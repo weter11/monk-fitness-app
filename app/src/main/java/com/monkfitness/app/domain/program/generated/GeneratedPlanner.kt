@@ -112,7 +112,7 @@ object GeneratedPlanner {
                     focus = focus,
                     exerciseId = chosen.exerciseId,
                     familyId = chosen.familyId,
-                    prescription = prescriptionFor(request.policy, chosen.dimension)
+                    prescription = prescriptionFor(request.policy, chosen)
                 )
             }
             return GeneratedSlot(
@@ -134,23 +134,46 @@ object GeneratedPlanner {
     /**
      * The prescription a generated element carries, in the exercise's own dimension (§10).
      *
-     * The targets come from the policy and are §10's own two example shapes: this is the plan's own
-     * prescription, written per set, and it touches no exercise metadata. The three named dimensions
-     * with no subtype are unreachable here — a candidate in one of them is reported unusable rather
-     * than prescribed — so the fall-through names the invariant instead of returning something a
-     * dimension cannot mean.
+     * ### A new exercise starts at the lower bound of its own range
+     *
+     * When the candidate's catalogue metadata states a progression range, the element prescribes the
+     * catalogue's own set count, uniformly, at that range's **lower bound** — a push-up starts at
+     * `3 × 6`, a plank at `3 × 30 s`, an exercise the catalogue defines with two sets at two. The
+     * range is the exercise's full progression span (`baseMin..phase4Max`, see
+     * `Exercise.toConfigurationMetadata`), so its first value is where the exercise begins, not where
+     * a generator's own fixed shape happens to start: §10's `12 / 10 / 8 / 6` and `30s / 30s / 45s`
+     * describe a *set of targets for one plan*, and applying them to every exercise regardless of what
+     * that exercise's own definition says is exactly what this avoids.
+     *
+     * ### The policy's lists are the fallback, not the rule
+     *
+     * A candidate whose caller states no range (a hand-stated library view, a fixture) still has to be
+     * prescribed something, and [GenerationPolicy]'s two lists remain that answer — unchanged, and
+     * still the shapes §10 writes out. Nothing is deleted: a caller that wants §10's shapes verbatim
+     * states no range, and a caller that states one gets its own.
+     *
+     * The three named dimensions with no subtype are unreachable here — a candidate in one of them is
+     * reported unusable rather than prescribed — so the fall-through names the invariant instead of
+     * returning something a dimension cannot mean.
      */
     private fun prescriptionFor(
         policy: GenerationPolicy,
-        dimension: PrescriptionDimension
-    ): Prescription = when (dimension) {
-        PrescriptionDimension.REP_BASED -> RepPrescription(policy.repPrescriptionTargets)
-        PrescriptionDimension.TIME_BASED -> TimePrescription(policy.timePrescriptionTargets)
+        candidate: GenerationCandidate<*>
+    ): Prescription = when (candidate.dimension) {
+        PrescriptionDimension.REP_BASED ->
+            candidate.metadata.repRange
+                ?.let { range -> RepPrescription.uniform(candidate.metadata.sets, range.first) }
+                ?: RepPrescription(policy.repPrescriptionTargets)
+        PrescriptionDimension.TIME_BASED ->
+            candidate.metadata.timeRange
+                ?.let { range -> TimePrescription.uniform(candidate.metadata.sets, range.first) }
+                ?: TimePrescription(policy.timePrescriptionTargets)
         PrescriptionDimension.SET_BASED,
         PrescriptionDimension.DIFFICULTY_BASED,
         PrescriptionDimension.REST_BASED -> throw IllegalStateException(
-            "a generated element is never prescribed in $dimension: GenerationRequest.isUsable " +
-                "excludes every candidate whose dimension §10 names without implementing"
+            "a generated element is never prescribed in ${candidate.dimension}: " +
+                "GenerationRequest.isUsable excludes every candidate whose dimension §10 names " +
+                "without implementing"
         )
     }
 }

@@ -25,7 +25,11 @@ import com.monkfitness.app.domain.program.PLANNING_HORIZON_DAYS
  *    replace a focus or cancel a plan (§14).
  *
  * Two defaults are not invented at all: the two prescription shapes are the ones §10 itself writes
- * out (`12 / 10 / 8 / 6` and `30s / 30s / 45s`), used verbatim.
+ * out (`12 / 10 / 8 / 6` and `30s / 30s / 45s`), used verbatim. They are the **fallback** now, not
+ * the rule: an exercise whose catalogue metadata states a progression range is prescribed at that
+ * range's lower bound for the catalogue's own set count, and these two lists answer only for a
+ * candidate that states no range. They are kept rather than removed so that "§10's shapes, verbatim"
+ * stays expressible by a caller that wants it.
  *
  * @property secondaryFocusLimit how many secondary focuses a slot may take (§8 allows `0–2`; the
  *   default is the maximum §8 permits).
@@ -49,9 +53,12 @@ import com.monkfitness.app.domain.program.PLANNING_HORIZON_DAYS
  *   conditioning set with a pressing set. Like the recovery penalty it is soft: a loaded focus is
  *   passed over only while another eligible focus still needs exposure.
  * @property repPrescriptionTargets the repetition prescription a generated `REP_BASED` element
- *   carries, per set — §10's own example shape, used unchanged.
+ *   carries, per set — §10's own example shape, used unchanged. Read only for a candidate whose
+ *   metadata states no repetition range; a candidate that states one is prescribed at its lower
+ *   bound instead ([com.monkfitness.app.domain.program.generated.GeneratedPlanner]).
  * @property timePrescriptionTargets the duration prescription a generated `TIME_BASED` element
- *   carries, in seconds per set — §10's other example shape, used unchanged.
+ *   carries, in seconds per set — §10's other example shape, used unchanged. The same fallback
+ *   rule as [repPrescriptionTargets], for a candidate with no duration range.
  */
 data class GenerationPolicy(
     val secondaryFocusLimit: Int = DEFAULT_SECONDARY_FOCUS_LIMIT,
@@ -123,10 +130,10 @@ data class GenerationPolicy(
         /** Six sets of one focus, recently performed, is the soft load penalty's threshold. */
         const val DEFAULT_RECENT_LOAD_THRESHOLD: Int = 6
 
-        /** §10's repetition example, used unchanged: `12 / 10 / 8 / 6`. */
+        /** §10's repetition example, used unchanged — the fallback for a candidate with no range. */
         val DEFAULT_REP_PRESCRIPTION_TARGETS: List<Int> = listOf(12, 10, 8, 6)
 
-        /** §10's duration example, used unchanged: `30s / 30s / 45s`. */
+        /** §10's duration example, used unchanged — the same fallback, in seconds. */
         val DEFAULT_TIME_PRESCRIPTION_TARGETS: List<Int> = listOf(30, 30, 45)
 
         /** The policy the composition root uses until an owner decision says otherwise. */

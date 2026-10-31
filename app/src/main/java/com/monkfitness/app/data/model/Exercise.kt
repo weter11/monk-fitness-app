@@ -138,18 +138,38 @@ val Exercise.bodyRegion: BodyRegion
     }
 
 /**
- * This exercise as the configuration validator sees it: its own id and family, the domain and region
- * above, and the equipment it is defined with.
+ * This exercise as the configuration validator and the Generated Planner see it: its own id and
+ * family, the domain and region above, the equipment it is defined with, and the progression span its
+ * definition states.
  *
  * The metadata is derived, never restated: there is no second catalogue, and no field here is
  * anything the exercise definition does not already say.
+ *
+ * ### Why the range is the full progression span, and not the first phase's band
+ *
+ * [ExerciseMetadata.repRange] is `baseMinReps..phase4MaxReps` and [ExerciseMetadata.timeRange] is
+ * `baseDurationSeconds..phase4DurationSeconds` — deliberately **not** `baseMinReps..baseMaxReps`
+ * (nor `minReps..maxReps`, which is a phase's own band and moves with the phase). `baseMin..baseMax`
+ * is only the band the *first* phase occupies; it stops short of everything the exercise is meant to
+ * become. A generated plan starts an exercise at the lower bound of the span it will actually
+ * travel, and that span ends at the last phase's maximum, so the range has to be the whole journey:
+ * reading it as the first phase's band would make "the bottom of the range" mean "the bottom of
+ * phase 1" and quietly cap the exercise at phase 1 in the one place the planner looks.
+ *
+ * The two dimensions are exclusive: a timed exercise states a duration range and no repetition range,
+ * a repetition exercise the reverse. That is the same `isTimerBased` split the generation boundary
+ * already uses to decide a candidate's [com.monkfitness.app.domain.prescription.PrescriptionDimension],
+ * so the range and the dimension a prescription is written in cannot disagree.
  */
 fun Exercise.toConfigurationMetadata(): ExerciseMetadata<Equipment> = ExerciseMetadata(
     id = id,
     familyId = familyId,
     trainingDomain = trainingDomain,
     bodyRegion = bodyRegion,
-    requiredEquipment = requiredEquipment
+    requiredEquipment = requiredEquipment,
+    repRange = if (isTimerBased) null else baseMinReps..phase4MaxReps,
+    timeRange = if (isTimerBased) baseDurationSeconds..phase4DurationSeconds else null,
+    sets = sets
 )
 
 fun Exercise.applyDifficultyAdjustment(adjustment: Int): Exercise {
