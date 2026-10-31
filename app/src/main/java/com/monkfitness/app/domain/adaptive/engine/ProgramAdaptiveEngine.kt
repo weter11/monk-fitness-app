@@ -9,6 +9,7 @@ import com.monkfitness.app.domain.adaptive.ExposureLoad
 import com.monkfitness.app.domain.adaptive.IntensityEntry
 import com.monkfitness.app.domain.adaptive.IntensityLoad
 import com.monkfitness.app.domain.adaptive.LoadProfile
+import com.monkfitness.app.domain.adaptive.PerformedSetAmount
 import com.monkfitness.app.domain.adaptive.VolumeLoad
 import com.monkfitness.app.domain.adaptive.decision.AdaptiveAction
 import com.monkfitness.app.domain.adaptive.decision.AdaptiveAdjustment
@@ -390,6 +391,13 @@ object ProgramAdaptiveEngine {
         // ladder: the target is the caller's own, and the only rule this stage adds is the range clamp.
         request.prescriptionStep?.let { step -> return stepWithinRange(request, step) }
 
+        // A return after a gap is a re-prescription of the element's own exercise, never a step down the
+        // family's ladder: the family's level is where the user had reached, and it is the *week* that
+        // gets lighter, not the position they earned before the gap.
+        if (policyDecision.reason == ProgramAdaptiveReason.RETURN_AFTER_GAP) {
+            return returningWithinRange(request)
+        }
+
         if (policyDecision.action == AdaptiveAction.HOLD) {
             return realignment(request) ?: Resolution.None(policyDecision.reason)
         }
@@ -508,6 +516,76 @@ object ProgramAdaptiveEngine {
             reason = step.reason
         )
     }
+
+    /**
+     * The lighter week §15 asks for when the user returns from a long gap.
+     *
+     * The exercise is the element's **own**, and the amount is the one the user **last performed** — not
+     * the one the plan prescribes — lowered by the policy's gap-scaled share of the exercise's range. The
+     * step then travels through [stepWithinRange], so the same clamp and the same floor answer apply as
+     * they do to a caller-decided step: a target below the range's bottom becomes the bottom, and a
+     * presentation already at the bottom is `FLOOR_REACHED` with no adjustment.
+     *
+     * Three things this stage will not do, each of which would be a fact it does not own:
+     *
+     *  * it does not decide *that* the user is returning — the policy's own reason says so, and this
+     *    function is reached only because it did;
+     *  * it does not invent an amount when the history does not hold one: no performed amounts on the
+     *    family's last exposure, no range in the element's dimension, or an amount stated in the other
+     *    dimension all make the step unavailable rather than guessed;
+     *  * it does not raise anything. A lighter week never asks for more than the plan already presents, so
+     *    a session in which the user outperformed the prescription cannot come back as a heavier week.
+     */
+    private fun returningWithinRange(request: ProgramAdaptiveRequest): Resolution {
+        val before = request.element.presentation
+        val dimension = before.prescription.dimension
+        val amounts = request.range?.amountsFor(dimension)
+            ?: return Resolution.None(ProgramAdaptiveReason.PROGRESSION_UNAVAILABLE)
+
+        val performed = request.snapshot.exposures
+            .filter { exposure -> familyOf(exposure.exerciseId, request) == request.element.familyId }
+            .filter { exposure -> exposure.performedAmounts != null }
+            .sortedWith(compareBy({ it.startedAt }, { it.sessionExerciseId.value }))
+            .lastOrNull()
+            ?.performedAmounts
+            ?.map { amount -> amountIn(amount, dimension) }
+            ?: return Resolution.None(ProgramAdaptiveReason.PROGRESSION_UNAVAILABLE)
+        if (performed.any { amount -> amount <= 0 }) {
+            return Resolution.None(ProgramAdaptiveReason.PROGRESSION_UNAVAILABLE)
+        }
+
+        // The element's own shape: as many entries as the plan presents, taken in set order from what was
+        // performed and repeated from its last set where the user performed fewer sets than are presented.
+        val presented = before.prescription.perSetTargets
+        val attempted = presented.indices.map { index -> performed.getOrElse(index) { performed.last() } }
+        val target = request.policy.returnAfterGapTargets(attempted, amounts, request.window.gap)
+        val capped = target.mapIndexed { index, amount -> minOf(amount, presented[index]) }
+
+        val prescription = when (dimension) {
+            PrescriptionDimension.REP_BASED -> RepPrescription(capped)
+            PrescriptionDimension.TIME_BASED -> TimePrescription(capped)
+            else -> return Resolution.None(ProgramAdaptiveReason.PROGRESSION_UNAVAILABLE)
+        }
+        return stepWithinRange(
+            request,
+            ProgramPrescriptionStep(
+                target = prescription,
+                reason = ProgramAdaptiveReason.RETURN_AFTER_GAP
+            )
+        )
+    }
+
+    /** One performed set's amount in the element's own dimension, or `0` when it was the other unit's. */
+    private fun amountIn(amount: PerformedSetAmount, dimension: PrescriptionDimension): Int =
+        when (dimension) {
+            PrescriptionDimension.REP_BASED -> amount.completedReps
+            PrescriptionDimension.TIME_BASED -> amount.durationSeconds
+            else -> 0
+        }
+
+    /** The family an exercise belongs to, by the caller's classification; an unknown one is its own. */
+    private fun familyOf(exerciseId: String, request: ProgramAdaptiveRequest): String =
+        request.familyOfExercise[exerciseId] ?: exerciseId
 
     /**
      * The same-level variant change §15 permits, or `null` when there is nothing to realign.

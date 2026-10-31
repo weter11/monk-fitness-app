@@ -9,41 +9,54 @@ import java.time.Duration
 import java.time.LocalDate
 
 /**
- * The two **gap facts** a family's window can state about *when* the user last trained it, and about how
- * often they usually train at all.
+ * The **gap facts** a family's window can state about *when* the user last trained it, how long the
+ * stretch before this window was, and how often they usually train at all.
  *
  * ### Why they are facts and not judgements
  *
- * Both are read off stored data the app already keeps — the confirmed sets a session records, and the
- * exposures a window's sessions produced — so neither is a new measurement, a score or a threshold. They
+ * All three are read off stored data the app already keeps — the confirmed sets a session records, and
+ * the sessions of the family's own history — so none is a new measurement, a score or a threshold. They
  * are carried to the policy as **inputs**, exactly like the window's counts and the three qualitative
  * judgements beside them, because the layer that owns the history is the layer that can state them.
  *
  * ### Why each one is nullable, and what `null` means
  *
- * An absence is not a zero here, and the two absences are different facts:
+ * An absence is not a zero here, and the absences are different facts:
  *
  *  * [lastConfirmedSetOn] is `null` when the family has **never** had a confirmed set. That is not "the
  *    last set was today" and not "the last set was long ago" — there is no last set at all;
+ *  * [daysAway] is `null` when the family had **no confirmed set before this window's own session**, so
+ *    there is no stretch to measure. A first session is not a return;
  *  * [usualInterval] is `null` when there is **not enough data to state a habit**. A user with two
  *    sessions has no interval to be usual yet, and reporting one from two timestamps would turn a
  *    coincidence into a baseline.
  *
+ * ### Why `daysAway` is stated beside `lastConfirmedSetOn` and not derived from it
+ *
+ * The pass runs when a session **completes**, so `lastConfirmedSetOn` already includes that session's own
+ * sets: on the day a user comes back from three weeks away it reads *today*, and a rule asking *"how long
+ * has this been?"* would answer zero on the one day the question matters. [daysAway] states the stretch
+ * the user is returning **from** — the facts still say where the last set was, and this one says how long
+ * the gap before it was.
+ *
  * ### What is deliberately not here
  *
- * No threshold, no "gap" verdict, no bucket and no rule: whether a stated gap is *long* is a policy
- * question, and this value only says what the gap is. Nothing reads either field yet — the policy that
- * decides on them is a later step — which is why they are additive and why no decision can change
- * because of them today.
+ * No threshold, no "gap" verdict, no bucket and no rule: whether a stated gap is *long*, and how much
+ * lighter a return should be, are policy questions ([ProgramAdaptivePolicy.returnAfterGapHolds] and
+ * [ProgramAdaptivePolicy.returnAfterGapTargets]), and this value only says what the gap is.
  *
  * @property lastConfirmedSetOn the calendar date, in the caller's own zone, of the most recent confirmed
  *   set the family has anywhere in its stored history — **not** limited to the decision window. `null`
  *   when the family has never had one.
- * @property usualInterval the user's usual interval between sessions, derived from the window's recent
- *   exposures. `null` when there is not enough data to state one.
+ * @property daysAway whole calendar days between the family's last confirmed set **before** this window's
+ *   own session and the day the window is captured. `null` when there was no earlier confirmed set.
+ * @property usualInterval the user's usual interval between sessions, derived from the family's own most
+ *   recent sessions — the whole stored history, not only the decision window, which is empty of it after a
+ *   gap. `null` when there is not enough data to state one.
  */
 data class ProgramGapFacts(
     val lastConfirmedSetOn: LocalDate? = null,
+    val daysAway: Long? = null,
     val usualInterval: Duration? = null
 ) {
 
@@ -83,11 +96,12 @@ data class ProgramGapFacts(
  *   change, or `null` when it has never had one.
  * @property recoveryQualifyingWindows windows completed while the family is in recovery: §14's exit gate.
  * @property restChangeRequested whether a rest adaptation was asked for this window.
- * @property gap when the family was last trained, and how often the user usually trains — the two facts
- *   about *timing* this window is handed, as [ProgramGapFacts]. They are stated beside the counts rather
- *   than derived from them because a window's own signals cannot say when the last set happened: the
- *   window is an interval, and the last set may be older than it. **Nothing reads them yet** — no rule
- *   in this policy consults them, so a window that states them decides exactly as one that does not.
+ * @property gap when the family was last trained, how long the stretch before this window was, and how
+ *   often the user usually trains — the facts about *timing* this window is handed, as [ProgramGapFacts].
+ *   They are stated beside the counts rather than derived from them because a window's own signals cannot
+ *   say when the last set happened: the window is an interval, and the last set may be older than it. The
+ *   policy reads them for one rule only — §15's return after a gap, which pre-empts the window's own
+ *   reading instead of being derived from it.
  */
 data class ProgramAdaptiveWindow(
     val familyId: String,
@@ -242,18 +256,21 @@ data class ProgramPolicyDecision(
  * ```text
  * 1. recovery entry   strong evidence of unabsorbed load      → RECOVERY (never cooldown-gated)
  * 2. recovery gating  a family in RECOVERY stays until its exit gate is met, and leaves to HOLD
- * 3. rest             an unsupported adaptation is reported, never faked
- * 4. confirmed change the earned direction, if the cooldown has elapsed
- * 5. cooling down     an earned direction the cooldown blocks, reported as itself
- * 6. awaiting         a direction that holds in this window and not yet in the previous one(s)
- * 7. the gates        the direction is there and a gate (evidence, confidence, context, attendance,
+ * 3. return           the family is back after a long gap       → REGRESS (lighter, same exercise)
+ * 4. rest             an unsupported adaptation is reported, never faked
+ * 5. confirmed change the earned direction, if the cooldown has elapsed
+ * 6. cooling down     an earned direction the cooldown blocks, reported as itself
+ * 7. awaiting         a direction that holds in this window and not yet in the previous one(s)
+ * 8. the gates        the direction is there and a gate (evidence, confidence, context, attendance,
  *                     recent load) is not: the gate's own reason
- * 8. the default      insufficient evidence, a measured plateau, or a mixed window
+ * 9. the default      insufficient evidence, a measured plateau, or a mixed window
  * ```
  *
  * Step 1 is deliberately first: recovery **outranks** progression, which is what makes it a safety
  * state rather than a preference. Step 2 is what makes recovery exit to `HOLD` and never straight to a
- * progression — a family leaving recovery has to earn its change again, like any other family.
+ * progression — a family leaving recovery has to earn its change again, like any other family. Step 3
+ * comes before every confirmation rule on purpose: a family returning from a long gap has evidence that
+ * was earned *before* it, and a pending confirmation must not fire on it (§15).
  *
  * ### What the policy is not
  *
@@ -306,6 +323,71 @@ data class ProgramAdaptivePolicy(
 
     /** Eligible windows a progression-level change serves before the family may change level again. */
     val progressionCooldownWindows: Int = 2,
+
+    // --- the usual interval, and returning after a gap ---------------------------------------------
+
+    /**
+     * How many of the family's most recent sessions state its usual interval.
+     *
+     * The interval is a statement about a habit, so it is read over a short run of sessions rather than
+     * over the program's whole life: a user who trained twice a week for two months and then changed to
+     * four times a week has a new rhythm, and a median over the whole history would still describe the
+     * old one. The number is a count of **sessions**, not of days, because the habit being measured is
+     * *how often the user turns up*, whatever the calendar says.
+     */
+    val usualIntervalSessions: Int = 5,
+
+    /**
+     * The interval assumed when the history is too short to state one, in whole days.
+     *
+     * A user with two sessions has no habit yet, and a rule that declined to answer until it had five
+     * would present a full prescription to somebody coming back from a month away — the exact case this
+     * parameter is here to prevent. It is deliberately a *usual interval* and not a day count of its own:
+     * every threshold below is stated as a multiple of the interval, so the fallback feeds the same
+     * arithmetic the measured one does and no second baseline exists (§15).
+     */
+    val usualIntervalFallbackDays: Int = 3,
+
+    /**
+     * A gap longer than this many of the user's own intervals is a return, not a missed session.
+     *
+     * The compare is strict, which is what makes [usualIntervalFallbackDays]' neighbour rule readable:
+     * one missed session is two intervals and two missed sessions are exactly three, so *"more than
+     * three"* is the first gap that cannot be explained by the sessions the user merely skipped. A
+     * longer multiple would let a real gap through; a shorter one would lighten the week of somebody who
+     * missed a single session.
+     */
+    val returnGapUsualIntervalMultiple: Int = 3,
+
+    /**
+     * ... and whatever the user's rhythm, a return is at least this many days long.
+     *
+     * The multiple alone makes a frequent trainer's gap short in absolute terms — at four sessions a week,
+     * three intervals is five days — and a five-day break is a normal week with one session moved, not an
+     * illness. The floor is in calendar days because that is the unit the user experiences the absence in.
+     */
+    val returnGapMinimumDays: Int = 10,
+
+    /**
+     * The share of the exercise's **range width** a return takes away once the gap is long enough for the
+     * full reduction ([returnGapFullReductionIntervals]).
+     *
+     * It is a fraction of the range and not a number of repetitions because the range is the only span the
+     * adaptive layer knows the exercise's own difficulty in (§15's within-range step): a quarter of a
+     * 4..12 span is two repetitions, and a quarter of a 20..60 seconds span is ten seconds, without this
+     * file naming either unit.
+     */
+    val returnGapReductionNumerator: Int = 1,
+    val returnGapReductionDenominator: Int = 2,
+
+    /**
+     * The gap, in the user's own intervals, at which that full share is taken away.
+     *
+     * Shorter returns scale the share down in proportion ([returnAfterGapTargets]), so the amount taken
+     * away grows with the gap and stops growing here: a year away is not three times the adjustment of
+     * four months away, and the floor of the range is reached by the clamp rather than by this growth.
+     */
+    val returnGapFullReductionIntervals: Int = 6,
 
     // --- variant realignment -----------------------------------------------------------------------
 
@@ -362,6 +444,19 @@ data class ProgramAdaptivePolicy(
             } else {
                 holding(verdict, AdaptiveState.RECOVERY, ProgramAdaptiveReason.RECOVERY_HELD)
             }
+        }
+
+        // §15's return after a gap. It sits before every confirmation rule because the evidence those
+        // rules would count was earned *before* the gap: a family that had a progression pending when the
+        // user fell ill must come back lighter, not one step harder. The window's own reading is
+        // deliberately not reported with this decision — the caller advances its confirmation counters
+        // from the verdict (§15), and pre-gap evidence must not confirm anything on the way back in.
+        if (returnAfterGapHolds(window.gap)) {
+            return changing(
+                ProgramWindowVerdict(),
+                AdaptiveState.REGRESS,
+                ProgramAdaptiveReason.RETURN_AFTER_GAP
+            )
         }
 
         if (window.restChangeRequested) {
@@ -475,6 +570,75 @@ data class ProgramAdaptivePolicy(
     }
 
     /**
+     * The user's usual interval in **whole days**: the stated one, rounded up, or the policy's fallback
+     * when the history is too short to state one.
+     *
+     * Rounding up rather than down is the conservative direction for both rules that read it: the trigger
+     * is stated as a multiple of it, so a larger usual interval asks for a longer absence before a return
+     * is claimed, and a fractional habit (three and a half days) cannot become a shorter baseline than the
+     * user actually has. A user with no measurable habit is given [usualIntervalFallbackDays] rather than a
+     * rule that never fires — a month away is a return whether or not the user has trained enough for the
+     * app to say what their rhythm is.
+     */
+    fun usualIntervalDaysOf(gap: ProgramGapFacts): Long = gap.usualInterval
+        ?.let { interval -> (interval.seconds + SECONDS_PER_DAY - 1) / SECONDS_PER_DAY }
+        ?.coerceAtLeast(1L)
+        ?: usualIntervalFallbackDays.toLong()
+
+    /**
+     * Whether [gap] is a gap the user is **returning** from: long against their own rhythm, and long in
+     * absolute terms.
+     *
+     * ```text
+     * daysAway  stated and >= returnGapMinimumDays, and
+     * daysAway  >  returnGapUsualIntervalMultiple · usualIntervalDaysOf(gap)
+     * ```
+     *
+     * The strict compare is what keeps a missed session out of this rule: one missed session is two
+     * intervals, two missed sessions are exactly three, and neither is *more* than
+     * [returnGapUsualIntervalMultiple] of them. `null` days — a family that has never trained before this
+     * window — is no return at all: there is no earlier session to come back from.
+     */
+    fun returnAfterGapHolds(gap: ProgramGapFacts): Boolean {
+        val daysAway = gap.daysAway ?: return false
+        if (daysAway < returnGapMinimumDays) return false
+        return daysAway > returnGapUsualIntervalMultiple * usualIntervalDaysOf(gap)
+    }
+
+    /**
+     * The amounts a returning session is presented at: what the user **last performed**, lowered by the
+     * policy's share of the range's width.
+     *
+     * ```text
+     * intervals    min(daysAway / usualIntervalDaysOf(gap), returnGapFullReductionIntervals)
+     * reduction    rangeWidth · returnGapReductionNumerator · intervals
+     *              ────────────────────────────────────────────────────────   (integer division)
+     *              returnGapReductionDenominator · returnGapFullReductionIntervals
+     * target       performed[i] − reduction
+     * ```
+     *
+     * The base is what was **performed** and not what was prescribed: a user who was already falling short
+     * of the prescription before they fell ill comes back to their own last amount, lowered, rather than to
+     * a prescription they were not completing. The clamp to the range's floor is not applied here — it is
+     * the within-range prescription step's own single job, and a target that had already been clamped would
+     * hide the fact that the floor had been reached.
+     *
+     * @param performed the amounts to lower, one per presented set.
+     * @param range the exercise's own span, read for its width only.
+     */
+    fun returnAfterGapTargets(performed: List<Int>, range: IntRange, gap: ProgramGapFacts): List<Int> {
+        if (performed.isEmpty()) return performed
+        val intervals = minOf(
+            (gap.daysAway ?: 0L) / usualIntervalDaysOf(gap),
+            returnGapFullReductionIntervals.toLong()
+        )
+        val width = (range.last - range.first).coerceAtLeast(0).toLong()
+        val reduction = width * returnGapReductionNumerator * intervals /
+            (returnGapReductionDenominator.toLong() * returnGapFullReductionIntervals)
+        return performed.map { amount -> (amount - reduction).toInt() }
+    }
+
+    /**
      * Which gate stopped a window whose direction reads positively — the specific reason, in the order
      * the conditions are stated in [progressConditionsMet].
      */
@@ -568,6 +732,30 @@ data class ProgramAdaptivePolicy(
         require(progressionCooldownWindows >= 0) {
             "progressionCooldownWindows must be >= 0, was $progressionCooldownWindows"
         }
+        require(usualIntervalSessions >= 3) {
+            "three sessions are two intervals, which is the fewest that can state a habit at all, was " +
+                "$usualIntervalSessions"
+        }
+        require(usualIntervalFallbackDays >= 1) {
+            "a fallback usual interval is at least one day, was $usualIntervalFallbackDays"
+        }
+        require(returnGapUsualIntervalMultiple >= 1) {
+            "a return is longer than at least one usual interval, was $returnGapUsualIntervalMultiple"
+        }
+        require(returnGapMinimumDays >= 0) {
+            "the minimum gap in days must be >= 0, was $returnGapMinimumDays"
+        }
+        require(
+            returnGapReductionNumerator >= 0 &&
+                returnGapReductionDenominator >= 1 &&
+                returnGapReductionNumerator <= returnGapReductionDenominator
+        ) {
+            "the share of the range a return takes away must be a fraction within 0..1, was " +
+                "$returnGapReductionNumerator/$returnGapReductionDenominator"
+        }
+        require(returnGapFullReductionIntervals >= 1) {
+            "the reduction grows over at least one interval, was $returnGapFullReductionIntervals"
+        }
         require(consistencyMediumDenominator >= 1 && consistencyHighDenominator >= 1) {
             "consistency ratios need a positive denominator, were " +
                 "high=$consistencyHighNumerator/$consistencyHighDenominator " +
@@ -617,6 +805,9 @@ data class ProgramAdaptivePolicy(
     companion object {
 
         const val V1_VERSION: Int = 1
+
+        /** The one unit conversion this file makes: a stated interval, in the unit a gap is ridden out in. */
+        private const val SECONDS_PER_DAY: Long = 86_400L
 
         /** Adaptive policy version 1: every threshold at its documented v1 value. */
         val V1: ProgramAdaptivePolicy = ProgramAdaptivePolicy()

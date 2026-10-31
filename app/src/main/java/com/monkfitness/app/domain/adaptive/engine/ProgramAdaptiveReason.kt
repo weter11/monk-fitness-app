@@ -99,9 +99,13 @@ enum class ProgramAdaptiveReason {
     /**
      * The user is returning after a long gap: the same exercise is prescribed lighter for one window.
      *
-     * No policy emits this yet. It is a change reason because it accompanies a `REGRESS`, and it is
-     * supplied by a caller that has already measured the gap to the within-range prescription step —
-     * the reason travels with the request rather than being re-derived by this stage.
+     * This is the one change reason a **policy** emits from the gap facts rather than from the window's
+     * own trend ([ProgramAdaptivePolicy.returnAfterGapHolds]): the evidence for it is a stretch of calendar
+     * the window cannot measure, and the window's own reading is deliberately not reported with the
+     * decision, so pre-gap evidence cannot confirm a progression on the way back in. It is a change reason
+     * because it accompanies a `REGRESS`, and the engine answers it through the within-range prescription
+     * step — the same exercise at what the user last performed, lowered by a share of the exercise's range —
+     * never by moving the family down its ladder.
      */
     RETURN_AFTER_GAP,
 

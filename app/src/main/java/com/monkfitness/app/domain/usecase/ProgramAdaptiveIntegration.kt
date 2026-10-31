@@ -65,6 +65,7 @@ import java.time.Duration
 import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
+import java.time.temporal.ChronoUnit
 
 /**
  * §30 step 12's **adaptive integration**: from a completed Session to the adaptive half of §27's
@@ -293,17 +294,18 @@ class ProgramAdaptiveIntegration(
         )
         val familyOfExercise = classifiedExercisesOf(observations, day)
 
-        // §11's two facts about *when*, stated from the history the pass already holds: the last
-        // confirmed set anywhere in it (never narrowed to the window — a set older than the window is
-        // exactly the fact a gap rule would need), and the user's usual interval between sessions from
-        // this window's own exposures. Neither is read by any rule yet; both travel with the window.
+        // §11's facts about *when*, stated from the history the pass already holds: the last confirmed set
+        // anywhere in it (never narrowed to the window — a set older than the window is exactly the fact a
+        // gap rule needs), the stretch before this window's own session, and the user's usual interval from
+        // the family's last few sessions wherever they fall. §15's return rule reads the last two.
         val gapFacts = programGapFactsOf(
             sessions = history,
             completion = session.sessionId,
-            observations = observations,
             familyOf = { exerciseId -> classification.familyOf(exerciseId) },
             familyId = familyId,
-            zone = zone
+            zone = zone,
+            statedOn = LocalDate.ofInstant(capturedAt, zone),
+            policy = policy
         )
 
         val judgement = AdaptiveJudgementRule.of(
@@ -535,9 +537,9 @@ class ProgramAdaptiveIntegration(
         // element prescribes rest and no screen can ask for one, so a window never *asks*. The policy's
         // unsupported-rest path stays reachable only from a caller that states it (§15).
         restChangeRequested = false,
-        // The two timing facts, stated from the stored history. They are carried and not consulted: no
-        // rule in the policy reads them, so the decision this window produces is the one it produced
-        // before they existed (§11 keeps a fact and a judgement apart).
+        // The timing facts, stated from the stored history. §15's return rule reads two of them — how long
+        // the stretch before this window was, and how often the user usually trains — and no other rule
+        // consults any of them: a window that states no gap decides exactly as it did before they existed.
         gap = gap
     )
 
@@ -880,7 +882,7 @@ class ProgramAdaptiveIntegration(
 }
 
 // -------------------------------------------------------------------------------------------------
-// The window's two facts about *when* (§11). Stated here, read by nothing yet.
+// The window's facts about *when* (§11). Stated here, read by §15's return rule.
 // -------------------------------------------------------------------------------------------------
 
 /**
@@ -888,22 +890,30 @@ class ProgramAdaptiveIntegration(
  *
  * Three sessions are two intervals, which is the fewest that can say anything about a habit at all: one
  * interval is a single gap between two sessions and no more, and calling it "usual" would turn one
- * coincidence into a baseline. Below this the fact is absent (`null`) rather than estimated.
+ * coincidence into a baseline. Below this the fact is absent (`null`) rather than estimated, and the
+ * policy is what decides what to do about an absent habit ([ProgramAdaptivePolicy.usualIntervalFallbackDays]).
  */
 private const val SESSIONS_BEFORE_AN_INTERVAL_IS_USUAL = 3
 
 /**
- * The two gap facts of one pass: when the family was last trained, and how often the user trains.
+ * The gap facts of one pass: when the family was last trained, how long the stretch before this window
+ * was, and how often the user trains.
  *
- * Both are stated from data the pass already holds, and neither is a judgement:
+ * All three are stated from data the pass already holds, and none is a judgement:
  *
  *  * [lastConfirmedSetOn] is read from the **stored sets** of the Program's whole history — the same
  *    `history` list the window is assembled from, deliberately **not** narrowed to the window's start.
  *    That is the point of the fact: a family the user has not touched for six weeks has its last
  *    confirmed set *outside* every window, and a rule asking "how long has this been?" needs that date,
  *    not the window's empty answer;
- *  * [usualIntervalOf] is read from the window's **recent exposures**, because a habit is a statement
- *    about the recent past rather than about the program's whole life.
+ *  * [daysAway] is measured to the family's last confirmed set **before the session this pass is about**.
+ *    The pass runs at a completion, so the completing session's own sets are already confirmed and are
+ *    excluded here: on the day a user comes back the stretch that matters is the one they came back
+ *    *from*, and a fact that included today's session would read zero on exactly that day;
+ *  * [usualInterval] is read from the family's own **most recent sessions in the whole stored history** —
+ *    not from the window's exposures, which hold nothing at all after a gap. A habit is a statement about
+ *    the recent past, and the last [ProgramAdaptivePolicy.usualIntervalSessions] of a family's sessions are
+ *    the recent past whether or not they fall inside the last 28 days.
  *
  * The `familyOf` lambda is the caller's classification rather than a collaborator, so this derivation
  * stays a pure function of its arguments: no repository, no clock, no catalogue.
@@ -911,13 +921,15 @@ private const val SESSIONS_BEFORE_AN_INTERVAL_IS_USUAL = 3
 internal fun programGapFactsOf(
     sessions: List<WorkoutSession>,
     completion: SessionId,
-    observations: List<ExposureObservation>,
     familyOf: (String) -> String?,
     familyId: String,
-    zone: ZoneId
+    zone: ZoneId,
+    statedOn: LocalDate,
+    policy: ProgramAdaptivePolicy
 ): ProgramGapFacts = ProgramGapFacts(
     lastConfirmedSetOn = lastConfirmedSetOn(sessions, completion, familyOf, familyId, zone),
-    usualInterval = usualIntervalOf(observations)
+    daysAway = daysAwayFromFamily(sessions, completion, familyOf, familyId, statedOn, zone),
+    usualInterval = usualIntervalOf(sessions, completion, familyOf, familyId, policy.usualIntervalSessions)
 )
 
 /**
@@ -951,25 +963,80 @@ internal fun lastConfirmedSetOn(
     ?.let { performedAt -> LocalDate.ofInstant(performedAt, zone) }
 
 /**
- * The user's usual interval between sessions, from the window's recent exposures — or `null` when there
- * is not enough data to state one.
+ * Whole calendar days between the family's last confirmed set **before** [completion] and [statedOn], or
+ * `null` when the family had no earlier session.
+ *
+ * The completing session is excluded on purpose: this pass runs when a session has been completed, so its
+ * sets are already facts, and including them would make every return measure as a zero-day gap — a fact
+ * that can only ever say *"you were here today"*. Completed and cancelled attempts both count as an
+ * earlier session (a cancellation keeps its work as exposure); an attempt still running does not, by the
+ * same rule every other reading in this pass applies.
+ */
+internal fun daysAwayFromFamily(
+    sessions: List<WorkoutSession>,
+    completion: SessionId,
+    familyOf: (String) -> String?,
+    familyId: String,
+    statedOn: LocalDate,
+    zone: ZoneId
+): Long? {
+    val lastBefore = sessions
+        .filter { session -> session.sessionId != completion && session.status != SessionStatus.IN_PROGRESS }
+        .flatMap { session -> session.exercises }
+        .filter { occurrence -> occurrence.results.isNotEmpty() && familyOf(occurrence.exerciseId) == familyId }
+        .flatMap { occurrence -> occurrence.results }
+        .maxOfOrNull { set -> set.performedAt }
+        ?: return null
+    return ChronoUnit.DAYS.between(LocalDate.ofInstant(lastBefore, zone), statedOn)
+}
+
+/**
+ * The user's usual interval between sessions, from the family's own most recent sessions in the whole
+ * stored history — or `null` when there is not enough data to state one.
  *
  * ```text
- * sessions    the distinct start instants the exposures name, in order
+ * sessions    the distinct start instants at which the family was trained, in order, last N of them
  * intervals   the gaps between consecutive sessions
  * usual       the median interval, because a median is what "usual" means: one long holiday must not
  *             move the answer the way a mean would
  * ```
+ *
+ * The **whole history** is read, and only then narrowed to its last [sessionsToConsider] sessions. The
+ * decision window is deliberately not the source: after a gap of three weeks the 28-day window holds
+ * almost nothing, and an interval measured over it would be measured over the gap itself — the one span
+ * that is certainly not the user's habit. A habit is the recent past, not the window's contents.
+ *
+ * The session this pass is about is excluded for the same reason [daysAwayFromFamily] excludes it: the
+ * stretch that led to it **is** the gap, and counting it as one interval among two would let the absence
+ * define the habit it interrupted. The interval is therefore the rhythm the user had *before* they turned
+ * up, which is the rhythm a gap is measured against.
  *
  * The median of an even number of intervals is the whole-second midpoint of the two middle ones. Seconds
  * are the unit because a session gap is hours or days, and no floating point appears anywhere in this
  * layer (§17, §33).
  *
  * Fewer than [SESSIONS_BEFORE_AN_INTERVAL_IS_USUAL] sessions is `null` and not a guess: two sessions
- * are one interval, and one interval is not a habit.
+ * are one interval, and one interval is not a habit. What to do about an absent habit is the policy's
+ * decision, not this function's.
  */
-internal fun usualIntervalOf(observations: List<ExposureObservation>): Duration? {
-    val starts = observations.map { exposure -> exposure.startedAt }.distinct().sorted()
+internal fun usualIntervalOf(
+    sessions: List<WorkoutSession>,
+    completion: SessionId,
+    familyOf: (String) -> String?,
+    familyId: String,
+    sessionsToConsider: Int
+): Duration? {
+    val starts = sessions
+        .filter { session -> session.sessionId != completion && session.status != SessionStatus.IN_PROGRESS }
+        .filter { session ->
+            session.exercises.any { occurrence ->
+                occurrence.results.isNotEmpty() && familyOf(occurrence.exerciseId) == familyId
+            }
+        }
+        .map { session -> session.startedAt }
+        .distinct()
+        .sorted()
+        .takeLast(sessionsToConsider.coerceAtLeast(1))
     if (starts.size < SESSIONS_BEFORE_AN_INTERVAL_IS_USUAL) return null
 
     val intervals = starts.zipWithNext { earlier, later -> Duration.between(earlier, later) }.sorted()
