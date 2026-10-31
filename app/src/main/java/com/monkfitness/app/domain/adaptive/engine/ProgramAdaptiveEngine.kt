@@ -218,7 +218,9 @@ object ProgramAdaptiveEngine {
             val target: AdaptiveTarget,
             val after: EffectiveExercise,
             val reason: ProgramAdaptiveReason,
-            override val guardVerdict: ProgramGuardVerdict? = null
+            override val guardVerdict: ProgramGuardVerdict? = null,
+            /** The exercise's own authored span, for a change that stays inside it. */
+            val authoredCeiling: LoadProfile? = null
         ) : Resolution
 
         data class None(
@@ -266,6 +268,11 @@ object ProgramAdaptiveEngine {
     }
 
     private fun step(request: ProgramAdaptiveRequest, up: Boolean): Resolution {
+        // The exercise's own range is climbed before the family's ladder is: more repetitions (or seconds)
+        // of the same exercise is the smallest heavier prescription there is, and a harder variant is only
+        // the answer once the whole span of this one has been used.
+        withinRangeStep(request, up)?.let { within -> return within }
+
         val relation = request.relation
         val level = levelOf(request) ?: return Resolution.None(ProgramAdaptiveReason.PROGRESSION_UNAVAILABLE)
         if (!relation.declares(level)) {
@@ -292,6 +299,103 @@ object ProgramAdaptiveEngine {
             reason = if (up) ProgramAdaptiveReason.SUSTAINED_POSITIVE else ProgramAdaptiveReason.SUSTAINED_NEGATIVE
         )
     }
+
+    /**
+     * The same exercise at a different amount inside its own range, or `null` when this exercise has no
+     * span in its own dimension, or the span is already exhausted in [up]'s direction.
+     *
+     * Upward the base is the prescription; downward it is what the user **actually performed**, so a
+     * session that fell short corrects the next one instead of being measured against work that did not
+     * happen. Neither direction ever leaves the range, and a step that would change nothing is `null` so
+     * the family's ladder — never a no-op adjustment — is the answer.
+     */
+    private fun withinRangeStep(request: ProgramAdaptiveRequest, up: Boolean): Resolution? {
+        val before = request.element.presentation
+        val dimension = before.prescription.dimension
+        val amounts = request.range?.amountsFor(dimension) ?: return null
+        val presented = before.prescription.perSetTargets
+        if (presented.isEmpty()) return null
+
+        val target = if (up) {
+            if (presented.max() >= amounts.last) return null
+            presented.map { amount -> (amount + request.policy.rangeStepWithin(amounts)).coerceAtMost(amounts.last) }
+        } else {
+            if (presented.min() <= amounts.first) return null
+            correctedFromPerformed(request, presented, amounts, dimension)
+        }
+        if (target == presented) return null
+
+        val reason = if (up) ProgramAdaptiveReason.SUSTAINED_POSITIVE else ProgramAdaptiveReason.SUSTAINED_NEGATIVE
+        val after = EffectiveExercise(
+            programExerciseId = before.programExerciseId,
+            exerciseId = before.exerciseId,
+            prescription = prescriptionOf(dimension, target) ?: return null,
+            focus = before.focus
+        )
+        return Resolution.Change(
+            action = if (up) AdaptiveAction.PROGRESS else AdaptiveAction.REGRESS,
+            target = AdaptiveTarget.Exercise(before.exerciseId),
+            after = after,
+            reason = reason,
+            authoredCeiling = if (up) ceilingOf(before, amounts, dimension) else null
+        )
+    }
+
+    /**
+     * The amounts the next session should ask for after a shortfall: what was performed, in the shape the
+     * presentation asks for and never above it. A user who performed what was asked and fell short only in
+     * *sets* still gets a step down, taken from the prescription, so the correction is never a no-op.
+     */
+    private fun correctedFromPerformed(
+        request: ProgramAdaptiveRequest,
+        presented: List<Int>,
+        amounts: IntRange,
+        dimension: PrescriptionDimension
+    ): List<Int> {
+        val performed = performedAmountsOf(request, dimension)
+        val corrected = if (performed == null) {
+            presented
+        } else {
+            presented.indices.map { index ->
+                performed.getOrElse(index) { performed.last() }.coerceIn(amounts.first, amounts.last)
+            }
+        }
+        val capped = corrected.zip(presented).map { (correction, current) -> minOf(correction, current) }
+        return if (capped != presented) {
+            capped
+        } else {
+            presented.map { amount ->
+                (amount - request.policy.rangeStepWithin(amounts)).coerceAtLeast(amounts.first)
+            }
+        }
+    }
+
+    /** The span of [presentation] as a load profile, so the guard can bound a change by authored content. */
+    private fun ceilingOf(
+        presentation: EffectiveExercise,
+        amounts: IntRange,
+        dimension: PrescriptionDimension
+    ): LoadProfile {
+        val sets = presentation.prescription.setCount
+        val repetitions = if (dimension == PrescriptionDimension.REP_BASED) amounts.last * sets else 0
+        val seconds = if (dimension == PrescriptionDimension.TIME_BASED) amounts.last * sets else 0
+        return LoadProfile(
+            scope = AdaptiveScope.EXERCISE,
+            volume = VolumeLoad(sets = sets, repetitions = repetitions, durationSeconds = seconds),
+            intensity = IntensityLoad(),
+            density = DensityLoad(workingSeconds = seconds, restSeconds = 0),
+            exposure = ExposureLoad(opportunities = 0, completedOpportunities = 0)
+        )
+    }
+
+    private fun prescriptionOf(dimension: PrescriptionDimension, amounts: List<Int>): Prescription? =
+        when (dimension) {
+            PrescriptionDimension.REP_BASED -> RepPrescription(amounts)
+            PrescriptionDimension.TIME_BASED -> TimePrescription(amounts)
+            PrescriptionDimension.SET_BASED,
+            PrescriptionDimension.DIFFICULTY_BASED,
+            PrescriptionDimension.REST_BASED -> null
+        }
 
     /**
      * The element's own exercise, re-prescribed within its catalogue range: the exercise is kept and
@@ -351,13 +455,7 @@ object ProgramAdaptiveEngine {
         val amounts = request.range?.amountsFor(dimension)
             ?: return Resolution.None(ProgramAdaptiveReason.PROGRESSION_UNAVAILABLE)
 
-        val performed = request.snapshot.exposures
-            .filter { exposure -> familyOf(exposure.exerciseId, request) == request.element.familyId }
-            .filter { exposure -> exposure.performedAmounts != null }
-            .sortedWith(compareBy({ it.startedAt }, { it.sessionExerciseId.value }))
-            .lastOrNull()
-            ?.performedAmounts
-            ?.map { amount -> amountIn(amount, dimension) }
+        val performed = performedAmountsOf(request, dimension)
             ?: return Resolution.None(ProgramAdaptiveReason.PROGRESSION_UNAVAILABLE)
         if (performed.any { amount -> amount <= 0 }) {
             return Resolution.None(ProgramAdaptiveReason.PROGRESSION_UNAVAILABLE)
@@ -390,6 +488,22 @@ object ProgramAdaptiveEngine {
             PrescriptionDimension.TIME_BASED -> amount.durationSeconds
             else -> 0
         }
+
+    /**
+     * The amounts the family's most recent observed session actually performed, in [dimension]'s unit, or
+     * `null` when nothing in the window was recorded. Ordered by stamp then occurrence identity, the order
+     * the snapshot requires, so "the last one" is a fact about time rather than about list order.
+     */
+    private fun performedAmountsOf(
+        request: ProgramAdaptiveRequest,
+        dimension: PrescriptionDimension
+    ): List<Int>? = request.snapshot.exposures
+        .filter { exposure -> familyOf(exposure.exerciseId, request) == request.element.familyId }
+        .filter { exposure -> exposure.performedAmounts != null }
+        .sortedWith(compareBy({ it.startedAt }, { it.sessionExerciseId.value }))
+        .lastOrNull()
+        ?.performedAmounts
+        ?.map { amount -> amountIn(amount, dimension) }
 
     private fun familyOf(exerciseId: String, request: ProgramAdaptiveRequest): String =
         request.familyOfExercise[exerciseId] ?: exerciseId
@@ -441,7 +555,8 @@ object ProgramAdaptiveEngine {
             candidateLoad = loadProfileOf(request, change.after, change.target.scope),
             recentBaselineLoad = request.snapshot.baselineLoad,
             recentLoad = request.snapshot.recentLoad,
-            policy = request.policy
+            policy = request.policy,
+            authoredCeiling = change.authoredCeiling
         )
         return if (verdict is ProgramGuardVerdict.Filtered) {
             Resolution.Refused(target = change.target, guardVerdict = verdict)

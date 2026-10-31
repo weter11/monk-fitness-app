@@ -30,7 +30,11 @@ class ProgramAdaptivePolicyTest {
 
     private val policy = ProgramAdaptivePolicy.V1
 
-    /** The window's own reading when a family is handling its prescription without improving on it. */
+    /**
+     * The window's own reading when a family is handling its prescription without improving on it. The
+     * *evidence level* is what holds this one: a window this complete that is also measured as strong
+     * earns the next load (`aWindowThatCompletedItsPrescriptionEarnsTheNextLoad`).
+     */
     private val plateauSignals = signals(
         exposures = exposure(exposures = 4, prescribedSets = 12, completedSets = 12),
         trend = ProgramPerformanceTrend.STABLE
@@ -106,6 +110,22 @@ class ProgramAdaptivePolicyTest {
 
         assertEquals(AdaptiveState.HOLD, decision.state)
         assertEquals(ProgramAdaptiveReason.MIXED_EVIDENCE, decision.reason)
+    }
+
+    @Test
+    fun aWindowThatCompletedItsPrescriptionEarnsTheNextLoad() {
+        val completed = signals(
+            exposures = exposure(exposures = 4, prescribedSets = 12, completedSets = 12),
+            trend = ProgramPerformanceTrend.STABLE
+        )
+
+        val decision = policy.evaluate(
+            evidence(window = window(precedingProgressQualifyingWindows = 1), signals = completed)
+        )
+
+        assertEquals(AdaptiveState.PROGRESS, decision.state)
+        assertEquals(AdaptiveAction.PROGRESS, decision.action)
+        assertEquals(ProgramAdaptiveReason.SUSTAINED_POSITIVE, decision.reason)
     }
 
     @Test

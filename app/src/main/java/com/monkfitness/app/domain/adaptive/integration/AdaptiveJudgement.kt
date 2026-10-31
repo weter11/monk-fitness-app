@@ -87,7 +87,7 @@ object AdaptiveJudgementRule {
             .distinct()
 
         return when {
-            comparableSessions.size < MINIMUM_DISTINCT_SESSIONS -> ConfidenceLevel.MODERATE
+            comparableSessions.size < policy.confidenceMinimumDistinctSessions -> ConfidenceLevel.MODERATE
             exposures < policy.progressMinimumExposures -> ConfidenceLevel.MODERATE
             else -> ConfidenceLevel.HIGH
         }
@@ -108,6 +108,4 @@ object AdaptiveJudgementRule {
     private fun familyOf(exerciseId: String, familyOfExercise: Map<String, String>): String =
         familyOfExercise[exerciseId] ?: exerciseId
 
-    /** A count to exceed: one session is one occasion, two are the first thing that is a history. */
-    private const val MINIMUM_DISTINCT_SESSIONS = 2
 }

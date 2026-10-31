@@ -86,7 +86,8 @@ object ProgramAggregateLoadGuard {
         candidateLoad: LoadProfile,
         recentBaselineLoad: LoadProfile? = null,
         recentLoad: LoadProfile? = null,
-        policy: ProgramAdaptivePolicy
+        policy: ProgramAdaptivePolicy,
+        authoredCeiling: LoadProfile? = null
     ): ProgramGuardVerdict {
         val scope = baselineLoad.scope
         if (action == AdaptiveAction.HOLD || action == AdaptiveAction.REGRESS ||
@@ -102,7 +103,7 @@ object ProgramAggregateLoadGuard {
             null
         }
 
-        val exceeded = delta.comparable.filter { compared -> exceeds(compared, policy) }
+        val exceeded = delta.comparable.filter { compared -> exceeds(compared, policy, authoredCeiling) }
         if (exceeded.isNotEmpty()) {
             return ProgramGuardVerdict.Filtered(
                 scope = scope,
@@ -137,19 +138,34 @@ object ProgramAggregateLoadGuard {
      * adaptation may **add**, the rest rule bounds what it may **take away**, and a channel that did not
      * move is never a violation. Every comparison is exact integer arithmetic, with no division or
      * rounding.
+     *
+     * [authoredCeiling] is the exercise's own span, and it replaces the volume tolerances: a change that
+     * stays inside the range the catalogue authored is bounded by that content, not by a share of the
+     * baseline — which is what lets a prescription climb within its range at all.
      */
     private fun exceeds(
         compared: ProgramChannelComparison.Compared,
-        policy: ProgramAdaptivePolicy
+        policy: ProgramAdaptivePolicy,
+        authoredCeiling: LoadProfile?
     ): Boolean = when (compared.channel) {
-        ProgramLoadChannel.VOLUME_SETS -> compared.increases && exceedsIncrease(
-            compared, policy.guardAllowedSetIncreaseNumerator, policy.guardAllowedSetIncreaseDenominator
-        )
+        ProgramLoadChannel.VOLUME_SETS -> compared.increases && (
+            ceilingOf(compared.channel, authoredCeiling)?.let { ceiling -> compared.candidate > ceiling }
+                ?: exceedsIncrease(
+                    compared,
+                    policy.guardAllowedSetIncreaseNumerator,
+                    policy.guardAllowedSetIncreaseDenominator
+                )
+            )
 
         ProgramLoadChannel.VOLUME_REPETITIONS,
-        ProgramLoadChannel.VOLUME_SECONDS -> compared.increases && exceedsIncrease(
-            compared, policy.guardAllowedAmountIncreaseNumerator, policy.guardAllowedAmountIncreaseDenominator
-        )
+        ProgramLoadChannel.VOLUME_SECONDS -> compared.increases && (
+            ceilingOf(compared.channel, authoredCeiling)?.let { ceiling -> compared.candidate > ceiling }
+                ?: exceedsIncrease(
+                    compared,
+                    policy.guardAllowedAmountIncreaseNumerator,
+                    policy.guardAllowedAmountIncreaseDenominator
+                )
+            )
 
         // The relation has already established that a single declared step exists; this is the
         // guard's own independent bound on how far one decision may travel.
@@ -174,6 +190,20 @@ object ProgramAggregateLoadGuard {
         // not load the adaptive stage added.
         ProgramLoadChannel.EXPOSURE_COMPLETED -> false
     }
+
+    /** The authored ceiling for [channel], or `null` when the ceiling says nothing about it. */
+    private fun ceilingOf(channel: ProgramLoadChannel, ceiling: LoadProfile?): Int? =
+        if (ceiling == null) {
+            null
+        } else {
+            when (channel) {
+                ProgramLoadChannel.VOLUME_SETS -> ceiling.volume.sets
+                ProgramLoadChannel.VOLUME_REPETITIONS -> ceiling.volume.repetitions
+                ProgramLoadChannel.VOLUME_SECONDS -> ceiling.volume.durationSeconds
+                ProgramLoadChannel.DENSITY_WORKING_SECONDS -> ceiling.density.workingSeconds
+                else -> null
+            }
+        }
 
     /** `candidate ≤ baseline + baseline · numerator/denominator`, in exact integers. */
     private fun exceedsIncrease(

@@ -141,12 +141,20 @@ guard — never re-derived at a call site. The v1 values:
 | `guardAllowedWorkIncrease*` | 0/1 | working seconds it may add |
 | `guardAllowedLevelSteps` | 1 | declared levels one decision may travel |
 | `guardAllowedRestDecrease*` | 1/1 | rest may not shorten below this fraction |
+| `rangeStepNumerator` / `rangeStepDenominator` | 1/4 | share of an exercise's own range width one step moves |
+| `confidenceMinimumDistinctSessions` | 2 | sessions before confidence above `LOW` may be stated |
+| `sessionsBeforeAnIntervalIsUsual` | 3 | sessions before an interval between them is a habit |
 
-The zeros are deliberate: **v1 allows no automatic volume increase**. The adaptive stage's job is to move
-the family to the variant its own ladder declares next, and how much the user does is the plan's and the
-user's business. A caller that wants a bounded increase states its own numerator — and the arithmetic is
-exact, so `1/4` means *"37 repetitions of a 30-repetition baseline is inside +25%, 38 is not"*, which
+The zeros are deliberate: **v1 allows no automatic volume increase for a variant step**. The adaptive
+stage's job there is to move the family to the variant its own ladder declares next, and how much the user
+does is the plan's and the user's business. A caller that wants a bounded increase states its own
+numerator — and the arithmetic is exact, so `1/4` means *"37 repetitions of a 30-repetition baseline is
+inside +25%, 38 is not"*, which
 `ProgramAggregateLoadGuardTest.theToleranceIsTheExactIntegerBoundaryThePolicyStates` measures.
+
+A step **inside** an exercise's own range is not bounded by those tolerances: its bound is the span the
+catalogue authored, passed to the guard as `authoredCeiling`, and the engine never prescribes past either
+end of it.
 
 ### The state machine, in priority order
 
@@ -166,7 +174,8 @@ exact, so `1/4` means *"37 repetitions of a 30-repetition baseline is inside +25
 ```
 
 **PROGRESS** (§7) requires all of: comparable exposures ≥ `progressMinimumExposures`; a **measured
-positive trend**; a **recent end** that fell short of nothing; `EvidenceLevel.STRONG`; confidence above
+positive trend** *or* a **recent end that completed its prescription**; a **recent end** that fell short
+of nothing; `EvidenceLevel.STRONG`; confidence above
 `LOW`; `RecoveryContext.FAVORABLE`; attendance not `LOW`; a recent context not above the plan's own
 prescription; confirmation across `progressConfirmingWindows`; and a cooldown that has elapsed (or a
 family that has never changed level, where there is nothing to cool down from).
@@ -244,6 +253,7 @@ Resolution rules, all of them bounded non-progressing answers rather than substi
 | the ordered step's exercise is not in `availableExerciseIds` | `HOLD` / `PROGRESSION_UNAVAILABLE` |
 | the level above declares several variants | `HOLD` / `PROGRESSION_UNAVAILABLE` |
 | the level is unknown (the caller holds none, and the relation does not declare the presented exercise) | `HOLD` / `PROGRESSION_UNAVAILABLE` |
+| the exercise's own range still has room in the direction asked | `PROGRESS` / `SUSTAINED_POSITIVE`, or `REGRESS` / `SUSTAINED_NEGATIVE`, on the **same** exercise at a different amount |
 | the element presents something the family does not declare there, and it declares another variant that is available | `CHANGE_VARIANT` / `VARIANT_REALIGNED` |
 
 Nothing is ever substituted: the engine cannot return an exercise the relation does not declare, and it
