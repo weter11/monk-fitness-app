@@ -11,6 +11,7 @@ import com.monkfitness.app.domain.adaptive.engine.ProgramAdaptiveRig
 import com.monkfitness.app.domain.adaptive.engine.ProgramElementOwnership
 import com.monkfitness.app.domain.adaptive.integration.ownership
 import com.monkfitness.app.domain.adaptive.integration.ProgressionRelationProvider
+import com.monkfitness.app.domain.prescription.RepPrescription
 import com.monkfitness.app.domain.program.ProgramExerciseOrigin
 import com.monkfitness.app.domain.product.ProductionProgressionRelationDefinitions
 import kotlinx.coroutines.runBlocking
