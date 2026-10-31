@@ -16,10 +16,8 @@ import com.monkfitness.app.domain.program.target.TargetScheduleWindow
 import java.time.LocalDate
 
 /**
- * Every value one orchestration pass needs, supplied by the caller.
- *
- * The request is a pure value: it carries no clock, no repository, and no identity
- * generator, so the same request always describes the same semantic pass.
+ * Every value one orchestration pass needs, supplied by the caller. A pure value — no clock, no
+ * repository, no identity generator — so the same request always describes the same semantic pass.
  */
 data class TargetScheduleOrchestrationRequest(
     val programId: ProgramId,
@@ -35,11 +33,9 @@ data class TargetScheduleOrchestrationRequest(
 )
 
 /**
- * The three semantic boundaries of one pass, each kept whole.
- *
- * `targetPlan` is what semantic target computation produced, `decision` is what temporal
- * classification produced, and `applicationResult` is what presentation and persistence
- * produced. None of them is flattened into the next.
+ * The three semantic boundaries of one pass, each kept whole and none flattened into the next: what
+ * target computation produced, what temporal classification produced, what presentation and
+ * persistence produced.
  */
 data class TargetScheduleOrchestrationResult(
     val request: TargetScheduleOrchestrationRequest,
@@ -49,13 +45,9 @@ data class TargetScheduleOrchestrationResult(
 )
 
 /**
- * Phase 12 orchestration: `TargetPlanner` -> `TargetSchedulePolicy` ->
- * `TargetScheduleApplicationService`.
- *
- * This boundary composes the three existing stages and adds no scheduling semantics of
- * its own. Temporal interpretation belongs to [TargetSchedulePolicy]; presentation and
- * persistence belong to [TargetScheduleApplicationService]; target planning belongs to
- * [TargetPlanner]. Typed failures from all three propagate unchanged.
+ * `TargetPlanner` -> `TargetSchedulePolicy` -> `TargetScheduleApplicationService`, composing the three
+ * stages and adding no scheduling semantics of its own. Typed failures from all three propagate
+ * unchanged.
  */
 class TargetScheduleOrchestrator(
     private val applicationService: TargetScheduleApplicationService

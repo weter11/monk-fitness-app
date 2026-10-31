@@ -13,20 +13,12 @@ import com.monkfitness.app.domain.program.target.TargetScheduleWindow
 import java.time.LocalDate
 
 /**
- * One explicitly stated target rule, in the vocabulary the *caller* owns.
+ * One explicitly stated target rule, in the vocabulary the *caller* owns: which rule, which workout it
+ * produces, how often it recurs, the date it anchors to.
  *
- * A target scheduling pass is fully described only if the caller says, for every rule it wants,
- * exactly four things: which rule it is, which workout it produces, how often it recurs and the
- * date it is anchored to. This value is that statement, and nothing else. It is deliberately a
- * separate type from [TargetSchedule] rather than an alias of it: [TargetSchedule] is the *engine's*
- * input, and keeping a caller-authored record distinct from it is what makes "the caller supplied
- * this" a fact a reader can check instead of an assumption.
- *
- * Nothing here is defaulted, derived or validated at construction. A blank identity is not
- * representable as a *rule* — it is representable as a *claim* — so [TargetScheduleInputAdapter] is
- * where a malformed claim is refused, with a typed reason naming what was missing. Deciding that a
- * blank rule id is acceptable, or that two claims about one rule can be merged, would be scheduling
- * policy, and policy does not live at an input boundary.
+ * Deliberately separate from [TargetSchedule], the engine's own input, so "the caller supplied this" is
+ * a fact a reader can check. Nothing is defaulted, derived or validated here — a blank identity is
+ * representable as a *claim*, and [TargetScheduleInputAdapter] is where a malformed claim is refused.
  */
 data class TargetScheduleDefinition(
     val ruleId: String,
@@ -35,11 +27,8 @@ data class TargetScheduleDefinition(
     val anchorDate: LocalDate
 ) {
     /**
-     * The deterministic field-by-field conversion into the engine's own [TargetSchedule].
-     *
-     * Every field is copied; nothing is computed. There is no branch here, and there could not be
-     * one: a conversion that chose a cadence or an identity for itself would be inventing the target
-     * semantics the caller did not state.
+     * The deterministic field-by-field conversion into the engine's [TargetSchedule]; nothing is
+     * computed, because choosing a cadence or identity here would invent semantics the caller omitted.
      */
     fun toTargetSchedule(): TargetSchedule = TargetSchedule(
         ruleId = ruleId,
@@ -50,22 +39,14 @@ data class TargetScheduleDefinition(
 }
 
 /**
- * Every value one target scheduling pass needs, in the shape the application layer holds it.
+ * Every value one target scheduling pass needs. The [scheduleDefinitions] are the only thing this
+ * boundary converts; every other property is forwarded unchanged, so the pipeline after this point is
+ * the only place target semantics exist.
  *
- * The [scheduleDefinitions] are the only thing this boundary converts; every other property is
- * forwarded unchanged, which is what makes the pipeline after this point the only place target
- * semantics exist. The named properties are deliberately the same ten the orchestration request
- * carries, so the conversion is a value substitution and not a reshaping.
- *
- * Three of them are *caller-owned facts this stage refuses to reconstruct*:
- *
- *  * [existingOccurrences] — the persisted slot does not carry a full occurrence payload, so there
- *    is no honest way to read one back. Until a dedicated semantic read-back contract exists, the
- *    caller states them;
- *  * [sources] — a derived rule's source occurrences are semantic, and resolving them is the
- *    planning stage's work, not an input boundary's;
- *  * [programDayBindings] — a `workoutId` to `ProgramDayId` mapping cannot be recovered from a day
- *    number, a name, a date or an id's own text, so it is stated.
+ * Three are *caller-owned facts this stage refuses to reconstruct*: [existingOccurrences] (the persisted
+ * slot carries no full occurrence payload to read back), [sources] (resolving a derived rule is the
+ * planning stage's work) and [programDayBindings] (`workoutId -> ProgramDayId` cannot be recovered from
+ * a day number, a name, a date or an id's own text).
  */
 data class TargetScheduleInput(
     val programId: ProgramId,
@@ -80,25 +61,19 @@ data class TargetScheduleInput(
     val programDayBindings: List<TargetProgramDayBinding>
 )
 
-/** Typed refusals for a target scheduling input that does not state what a pass requires. */
 sealed class TargetScheduleInputException(message: String) : IllegalArgumentException(message) {
 
-    /** A definition claims a rule without naming it, so no occurrence could ever be attributed. */
     data class BlankTargetRuleIdentity(val index: Int) : TargetScheduleInputException(
         "target schedule definition $index has a blank rule identity"
     )
 
-    /** A definition names a rule but not the workout that rule produces. */
     data class BlankTargetWorkoutIdentity(val index: Int) : TargetScheduleInputException(
         "target schedule definition $index has a blank workout identity"
     )
 
     /**
-     * Two definitions claim one rule identity.
-     *
-     * A rule id is the identity the rest of the pipeline keys on: the resolver sorts by it, the
-     * composer writes it into the occurrence key, and a derived cadence names it as its source. Two
-     * claims about one identity cannot both be true, and silently keeping one of them would be a
+     * Two definitions claim one rule identity. The rest of the pipeline keys on it — the resolver sorts
+     * by it, the composer writes it into the occurrence key — and keeping one claim silently would be a
      * scheduling decision made here.
      */
     data class DuplicateTargetRuleIdentity(val ruleId: String, val index: Int) :
@@ -108,48 +83,28 @@ sealed class TargetScheduleInputException(message: String) : IllegalArgumentExce
 }
 
 /**
- * Phase 13 input boundary: explicit application definitions
- * [TargetScheduleDefinition] -> the engine's own [TargetSchedule], and
- * [TargetScheduleInput] -> [TargetScheduleOrchestrationRequest].
+ * The input boundary: explicit [TargetScheduleDefinition] -> the engine's [TargetSchedule], and
+ * [TargetScheduleInput] -> [TargetScheduleOrchestrationRequest]. It is the only place caller-owned Program
+ * data becomes a target scheduling request, by deterministic value conversion alone: it does not run the
+ * pass and holds no collaborator, repository, clock or identity generator.
  *
- * This adapter is the *only* place where caller-owned Program data becomes a target scheduling
- * request, and it does so by deterministic value conversion alone:
+ * It never reads the legacy scheduling vocabulary. A `ProgramSchedule` states *when slots fall*, not a
+ * target rule, and a mapper producing the missing identity, workout and anchor would be inventing them;
+ * `ProgramDay.position` is an ordering, `.name` a label and an id's text is opaque, so none can stand in
+ * for a stated target identity.
  *
- * ```text
- * explicit target definitions + bindings
- *         ↓  TargetScheduleInputAdapter
- * TargetScheduleOrchestrationRequest
- *         ↓  TargetScheduleOrchestrator
- * ```
- *
- * It does not run the pass. It holds no planning, temporal, presentation or persistence
- * collaborator, and no repository, clock or identity generator: an equivalent input always
- * describes an equality-identical request.
- *
- * What it deliberately does **not** do is read the legacy scheduling vocabulary. A revision's
- * `ProgramSchedule` states *when slots fall*; it does not state a target rule, because a rule also
- * needs a rule identity, a workout identity, an anchor date and, for a derived rule, its source. A
- * mapper that produced those would be inventing them, so none exists — neither here nor in the
- * legacy contour, and no implicit `ProgramSchedule -> TargetSchedule` path is introduced by this
- * stage. The same holds for every other identity a Program holds: a `ProgramDay.position` is an
- * ordering, a `ProgramDay.name` is a label, and an id's own text is opaque (§1), so none of them can
- * stand in for a target identity the caller has to state.
- *
- * The KDoc of this file names no target stage type on purpose. The production-source scans that pin
- * "which component owns this vocabulary" read file text without stripping comments, so a KDoc that
- * spelled those types out would register as a caller and invert a guard that is meant to stay closed.
- * The stage document names them; the source does not.
+ * This KDoc names no target stage type on purpose: the production-source scans that pin "which component
+ * owns this vocabulary" read file text without stripping comments, so naming them would register this
+ * file as a caller and invert a guard meant to stay closed.
  */
 class TargetScheduleInputAdapter {
 
     /**
      * The whole conversion, in one expression per field.
      *
-     * Order is the caller's: [TargetScheduleInput.scheduleDefinitions] is converted positionally and
-     * never sorted, grouped or deduplicated, because a canonical order would be a second, invisible
-     * statement about which rule matters. The duplicate check below is a *refusal*, not a
-     * canonicalisation: it says two claims about one identity cannot both be true, and leaves the
-     * caller to supply one.
+     * Order is the caller's: definitions are converted positionally, never sorted, grouped or deduplicated,
+     * since a canonical order would be a second, invisible statement about which rule matters. The
+     * duplicate check is a *refusal*, not a canonicalisation.
      */
     fun adapt(input: TargetScheduleInput): TargetScheduleOrchestrationRequest {
         val schedules = targetSchedules(input.scheduleDefinitions)
@@ -170,13 +125,10 @@ class TargetScheduleInputAdapter {
     /**
      * Validates the shape of the caller's own claims, then converts them one for one.
      *
-     * The checks are about *identity and shape only* — a named rule, a named workout, one claim per
-     * rule. Whether a rule is date-eligible, paused, missed, in the past or in the future, what a
-     * composition means, and whether a cadence is resolvable at all are all downstream questions:
-     * [ScheduleCadence] already rejects an impossible cadence at construction, and the temporal
-     * stage is the only authority on dates. No `(ruleId, anchorDate)` uniqueness rule is added here
-     * either: [TargetSchedule] states none, and inventing one would be a second semantic rule about
-     * what a pass means.
+     * The checks concern *identity and shape only* — a named rule, a named workout, one claim per rule.
+     * Date eligibility, pauses and cadence resolvability are downstream questions, and no
+     * `(ruleId, anchorDate)` uniqueness rule is added: [TargetSchedule] states none, and inventing one
+     * would be a second semantic rule about what a pass means.
      */
     private fun targetSchedules(
         definitions: List<TargetScheduleDefinition>

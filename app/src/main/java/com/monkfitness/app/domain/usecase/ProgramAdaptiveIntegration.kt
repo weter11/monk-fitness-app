@@ -68,90 +68,43 @@ import java.time.ZoneId
 import java.time.temporal.ChronoUnit
 
 /**
- * §30 step 12's **adaptive integration**: from a completed Session to the adaptive half of §27's
- * completion unit.
+ * The adaptive integration: from a completed Session to the adaptive half of the completion unit.
  *
- * ```text
- * the Session being completed  (its confirmed sets are already facts)
- *     ↓  the families the completion exposed, and their real window of history      §6, §11
- * next not-yet-started, still-startable Slot of the same Program + Revision         §4
- *     ↓  its presentation: the revision's plan day + the adjustments standing for it §16
- *     ↓  the element of that presentation whose ladder can resolve it                §10
- * AdaptiveInputSnapshot + ProgramAdaptiveRequest   (real facts, supplied identity)   §5, §8
- *     ↓
- * ProgramAdaptiveEngine.decide                    (pure, collaborator-free)          §11
- *     ↓
- * ProgramAdaptiveResult                           (decision, adjustment, family state)
- *     ↓
- * AdaptiveIntegrationOutcome                      (§20's four shapes)
- * ```
+ * It **prepares** that half and writes nothing. Persisting it is the completion transaction, which opens the
+ * session, the opportunity and the adaptive rows as one unit: the outcome carries an `AdaptiveCompletion` and
+ * the runtime hands it to [ProgramAdaptiveRepository] inside that transaction. The runtime composes and never
+ * calculates a signal, resolves a progression or runs a policy.
  *
- * This class **prepares** the adaptive half and writes nothing. Persisting it is §27's completion
- * transaction, which `SessionRuntime.finishSession` opens and which owns the session, the opportunity
- * and the adaptive rows as one unit of work: the outcome carries an
- * [com.monkfitness.app.domain.workout.AdaptiveCompletion], and the runtime hands it to
- * [ProgramAdaptiveRepository] inside the transaction. That split is §17's: the runtime composes
- * *"session + slot + already-produced adaptive completion"* and never calculates a signal, resolves a
- * progression, runs a policy or selects an exercise.
+ * What it decides: the **target opportunity** (the next not-yet-started, still-startable one of the same
+ * Program under the same revision — no other opportunity, no other revision, and none created here, so when
+ * none is eligible the answer is `NO_FUTURE_SLOT`); the **subject** (the first element of that opportunity's
+ * presentation whose family the completion exposed and for which a ladder is declared — ownership is *not*
+ * decided here, an authored or pinned element is handed to the engine as what it is); the **window's facts**;
+ * the **three judgements** (evidence, confidence, recovery), kept separate; and **identity and the moment**,
+ * from the injected [IdGenerator] and [Clock], read once per pass.
  *
- * ### What it decides
- *
- *  * **the target opportunity** — the next not-yet-started, still-startable opportunity of the same
- *    Program under the same revision the completion belonged to ([adaptiveTargetSlotOf]). No other
- *    opportunity, no other revision, no other Program, and no slot created here: when none is eligible
- *    the answer is [AdaptiveInputGap.NO_FUTURE_SLOT] and nothing is written (§4, §25);
- *  * **the subject** — the first element of that opportunity's presentation whose family the completion
- *    exposed and for which a ladder is declared ([adaptiveTargetElementOf]). Ownership is *not* decided
- *    here: an element the user authored or pinned is handed to the engine as what it is, and the engine's
- *    own rule holds on it (§15, §19);
- *  * **the window's facts** — observations from the stored sessions, the plan's own opportunities for the
- *    family, what was actually performed, and the family's maintained bookkeeping (§6, §7, §13);
- *  * **the three judgements** — evidence, confidence and recovery, derived from those facts by
- *    [AdaptiveJudgementRule] and kept separate (§9, §12, §14);
- *  * **identity and the moment** — the decision and adjustment ids from the injected [IdGenerator], and
- *    `decidedAt`/`capturedAt` from the injected [Clock], read once per pass (§5, §26).
- *
- * ### What it does not do
- *
- * It runs no policy of its own, applies no threshold of its own, invents no ladder, fabricates no
- * judgement, creates no row, moves no date, creates no slot, creates or rewrites no revision and mutates
- * no session. One fact production does not have is recorded rather than hidden: the target schema stores
+ * It runs no policy or threshold of its own, invents no ladder, fabricates no judgement, and creates, moves or
+ * rewrites nothing. One fact production does not have is recorded rather than hidden: the target schema stores
  * no family ladder, so the composition root wires `NoDeclaredProgression` and **no family is adapted in
- * production today** — every pass stops at [AdaptiveInputGap.NO_DECLARED_PROGRESSION_RELATION] instead of
- * fabricating a progression.
+ * production today** — every pass stops at `NO_DECLARED_PROGRESSION_RELATION` rather than fabricating a
+ * progression. The exercise→family catalogue is supplied from the app's own shipped catalogue, which moved
+ * production from `NO_FAMILY_CLASSIFICATION` to that later gap and nothing further.
  *
- * The *other* fact §30 step 12 recorded as missing — an exercise→family catalogue — **P30 supplied**, from
- * the app's own shipped catalogue rather than from new storage. Supplying it moved production one gap
- * later, from `NO_FAMILY_CLASSIFICATION` to `NO_DECLARED_PROGRESSION_RELATION`, and nothing further: a pass
- * can now name the family it is about and still declines to adapt it, because the ladder is still
- * undeclared. `docs/PROGRAM_ADAPTIVE_FAMILY_CLASSIFICATION.md` records the audit that established the
- * catalogue's `Exercise.familyId` *is* this engine's family identity; the suites drive the whole flow with
- * a ladder supplied on top of it.
- *
- * @param planRepository the revision mechanism, read for the revision the completed Session names — the
- *   revision its target opportunity must belong to. Read, never written (§6).
- * @param scheduleRepository the opportunities: read for the revision's slots and for nothing else. No
- *   slot is created, moved, renumbered or superseded here (§20, §25).
- * @param sessionRepository the session graph: the completion itself, and the Program's history the window
- *   is assembled from. A session is assembled from its own stored rows, so a later revision or adjustment
- *   cannot change what an old observation says (§19).
- * @param adaptiveRepository the target adaptive tables: read for the family's state and for the
- *   adjustments standing for the target opportunity, which a new decision supersedes by reference (§14,
- *   §16). Nothing is written here.
- * @param relations the ladder source (§10).
- * @param classification the caller's exercise→family classification (§9).
- * @param clock the moment the window is captured at and the decision is stamped with — read once per pass
- *   (§26).
- * @param idGenerator the identity source the decision and its adjustment are minted through (§26).
- * @param zone the calendar zone a slot's *date* is read in. A slot is planned for a date while the window
- *   is an interval of instants, and the conversion belongs to the layer that owns the clock rather than
- *   to the decision (§26), which is why it is an explicit constructor fact rather than a
- *   `systemDefault()` call inside the load assembly.
- * @param window how far back the decision window reaches (§8's lookback rule, owned by the integration).
- * @param policy the adaptive policy every threshold, count and tolerance is read from (§15).
- * @param exerciseRanges where the element's exercise's own progression range is read from, when the
- *   caller states one. It is a caller fact like [classification]: this layer owns no catalogue, and
- *   [ExerciseRangeSource.NONE] is the default for a caller that states no ranges at all.
+ * @param planRepository read for the revision the completed Session names — its target opportunity must belong
+ *   to it. Never written.
+ * @param scheduleRepository read for the revision's slots and nothing else; no slot is created, moved or
+ *   superseded here.
+ * @param sessionRepository the completion itself and the history the window is assembled from. A session is
+ *   assembled from its own stored rows, so a later revision cannot change what an old observation says.
+ * @param adaptiveRepository the family's state and the adjustments standing for the target opportunity, which a
+ *   new decision supersedes by reference. Nothing is written here.
+ * @param clock the moment the window is captured at and the decision stamped with — read once per pass.
+ * @param zone the calendar a slot's *date* is read in. A slot is planned for a date while the window is an
+ *   interval of instants, and the conversion belongs to the layer that owns the clock — an explicit fact rather
+ *   than a `systemDefault()` call inside the load assembly.
+ * @param policy the adaptive policy every threshold, count and tolerance is read from.
+ * @param exerciseRanges where the element's own progression range is read from, when a caller states one. A
+ *   caller fact like the classification: this layer owns no catalogue.
  */
 class ProgramAdaptiveIntegration(
     private val planRepository: ProgramPlanRepository,
@@ -171,9 +124,8 @@ class ProgramAdaptiveIntegration(
     /**
      * The adaptive half of the completion of [sessionId], prepared but not written.
      *
-     * Expected outcomes are values — [AdaptiveIntegrationResult.Success] of one of §20's four shapes —
-     * stored facts the domain refuses surface as [AdaptiveIntegrationResult.InvalidData], and anything
-     * else as [AdaptiveIntegrationResult.Failure]. Nothing is ever swallowed into an empty result (§28).
+     * Expected outcomes are values — `Success` of one of the four shapes — stored facts the domain refuses
+     * surface as `InvalidData`, and anything else as `Failure`. Nothing is swallowed into an empty result.
      */
     suspend fun adaptAfter(sessionId: SessionId): AdaptiveIntegrationResult = try {
         pass(sessionId)
@@ -185,17 +137,14 @@ class ProgramAdaptiveIntegration(
         AdaptiveIntegrationResult.Failure(failure)
     }
 
-    // ---------------------------------------------------------------------------------------------
-    // The pass, in §5's order: whose completion, which opportunity, whose element, which facts.
-    // ---------------------------------------------------------------------------------------------
+    // The pass, in order: whose completion, which opportunity, whose element, which facts.
 
     private suspend fun pass(sessionId: SessionId): AdaptiveIntegrationResult {
         val session = sessionRepository.sessionById(sessionId)
             ?: return gap(AdaptiveInputGap.NO_SUCH_SESSION)
-        // The trigger is the *completion* of this attempt: §27 makes the completion and the adaptive
-        // half one transaction, so the pass runs while the attempt is still `IN_PROGRESS` and the
-        // completion that carries its result is the one that stamps it. A cancelled attempt is the
-        // case that has no completion at all.
+        // The trigger is the *completion* of this attempt: the completion and the adaptive half are one
+        // transaction, so the pass runs while the attempt is still `IN_PROGRESS` and the completion that
+        // carries its result is the one that stamps it. A cancelled attempt has no completion at all.
         if (session.status == SessionStatus.CANCELLED) {
             return gap(AdaptiveInputGap.SESSION_WAS_CANCELLED)
         }
@@ -207,9 +156,8 @@ class ProgramAdaptiveIntegration(
             )
         if (revision.mode == ProgramMode.MANUAL) return gap(AdaptiveInputGap.PROGRAM_MODE_IS_MANUAL)
 
-        // One moment for the whole pass, read once (§26): the window is captured at it, the target
-        // opportunity is chosen against its own calendar day, the presentation is composed at it, and
-        // every row this produces is stamped with it.
+        // One moment for the whole pass: the window is captured at it, the target opportunity is chosen
+        // against its calendar day, and every row this produces is stamped with it.
         val capturedAt = clock.now()
         val windowStart = window.windowStart(capturedAt)
 
@@ -232,9 +180,9 @@ class ProgramAdaptiveIntegration(
         val observations = observationsOf(history, session.sessionId, windowStart, capturedAt)
         val exposed = exposedFamiliesOf(session)
 
-        // §16's composition, plus the standing adjustments that make it effective: the element the
-        // decision is about is the one the user would actually be shown, and a decision about it
-        // supersedes the adjustment standing for it — by reference, never by rewriting it.
+        // The presentation plus the standing adjustments that make it effective: the element the decision is
+        // about is the one the user would actually be shown, and a decision about it supersedes the standing
+        // adjustment — by reference, never by rewriting it.
         val standing = standingAdjustments(adaptiveRepository.adjustmentsOf(targetSlot.slotId))
         val presented = presentedWorkout(day, targetSlot, standing, capturedAt)
         val ownership = day.exercises.associate { it.programExerciseId.value to it.ownership }
@@ -294,10 +242,10 @@ class ProgramAdaptiveIntegration(
         )
         val familyOfExercise = classifiedExercisesOf(observations, day)
 
-        // §11's facts about *when*, stated from the history the pass already holds: the last confirmed set
-        // anywhere in it (never narrowed to the window — a set older than the window is exactly the fact a
-        // gap rule needs), the stretch before this window's own session, and the user's usual interval from
-        // the family's last few sessions wherever they fall. §15's return rule reads the last two.
+        // The facts about *when*, from history the pass already holds: the last confirmed set anywhere in it
+        // (never narrowed to the window — a set older than the window is exactly the fact a gap rule needs),
+        // the stretch before this window's own session, and the user's usual interval from the family's last
+        // few sessions wherever they fall. The return rule reads the last two.
         val gapFacts = programGapFactsOf(
             sessions = history,
             completion = session.sessionId,
@@ -360,24 +308,17 @@ class ProgramAdaptiveIntegration(
         )
     }
 
-    // ---------------------------------------------------------------------------------------------
-    // §20's four shapes, from the engine's own result.
-    // ---------------------------------------------------------------------------------------------
+    // The four outcome shapes, from the engine's own result.
 
     /**
-     * Which of §20's four shapes one engine result is, and the family's state after the window.
+     * Which of the four shapes one engine result is, and the family's state after the window.
      *
-     * Every branch is a rule rather than a convenience:
-     *
-     *  * the guard's refusal is **the only** thing that produces a kept `NOT_APPLIED` decision, because
-     *    §18 names exactly that case as one that "remains recorded" — the change was resolved and
-     *    refused;
-     *  * an applied change is [AdaptiveIntegrationOutcome.AdaptiveApplied] and carries all three legs §27
-     *    writes as one unit: the state, the decision and the adjustment;
-     *  * every other hold is [AdaptiveIntegrationOutcome.NothingToAdapt] — no decision row and no
-     *    adjustment, with the family's own bookkeeping advanced (§11);
-     *  * an applied change whose family has no storable position fails loudly instead of being stored
-     *    half-explained: a resolved step exists only because the ladder declared a level for it.
+     * Every branch is a rule: a refusal by the guard is **the only** thing that produces a kept `NOT_APPLIED`
+     * decision, because that is the case the domain names as one that "remains recorded" — the change was
+     * resolved and refused; an applied change carries all three legs written as one unit; every other hold is
+     * `NothingToAdapt` with the family's bookkeeping still advanced; and an applied change whose family has no
+     * storable position fails loudly rather than being stored half-explained, since a resolved step exists
+     * only because the ladder declared a level for it.
      */
     private fun outcomeOf(
         result: ProgramAdaptiveResult,
@@ -418,36 +359,15 @@ class ProgramAdaptiveIntegration(
     }
 
     /**
-     * The family's state after one window, or `null` when there is no position to store (§11, §23).
+     * The family's state after one window, or `null` when there is no position to store.
      *
-     * ```text
-     * progressionLevel   the level an applied change moved to, else the stored level, else the level
-     *                    the ladder declares for what the opportunity presents
-     * currentExerciseId  the variant an applied change moved to, else the declared variant the
-     *                    opportunity presents, else the stored one
-     * adaptationState    the engine's own state for the family after the window
-     * ```
-     *
-     * and the five window facts advance by the engine's own verdict
-     * ([com.monkfitness.app.domain.adaptive.engine.ProgramWindowVerdict]):
-     *
-     * ```text
-     * precedingProgressQualifyingWindows  +1 when §7's progression conditions held, else 0
-     * precedingRegressQualifyingWindows   +1 when §7's regression conditions held, else 0
-     * precedingRecoveryQualifyingWindows  +1 when §14's reduced-absorption pattern held, else 0
-     * recoveryQualifyingWindows           +1 while the family is in recovery, else 0
-     * qualifyingWindowsSinceLastChange    0 after a level change, else +1 for a window the family did not
-     *                                     spend in recovery — and `null` while the family has never changed
-     *                                     level, because "never changed" is not "0 ago"
-     * ```
-     *
-     * Each of those is a count of **windows**, and this window is one of them: a window cannot count
-     * itself, which is why the engine reports the verdict it decided on and this method only advances the
-     * bookkeeping. A realignment is not a level change and does not reset the cooldown (§15's decision
-     * 4); it is still one eligible window and is counted as one. A window the family spends in recovery
-     * is the one kind that is **not** eligible: §14's safety state outranks progression and no level
-     * change can be made from it, so the count holds there instead of being spent — otherwise a family
-     * leaving recovery would find its cooldown already elapsed for weeks it could not use.
+     * `progressionLevel` and `currentExerciseId` are what an applied change moved to, else what is stored, else
+     * what the ladder declares for what the opportunity presents — the engine's own fallback, so the stored
+     * state always names a position. Each count is a count of windows and a window cannot count itself, so the
+     * engine reports its verdict and this method only advances. A realignment is not a level change but is
+     * still one eligible window; `qualifyingWindowsSinceLastChange` stays `null` while the family never changed
+     * level ("never changed" is not "0 ago"); and a recovery window is the one kind that is *not* eligible, so
+     * the count holds rather than being spent for weeks the family could not use.
      */
     private fun stateAfter(
         result: ProgramAdaptiveResult,
@@ -487,9 +407,9 @@ class ProgramAdaptiveIntegration(
             precedingRecoveryQualifyingWindows =
                 advanced(stored?.precedingRecoveryQualifyingWindows, verdict.recoveryQualifying),
 
-            // The cooldown is spent by windows the family could have changed level in, so a window it
-            // spent in recovery holds the count: §14's state outranks progression, and charging a family
-            // for weeks it could not use would make the cooldown elapse on its behalf.
+            // The cooldown is spent by windows the family could have changed level in, so a window spent in
+            // recovery holds the count: charging a family for weeks it could not use would make the cooldown
+            // elapse on its behalf.
             qualifyingWindowsSinceLastChange = when {
                 levelChange -> 0
                 stored?.qualifyingWindowsSinceLastChange == null -> null
@@ -507,16 +427,13 @@ class ProgramAdaptiveIntegration(
     /** The count of consecutive qualifying windows, advanced by this window's own verdict. */
     private fun advanced(stored: Int?, qualified: Boolean): Int = if (qualified) (stored ?: 0) + 1 else 0
 
-    // ---------------------------------------------------------------------------------------------
-    // §11's window facts, §6's observations, §17's loads.
-    // ---------------------------------------------------------------------------------------------
+    // The window's facts, the observations and the loads.
 
     /**
-     * The family's maintained facts, as the engine's own window value (§15).
+     * The family's maintained facts, as the engine's own window value.
      *
-     * The level is the stored one when the family has a state, and otherwise the one the ladder declares
-     * for what the opportunity presents — which is the same fallback the engine itself applies, stated
-     * here so the stored state that comes out of this pass always names a position ([stateAfter]).
+     * The level is the stored one, else the one the ladder declares for what the opportunity presents — the
+     * same fallback the engine applies, stated here so the state this pass stores always names a position.
      */
     private fun windowOf(
         familyId: String,
@@ -533,34 +450,24 @@ class ProgramAdaptiveIntegration(
         precedingRecoveryQualifyingWindows = stored?.precedingRecoveryQualifyingWindows ?: 0,
         qualifyingWindowsSinceLastChange = stored?.qualifyingWindowsSinceLastChange,
         recoveryQualifyingWindows = stored?.recoveryQualifyingWindows ?: 0,
-        // The target tree has no source for a rest request: §10's REST_BASED has no subtype, no plan
-        // element prescribes rest and no screen can ask for one, so a window never *asks*. The policy's
-        // unsupported-rest path stays reachable only from a caller that states it (§15).
+        // The target tree has no source for a rest request: `REST_BASED` has no subtype, no plan element
+        // prescribes rest and no screen can ask for one, so a window never *asks*. The policy's
+        // unsupported-rest path stays reachable only from a caller that states it.
         restChangeRequested = false,
-        // The timing facts, stated from the stored history. §15's return rule reads two of them — how long
-        // the stretch before this window was, and how often the user usually trains — and no other rule
-        // consults any of them: a window that states no gap decides exactly as it did before they existed.
+        // The timing facts, from the stored history. The return rule reads two of them — the stretch before
+        // this window and how often the user usually trains — and no other rule consults the rest: a window
+        // stating no gap decides exactly as it did before they existed.
         gap = gap
     )
 
     /**
-     * The window's observations: what actually happened, from the sessions the Program already stores
-     * (§6, §12).
+     * The window's observations: what actually happened, from what the Program already stores.
      *
-     * Three rules, each of them §12's:
-     *
-     *  * an observation is built from an occurrence with **at least one confirmed set** — a skipped
-     *    exercise and an opportunity that was never trained produce no observation at all rather than a
-     *    zero-valued one;
-     *  * a session that **ended** contributes, and both endings do: a completed session and a cancelled
-     *    one, because a cancellation keeps its partial work as partial exposure while never becoming a
-     *    full one. An attempt still in progress is not counted yet — it has not ended, so its work is not
-     *    yet an execution of anything;
-     *  * the prescription an observation is measured against is the session's own **snapshot**, which is
-     *    why a later revision or adjustment cannot change what an old observation says.
-     *
-     * The set is ordered by start instant and occurrence identity, which is the order the snapshot
-     * requires and the order the signal layer counts in.
+     * An observation needs **at least one confirmed set** — a skipped exercise produces none rather than a
+     * zero-valued one. Ended attempts contribute and both endings count (a cancellation keeps its partial work
+     * as partial exposure); an attempt still running has not ended, so its work is not yet an execution of
+     * anything. The prescription is the session's own snapshot, so a later revision cannot change what an old
+     * observation says. Ordered by start instant then occurrence identity, the order the snapshot requires.
      */
     private fun observationsOf(
         sessions: List<WorkoutSession>,
@@ -582,8 +489,8 @@ class ProgramAdaptiveIntegration(
                     level = if (completed >= prescribed) ExposureLevel.FULL else ExposureLevel.PARTIAL,
                     completedSets = completed,
                     prescribedSets = prescribed,
-                    // The per-set amounts are carried, not interpreted: the counts above still say how
-                    // many sets happened, and nothing reads these yet (§12).
+                    // The per-set amounts are carried, not interpreted: the counts above say how many sets
+                    // happened, and nothing reads these yet.
                     performedAmounts = occurrence.results.map { result ->
                         PerformedSetAmount(
                             completedReps = result.completedReps,
@@ -598,18 +505,14 @@ class ProgramAdaptiveIntegration(
         .sortedWith(compareBy({ it.startedAt }, { it.sessionExerciseId.value }))
 
     /**
-     * The families the completed session **exposed**: the families of the occurrences it confirmed work
-     * for.
+     * The families the completed session **exposed**: those of the occurrences it confirmed work for.
      *
-     * A skipped occurrence exposed nothing, and neither did an occurrence with no confirmed set (§12), so
-     * neither is part of this set. The completion's own snapshot decides — which is what makes the subject
-     * of the decision a fact rather than a reading of today's plan.
-     *
-     * An occurrence whose exercise the classification does not know contributes **no** family here: the
-     * subject of a decision has to be a family a ladder can be declared for, and deriving one from the
-     * exercise id would be inventing the catalogue this stage is explicit about not owning. That is the
-     * same rule [adaptiveTargetElementOf] applies to the target opportunity's own elements, so the two
-     * sides of the match cannot disagree about what a family is.
+     * A skipped occurrence, or one with no confirmed set, exposed nothing, and the completion's own snapshot
+     * decides — which makes the subject a fact rather than a reading of today's plan. An exercise the
+     * classification does not know contributes **no** family: the subject must be one a ladder can be declared
+     * for, and deriving it from the exercise id would invent the catalogue this stage does not own.
+     * [adaptiveTargetElementOf] applies the same rule to the target's elements, so the two sides cannot
+     * disagree about what a family is.
      */
     private fun exposedFamiliesOf(session: WorkoutSession): Set<String> =
         session.exercises
@@ -617,7 +520,6 @@ class ProgramAdaptiveIntegration(
             .mapNotNull { classification.familyOf(it.exerciseId) }
             .toSet()
 
-    /** The caller's exercise→family classification, for the exercises of the window and of the day. */
     private fun classifiedExercisesOf(
         observations: List<ExposureObservation>,
         day: ProgramDay
@@ -630,14 +532,10 @@ class ProgramAdaptiveIntegration(
     /**
      * The plan's own opportunities for one family **inside the window**, and what they prescribed.
      *
-     * An opportunity is the plan's, not the adaptive layer's: the revision's slots whose planned date falls
-     * inside the window and whose plan day presents the family (§20 — a slot is an opportunity, never an
-     * amount of work). The date is read in the injected [zone], because a slot is planned for a date while
-     * the window is an interval of instants, and only one of those two facts is convert into the other
-     * here.
-     *
-     * @property opportunities how many of the plan's opportunities presented this family.
-     * @property completedOpportunities how many of them produced confirmed work for it.
+     * An opportunity is the plan's, not the adaptive layer's: the revision's slots whose planned date falls in
+     * the window and whose plan day presents the family — a slot is an opportunity, never an amount of work.
+     * The date is read in the injected [zone] because a slot is planned for a date while the window is an
+     * interval of instants, and only one of those converts into the other here.
      */
     private data class FamilyPlanWindow(
         val opportunities: Int,
@@ -698,12 +596,12 @@ class ProgramAdaptiveIntegration(
     }
 
     /**
-     * The **baseline** side of §18's comparison: what the plan prescribed for the family in the window.
+     * The **baseline** side of the comparison: what the plan prescribed for the family in the window.
      *
-     * The volume channels are kept apart — repetitions and seconds are different measurements and nothing
-     * converts between them (§17) — and the intensity channel carries the family's own position, which is
-     * the one level a level is comparable to. [ExposureLoad] is the context channel: how much opportunity
-     * the family had, and how much of it produced work.
+     * Volume channels stay apart — repetitions and seconds are different measurements and nothing converts
+     * between them — and the intensity channel carries the family's own position, the one level a level is
+     * comparable to. `ExposureLoad` is the context channel: how much opportunity the family had, and how much
+     * of it produced work.
      */
     private fun planLoadOf(
         level: Int?,
@@ -721,10 +619,9 @@ class ProgramAdaptiveIntegration(
         ),
         density = DensityLoad(
             workingSeconds = plan.prescribedSeconds,
-            // Rest is recorded nowhere in the target tree: a prescription has no rest field and §10's
-            // REST_BASED has no subtype. The channel therefore carries the working time that *is*
-            // recorded and a zero rest, which a comparison reads as "nothing recorded" on that channel —
-            // a bound that blocks nothing, never a rest proposal (§18).
+            // Rest is recorded nowhere in the target tree: a prescription has no rest field and there is no
+            // rest subtype. The channel carries the working time that *is* recorded and a zero rest, which a
+            // comparison reads as "nothing recorded" — a bound that blocks nothing, never a rest proposal.
             restSeconds = 0
         ),
         exposure = ExposureLoad(
@@ -734,12 +631,10 @@ class ProgramAdaptiveIntegration(
     )
 
     /**
-     * The **recent** side of §18's comparison: what was actually performed for the family inside the
-     * window, from the sessions' own confirmed sets.
+     * The **recent** side of the comparison: what was actually performed for the family inside the window.
      *
-     * It is `null` when the window holds no confirmed work for the family, which is a fact and not a zero
-     * (§11): a missed opportunity and an untrained week are absences, and reporting them as a zero-load
-     * recent past would read as *"the user did nothing, so add more"* — the inversion §12 and §18 forbid.
+     * `null` when the window holds no confirmed work, which is a fact and not a zero: a missed opportunity and an
+     * untrained week are absences, and a zero-load recent past would read as *"the user did nothing, so add more"*.
      */
     private fun performedLoadOf(
         sessions: List<WorkoutSession>,
@@ -763,19 +658,18 @@ class ProgramAdaptiveIntegration(
         return LoadProfile(
             scope = AdaptiveScope.FAMILY,
             volume = VolumeLoad(sets = sets, repetitions = repetitions, durationSeconds = seconds),
-            // The recent past's *level* is deliberately not stated: an observation records what was
-            // performed, not where the family stood when it was performed, and the position is a fact
-            // about now. Stating today's level on the recent side would claim a historical position
-            // nobody recorded, so the channel reads "not covered" and blocks nothing (§17).
+            // The recent past's *level* is deliberately not stated: an observation records what was performed,
+            // not where the family stood when it was, and the position is a fact about now. Stating today's
+            // level here would claim a historical position nobody recorded, so the channel reads "not covered"
+            // and blocks nothing.
             intensity = IntensityLoad(),
             density = DensityLoad(workingSeconds = seconds, restSeconds = 0),
-            // The exposure channel is the *plan's* opportunity record on both sides, because that is
-            // what an opportunity is: the plan's and the calendar's (§20), and the recent past does not
-            // have a second one to state. What the channel carries is the pair §18's recent-context rule
-            // reads — how many opportunities the family had, and how many of them produced work — so
-            // "the recent past met the plan and still owes an opportunity" is answerable. Stating the
-            // performed *occurrences* here instead would make the recent side "above the plan" on every
-            // window in which the family appeared more than once, which is not a load reading at all.
+            // The exposure channel is the *plan's* opportunity record on both sides, because an opportunity is
+            // the plan's and the calendar's, and the recent past has no second one to state. What it carries is
+            // the pair the recent-context rule reads — how many opportunities the family had, and how many
+            // produced work — so "the recent past met the plan and still owes an opportunity" is answerable.
+            // Stating the performed *occurrences* here instead would make the recent side "above the plan" on
+            // every window in which the family appeared more than once, which is not a load reading at all.
             exposure = exposure
         )
     }
@@ -783,21 +677,17 @@ class ProgramAdaptiveIntegration(
     /**
      * Whether a stored attempt contributes to the window whose completion is being prepared.
      *
-     * An attempt that **ended** does: a completed one and a cancelled one, because a cancellation keeps
-     * its partial work as partial exposure (§12) while never becoming a full one. The attempt the
-     * completion is **about** does too, and that is the case that makes §27's single transaction
-     * possible: its confirmed sets are work that happened, and the end stamp the completion is about to
-     * write is not what makes them count. An attempt still in progress that is *not* this completion is
-     * not counted yet — it has not ended, so its work is not yet an execution of anything.
+     * Ended attempts do, and both endings count. The attempt the completion is **about** does too, which is what
+     * makes the single completion transaction possible: its confirmed sets are work that happened, and the end
+     * stamp about to be written is not what makes them count.
      */
     private fun WorkoutSession.isHistoryOfTheCompletion(completion: SessionId): Boolean =
         sessionId == completion || status != SessionStatus.IN_PROGRESS
 
     /**
-     * The family one occurrence belongs to, by the caller's classification — or `null` when the
-     * classification does not know the exercise, in which case the occurrence contributes to no family's
-     * history. The decided family is always one the classification named (the target element was chosen
-     * through it), so an unclassified occurrence can never be counted into it by accident.
+     * The family one occurrence belongs to, by the caller's classification — or `null` when it does not know
+     * the exercise, in which case the occurrence contributes to no family's history. The decided family is
+     * always one the classification named, so an unclassified occurrence can never be counted into it.
      */
     private fun familyOf(occurrence: SessionExercise): String? =
         classification.familyOf(occurrence.exerciseId)
@@ -807,14 +697,12 @@ class ProgramAdaptiveIntegration(
         classification.familyOf(exercise.exerciseId)
 
     /**
-     * The exercises the plan presents — §9's `allowed exerciseIds`, as far as this tree states them.
+     * The exercises the plan presents, as the `allowedExerciseIds` this tree can state.
      *
-     * §9 makes the user's own selection authoritative over an adaptive preference, and the target schema
-     * stores no enabled-exercise selection of its own: the selection a Program *does* hold is the plan the
-     * user built. Reading it here is the conservative statement of that fact — a progression step the
-     * plan does not present is unavailable and the engine holds rather than introducing an exercise the
-     * user's own plan does not contain. The alternative (a persisted per-user selection) is a missing
-     * artefact, recorded in `docs/PROGRAM_ADAPTIVE_INTEGRATION.md`, not guessed at here.
+     * The user's own selection is authoritative over an adaptive preference, and the target schema stores no
+     * enabled-exercise selection of its own: the selection a Program *does* hold is the plan the user built.
+     * Reading it is the conservative statement of that fact — a progression step the plan does not present is
+     * unavailable, and the engine holds rather than introducing an exercise the user's plan lacks.
      */
     private fun availableExerciseIdsOf(revision: ProgramRevision): Set<String> =
         revision.days.flatMap { day -> day.exercises.map { it.exerciseId } }.toSet()
@@ -822,11 +710,10 @@ class ProgramAdaptiveIntegration(
     /**
      * The adjustment a new decision would supersede for one element of the presentation, or `null`.
      *
-     * §16's supersession is by reference and only the **latest standing** adjustment affects the
-     * presentation, so the chain is read (never rewritten) and the newest standing adjustment for this
-     * element is the one named. A chain that somehow holds two adjustments for one element is invalid
-     * persisted data and fails loudly in `standingAdjustments`/`presentedWorkout` rather than being
-     * resolved by picking one.
+     * Supersession is by reference and only the **latest standing** adjustment affects the presentation, so the
+     * chain is read (never rewritten) and the newest standing adjustment for the element is the one named. A
+     * chain holding two adjustments for one element is invalid persisted data and fails loudly inside
+     * `standingAdjustments`/`presentedWorkout` rather than being resolved by picking one.
      */
     private fun supersededBy(
         standing: List<AdaptiveAdjustment>,
@@ -839,14 +726,11 @@ class ProgramAdaptiveIntegration(
     /**
      * The window as the engine's own snapshot type states it.
      *
-     * The three judgement fields are parameters rather than a single value because the signal layer must
-     * be asked **before** they can be decided: they are derived from the signals, the signals are derived
-     * from the observations and the two load profiles, and only then does the snapshot carry the real
-     * levels. The first construction therefore passes the documented *absence* of every judgement
-     * (`INSUFFICIENT` / `LOW` / `UNKNOWN`) and the rule it feeds reads none of them — the signal
-     * calculator derives its own signals from `exposures`, `baselineLoad` and `recentLoad` and never looks
-     * at the three levels, which is exactly why they could stay inputs of the engine rather than being
-     * computed inside it.
+     * The three judgement fields are parameters because the signal layer must be asked **before** they can be
+     * decided: they derive from the signals, which derive from the observations and the two load profiles. The
+     * first construction therefore passes the documented *absence* of every judgement and the rule it feeds
+     * reads none of them — the signal calculator derives its own signals from `exposures`, `baselineLoad` and
+     * `recentLoad` and never looks at the three levels, which is why they could stay inputs of the engine.
      */
     private fun snapshotOf(
         session: WorkoutSession,
@@ -873,50 +757,34 @@ class ProgramAdaptiveIntegration(
         recentLoad = recentLoad
     )
 
-    /** A stored fact that cannot be true, as the pass reports it (§28's `INVALID_DATA`). */
+    /** A stored fact that cannot be true, as the pass reports it. */
     private fun invalidData(message: String): Nothing = throw IllegalStateException(message)
 
-    /** An expected absence of a fact, as the pass reports it (§20, §28's `EXPECTED`). */
+    /** An expected absence of a fact, as the pass reports it. */
     private fun gap(gap: AdaptiveInputGap): AdaptiveIntegrationResult =
         AdaptiveIntegrationResult.Success(AdaptiveIntegrationOutcome.CannotBuildAdaptiveRequest(gap))
 }
 
-// -------------------------------------------------------------------------------------------------
-// The window's facts about *when* (§11). Stated here, read by §15's return rule.
-// -------------------------------------------------------------------------------------------------
+// The window's facts about *when*. Stated here, read by the return rule.
 
 /**
  * How many sessions must exist before an interval between sessions can be called *usual*.
  *
- * Three sessions are two intervals, which is the fewest that can say anything about a habit at all: one
- * interval is a single gap between two sessions and no more, and calling it "usual" would turn one
- * coincidence into a baseline. Below this the fact is absent (`null`) rather than estimated, and the
- * policy is what decides what to do about an absent habit ([ProgramAdaptivePolicy.usualIntervalFallbackDays]).
+ * Three sessions are two intervals, the fewest that can say anything about a habit: one interval is a single
+ * gap and calling it "usual" would turn one coincidence into a baseline. Below this the fact is absent
+ * (`null`) rather than estimated, and the policy decides what to do about an absent habit.
  */
 private const val SESSIONS_BEFORE_AN_INTERVAL_IS_USUAL = 3
 
 /**
- * The gap facts of one pass: when the family was last trained, how long the stretch before this window
- * was, and how often the user trains.
+ * The gap facts of one pass: when the family was last trained, the stretch before this window, and how often
+ * the user trains.
  *
- * All three are stated from data the pass already holds, and none is a judgement:
- *
- *  * [lastConfirmedSetOn] is read from the **stored sets** of the Program's whole history — the same
- *    `history` list the window is assembled from, deliberately **not** narrowed to the window's start.
- *    That is the point of the fact: a family the user has not touched for six weeks has its last
- *    confirmed set *outside* every window, and a rule asking "how long has this been?" needs that date,
- *    not the window's empty answer;
- *  * [daysAway] is measured to the family's last confirmed set **before the session this pass is about**.
- *    The pass runs at a completion, so the completing session's own sets are already confirmed and are
- *    excluded here: on the day a user comes back the stretch that matters is the one they came back
- *    *from*, and a fact that included today's session would read zero on exactly that day;
- *  * [usualInterval] is read from the family's own **most recent sessions in the whole stored history** —
- *    not from the window's exposures, which hold nothing at all after a gap. A habit is a statement about
- *    the recent past, and the last [ProgramAdaptivePolicy.usualIntervalSessions] of a family's sessions are
- *    the recent past whether or not they fall inside the last 28 days.
- *
- * The `familyOf` lambda is the caller's classification rather than a collaborator, so this derivation
- * stays a pure function of its arguments: no repository, no clock, no catalogue.
+ * All three come from data the pass already holds. [lastConfirmedSetOn] reads the **whole** history — not
+ * narrowed to the window, because a family untouched for six weeks has its last set *outside* every window and
+ * "how long has this been?" needs that date. [daysAway] excludes the completing session, so a return measures
+ * the stretch they came back *from* rather than zero. [usualInterval] reads the family's recent sessions in the
+ * whole history, not the window's exposures, which hold nothing after a gap.
  */
 internal fun programGapFactsOf(
     sessions: List<WorkoutSession>,
@@ -935,18 +803,12 @@ internal fun programGapFactsOf(
 /**
  * The calendar date of the family's most recent confirmed set, or `null` when it has never had one.
  *
- * Three rules, each of them the pass's own:
+ * The date is the set's own `performedAt` — the moment the work happened — never the session's start or end
+ * stamp. The occurrence must belong to [familyId] by the caller's classification, and the attempt must have
+ * **ended** (or be this completion), the same rule the window's observations use. No window bound is applied:
+ * that absence is the fact.
  *
- *  * a **confirmed set** is a `SetResult`, so the date is the set's own `performedAt` — the moment the
- *    work happened — and never the session's start or end stamp;
- *  * the occurrence must belong to [familyId] by the caller's classification, so an unclassified
- *    exercise contributes to no family exactly as it does everywhere else in this pass;
- *  * the attempt must have **ended** (or be the completion this pass is about), which is the same rule
- *    the window's observations use: work in an attempt still running is not yet an execution of
- *    anything. No window bound is applied — that absence is the fact.
- *
- * The instant is turned into a date in the caller's [zone], because "the last set was on the 3rd" is a
- * calendar statement and the zone is the composition root's one value (§26).
+ * The instant becomes a date in [zone], because "the last set was on the 3rd" is a calendar statement.
  */
 internal fun lastConfirmedSetOn(
     sessions: List<WorkoutSession>,
@@ -966,11 +828,9 @@ internal fun lastConfirmedSetOn(
  * Whole calendar days between the family's last confirmed set **before** [completion] and [statedOn], or
  * `null` when the family had no earlier session.
  *
- * The completing session is excluded on purpose: this pass runs when a session has been completed, so its
- * sets are already facts, and including them would make every return measure as a zero-day gap — a fact
- * that can only ever say *"you were here today"*. Completed and cancelled attempts both count as an
- * earlier session (a cancellation keeps its work as exposure); an attempt still running does not, by the
- * same rule every other reading in this pass applies.
+ * The completing session is excluded on purpose: its sets are already facts, and including them would make
+ * every return measure as a zero-day gap. Completed and cancelled attempts both count as an earlier session;
+ * an attempt still running does not.
  */
 internal fun daysAwayFromFamily(
     sessions: List<WorkoutSession>,
@@ -991,33 +851,17 @@ internal fun daysAwayFromFamily(
 }
 
 /**
- * The user's usual interval between sessions, from the family's own most recent sessions in the whole
- * stored history — or `null` when there is not enough data to state one.
+ * The user's usual interval between sessions — or `null` when there is not enough data to state one.
  *
- * ```text
- * sessions    the distinct start instants at which the family was trained, in order, last N of them
- * intervals   the gaps between consecutive sessions
- * usual       the median interval, because a median is what "usual" means: one long holiday must not
- *             move the answer the way a mean would
- * ```
+ * The **median**, because that is what "usual" means: one long holiday must not move it the way a mean would.
+ * The whole history is read and only then narrowed to the last [sessionsToConsider] sessions: after a
+ * three-week gap the window holds almost nothing, and an interval measured over it would be measured over the
+ * gap itself — the one span certainly not the habit.
  *
- * The **whole history** is read, and only then narrowed to its last [sessionsToConsider] sessions. The
- * decision window is deliberately not the source: after a gap of three weeks the 28-day window holds
- * almost nothing, and an interval measured over it would be measured over the gap itself — the one span
- * that is certainly not the user's habit. A habit is the recent past, not the window's contents.
- *
- * The session this pass is about is excluded for the same reason [daysAwayFromFamily] excludes it: the
- * stretch that led to it **is** the gap, and counting it as one interval among two would let the absence
- * define the habit it interrupted. The interval is therefore the rhythm the user had *before* they turned
- * up, which is the rhythm a gap is measured against.
- *
- * The median of an even number of intervals is the whole-second midpoint of the two middle ones. Seconds
- * are the unit because a session gap is hours or days, and no floating point appears anywhere in this
- * layer (§17, §33).
- *
- * Fewer than [SESSIONS_BEFORE_AN_INTERVAL_IS_USUAL] sessions is `null` and not a guess: two sessions
- * are one interval, and one interval is not a habit. What to do about an absent habit is the policy's
- * decision, not this function's.
+ * The completing session is excluded for [daysAwayFromFamily]'s reason: the stretch that led to it **is** the
+ * gap, and counting it would let the absence define the habit it interrupted. Seconds are the unit (no floating
+ * point in this layer), and fewer than [SESSIONS_BEFORE_AN_INTERVAL_IS_USUAL] sessions is `null`, not a guess —
+ * what to do about an absent habit is the policy's decision.
  */
 internal fun usualIntervalOf(
     sessions: List<WorkoutSession>,
