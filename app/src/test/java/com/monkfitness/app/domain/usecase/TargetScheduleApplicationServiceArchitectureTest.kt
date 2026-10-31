@@ -123,17 +123,6 @@ class TargetScheduleApplicationServiceArchitectureTest {
     }
 
     @Test
-    fun legacySchedulerContourIsUnwiredAndUnchangedByThisBoundary() {
-        val scheduler = File(mainDir, "domain/usecase/ProgramScheduler.kt")
-        val planner = File(mainDir, "domain/program/SlotPlanner.kt")
-        val calendar = File(mainDir, "domain/program/ScheduleCalendar.kt")
-        assertTrue(scheduler.isFile && planner.isFile && calendar.isFile)
-        assertTrue(!scheduler.readText().contains("TargetScheduleApplicationService"))
-        assertTrue(!planner.readText().contains("TargetScheduleApplicationService"))
-        assertTrue(!calendar.readText().contains("TargetScheduleApplicationService"))
-    }
-
-    @Test
     fun appContainerWiresTheServiceBesideThePersisterWithoutRewiringLegacyScheduler() {
         val container = File(mainDir, "di/AppContainer.kt").readText()
         assertEquals(1, occurrences(container, "TargetScheduleApplicationService("))

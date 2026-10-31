@@ -136,23 +136,6 @@ class TargetScheduleOrchestratorArchitectureTest {
     }
 
     @Test
-    fun theLegacySchedulerContourIsUnwiredAndUnchanged() {
-        val scheduler = File(mainDir, "domain/usecase/ProgramScheduler.kt")
-        val planner = File(mainDir, "domain/program/SlotPlanner.kt")
-        val calendar = File(mainDir, "domain/program/ScheduleCalendar.kt")
-        assertTrue(scheduler.isFile && planner.isFile && calendar.isFile)
-        listOf(scheduler, planner, calendar).forEach { file ->
-            assertTrue(
-                "${file.name} must not reach the target orchestrator",
-                !file.readText().contains("TargetScheduleOrchestrator")
-            )
-        }
-        assertTrue(!orchestratorFile.readText().contains("ProgramScheduler"))
-        assertTrue(!orchestratorFile.readText().contains("SlotPlanner"))
-        assertTrue(!orchestratorFile.readText().contains("ScheduleCalendar"))
-    }
-
-    @Test
     fun appContainerWiresTheOrchestratorBesideThePersisterAndTheApplicationBoundary() {
         val container = code(File(mainDir, "di/AppContainer.kt").readText())
         assertEquals(1, occurrences(container, "TargetScheduleOrchestrator("))

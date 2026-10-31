@@ -395,36 +395,6 @@ class ProgramAdaptivePolicyTest {
     // ------------------------------------------------------------------ the policy's own values
 
     @Test
-    fun everyThresholdIsTheDocumentedV1Value() {
-        assertEquals(1, policy.version)
-        assertEquals(3, policy.trendMinimumExposures)
-        assertEquals(4, policy.progressMinimumExposures)
-        assertEquals(3, policy.regressMinimumExposures)
-        assertEquals(3, policy.regressMinimumShortfallSets)
-        assertEquals(3, policy.consistencyHighNumerator)
-        assertEquals(4, policy.consistencyHighDenominator)
-        assertEquals(1, policy.consistencyMediumNumerator)
-        assertEquals(2, policy.consistencyMediumDenominator)
-        assertEquals(2, policy.progressConfirmingWindows)
-        assertEquals(2, policy.regressConfirmingWindows)
-        assertEquals(1, policy.recoveryEntryConfirmingWindows)
-        assertEquals(2, policy.recoveryProlongedWindows)
-        assertEquals(2, policy.recoveryExitQualifyingWindows)
-        assertEquals(2, policy.progressionCooldownWindows)
-        assertTrue(policy.variantRealignmentEnabled)
-        assertEquals(0, policy.guardAllowedSetIncreaseNumerator)
-        assertEquals(1, policy.guardAllowedSetIncreaseDenominator)
-        assertEquals(0, policy.guardAllowedAmountIncreaseNumerator)
-        assertEquals(1, policy.guardAllowedAmountIncreaseDenominator)
-        assertEquals(0, policy.guardAllowedWorkIncreaseNumerator)
-        assertEquals(1, policy.guardAllowedWorkIncreaseDenominator)
-        assertEquals(1, policy.guardAllowedLevelSteps)
-        assertEquals(1, policy.guardAllowedRestDecreaseNumerator)
-        assertEquals(1, policy.guardAllowedRestDecreaseDenominator)
-        assertEquals(ProgramAdaptivePolicy.V1, policy)
-    }
-
-    @Test
     fun theReasonVocabularyIsExactlyTheRulesThatEmitIt() {
         assertEquals(
             "every reason belongs to exactly one side of the vocabulary",

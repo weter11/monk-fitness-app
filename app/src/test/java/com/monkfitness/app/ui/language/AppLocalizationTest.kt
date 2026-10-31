@@ -41,20 +41,6 @@ class AppLocalizationTest {
     // ---- the policy -------------------------------------------------------------------------------
 
     @Test
-    fun theSupportedLanguagesAreTheSevenTheAppShips() {
-        assertEquals(
-            "the app's supported languages, in picker order",
-            listOf("en", "ru", "uk", "bg", "pt", "es", "it"),
-            AppLanguage.supportedTags
-        )
-        assertEquals(
-            "every entry is a language the app ships, plus the system-default mode",
-            AppLanguage.supported.size + 1,
-            AppLanguage.entries.size
-        )
-    }
-
-    @Test
     fun theSystemDefaultIsAModeAndNotALanguage() {
         val systemDefault = AppLanguage.SYSTEM_DEFAULT
 

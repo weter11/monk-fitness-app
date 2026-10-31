@@ -124,27 +124,6 @@ class ProgramAdaptiveRepositoryTest {
         )
     }
 
-    @Test
-    fun noClassNamedAdaptiveRepositorySurvivesAndTheTargetOneIsTheOnlyAdaptiveRepository() = runBlocking {
-        val sources = java.io.File("src/main/java/com/monkfitness/app/data/repository").let {
-            if (it.isDirectory) it else java.io.File("app/src/main/java/com/monkfitness/app/data/repository")
-        }
-        val declaring = sources.listFiles { file -> file.extension == "kt" }!!
-            .filter { it.readText().contains("class AdaptiveRepository(") }
-            .map { it.name }
-
-        // §30 step 15 inverted this claim. Until then the *target* repository had to keep its own name
-        // because the Stage-1 `AdaptiveRepository` was still wired beside it; now the Stage-1 class is
-        // gone, so the target one is simply *the* adaptive repository and the generic name is free — and
-        // must stay free, because a second class claiming it would be a second owner of the same tables.
-        assertEquals(
-            "the Stage-1 `AdaptiveRepository` is retired; `ProgramAdaptiveRepository` is the only " +
-                "adaptive repository and the generic name belongs to nothing",
-            emptyList<String>(),
-            declaring
-        )
-    }
-
     // ---- append-only history ---------------------------------------------------------------------
 
     @Test

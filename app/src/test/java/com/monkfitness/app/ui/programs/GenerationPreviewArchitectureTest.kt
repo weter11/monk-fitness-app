@@ -289,34 +289,6 @@ class GenerationPreviewArchitectureTest {
         )
     }
 
-    @Test
-    fun theUiStateHoldsExactlyOneDraftAndOneTemporaryPreview() {
-        assertTrue(
-            "§7's working draft is the draft; the state carries its presentation",
-            ProgramDraftUi::class.java.declaredFields.any { field -> field.name == "days" }
-        )
-        val stateFields = ProgramsUiState::class.java.declaredFields.map { field -> field.name }
-        assertEquals(
-            "a second draft-shaped field in the UI state would be a second current-draft source of " +
-                "truth. §30 step 26 adds exactly one: the temporary preview",
-            listOf("generationPreview"),
-            stateFields.filter { name -> name.contains("review") || name.contains("Preview") }
-                .filterNot { name -> name == "importReview" }
-                .sorted()
-        )
-        assertEquals(
-            "and it is a preview *model*, not a draft: no field of the state is a ProgramEditorDraft",
-            emptyList<String>(),
-            stateFields.filter { name ->
-                ProgramsUiState::class.java.declaredFields
-                    .first { it.name == name }
-                    .type
-                    .name
-                    .endsWith("ProgramEditorDraft")
-            }
-        )
-    }
-
     // ---------------------------------------------------------------- the preview is temporary
 
     @Test

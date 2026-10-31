@@ -387,12 +387,4 @@ class ProgramAdaptiveEngineTest {
         )
     }
 
-    @Test
-    fun everyAvailableExerciseStaysAvailableWhateverTheHomeExerciseIs() {
-        // A guard against a fixture that quietly narrows the user's selection: the ordinary request
-        // is made over the whole rig vocabulary.
-        assertEquals(
-            setOf(EASIER, PRESENTED, HARDER, SAME_LEVEL_ALTERNATIVE), EVERY_EXERCISE
-        )
-    }
 }

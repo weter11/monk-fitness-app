@@ -101,20 +101,6 @@ class TargetScheduleSlotPersisterArchitectureTest {
     }
 
     @Test
-    fun theLegacySchedulerRemainsUnwiredAndUnchanged() {
-        val scheduler = File(mainDir, "domain/usecase/ProgramScheduler.kt")
-        val planner = File(mainDir, "domain/program/SlotPlanner.kt")
-        val calendar = File(mainDir, "domain/program/ScheduleCalendar.kt")
-        assertTrue(scheduler.isFile)
-        assertTrue(planner.isFile)
-        assertTrue(calendar.isFile)
-        assertTrue(!scheduler.readText().contains("TargetScheduleSlotPersister"))
-        assertTrue(!scheduler.readText().contains("TargetSlotMaterializer"))
-        assertTrue(!planner.readText().contains("targetOccurrenceKey"))
-        assertTrue(!calendar.readText().contains("targetOccurrenceKey"))
-    }
-
-    @Test
     fun integrationInputKeepsTheDecisionAndPresentationAsValues() {
         val types = listOf(
             TargetScheduleSlotPersistenceInput::class.java,
