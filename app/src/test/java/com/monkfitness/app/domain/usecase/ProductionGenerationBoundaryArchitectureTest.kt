@@ -290,7 +290,8 @@ class ProductionGenerationBoundaryArchitectureTest {
                 "anything (found ${readers.size})",
             // Raised from 4 by P30 with the reader list below, in the same pass, because the two numbers
             // are the same claim: this many readers are *expected*, so fewer means the sweep is broken.
-            readers.size >= 5
+            // Raised again by P33, again with the list, for the same reason.
+            readers.size >= 6
         )
         // P30 **extended** this list rather than relaxing it, and the extension is the point. The new
         // reader is `CatalogExerciseFamilyClassification`, and it is allowed here for one stated reason:
@@ -298,10 +299,20 @@ class ProductionGenerationBoundaryArchitectureTest {
         // only honest way to answer it is to read that field — and the alternative would have been a
         // second exercise list, which is a far larger sin than a fifth reader of the first one.
         //
-        // It is not a second *owner*: this reader holds a projection of `familyId` and nothing else (no
-        // `Exercise`, no name, no equipment, no animation id), which is the same discipline
+        // P33 extends it once more, on exactly the same footing and for the same reason. The new reader
+        // is `CatalogExerciseRangeSource`, and the fact it answers — the progression span an exercise
+        // travels — is likewise stated per exercise in the catalogue's own definition (`baseMinReps`,
+        // `phase4MaxReps`, `baseDurationSeconds`, `phase4DurationSeconds`, `isTimerBased`), read through
+        // the `toConfigurationMetadata()` mapper that already folds them. The alternative is the one P30
+        // refused: a second table of spans, which would be a second owner of the catalogue and would
+        // drift from it on the first exercise edited.
+        //
+        // Neither of them is a second *owner*: the classification holds a projection of `familyId` and
+        // nothing else, the range source a projection of the span and nothing else — no `Exercise`, no
+        // name, no equipment, no animation id in either — which is the same discipline
         // `ProgramExerciseLibrary` holds its ids under, and `ProgramExerciseFamilyClassificationTest`
-        // asserts it. A sixth reader would still be a second owner, and this gate would say so.
+        // asserts it for the first of them. A further reader would still be a second owner, and this gate
+        // would say so.
         //
         // The entry is placed where `sorted()` puts it — `Catalog…` before `Production…` — because these
         // assertions compare against `readers.sorted()`, so an entry appended at the end fails with a diff
@@ -313,6 +324,7 @@ class ProductionGenerationBoundaryArchitectureTest {
                 "second owner of the catalogue.",
             listOf(
                 "domain/usecase/CatalogExerciseFamilyClassification.kt",
+                "domain/usecase/CatalogExerciseRangeSource.kt",
                 "domain/usecase/ProductionGenerationBoundary.kt",
                 "domain/usecase/ProgramExerciseLibrary.kt",
                 "domain/usecase/WorkoutGenerator.kt",
