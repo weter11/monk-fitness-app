@@ -197,9 +197,11 @@ data class ProgramAdaptivePolicy(
     val returnGapUsualIntervalMultiple: Int = 3,
 
 /**
- * A floor for frequent trainers, in calendar days: the unit the user experiences the absence in.
+ * A floor for frequent trainers, in calendar days: the unit the user experiences the absence in. A
+ * fortnight is the shortest absence that reads as a break rather than a rhythm — two missed sessions
+ * at a three-a-week cadence are ten days and are answered as ordinary life.
  */
-    val returnGapMinimumDays: Int = 10,
+    val returnGapMinimumDays: Int = 14,
 
 /**
  * A share of the exercise's **range width**, not a repetition count: the range is the only span the

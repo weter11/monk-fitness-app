@@ -62,6 +62,13 @@ enum class ProgramAdaptiveReason {
      */
     RETURN_AFTER_GAP,
 
+    /**
+     * The last session logged less than it was asked for, in the exercise's own unit, so the next one
+     * starts from what was actually done. The policy cannot see this: it counts sets completed, and a
+     * complete set of six against an eight is a completed set.
+     */
+    BELOW_TARGET_CORRECTION,
+
     VARIANT_REALIGNED;
 
     val isHold: Boolean
@@ -75,6 +82,7 @@ enum class ProgramAdaptiveReason {
             SUSTAINED_POSITIVE -> AdaptiveAction.PROGRESS
             SUSTAINED_NEGATIVE -> AdaptiveAction.REGRESS
             RETURN_AFTER_GAP -> AdaptiveAction.REGRESS
+            BELOW_TARGET_CORRECTION -> AdaptiveAction.REGRESS
             VARIANT_REALIGNED -> AdaptiveAction.CHANGE_VARIANT
             else -> AdaptiveAction.HOLD
         }
@@ -106,6 +114,7 @@ enum class ProgramAdaptiveReason {
             SUSTAINED_POSITIVE,
             SUSTAINED_NEGATIVE,
             RETURN_AFTER_GAP,
+            BELOW_TARGET_CORRECTION,
             VARIANT_REALIGNED
         )
     }

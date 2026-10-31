@@ -28,8 +28,8 @@ import java.time.Instant
 /**
  * Everything the engine is given for one decision: the whole input surface, with no collaborator, no
  * clock and no lookup, so a decision is reproducible from this value alone. [availableExerciseIds] is
- * the user's own selection — the engine holds rather than bypassing it, and never substitutes an
- * exercise in its place.
+ * the user's own selection, read for a same-level realignment; a ladder step is answered by the family's
+ * hierarchy, not by the plan's content.
  */
 data class ProgramAdaptiveRequest(
     val decisionId: DecisionId,
@@ -117,6 +117,16 @@ data class ProgramAdaptiveResult(
 
     val wasFilteredByTheGuard: Boolean
         get() = guard is ProgramGuardVerdict.Filtered
+
+    /**
+     * Whether this change spends the family's progression cooldown. A correction from what the user
+     * actually logged is not an adjustment of the programme: it is the next session being made doable, so
+     * it must not push the next increase back by a cooldown period.
+     */
+    val spendsTheCooldown: Boolean
+        get() = isApplied &&
+            decision.action != AdaptiveAction.CHANGE_VARIANT &&
+            reason != ProgramAdaptiveReason.BELOW_TARGET_CORRECTION
 }
 
 /**
@@ -253,6 +263,12 @@ object ProgramAdaptiveEngine {
             return returningWithinRange(request)
         }
 
+        // A session that logged less than it was asked for settles the next target from what was done.
+        // It is read before the policy's own direction because that direction counts sets completed, not
+        // the amounts inside them: a complete set of six against an eight is a completed set, so the
+        // policy would raise a target the user has just shown they cannot meet.
+        belowTargetCorrection(request)?.let { return it }
+
         if (policyDecision.action == AdaptiveAction.HOLD) {
             return realignment(request) ?: Resolution.None(policyDecision.reason)
         }
@@ -273,6 +289,9 @@ object ProgramAdaptiveEngine {
         // the answer once the whole span of this one has been used.
         withinRangeStep(request, up)?.let { within -> return within }
 
+        // A generated plan's content is the planner's choice, not the user's veto: the next rung is
+        // introduced even when the plan does not present it. An authored element never reaches here —
+        // ownership settled it before the policy ran.
         val relation = request.relation
         val level = levelOf(request) ?: return Resolution.None(ProgramAdaptiveReason.PROGRESSION_UNAVAILABLE)
         if (!relation.declares(level)) {
@@ -288,9 +307,6 @@ object ProgramAdaptiveEngine {
                     ProgramAdaptiveReason.PROGRESSION_UNAVAILABLE
                 }
             )
-        if (variant.exerciseId !in request.availableExerciseIds) {
-            return Resolution.None(ProgramAdaptiveReason.PROGRESSION_UNAVAILABLE)
-        }
 
         return Resolution.Change(
             action = if (up) AdaptiveAction.PROGRESS else AdaptiveAction.REGRESS,
@@ -338,6 +354,44 @@ object ProgramAdaptiveEngine {
             after = after,
             reason = reason,
             authoredCeiling = if (up) ceilingOf(before, amounts, dimension) else null
+        )
+    }
+
+    /**
+     * The next target, taken from the last session's own amounts wherever they fell below what is
+     * presented: `null` when every set met or beat the presentation, and `null` when this exercise has no
+     * span in its own dimension to keep the correction inside.
+     *
+     * Only lowering is expressed here — a set above its target is the policy's business, not a raise
+     * disguised as a correction.
+     */
+    private fun belowTargetCorrection(request: ProgramAdaptiveRequest): Resolution? {
+        val before = request.element.presentation
+        val dimension = before.prescription.dimension
+        val amounts = request.range?.amountsFor(dimension) ?: return null
+        val presented = before.prescription.perSetTargets
+        if (presented.isEmpty()) return null
+        val performed = performedAmountsOf(request, dimension)?.takeIf { it.isNotEmpty() } ?: return null
+
+        // The element's own shape: one entry per presented set, taken in set order and repeated from the
+        // last set where fewer sets were performed than are presented.
+        val target = presented.indices.map { index ->
+            performed.getOrElse(index) { performed.last() }
+                .coerceIn(amounts.first, amounts.last)
+                .coerceAtMost(presented[index])
+        }
+        if (target.indices.none { index -> target[index] < presented[index] }) return null
+
+        return Resolution.Change(
+            action = AdaptiveAction.REGRESS,
+            target = AdaptiveTarget.Exercise(before.exerciseId),
+            after = EffectiveExercise(
+                programExerciseId = before.programExerciseId,
+                exerciseId = before.exerciseId,
+                prescription = prescriptionOf(dimension, target) ?: return null,
+                focus = before.focus
+            ),
+            reason = ProgramAdaptiveReason.BELOW_TARGET_CORRECTION
         )
     }
 

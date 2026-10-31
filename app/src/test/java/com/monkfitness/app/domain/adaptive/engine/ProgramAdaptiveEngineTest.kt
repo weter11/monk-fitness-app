@@ -3,6 +3,7 @@ package com.monkfitness.app.domain.adaptive.engine
 import com.monkfitness.app.domain.adaptive.AdaptiveScope
 import com.monkfitness.app.domain.adaptive.AdaptiveState
 import com.monkfitness.app.domain.adaptive.ExerciseRange
+import com.monkfitness.app.domain.adaptive.PerformedSetAmount
 import com.monkfitness.app.domain.adaptive.engine.ProgramAdaptiveRig.ADJUSTMENT_ID
 import com.monkfitness.app.domain.adaptive.engine.ProgramAdaptiveRig.DECISION_ID
 import com.monkfitness.app.domain.adaptive.engine.ProgramAdaptiveRig.EASIER
@@ -23,6 +24,7 @@ import com.monkfitness.app.domain.adaptive.decision.AdaptiveAction
 import com.monkfitness.app.domain.adaptive.decision.AdaptiveTarget
 import com.monkfitness.app.domain.adaptive.decision.DecisionOutcome
 import com.monkfitness.app.domain.common.AdjustmentId
+import com.monkfitness.app.domain.prescription.RepPrescription
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotEquals
@@ -167,7 +169,7 @@ class ProgramAdaptiveEngineTest {
     }
 
     @Test
-    fun aStepTheUsersSelectionExcludesIsUnavailableAndNothingIsSubstituted() {
+    fun aStepIntroducesTheRungEvenWhenThePlanDoesNotPresentIt() {
         val result = engine.decide(
             request(
                 snapshot = snapshot(exposures = improvement()),
@@ -176,13 +178,85 @@ class ProgramAdaptiveEngineTest {
             )
         )
 
-        assertEquals(AdaptiveAction.PROGRESS, result.requestedAction)
-        assertEquals(AdaptiveAction.HOLD, result.decision.action)
-        assertEquals(ProgramAdaptiveReason.PROGRESSION_UNAVAILABLE, result.reason)
-        assertNull(
-            "the user's own configuration is authoritative: an unavailable step produces a bounded " +
-                "non-progressing result and never a different exercise (§9, §15)",
-            result.adjustment
+        assertEquals(AdaptiveAction.PROGRESS, result.decision.action)
+        assertEquals(ProgramAdaptiveReason.SUSTAINED_POSITIVE, result.reason)
+        assertEquals(
+            "the family's own ladder answers a ladder step: the next rung is introduced even though the " +
+                "plan presents only the element's own exercise",
+            HARDER,
+            result.adjustment!!.after.exerciseId
+        )
+    }
+
+    @Test
+    fun aSetLoggedBelowItsTargetSettlesTheNextOneInsteadOfRaisingIt() {
+        val presented = RepPrescription.uniform(3, 10)
+        val observed = plateau()
+        val belowTarget = observed.mapIndexed { index, exposure ->
+            if (index == observed.lastIndex) {
+                exposure.copy(
+                    performedAmounts = listOf(8, 8, 6).map { amount -> PerformedSetAmount(amount, 0) }
+                )
+            } else {
+                exposure
+            }
+        }
+
+        val result = engine.decide(
+            request(
+                snapshot = snapshot(exposures = belowTarget),
+                element = element(prescription = presented),
+                window = window(level = 2),
+                range = ExerciseRange(repRange = 6..15)
+            )
+        )
+
+        assertEquals(AdaptiveAction.REGRESS, result.decision.action)
+        assertEquals(ProgramAdaptiveReason.BELOW_TARGET_CORRECTION, result.reason)
+        assertEquals(
+            "the next session is asked for what was actually logged, set by set",
+            listOf(8, 8, 6),
+            result.adjustment!!.after.prescription.perSetTargets
+        )
+        assertEquals(
+            "and it is the same exercise at a lower amount, not a rung",
+            PRESENTED,
+            result.adjustment.after.exerciseId
+        )
+        assertFalse(
+            "a correction to what was done is not an adjustment of the programme, so it must not push the " +
+                "next increase back by a cooldown",
+            result.spendsTheCooldown
+        )
+    }
+
+    @Test
+    fun aSessionThatMetItsPresentationIsNotCorrected() {
+        val presented = RepPrescription.uniform(3, 10)
+        val observed = plateau()
+        val met = observed.mapIndexed { index, exposure ->
+            if (index == observed.lastIndex) {
+                exposure.copy(
+                    performedAmounts = listOf(10, 10, 10).map { amount -> PerformedSetAmount(amount, 0) }
+                )
+            } else {
+                exposure
+            }
+        }
+
+        val result = engine.decide(
+            request(
+                snapshot = snapshot(exposures = met),
+                element = element(prescription = presented),
+                window = window(level = 2),
+                range = ExerciseRange(repRange = 6..15)
+            )
+        )
+
+        assertNotEquals(
+            "a session that met its presentation is the policy's business, not a correction's",
+            ProgramAdaptiveReason.BELOW_TARGET_CORRECTION,
+            result.reason
         )
     }
 

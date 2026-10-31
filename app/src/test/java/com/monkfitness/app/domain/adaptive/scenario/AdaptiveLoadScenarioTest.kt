@@ -6,8 +6,12 @@ import com.monkfitness.app.domain.adaptive.BodyRegion
 import com.monkfitness.app.domain.adaptive.ExerciseMetadata
 import com.monkfitness.app.domain.adaptive.engine.ProgramElementOwnership
 import com.monkfitness.app.domain.adaptive.engine.ProgramProgressionRelation
+import com.monkfitness.app.domain.adaptive.engine.ProgramProgressionVariant
+import com.monkfitness.app.domain.adaptive.engine.ProgramAdaptiveReason
+import com.monkfitness.app.domain.adaptive.decision.AdaptiveAction
 import com.monkfitness.app.domain.adaptive.toExerciseRange
 import com.monkfitness.app.domain.prescription.PrescriptionDimension
+import com.monkfitness.app.domain.prescription.TimePrescription
 import com.monkfitness.app.domain.product.ProductionProgressionRelationDefinitions
 import com.monkfitness.app.domain.program.Focus
 import com.monkfitness.app.domain.program.ProgramDuration
@@ -138,6 +142,27 @@ class AdaptiveLoadScenarioTest {
         )
         printTable("c1. 15-day gap", listOf(backAfterFifteen))
 
+        // Ten days is two missed sessions at this rhythm, under the return floor: the absence is answered
+        // by the ordinary rules and the load is not lightened for it.
+        val tenDays = timelineWithSixSessions()
+        val beforeTen = tenDays.trend.nextPlanned
+        val backAfterTen = tenDays.trend.runSession(
+            tenDays.lastDate.plusDays(10),
+            full(tenDays.trend.nextPlanned)
+        )
+
+        assertNotEquals(
+            "ten days is below the return floor, so the return rule does not answer it: " +
+                "$beforeTen -> ${backAfterTen.nextPlanned}",
+            "RETURN_AFTER_GAP",
+            backAfterTen.reason
+        )
+        assertTrue(
+            "and the next session is not lightened: $beforeTen -> ${backAfterTen.nextPlanned}",
+            backAfterTen.nextPlanned.sum() >= beforeTen.sum()
+        )
+        printTable("c2. 10-day gap", listOf(backAfterTen))
+
         val shortBreak = timelineWithSixSessions()
         val beforeShort = shortBreak.trend.nextPlanned
         val backAfterFour = shortBreak.trend.runSession(
@@ -149,7 +174,7 @@ class AdaptiveLoadScenarioTest {
                 "$beforeShort -> ${backAfterFour.nextPlanned}",
             backAfterFour.nextPlanned.sum() >= beforeShort.sum()
         )
-        printTable("c2. 4-day gap", listOf(backAfterFour))
+        printTable("c3. 4-day gap", listOf(backAfterFour))
     }
 
     // ---- d. novice vs veteran ---------------------------------------------------------------------
@@ -190,6 +215,52 @@ class AdaptiveLoadScenarioTest {
     }
 
     // ---- e. poor results -------------------------------------------------------------------------
+
+    @Test
+    fun e2ASetBelowItsTargetSettlesTheNextOneAndGrowthResumes() {
+        val trend = pushupTimeline()
+        var date = dates.first()
+        val rows = mutableListOf<ScenarioRow>()
+
+        repeat(6) {
+            rows += trend.runSession(date, full(trend.nextPlanned))
+            date = next(date)
+        }
+        val asked = trend.nextPlanned
+
+        // The last set comes in two repetitions short of its target; the others are met.
+        val underTarget = asked.dropLast(1) + (asked.last() - 2)
+        rows += trend.runSession(date, underTarget)
+        date = next(date)
+        val corrected = trend.nextPlanned
+        printTable("e2. one set below its target", rows)
+
+        assertEquals(
+            "the next session is asked for what was actually performed, set by set: " +
+                "$asked -> $corrected",
+            underTarget,
+            corrected
+        )
+        assertEquals(
+            "and the correction says what it is rather than being reported as a trend",
+            "BELOW_TARGET_CORRECTION",
+            rows.last().reason
+        )
+
+        val resumed = mutableListOf<ScenarioRow>()
+        repeat(3) {
+            resumed += trend.runSession(date, full(trend.nextPlanned))
+            date = next(date)
+        }
+        printTable("e2. growth after the correction", resumed)
+
+        assertTrue(
+            "the correction does not restart the progression cooldown: the first good session after it is " +
+                "the one the confirmation rule was waiting for, so the load is raised no later than the " +
+                "second: $resumed",
+            resumed.take(2).any { row -> row.rose }
+        )
+    }
 
     @Test
     fun eMissedRepsNeverRaiseTheLoad() {
@@ -251,40 +322,69 @@ class AdaptiveLoadScenarioTest {
     }
 
     @Test
-    fun f2TheTopOfTheRangeHoldsWhenThePlanDoesNotPresentTheHarderVariant() {
+    fun f2TheTopOfTheRangeIntroducesTheHarderVariantThePlanDoesNotPresent() {
         val trend = pushupTimeline()
         var date = dates.first()
         val rows = mutableListOf<ScenarioRow>()
 
-        repeat(40) {
+        repeat(56) {
             rows += trend.runSession(date, full(trend.nextPlanned))
             date = next(date)
         }
-        printTable("f2. push-ups to the top of the range, only the presented variant available", rows)
+        printTable("f2. push-ups to the top of the range, only the presented variant in the plan", rows)
 
-        val atTheTop = rows.last()
+        val climbed = rows.takeWhile { row -> row.nextExerciseId == PUSHUP }
+        assertTrue(
+            "the load climbs inside the exercise's own range before the exercise changes: " +
+                "${climbed.map { row -> row.nextPlanned.sum() }}",
+            climbed.size > 1 && climbed.last().nextPlanned.sum() > climbed.first().nextPlanned.sum()
+        )
+        assertTrue(
+            "and only once the range is used does the family step to a variant the plan does not present",
+            rows.any { row -> row.nextExerciseId == "pushups_wide" }
+        )
         assertEquals(
-            "the exercise the plan presents is kept rather than replaced by one it does not",
-            PUSHUP,
-            atTheTop.nextExerciseId
+            "the rung the plan never presented is still one the family declares",
+            ProgramAdaptiveReason.CEILING_REACHED.name,
+            rows.last().reason
         )
-        assertTrue(
-            "and the amounts stay inside the exercise's own range",
-            atTheTop.nextPlanned.all { amount -> amount in PUSHUP_RANGE }
-        )
-        assertTrue(
-            "the ceiling is a hold with a reason, never a crash and never a silent growth",
-            atTheTop.action?.name == "HOLD"
+        assertEquals(
+            "and at the top of the whole ladder the engine holds where it is",
+            AdaptiveAction.HOLD.name,
+            rows.last().action?.name
         )
     }
 
     @Test
-    fun f3AFamilyWithoutALadderHoldsGracefully() {
-        val rows = plankTimeline(PLANK_SESSIONS)
-        printTable("f3. a plank hold, a family with no declared ladder", rows)
+    fun f3AFamilyWithOneRungClimbsItsOwnRangeAndHoldsAtTheTop() {
+        val rows = plankTimeline(sessions = PLANK_SESSIONS, relation = plankSingleRung())
+        printTable("f3. a plank hold declared as one rung", rows)
 
         assertTrue(
-            "a family with no ladder is reported, not adapted and not crashed on",
+            "a family declared as one rung still advances within its own range: " +
+                "${rows.map { row -> row.nextPlanned }}",
+            rows.any { row -> row.rose }
+        )
+        assertTrue(
+            "and never leaves it",
+            rows.all { row -> row.nextPlanned.all { amount -> amount in PLANK_RANGE } }
+        )
+        val atTheTop = rows.last()
+        assertEquals(
+            "at the top of the range it holds, and says so with a reason the UI can show",
+            ProgramAdaptiveReason.CEILING_REACHED.name,
+            atTheTop.reason
+        )
+        assertEquals(AdaptiveAction.HOLD.name, atTheTop.action?.name)
+    }
+
+    @Test
+    fun f4AFamilyWithNoDeclaredRelationIsReportedNotAdapted() {
+        val rows = plankTimeline(sessions = PLANK_SESSIONS, relation = null)
+        printTable("f4. a plank hold, a family with no declared relation at all", rows)
+
+        assertTrue(
+            "a family the catalogue declares nothing for is reported, not adapted and not crashed on",
             rows.all { row -> row.reason == AdaptiveLoadTimeline.NO_DECLARED_LADDER }
         )
         assertTrue(
@@ -369,21 +469,39 @@ class AdaptiveLoadScenarioTest {
         return BreakPoint(trend, dates.last { it < date })
     }
 
-    private fun plankTimeline(sessions: Int): List<ScenarioRow> {
+    private fun plankTimeline(
+        sessions: Int,
+        relation: ProgramProgressionRelation? = null
+    ): List<ScenarioRow> {
         val trend = AdaptiveLoadTimeline(
             familyId = PLANK_FAMILY,
             dimension = PrescriptionDimension.TIME_BASED,
             rangeOf = { ExerciseRange(timeRange = PLANK_RANGE) },
-            relation = null,
+            relation = relation,
             availableExerciseIds = setOf(PLANK),
             subjectExerciseId = PLANK,
             subjectAmounts = listOf(20, 20, 20)
         )
         var date = dates.first()
         return (1..sessions).map {
-            trend.runSession(date, listOf(20, 20, 20)).also { date = next(date) }
+            trend.runSession(date, trend.nextPlanned).also { date = next(date) }
         }
     }
+
+    /**
+     * A ladder-less family's one rung: the exercise the plan already presents, at the position it starts
+     * on. Nothing is authored here — no second exercise, no level above it.
+     */
+    private fun plankSingleRung(): ProgramProgressionRelation = ProgramProgressionRelation(
+        familyId = PLANK_FAMILY,
+        variants = listOf(
+            ProgramProgressionVariant(
+                level = 0,
+                exerciseId = PLANK,
+                prescription = TimePrescription(listOf(20, 20, 20))
+            )
+        )
+    )
 
     private data class BreakPoint(val trend: AdaptiveLoadTimeline, val lastDate: LocalDate)
 
@@ -465,6 +583,6 @@ class AdaptiveLoadScenarioTest {
         /** Twelve sessions: four weeks of a three-day rhythm. */
         const val TOTAL = 12
 
-        const val PLANK_SESSIONS = 6
+        const val PLANK_SESSIONS = 20
     }
 }

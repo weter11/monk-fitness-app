@@ -81,6 +81,29 @@ class ProgramAggregateLoadGuardTest {
     }
 
     @Test
+    fun anAuthoredCeilingBoundsTheWorkingTimeItRaises() {
+        val baseline = profile(scope = AdaptiveScope.EXERCISE, sets = 3, seconds = 60)
+
+        val insideTheSpan = ProgramAggregateLoadGuard.guard(
+            action = AdaptiveAction.PROGRESS,
+            baselineLoad = baseline,
+            candidateLoad = profile(scope = AdaptiveScope.EXERCISE, sets = 3, seconds = 90),
+            policy = policy,
+            authoredCeiling = profile(scope = AdaptiveScope.EXERCISE, sets = 3, seconds = 180)
+        )
+        approved(insideTheSpan)
+
+        val beyondIt = ProgramAggregateLoadGuard.guard(
+            action = AdaptiveAction.PROGRESS,
+            baselineLoad = baseline,
+            candidateLoad = profile(scope = AdaptiveScope.EXERCISE, sets = 3, seconds = 210),
+            policy = policy,
+            authoredCeiling = profile(scope = AdaptiveScope.EXERCISE, sets = 3, seconds = 180)
+        )
+        filtered(beyondIt)
+    }
+
+    @Test
     fun aLongerWorkingTimeIsRefusedOnItsOwnChannel() {
         val verdict = filtered(
             ProgramAggregateLoadGuard.guard(

@@ -267,11 +267,11 @@ class ProductionAdaptiveProgressionContentTest {
     }
 
     /**
-     * The ladder's `+1` rung is `pushups_wide`. Without it enabled the engine must not move there, and
-     * must say so with its own bounded answer rather than substituting another declared rung.
+     * The ladder's `+1` rung is `pushups_wide`. A plan that presents only the element's own exercise does
+     * not keep the family there: the relation declares the next rung, and adaptation introduces it.
      */
     @Test
-    fun aDisabledNextRungIsRefusedByTheEngineOnTheStoredRelation() = runBlocking {
+    fun aRungThePlanDoesNotPresentIsIntroducedOnTheStoredRelation() = runBlocking {
         rig.createSingleFamilyGraph()
         val engineRig = ProgramAdaptiveRig
         val stored = requireNotNull(rig.productionProvider().relationOf("pushups"))
@@ -288,19 +288,14 @@ class ProductionAdaptiveProgressionContentTest {
         )
 
         assertEquals(
-            "the +1 rung the ladder declares is unavailable, so the engine holds rather than adapting " +
-                "to an exercise the user does not have",
-            AdaptiveAction.HOLD,
+            "the +1 rung the ladder declares is where the family goes, whether or not the plan presents it",
+            AdaptiveAction.PROGRESS,
             result.decision.action
         )
-        assertNull(
-            "and no adjustment is presented at all",
-            result.adjustment
-        )
         assertEquals(
-            "the reason is the engine's own, unchanged",
-            ProgramAdaptiveReason.PROGRESSION_UNAVAILABLE,
-            result.reason
+            "and it is the rung the stored relation declares, at its authored prescription",
+            RepPrescription(listOf(7, 7, 7)),
+            requireNotNull(result.adjustment).after.prescription
         )
     }
 
