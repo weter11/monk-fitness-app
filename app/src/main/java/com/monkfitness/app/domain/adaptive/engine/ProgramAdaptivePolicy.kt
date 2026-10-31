@@ -5,6 +5,54 @@ import com.monkfitness.app.domain.adaptive.ConfidenceLevel
 import com.monkfitness.app.domain.adaptive.EvidenceLevel
 import com.monkfitness.app.domain.adaptive.RecoveryContext
 import com.monkfitness.app.domain.adaptive.decision.AdaptiveAction
+import java.time.Duration
+import java.time.LocalDate
+
+/**
+ * The two **gap facts** a family's window can state about *when* the user last trained it, and about how
+ * often they usually train at all.
+ *
+ * ### Why they are facts and not judgements
+ *
+ * Both are read off stored data the app already keeps — the confirmed sets a session records, and the
+ * exposures a window's sessions produced — so neither is a new measurement, a score or a threshold. They
+ * are carried to the policy as **inputs**, exactly like the window's counts and the three qualitative
+ * judgements beside them, because the layer that owns the history is the layer that can state them.
+ *
+ * ### Why each one is nullable, and what `null` means
+ *
+ * An absence is not a zero here, and the two absences are different facts:
+ *
+ *  * [lastConfirmedSetOn] is `null` when the family has **never** had a confirmed set. That is not "the
+ *    last set was today" and not "the last set was long ago" — there is no last set at all;
+ *  * [usualInterval] is `null` when there is **not enough data to state a habit**. A user with two
+ *    sessions has no interval to be usual yet, and reporting one from two timestamps would turn a
+ *    coincidence into a baseline.
+ *
+ * ### What is deliberately not here
+ *
+ * No threshold, no "gap" verdict, no bucket and no rule: whether a stated gap is *long* is a policy
+ * question, and this value only says what the gap is. Nothing reads either field yet — the policy that
+ * decides on them is a later step — which is why they are additive and why no decision can change
+ * because of them today.
+ *
+ * @property lastConfirmedSetOn the calendar date, in the caller's own zone, of the most recent confirmed
+ *   set the family has anywhere in its stored history — **not** limited to the decision window. `null`
+ *   when the family has never had one.
+ * @property usualInterval the user's usual interval between sessions, derived from the window's recent
+ *   exposures. `null` when there is not enough data to state one.
+ */
+data class ProgramGapFacts(
+    val lastConfirmedSetOn: LocalDate? = null,
+    val usualInterval: Duration? = null
+) {
+
+    companion object {
+
+        /** No gap fact is stated at all: the family has no confirmed set and no measurable habit. */
+        val NONE: ProgramGapFacts = ProgramGapFacts()
+    }
+}
 
 /**
  * One family's circumstances in one decision window, as the caller maintains them (§15).
@@ -35,6 +83,11 @@ import com.monkfitness.app.domain.adaptive.decision.AdaptiveAction
  *   change, or `null` when it has never had one.
  * @property recoveryQualifyingWindows windows completed while the family is in recovery: §14's exit gate.
  * @property restChangeRequested whether a rest adaptation was asked for this window.
+ * @property gap when the family was last trained, and how often the user usually trains — the two facts
+ *   about *timing* this window is handed, as [ProgramGapFacts]. They are stated beside the counts rather
+ *   than derived from them because a window's own signals cannot say when the last set happened: the
+ *   window is an interval, and the last set may be older than it. **Nothing reads them yet** — no rule
+ *   in this policy consults them, so a window that states them decides exactly as one that does not.
  */
 data class ProgramAdaptiveWindow(
     val familyId: String,
@@ -45,7 +98,8 @@ data class ProgramAdaptiveWindow(
     val precedingRecoveryQualifyingWindows: Int = 0,
     val qualifyingWindowsSinceLastChange: Int? = null,
     val recoveryQualifyingWindows: Int = 0,
-    val restChangeRequested: Boolean = false
+    val restChangeRequested: Boolean = false,
+    val gap: ProgramGapFacts = ProgramGapFacts.NONE
 ) {
 
     init {

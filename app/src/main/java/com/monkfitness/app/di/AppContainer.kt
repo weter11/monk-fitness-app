@@ -39,6 +39,7 @@ import com.monkfitness.app.bootstrap.BuiltInProgressionCatalogueBootstrap
 import com.monkfitness.app.domain.program.DraftIdSource
 import com.monkfitness.app.domain.usecase.SHIPPED_EXERCISE_CATALOGUE
 import com.monkfitness.app.domain.usecase.CatalogExerciseFamilyClassification
+import com.monkfitness.app.domain.usecase.CatalogExerciseRangeSource
 import com.monkfitness.app.domain.usecase.ProgramAdaptiveIntegration
 import com.monkfitness.app.domain.usecase.ProgramEditorService
 import com.monkfitness.app.domain.usecase.ProgramExerciseLibrary
@@ -744,6 +745,32 @@ class AppContainer(
         CatalogExerciseFamilyClassification()
 
     /**
+     * §30 step 12's third caller fact — the exercise's own progression range, read from the shipped
+     * catalogue.
+     *
+     * The adaptive layer owns no catalogue, so a range arrives as an input, and until this node existed
+     * production supplied none: [com.monkfitness.app.domain.adaptive.ExerciseRangeSource.NONE] answered
+     * `null` for every id, which meant **no range reached the engine in production at all** and the
+     * within-range prescription step could only be exercised by a caller that stated one itself. This is
+     * the wiring that closes that gap, and it is a **read of a fact the catalogue already states** —
+     * the span each exercise's own definition carries — not a new prescription, a new threshold or a new
+     * policy.
+     *
+     * It is a **graph node rather than a constant**, for the same reason
+     * [catalogExerciseFamilyClassification] is: the fact is the catalogue's, and the container decides
+     * which object the integration receives without deciding anything about it. It is deliberately
+     * placed **outside** every other node's container slice — several architecture gates read this file
+     * with `substringAfter("val <node>").substringBefore("val <node>")`, so a node dropped between two of
+     * those boundaries would silently widen or narrow a neighbour's scan, and the failure would name a
+     * token this wiring never meant to police.
+     *
+     * Like the classification it is a compile-time fact: nothing is persisted, cached or invalidated, so
+     * this is a `val` built once at construction rather than a repository (§23 gains no table).
+     */
+    val catalogExerciseRangeSource: CatalogExerciseRangeSource =
+        CatalogExerciseRangeSource()
+
+    /**
      * The adaptive integration — §30 step 12, over the repositories and the engine above.
      *
      * It owns one thing: turning a **completed Session** into the adaptive half of §27's completion unit.
@@ -801,7 +828,8 @@ class AppContainer(
         classification = catalogExerciseFamilyClassification,
         clock = clock,
         idGenerator = idGenerator,
-        zone = zone
+        zone = zone,
+        exerciseRanges = catalogExerciseRangeSource
     )
 
     /**
