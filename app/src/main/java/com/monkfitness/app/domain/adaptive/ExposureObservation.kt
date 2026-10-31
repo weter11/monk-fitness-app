@@ -5,33 +5,20 @@ import com.monkfitness.app.domain.common.SessionId
 import java.time.Instant
 
 /**
- * How much of one exercise occurrence was actually executed (§12).
- *
- * There are two levels, not three, and the missing one is the point: a skipped exercise and a missed
- * slot produce **no observation at all**. "No exposure" is represented by the absence of an
- * [ExposureObservation] — never by an observation of zero work — because zero reps performed and an
- * opportunity that never happened are different facts, and only one of them says anything about the
- * user.
+ * How much of one occurrence was executed. A skipped exercise and a missed slot produce **no observation
+ * at all**: "no exposure" is the absence of an [ExposureObservation], never an observation of zero work —
+ * zero reps performed and an opportunity that never happened are different facts.
  */
 enum class ExposureLevel {
 
-    /** Some work happened, but less than was prescribed. */
     PARTIAL,
 
-    /** All of the prescribed work happened (or more — extra sets are the user's business). */
     FULL
 }
 
 /**
- * What one completed set actually amounted to, as the adaptive layer records it (§12).
- *
- * A set is measured in one unit, exactly as it was prescribed in one unit: a repetition set carries
- * [completedReps] and no seconds, a timed set carries [durationSeconds] and no repetitions. That is the
- * same rule `SetResult` enforces where the set is confirmed, restated here because an observation is a
- * record of what happened rather than a live handle on the set row it came from.
- *
- * @property completedReps repetitions performed; `0` for a timed set.
- * @property durationSeconds seconds performed; `0` for a repetition set.
+ * What one completed set amounted to. A set is measured in one unit, exactly as it was prescribed in one:
+ * a repetition set carries [completedReps] and no seconds, a timed set the reverse.
  */
 data class PerformedSetAmount(
     val completedReps: Int,
@@ -49,41 +36,13 @@ data class PerformedSetAmount(
 }
 
 /**
- * One exercise occurrence, as observed: what actually happened to it (§12).
+ * One exercise occurrence, as observed — the unit the adaptive stage reasons over, not the slot, the
+ * session or the exercise in the abstract. Identity is ([sessionId], [sessionExerciseId]), so one workout
+ * is many observations sharing a session.
  *
- * This is the unit the adaptive stage reasons over — not the slot, not the session and not the
- * exercise in the abstract. Identity comes from the session it belongs to ([sessionId]) and the
- * occurrence within it ([sessionExerciseId]), so a full workout is many observations that happen to
- * share a session, and the same exercise on two different days is two observations that happen to
- * share an `exerciseId`.
- *
- * Four construction rules mirror the architecture's exposure rules exactly:
- *
- *  * an observation records work that happened, so it needs at least one completed set. There is no
- *    "observed nothing" instance to construct — that fact is the absence of this value;
- *  * [level] agrees with the counts: `FULL` means every prescribed set was completed (or more), and
- *    `PARTIAL` means fewer were. A partial execution cannot claim to be full and a full one cannot
- *    under-report;
- *  * a cancelled session is not a completed workout, but it may still contain partial exposure — the
- *    observations are built from what actually happened, which is why cancellation does not zero them;
- *  * [prescribedSets] is what was presented to the user (the session's own snapshot), not what today's
- *    plan says, so a later edit cannot change what this observation is measured against.
- *
- * [performedAmounts] is additive to those counts and is deliberately not read by any rule yet: it
- * carries what each completed set amounted to — repetitions or seconds — one entry per completed set in
- * set order, when the producer has it. `null` means the amounts were not recorded, which is a different
- * fact from zero work: the counts already state that work happened.
- *
- * @property exerciseId the library key of the exercise, as presented.
- * @property sessionId the session the occurrence ran in.
- * @property sessionExerciseId identity of the occurrence within that session.
- * @property level partial or full execution.
- * @property completedSets sets that were actually completed, `>= 1`.
- * @property prescribedSets sets that were presented, `>= 1`.
- * @property performedAmounts what each completed set amounted to, one entry per set in set order, or
- *   `null` when the amounts were not recorded.
- * @property startedAt when the occurrence began.
- * @property finishedAt when the occurrence ended, or `null` if it has not ended.
+ * There is no "observed nothing" instance: an observation records work that happened. [prescribedSets] is
+ * what the session's own snapshot presented, not what today's plan says, so a later edit cannot change
+ * what this is measured against, and a `null` [performedAmounts] is not zero work.
  */
 data class ExposureObservation(
     val exerciseId: String,
@@ -120,7 +79,6 @@ data class ExposureObservation(
         }
     }
 
-    /** Whether the whole prescription was executed. */
     val isFull: Boolean
         get() = level == ExposureLevel.FULL
 }
