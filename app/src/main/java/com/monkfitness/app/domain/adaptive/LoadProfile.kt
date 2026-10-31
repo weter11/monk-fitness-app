@@ -1,29 +1,10 @@
 package com.monkfitness.app.domain.adaptive
 
 /**
- * The load of one scope, in the four dimensions the architecture keeps apart (§17).
- *
- * There is **no total**. This type deliberately exposes no scalar, no weight and no conversion
- * between its parts: "1 push-up = X load units" is exactly the invention the architecture forbids,
- * because it would silently equate unlike work and then let a single number drive progression. What
- * the adaptive stage may reason about is what is actually recorded here:
- *
- *  * [volume] — how much work, in the units it was prescribed in;
- *  * [intensity] — at what progression level, per family;
- *  * [density] — the work-to-time structure;
- *  * [exposure] — how much opportunity the scope had, which is context rather than physical workload:
- *    a focus that got more of the plan's attention did not thereby become heavier.
- *
- * The four are meaningful together and only *within* a comparable context — volume primarily within
- * the same exercise or family, intensity through the progression relations of that family — so a
- * profile is a description, not a ranking key, and comparing two profiles is a decision the load
- * guard makes at a named [scope] with its own rules.
- *
- * @property scope the granularity this profile is stated at.
- * @property volume the work performed or prescribed, per unit.
- * @property intensity the progression level of the families involved.
- * @property density the work/rest structure.
- * @property exposure the opportunity this scope had.
+ * The load of one scope, in the four dimensions kept apart. There is deliberately **no total**, no weight
+ * and no conversion between the parts: equating unlike work would let one number drive progression.
+ * [exposure] is context, not workload — a focus that got more of the plan's attention did not thereby
+ * become heavier.
  */
 data class LoadProfile(
     val scope: AdaptiveScope,
@@ -34,15 +15,8 @@ data class LoadProfile(
 )
 
 /**
- * Work in the units a plan is written in.
- *
- * Repetitions and seconds are different measurements, so they are reported side by side and never
- * added together; two volumes are comparable only when they are in the same unit. This mirrors the
- * convention the app's own statistics already use (sets / reps / timer seconds).
- *
- * @property sets the number of sets, `>= 0`.
- * @property repetitions the repetitions performed or prescribed, `>= 0`.
- * @property durationSeconds the seconds performed or prescribed, `>= 0`.
+ * Work in the units a plan is written in. Repetitions and seconds are different measurements, reported
+ * side by side and never added together; two volumes are comparable only in the same unit.
  */
 data class VolumeLoad(
     val sets: Int = 0,
@@ -57,22 +31,13 @@ data class VolumeLoad(
         }
     }
 
-    /** Whether nothing at all was prescribed or performed in any unit. */
     val isZero: Boolean
         get() = sets == 0 && repetitions == 0 && durationSeconds == 0
 }
 
 /**
- * The progression level of one family, as the family's progression hierarchy defines it.
- *
- * [level] is an ordinal position in that hierarchy and nothing more. This model fixes no bounds, no
- * step size and no coefficient: the level range, the step between levels and the relations that make
- * one variant harder than another belong to the progression hierarchy and arrive with it (§15 — a
- * variant change requires an explicit progression relation). A level is therefore comparable to
- * another level of the *same* family and to nothing else.
- *
- * @property familyId the family this level belongs to.
- * @property level the family's position in its progression hierarchy.
+ * [level] is an ordinal position in the family's own hierarchy and nothing more: the bounds and steps
+ * belong to the hierarchy, so a level is comparable to another level of the *same* family only.
  */
 data class IntensityEntry(
     val familyId: String,
@@ -84,14 +49,7 @@ data class IntensityEntry(
     }
 }
 
-/**
- * The progression levels of the families a load profile covers.
- *
- * The entries are held in family order so that two profiles covering the same families in the same
- * positions are equal values, whatever order the caller discovered them in.
- *
- * @property levels the levels, one per family, in family-id order.
- */
+/** Held in family order, so two profiles covering the same families are equal values whatever order the caller discovered them in. */
 data class IntensityLoad(
     val levels: List<IntensityEntry> = emptyList()
 ) {
@@ -105,21 +63,13 @@ data class IntensityLoad(
         }
     }
 
-    /** The level recorded for [familyId], or `null` when this profile does not cover that family. */
     fun levelOf(familyId: String): Int? =
         levels.firstOrNull { it.familyId == familyId }?.level
 }
 
 /**
- * The work-to-time structure of a scope.
- *
- * Density is not a ratio and not a rate: the two amounts are kept as they were measured, because a
- * ratio would be a derived number the architecture has not agreed on. What it says is how the work was
- * arranged in time — the same volume performed with half the rest is a different stimulus even though
- * the volume is identical.
- *
- * @property workingSeconds seconds spent working.
- * @property restSeconds seconds spent resting.
+ * Not a ratio and not a rate: the amounts are kept as measured, because a ratio would be a derived number
+ * nobody agreed on. The same volume with half the rest is a different stimulus.
  */
 data class DensityLoad(
     val workingSeconds: Int = 0,
@@ -135,15 +85,9 @@ data class DensityLoad(
 }
 
 /**
- * How much opportunity a scope had, and how much of it produced work.
- *
- * This is the exposure/context channel, and it is explicitly **not** physical workload: a focus
- * receiving more of the plan's attention, or a session having more slots available, says something
- * about the plan and the calendar, not about how heavy the training was (§17). Exposure is where
- * "the opportunity existed but nothing happened" is recorded honestly rather than as zero work.
- *
- * @property opportunities how many opportunities the scope had, `>= 0`.
- * @property completedOpportunities how many of them produced work, within `0..opportunities`.
+ * The exposure/context channel, explicitly **not** physical workload: a focus receiving more of the plan's
+ * attention says something about the plan and the calendar. It is where "the opportunity existed but
+ * nothing happened" is recorded honestly rather than as zero work.
  */
 data class ExposureLoad(
     val opportunities: Int = 0,
