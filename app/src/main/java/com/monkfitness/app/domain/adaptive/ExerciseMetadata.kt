@@ -2,7 +2,7 @@ package com.monkfitness.app.domain.adaptive
 
 /**
  * The **metadata vocabulary** a plan element is described with: which training domain an exercise
- * serves, which body region it trains, and the four facts about it a planner may consume.
+ * serves, which body region it trains, and the facts about it a planner may consume.
  *
  * ### Why this file is separate
  *
@@ -66,19 +66,56 @@ enum class BodyRegion {
  * carries an empty set, and equipment tokens the app uses to mean "nothing" are tolerated without
  * being interpreted (the availability rule below reads requirements, never tokens).
  *
- * The type carries no prescription: no sets, reps, durations, difficulty or order. Validation is
- * about whether a selection is structurally and training-domain valid, and nothing about it applies,
- * persists, generates or adjusts a workout.
+ * ### The progression range is catalogue data, not a prescription
+ *
+ * [repRange], [timeRange] and [sets] are the span and set count the exercise's **own catalogue
+ * definition** states — read from it by `Exercise.toConfigurationMetadata`, never chosen by a
+ * planner. They exist so generation can start an exercise where the catalogue says it starts (at the
+ * lower bound of the span it will travel, for as many sets as the catalogue defines) instead of at a
+ * fixed shape of the generator's own.
+ *
+ * They are not a prescription: there is no per-set sequence, no difficulty, no order and no rest,
+ * and nothing here decides how an *adaptation* moves the range. A caller that states no range
+ * (`null`) is still a complete value — the planner then falls back to its own policy targets.
+ *
+ * @property repRange the full span this exercise's repetitions progress through, when the catalogue
+ *   states one. `null` for a timed exercise, and for a caller that states no range at all.
+ * @property timeRange the same span for a timed exercise, in seconds; `null` for a repetition one.
+ * @property sets the set count the catalogue defines this exercise with — the count a generated
+ *   prescription is written for. `0` only when the caller states no range, which is the one case
+ *   where no set count is needed.
  */
 data class ExerciseMetadata<E>(
     val id: String,
     val familyId: String,
     val trainingDomain: TrainingDomain,
     val bodyRegion: BodyRegion,
-    val requiredEquipment: Set<E> = emptySet()
+    val requiredEquipment: Set<E> = emptySet(),
+    val repRange: IntRange? = null,
+    val timeRange: IntRange? = null,
+    val sets: Int = 0
 ) {
     init {
         require(id.isNotBlank()) { "an exercise metadata must carry an exercise id" }
         require(familyId.isNotBlank()) { "an exercise metadata must carry its family, was \"$familyId\"" }
+        require(repRange == null || timeRange == null) {
+            "an exercise progresses in one dimension: '${id}' stated repRange=$repRange and " +
+                "timeRange=$timeRange, and a prescription is written in one of them"
+        }
+        repRange?.let { range ->
+            require(!range.isEmpty()) {
+                "a progression range spans at least one value, '${id}' stated $range"
+            }
+        }
+        timeRange?.let { range ->
+            require(!range.isEmpty()) {
+                "a progression range spans at least one value, '${id}' stated $range"
+            }
+        }
+        require(sets >= 0) { "a catalogue set count is a count, '${id}' stated $sets" }
+        require((repRange == null && timeRange == null) || sets >= 1) {
+            "an exercise that states a progression range is also stated with the set count its " +
+                "catalogue definition carries, '${id}' stated $sets"
+        }
     }
 }

@@ -8,8 +8,8 @@ import com.monkfitness.app.domain.program.FocusPlan
 import com.monkfitness.app.domain.program.ProgramDuration
 import com.monkfitness.app.domain.program.ProgramMode
 import com.monkfitness.app.domain.program.ProgramSchedule
-import com.monkfitness.app.domain.program.generated.GenerationPolicy
 import com.monkfitness.app.domain.usecase.ProductionFocusClassification
+import com.monkfitness.app.domain.usecase.WorkoutGenerator
 import kotlinx.coroutines.runBlocking
 import org.junit.After
 import org.junit.Assert.assertEquals
@@ -399,12 +399,12 @@ class ProgramsGenerationPreviewTest {
     }
 
     @Test
-    fun thePreviewKeepsEveryUnevenPerSetTargetInThePrescriptionsOwnOrder() = runBlocking {
-        // §30 step 26's fix, measured on a real pass. §10's two generated prescription shapes are
-        // *unequal* per set — repetitions 12/10/8/6 and durations 30/30/45 — and `GenerationPolicy`
-        // uses both verbatim. A Preview that carried one number would state "4 sets of 12 reps" for a
-        // plan that drops to 6, which overstates it in the one direction a reader is least likely to
-        // notice: it makes a descending prescription look flat.
+    fun thePreviewStartsEveryElementAtTheLowerBoundOfItsOwnCatalogueRange() = runBlocking {
+        // The owner's rule, measured on a real pass: a new exercise starts at the **lower bound of the
+        // range its own catalogue definition states**, for the set count that definition carries — not
+        // at §10's fixed 12 / 10 / 8 / 6 or 30 / 30 / 45 shapes, and not at a fixed 4 or 3 sets. The
+        // expected numbers are read from the catalogue itself (the same list the generation boundary
+        // reads), so this test never restates the data it is checking.
         openGenerated()
         rig.controller.setDraftFocus(FocusPlan.focused(listOf(Focus.PUSH)))
 
@@ -413,69 +413,64 @@ class ProgramsGenerationPreviewTest {
         val elements = rig.state.generationPreview!!.days.flatMap { day -> day.elements }
         assertTrue("the pass planned exercises to look at", elements.isNotEmpty())
 
+        val catalogue = WorkoutGenerator().getExerciseLibrary().associateBy { it.id }
         elements.forEach { element ->
-            val dimension = element.dimension
-            val expected = when (dimension) {
-                com.monkfitness.app.domain.prescription.PrescriptionDimension.TIME_BASED ->
-                    GenerationPolicy.DEFAULT.timePrescriptionTargets
-
-                else -> GenerationPolicy.DEFAULT.repPrescriptionTargets
-            }
+            val exercise = catalogue.getValue(element.exerciseId)
+            val lowerBound =
+                if (exercise.isTimerBased) exercise.baseDurationSeconds else exercise.baseMinReps
             assertEquals(
-                "§10's $dimension prescription is ${expected.joinToString(" / ")} and the Preview " +
-                    "carries the whole sequence, not its first term",
-                expected,
+                "the Preview carries the prescription the plan made — $lowerBound for every one of " +
+                    "the catalogue's ${exercise.sets} sets — rather than a fixed generator shape",
+                List(exercise.sets) { lowerBound },
                 element.targetsPerSet
             )
             assertEquals(
-                "and the order is the prescription's own — a repetition is a progression, and " +
-                    "reordering it would misstate it as much as truncating it",
-                expected.size,
-                element.targetsPerSet.size
-            )
-            assertFalse(
-                "…so the Preview does not report a descending prescription as a flat one",
-                element.isUniformPrescription && expected.distinct().size > 1
+                "…and the set count is the catalogue's own, not a generator's 4 or 3",
+                exercise.sets,
+                element.sets
             )
             assertEquals(
-                "and the set count is the prescription's own set count, matching the number of terms",
-                element.targetsPerSet.size,
-                element.sets
+                "…and the whole sequence is carried, not just its first term",
+                element.sets,
+                element.targetsPerSet.size
             )
         }
     }
 
     @Test
     fun aUniformPrescriptionIsDistinguishableFromAnUnevenOne() = runBlocking {
-        // The converse: the flag that lets a caller render one number plainly must not be true for the
-        // real generated shapes, and the list must remain complete either way. Without this the previous
-        // test could pass with a `isUniformPrescription` that is simply hard-coded.
+        // The converse: the flag that lets a caller render one number plainly must be true for the
+        // generated shapes — one lower bound per set — and false for an uneven one, so it is neither
+        // hard-coded nor a label every element carries. Without the second half the first could pass
+        // with an `isUniformPrescription` that simply returns true.
         openGenerated()
         rig.controller.previewDraft()
         val elements = rig.state.generationPreview!!.days.flatMap { day -> day.elements }
 
         assertTrue("there are elements to judge", elements.isNotEmpty())
-        assertTrue(
-            "§10's generated prescriptions are unequal in both dimensions, so a Preview of one is " +
-                "never uniform — a flag that was simply hard-coded would make this vacuous",
-            elements.none { element -> element.isUniformPrescription }
-        )
-        // The two dimensions carry *different* numbers of terms (4 repetitions, 3 durations), so
-        // "every term is carried" has to be checked against the element's own dimension rather than
-        // against one list — otherwise this passes while half the elements are truncated.
         elements.forEach { element ->
-            val expected = when (element.dimension) {
-                com.monkfitness.app.domain.prescription.PrescriptionDimension.TIME_BASED ->
-                    GenerationPolicy.DEFAULT.timePrescriptionTargets
-
-                else -> GenerationPolicy.DEFAULT.repPrescriptionTargets
-            }
             assertEquals(
-                "…and every term of this ${element.dimension} prescription is carried",
-                expected,
-                element.targetsPerSet
+                "a generated element prescribes one value per set",
+                1,
+                element.targetsPerSet.distinct().size
+            )
+            assertTrue(
+                "…so a Preview of one may render it as one number",
+                element.isUniformPrescription
             )
         }
+
+        val uneven = ProgramGenerationPreviewElementUi(
+            exerciseId = "authored-by-hand",
+            nameRes = 0,
+            dimension = com.monkfitness.app.domain.prescription.PrescriptionDimension.REP_BASED,
+            sets = 4,
+            targetsPerSet = listOf(12, 10, 8, 6)
+        )
+        assertFalse(
+            "…and an uneven prescription is still not reported as uniform",
+            uneven.isUniformPrescription
+        )
     }
 
     // ---------------------------------------------------------------- reconciliation
