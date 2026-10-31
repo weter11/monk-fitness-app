@@ -38,27 +38,11 @@ import com.monkfitness.app.ui.components.MonkButton
 import com.monkfitness.app.viewmodel.MainViewModel
 
 /**
- * **Home** — the app's landing screen, now over the **target Program System** (§30 step 15).
- *
- * Before this step Home ran the shipped 56-day program: a day number derived from a stored start date, a
- * `program_day_state` row for today, a routine generated from the day and a completion written back as
- * `user_progress`. All of that is retired. What Home shows now is what the Program System already owns
- * and can answer:
- *
- * ```text
- * the Program being worked on   ProgramLifecycleService   (the one global selection, §3)
- * the next opportunity          ProgramScheduler          (§20 — the earliest startable opportunity)
- * the calendar's own counts     ProgramProgressService    (§21 completed / missed / upcoming)
- * the Program's own streak      ProgramProgressService    (§21, per Program)
- * ```
- *
- * There is **no day number, no cycle and no completion grid**: a workout is identified by the
- * **opportunity** it is, so "Start workout" navigates to that opportunity's id and the session screen
- * asks the runtime to start *it*. Repeating a workout is not an action here either: the Scheduler may
- * hold a missed opportunity, and it is offered as itself rather than as a duplicate of a day.
- *
- * The optional posture / mobility track is retained unchanged (§4): it is a daily practice on its own
- * 56-day rhythm, not part of any Program, and it keeps its own card.
+ * **Home**: the Program being worked on, the next opportunity, the calendar's own counts and the
+ * Program's streak, all answered by the Program System. There is **no day number, no cycle and no
+ * completion grid** — a workout is identified by the **opportunity** it is, so "Start workout"
+ * navigates to that opportunity's id, and a missed opportunity is offered as itself rather than as a
+ * duplicate of a day. The optional posture/mobility track is no part of any Program and keeps its card.
  */
 @Composable
 fun HomeScreen(
@@ -68,14 +52,9 @@ fun HomeScreen(
     onOpenSettings: () -> Unit,
     onStartPostureWorkout: () -> Unit
 ) {
-    // P1 of the creation remediation: `ProgramHomeController.load()` existed but Home never called
-    // it, so the card rendered the state holder's initial value — no Program, no next workout, no
-    // Start — no matter what was created, selected or scheduled. This is ProgressScreen's own
-    // mechanism (`LaunchedEffect(viewModel) { viewModel.refreshProgress() }`): a lifecycle-aware
-    // effect keyed on the holder, re-read on every composition of this destination — first open and
-    // every return to Home — and cancelled with the composition, so there is no read outliving the
-    // screen that asked for it. The read itself stays in the controller; nothing here touches a
-    // repository or a service.
+    // Keyed on the holder: re-read on every composition of this destination — first open and every
+    // return to Home — and cancelled with the composition, so no read outlives the screen. The read
+    // itself stays in the controller; nothing here touches a repository or a service.
     LaunchedEffect(viewModel) {
         viewModel.refreshHomeProgram()
     }

@@ -19,9 +19,8 @@ data class PostureUiState(
     val exercisesByFamily: Map<String, List<Exercise>>,
     val expandedFamilyIds: Set<String>,
     /**
-     * Engineering Validation category. Null whenever the "Show Engineering Validation
-     * category" setting is OFF, or when it is filtered out — so the normal catalog,
-     * workout generation, statistics and search never see validation poses.
+     * Null unless the "Show Engineering Validation" setting is ON, so the normal catalog, workout
+     * generation, statistics and search never see validation poses.
      */
     val validationCategory: ValidationCategory? = null,
     val validationPoses: List<ValidationPose> = emptyList()

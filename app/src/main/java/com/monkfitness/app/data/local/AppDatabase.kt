@@ -36,42 +36,42 @@ import com.monkfitness.app.data.model.WorkoutSessionEntity
 @Database(
     entities = [
         // The retained global tables: the posture / mobility track, the body-weight log and the
-        // nutrition plan's own calendar. None of them is keyed by a Program, a cycle or a program day,
-        // and all of them survive §30 step 15 unchanged — except `posture_session_progress`, whose own
-        // row identity was renamed to `trackCycle` / `trackDay` by `MIGRATION_11_12`.
+        // nutrition plan's own calendar. None of them is keyed by a Program, a cycle or a program day;
+        // `posture_session_progress`'s row identity was renamed to `trackCycle` / `trackDay` by
+        // `MIGRATION_11_12`.
         PostureSessionProgress::class,
         BodyWeightEntry::class,
         MealCycle::class,
         MealEntity::class,
         ShoppingItemEntity::class,
-        // The Program System's schema (§23) — the only Program architecture the app has after §30
-        // step 15. The retired tables (`user_progress`, `program_day_state`, `set_log`,
-        // `family_progression_state`, `adaptive_decision_record`) are no longer declared here and are
-        // dropped by `MIGRATION_11_12`; nothing in this list was added to stand in for them.
+        // The Program System's schema — the only Program architecture the app has. The retired tables
+        // (`user_progress`, `program_day_state`, `set_log`, `family_progression_state`,
+        // `adaptive_decision_record`) are no longer declared and are dropped by `MIGRATION_11_12`;
+        // nothing in this list was added to stand in for them.
         ProgramEntity::class,
         AppStateEntity::class,
         ProgramRevisionEntity::class,
         ProgramDayEntity::class,
         ProgramExerciseEntity::class,
         ProgramWorkoutSlotEntity::class,
-        // §30 step 14: the target occurrence's own semantic payload — the planned date and the
-        // ordered rule/workout components a slot row has no column for. Two tables because the
-        // components are an ordered list, and an order that has to be recovered by parsing a
-        // serialized blob is not a stored order.
+        // The target occurrence's own semantic payload — the planned date and the ordered rule/workout
+        // components a slot row has no column for. Two tables because the components are an ordered
+        // list, and an order that has to be recovered by parsing a serialized blob is not a stored
+        // order.
         ProgramTargetOccurrenceEntity::class,
         ProgramTargetOccurrenceComponentEntity::class,
         // The revision-owned **explicit target schedule source**: the rules a revision states (each
         // with its cadence form, that form's own payload and its anchor date) and the explicit
         // `workoutId -> ProgramDayId` bindings beside them. Two tables rather than columns on
         // `program_revision`, because the values are a *list* whose order and membership are the
-        // contract — the same reasoning §30 step 14 used for an occurrence's ordered components.
+        // contract.
         ProgramTargetScheduleRuleEntity::class,
         ProgramTargetProgramDayBindingEntity::class,
-        // P31: the app-owned **progression relation catalogue** — the persisted definition of each
-        // family's declared ladder. It is deliberately NOT revision-owned: a relation is keyed by
-        // `familyId` alone and its levels are ordinals inside that one family, never comparable across
-        // families, so scoping it to a Program or a revision would restate one ladder per plan and
-        // invite exactly the cross-family comparison §15 forbids. No index is declared either — the
+        // The app-owned **progression relation catalogue** — the persisted definition of each family's
+        // declared ladder. Deliberately NOT revision-owned: a relation is keyed by `familyId` alone and
+        // its levels are ordinals inside that one family, never comparable across families, so scoping
+        // it to a Program or a revision would restate one ladder per plan and invite exactly the
+        // cross-family comparison the domain forbids. No index is declared either — the
         // `(familyId, exerciseId)` primary key's leading column is the only column it is read by.
         ProgressionRelationVariantEntity::class,
         WorkoutSessionEntity::class,
@@ -89,10 +89,6 @@ import com.monkfitness.app.data.model.WorkoutSessionEntity
 )
 @TypeConverters(AdaptiveTypeConverters::class, ProgramTypeConverters::class)
 abstract class AppDatabase : RoomDatabase() {
-    // The retained global accessors. `progressDao` is gone: the mixed DAO was **split** rather than
-    // deleted, and the operations that served unrelated global features now live in the DAO that owns
-    // them — `nutritionDao` for the meal-cycle calendar, its meals, its shopping list and the
-    // body-weight log, and `postureProgressDao` for the posture / mobility track.
     abstract fun nutritionDao(): NutritionDao
 
     abstract fun postureProgressDao(): PostureProgressDao
@@ -100,8 +96,6 @@ abstract class AppDatabase : RoomDatabase() {
     /** Settings → Full reset. Global maintenance, over the tables the reset's contract names. */
     abstract fun maintenanceDao(): MaintenanceDao
 
-    // The Program System's DAOs (§30 step 3): one per target table, and the only Program accessors
-    // there are. No target DAO reads a retired table, and no retired table is declared any more.
     abstract fun programDao(): ProgramDao
 
     abstract fun appStateDao(): AppStateDao
@@ -115,8 +109,8 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun programWorkoutSlotDao(): ProgramWorkoutSlotDao
 
     /**
-     * The target occurrence's semantic payload (§30 step 14) — the parent row and its ordered
-     * component rows, read and written as one occurrence and never reconstructed from a slot.
+     * The target occurrence's semantic payload — the parent row and its ordered component rows, read
+     * and written as one occurrence and never reconstructed from a slot.
      */
     abstract fun programTargetOccurrenceDao(): ProgramTargetOccurrenceDao
 
@@ -128,7 +122,7 @@ abstract class AppDatabase : RoomDatabase() {
 
     /**
      * The app-owned progression relation catalogue: the variants each family declares, at the positions
-     * it declares them (P31).
+     * it declares them.
      *
      * A separate accessor from the adaptive DAO on purpose — see
      * [com.monkfitness.app.data.repository.ProgressionRelationRepository] for why a ladder is a
@@ -281,13 +275,12 @@ abstract class AppDatabase : RoomDatabase() {
         }
 
         /**
-         * Cycle-aware foundation (C1/C2): progress tables gain a cycleNumber column and a
-         * composite (cycleNumber, day) primary key so each 56-day program cycle has its own
-         * history. Non-destructive: legacy rows are preserved verbatim as cycle 1.
+         * Cycle-aware foundation: the progress tables gain a cycleNumber column and a composite
+         * (cycleNumber, day) primary key so each 56-day cycle has its own history. Non-destructive:
+         * legacy rows are preserved verbatim as cycle 1.
          */
         private val MIGRATION_5_6 = object : Migration(5, 6) {
             override fun migrate(database: SupportSQLiteDatabase) {
-                // user_progress → cycle 1
                 database.execSQL(
                     """
                     CREATE TABLE IF NOT EXISTS `user_progress_new` (
@@ -309,7 +302,6 @@ abstract class AppDatabase : RoomDatabase() {
                 database.execSQL("DROP TABLE `user_progress`")
                 database.execSQL("ALTER TABLE `user_progress_new` RENAME TO `user_progress`")
 
-                // posture_session_progress → cycle 1
                 database.execSQL(
                     """
                     CREATE TABLE IF NOT EXISTS `posture_session_progress_new` (
@@ -331,7 +323,6 @@ abstract class AppDatabase : RoomDatabase() {
                 database.execSQL("DROP TABLE `posture_session_progress`")
                 database.execSQL("ALTER TABLE `posture_session_progress_new` RENAME TO `posture_session_progress`")
 
-                // program_day_state → cycle 1 (backfilled from the live snapshot)
                 database.execSQL(
                     """
                     CREATE TABLE IF NOT EXISTS `program_day_state_new` (
@@ -361,13 +352,13 @@ abstract class AppDatabase : RoomDatabase() {
         }
 
         /**
-         * Adaptive program Stage 1: adds the two adaptive tables and touches nothing else.
+         * Adds the two adaptive tables and touches nothing else.
          *
          * Purely additive — two new tables, no row of any existing table read, rewritten or dropped,
-         * so a device upgrading from version 6 keeps every progress, posture, set-log, body-weight,
-         * calendar and nutrition row exactly as it was. Both tables are created empty: adaptive state
-         * starts at the domain's own baseline (a family with no stored state is evaluated as
-         * `notYetTracked`), so there is nothing to backfill and nothing to invent.
+         * so a device upgrading from version 6 keeps every existing row exactly as it was. Both tables
+         * are created empty: adaptive state starts at the domain's own baseline (a family with no
+         * stored state is evaluated as `notYetTracked`), so there is nothing to backfill and nothing to
+         * invent.
          *
          * The DDL is byte-equivalent to what Room generates for the two entities — column order,
          * types, nullability and keys included — because Room validates the migrated schema against
@@ -419,29 +410,27 @@ abstract class AppDatabase : RoomDatabase() {
         }
 
         /**
-         * Program System step 2 (§30): the target schema, added beside the shipped one.
+         * Program System step 2: the target schema, added beside the shipped one.
          *
          * Purely additive. Fifteen tables are created and nothing else is executed: no row of any
          * existing table is read, rewritten, reinterpreted or dropped, no index is changed, and Room's
          * own `room_master_table` is left to Room (it rewrites the identity hash after a successful
-         * upgrade). A device at version 7 therefore keeps every progress, posture, set-log, body-weight,
-         * nutrition and Stage-1 adaptive row exactly as it was, and gains an empty Program System.
+         * upgrade). A device at version 7 gains an empty Program System and keeps every existing row.
          *
-         * There is deliberately **no legacy program/history migration** here. §23 states that the new
-         * architecture has no dependency on `UserProgress`, `ProgramDayState`, `cycleNumber` or
-         * `sessionDate` as ownership, and §30 gives the old persistence its own retirement step; so no
-         * legacy row is converted into a Program, a Revision or a Session, and no placeholder is
-         * invented. The two persistence models coexist until that step, which is why the target tables
-         * that collide with shipped names are named explicitly: the legacy `set_log` stays `set_log` and
-         * the target set log is `program_set_log`; the Stage-1 `family_progression_state` and
-         * `adaptive_decision_record` stay in place, and the target pair is
-         * `program_family_progression_state` and `program_adaptive_decision_record`.
+         * There is deliberately **no legacy program/history migration** here: the new architecture has
+         * no dependency on `UserProgress`, `ProgramDayState`, `cycleNumber` or `sessionDate` as
+         * ownership, and the old persistence is retired in its own step — so no legacy row is converted
+         * into a Program, a Revision or a Session, and no placeholder is invented. That is also why the
+         * target tables that collide with shipped names are named explicitly: the legacy `set_log` stays
+         * `set_log` and the target set log is `program_set_log`; the Stage-1
+         * `family_progression_state` and `adaptive_decision_record` stay in place, and the target pair
+         * is `program_family_progression_state` and `program_adaptive_decision_record`.
          *
-         * Every foreign key is explicit and every delete action follows the ownership graph of §29:
-         * `ON DELETE CASCADE` for everything a Program owns, `SET NULL` for the blueprint's one
-         * nullable global reference (`app_state.nextProgramId`), and `NO ACTION` for
-         * `app_state.selectedProgramId` so that deleting the selected Program is refused until the
-         * lifecycle has chosen the fallback rather than being silently nulled.
+         * Every foreign key is explicit and every delete action follows the ownership graph:
+         * `ON DELETE CASCADE` for everything a Program owns, `SET NULL` for the blueprint's one nullable
+         * global reference (`app_state.nextProgramId`), and `NO ACTION` for `app_state.selectedProgramId`
+         * so that deleting the selected Program is refused until the lifecycle has chosen the fallback
+         * rather than being silently nulled.
          *
          * The DDL is byte-equivalent to what Room generates for the fifteen entities — column order,
          * types, nullability, keys, indices and delete actions included — because Room validates the
@@ -449,8 +438,7 @@ abstract class AppDatabase : RoomDatabase() {
          * that differs only in a `NOT NULL` flag would crash the upgrade rather than fail silently.
          *
          * Visible to the unit tests on purpose: the migration's statements are the deployable proof of
-         * the schema, and the schema suites execute them on a real SQLite engine as well as compare
-         * them token for token.
+         * the schema, and the schema suites execute them on a real SQLite engine.
          */
         internal val MIGRATION_7_8 = object : Migration(7, 8) {
             override fun migrate(database: SupportSQLiteDatabase) {
@@ -765,27 +753,16 @@ abstract class AppDatabase : RoomDatabase() {
         }
 
         /**
-         * The schedule-frequency correction (Program System, PR 2.1): one additive column.
+         * The schedule-frequency correction: one additive column.
          *
-         * A `FLEXIBLE_PER_WEEK` revision states a deterministic sessions-per-week frequency (§20) and the
+         * A `FLEXIBLE_PER_WEEK` revision states a deterministic sessions-per-week frequency and the
          * domain value it stands for (`ProgramSchedule.FlexiblePerWeek`) requires that number, but the
          * version-8 table stored only the schedule *form*. A revision therefore could not be written or
          * read without losing the frequency or inventing one.
          *
          * The correction is one `ALTER TABLE ... ADD COLUMN`, purely additive: it adds nothing but a
-         * nullable column, reads, rewrites, reinterprets and drops no row, touches no other table and no
-         * index, and invents no default — the frequency is required for one schedule form and must stay
-         * absent for the other, which the entity's own discriminator guard enforces. A device at version
-         * 8 keeps every progress, posture, set-log, body-weight, nutrition, Stage-1 adaptive and Program
-         * System row exactly as it was, and gains the ability to say how many sessions a week a flexible
-         * schedule holds.
-         *
-         * Version 7 devices are not affected differently: they run the version-7 → version-8 migration
-         * first and then this one, which is the chain `ProgramMigrationPreservationTest` executes.
-         *
-         * Visible to the unit tests on purpose: the statements are the deployable proof of the correction,
-         * and the schema suites execute them on a real SQLite engine as well as compare them token for
-         * token.
+         * nullable column and invents no default — the frequency is required for one schedule form and
+         * must stay absent for the other, which the entity's own discriminator guard enforces.
          */
         internal val MIGRATION_8_9 = object : Migration(8, 9) {
             override fun migrate(database: SupportSQLiteDatabase) {
@@ -797,35 +774,24 @@ abstract class AppDatabase : RoomDatabase() {
 
         /**
          * Version 9 → version 10: the **Goals & Focus** configuration becomes a stored structural fact
-         * of a revision (§6, §8).
+         * of a revision.
          *
-         * Two columns are appended to `program_revision`, both nullable and both without a default:
+         * Two columns are appended to `program_revision`: `focusGoal` (the Goal, as the domain enum
+         * member's own name) and `focusTargets` (the focuses it states, as one converted deterministic
+         * value).
          *
-         * ```text
-         * focusGoal      TEXT   the Goal, as the domain enum member's own name
-         * focusTargets   TEXT   the focuses it states, as one converted deterministic value
-         * ```
-         *
-         * Why they exist at all is §6: *goals/focus* is one of the structural changes that creates a
-         * revision, so a revision that could not state its goal would not be the record of the plan it
-         * describes — and §8's `CUSTOM` percentages would have nowhere to live. Why they are columns
-         * and not a table is §23: a focus configuration is a handful of tokens belonging to exactly
-         * one immutable revision, and a second row-shaped entity would model a relation that does not
-         * exist.
+         * They exist because goals/focus is one of the structural changes that creates a revision, so a
+         * revision that could not state its goal would not be the record of the plan it describes — and
+         * `CUSTOM` percentages would have nowhere to live. Columns and not a table, because a focus
+         * configuration is a handful of tokens belonging to exactly one immutable revision, and a second
+         * row-shaped entity would model a relation that does not exist.
          *
          * Both are nullable because SQLite cannot append a `NOT NULL` column without a default, and a
-         * default is exactly what must not be stated here: a revision written before this step chose
-         * no goal, and the mapper reads that absence as §8's `BALANCED` — the configuration that
-         * states nothing — rather than the schema claiming the user picked something. This migration
-         * therefore executes two `ALTER TABLE ... ADD COLUMN` statements and nothing else: no
-         * `UPDATE`, no `INSERT`, no row is touched and no value is invented for the rows already in
-         * the table.
-         *
-         * Version 7 and version 8 devices are not affected differently: they run the earlier steps of
-         * the chain first, which is what `ProgramMigrationPreservationTest` executes on a real engine.
-         *
-         * Visible to the unit tests on purpose, like the two corrections above: the statements are the
-         * deployable proof of the change and the schema suites compare them token for token.
+         * default is exactly what must not be stated here: a revision written before this step chose no
+         * goal, and the mapper reads that absence as `BALANCED` — the configuration that states nothing
+         * — rather than the schema claiming the user picked something. This migration therefore executes
+         * two `ALTER TABLE ... ADD COLUMN` statements and nothing else: no row is touched and no value is
+         * invented for the rows already in the table.
          */
         internal val MIGRATION_9_10 = object : Migration(9, 10) {
             override fun migrate(database: SupportSQLiteDatabase) {
@@ -840,62 +806,35 @@ abstract class AppDatabase : RoomDatabase() {
 
         /**
          * Version 10 → version 11: the adaptive stage's **window bookkeeping** becomes a stored fact of
-         * a family's progression state (§15, §18, §30 step 12).
+         * a family's progression state.
          *
-         * Five columns are appended to `program_family_progression_state`, all nullable and none with a
-         * default:
+         * Five nullable columns are appended to `program_family_progression_state` — the three
+         * preceding-* qualifying window counts, `qualifyingWindowsSinceLastChange` (the cooldown
+         * position, absent when never changed) and `recoveryQualifyingWindows` (the recovery exit gate)
+         * — and `reason` is appended to `program_adaptive_decision_record`.
          *
-         * ```text
-         * precedingProgressQualifyingWindows  INTEGER   consecutive progression-qualifying windows
-         * precedingRegressQualifyingWindows   INTEGER   the same, for the regression conditions
-         * precedingRecoveryQualifyingWindows  INTEGER   the same, for §14's reduced-absorption pattern
-         * qualifyingWindowsSinceLastChange    INTEGER   the cooldown position, absent when never changed
-         * recoveryQualifyingWindows           INTEGER   windows completed in recovery: the exit gate
-         * ```
+         * The reason is stored rather than reconstructed: an `APPLIED` row's reason is the one change
+         * token its action names, but a *filtered* one — `NOT_APPLIED`, `HOLD` — has exactly the shape of
+         * any of the eighteen holds, so reading it back as `AGGREGATE_LOAD_GUARD` would rest on the write
+         * rule rather than on a stored fact, and the mapping from an action to a token is a property of
+         * the current vocabulary rather than of the row.
          *
-         * and one column is appended to `program_adaptive_decision_record`:
+         * The counts exist because the engine takes them as **inputs** ([ProgramAdaptiveWindow]) and no
+         * window can count itself: a decision is a pure function of one frozen window plus the caller's
+         * maintained facts, so the caller has to carry those facts between windows — and a caller that
+         * carried them only in memory would lose a user's confirmation count on every process restart,
+         * which the design forbids. They are columns rather than a table, and are not reconstructed from
+         * the decision trail, because the trail records only the decisions the integration *keeps* and
+         * the per-window verdict that advances a confirmation count is not a fact of any decision row.
          *
-         * ```text
-         * reason                              TEXT      the rule that answered (ProgramAdaptiveReason)
-         * ```
-         *
-         * The reason is stored rather than reconstructed, and that is a deliberate decision (§13): an
-         * `APPLIED` row's reason is the one change token its action names, but a *filtered* one —
-         * `NOT_APPLIED`, `HOLD` — has exactly the shape of any of the eighteen holds, so reading it back
-         * as `AGGREGATE_LOAD_GUARD` would rest on the write rule rather than on a stored fact, and the
-         * mapping from an action to a token is a property of the current vocabulary rather than of the
-         * row. The full argument, and what deliberately stays unpersisted (the requested action, the
-         * signals, the guard's own verdict), is in `docs/PROGRAM_ADAPTIVE_INTEGRATION.md`.
-         *
-         * They exist because the engine takes them as **inputs** ([ProgramAdaptiveWindow]) and no
-         * window can count itself: §30 step 11 decided that a decision is a pure function of one
-         * frozen window plus the caller's maintained facts, so the caller has to carry those facts
-         * between windows — and a caller that carried them only in memory would lose a user's
-         * confirmation count on every process restart, which is the one thing §30 step 12's brief
-         * forbids ("*account for confirmation windows, recovery exit count, cooldown position without
-         * silently losing them across process restart*").
-         *
-         * Why columns here and not a table, and why not a reconstruction from the decision trail, is
-         * argued in `docs/PROGRAM_ADAPTIVE_INTEGRATION.md` (§11): the trail records only the decisions
-         * the integration *keeps* (an applied change and a guard-filtered one), the per-window verdict
-         * that advances a confirmation count is not a fact of any decision row, and a family's state is
-         * one current row per family per revision by its own primary key — which is exactly the shape
-         * of the fact being stored.
-         *
-         * Why nullable and defaultless: SQLite cannot append a `NOT NULL` column without a default, and
-         * a default is what must not be stated here. A row written before this step records no window
+         * Why nullable and defaultless: SQLite cannot append a `NOT NULL` column without a default, and a
+         * default is what must not be stated here. A row written before this step records no window
          * bookkeeping, and the mapper reads that absence as the count a family with no preceding window
          * has — the same value a `DEFAULT 0` would produce, without the schema asserting that every
          * upgraded row had counted zero windows. `qualifyingWindowsSinceLastChange` in particular must
          * stay absent rather than become `0`: `null` means *"this family has never had a progression
          * change"* and the cooldown is therefore already served, while `0` would claim a change happened
          * this window.
-         *
-         * Version 7, 8 and 9 devices are not affected differently: they run the earlier steps of the
-         * chain first, which is what `ProgramMigrationPreservationTest` executes on a real engine.
-         *
-         * Visible to the unit tests on purpose, like the three steps before it: the statements are the
-         * deployable proof of the change and the schema suites compare them token for token.
          */
         internal val MIGRATION_10_11 = object : Migration(10, 11) {
             override fun migrate(database: SupportSQLiteDatabase) {
@@ -926,28 +865,14 @@ abstract class AppDatabase : RoomDatabase() {
         }
 
         /**
-         * §30 step 15 — the legacy schema is retired and the posture/mobility track's identity is renamed.
+         * The legacy schema is retired and the posture/mobility track's identity is renamed.
          *
-         * ### What it drops, and why dropping is the right verb
-         *
-         * Five tables are removed, never converted:
-         *
-         * ```text
-         * user_progress              the shipped 56-day program's day-level completion
-         * program_day_state          its 1..56 grid, its cycle number and its missed flags
-         * set_log                    its set log — the target writes `program_set_log`
-         * family_progression_state   the Stage-1 adaptive generation's per-family progression
-         * adaptive_decision_record   the Stage-1 adaptive generation's decision audit trail
-         * ```
-         *
-         * The blueprint is explicit that **no legacy program or history migration is required**, so no row
-         * of these becomes a target row: a `UserProgress` row is not a session, a `ProgramDayState` row is
-         * not an opportunity, and a Stage-1 family level is not a target family state. Converting them
-         * would be inventing a mapping the data does not support, and the resulting target rows would claim
-         * a history that never happened. The destruction is deliberate, documented here and measured by
-         * `ProgramLegacyRemovalMigrationTest`.
-         *
-         * ### What it preserves, and how
+         * Five tables are dropped, never converted: `user_progress`, `program_day_state`, `set_log`,
+         * `family_progression_state` and `adaptive_decision_record`. No legacy program or history
+         * migration is required, so no row of these becomes a target row: a `UserProgress` row is not a
+         * session, a `ProgramDayState` row is not an opportunity, and a Stage-1 family level is not a
+         * target family state. Converting them would be inventing a mapping the data does not support,
+         * and the resulting target rows would claim a history that never happened.
          *
          * Everything else — the Program System's own tables, `app_state`, the body-weight log, the
          * nutrition plan's calendar, meals and shopping list — is untouched: this migration issues no
@@ -955,15 +880,14 @@ abstract class AppDatabase : RoomDatabase() {
          *
          * `posture_session_progress` is the one table that changes shape, and its **rows are copied, not
          * recreated**: `cycleNumber`/`day` become `trackCycle`/`trackDay`, which is a rename of the row's
-         * identity and not a reinterpretation of it (the track keeps its own 56-day calendar and its day 1
-         * is the same day). The table is rebuilt and filled from the old one rather than renamed in place,
-         * because `ALTER TABLE … RENAME COLUMN` needs SQLite 3.25 and this app's `minSdk` predates it on
-         * devices the app still supports; the copy is a plain column-for-column `SELECT`, so no row and no
-         * value is lost or invented.
+         * identity and not a reinterpretation of it (the track keeps its own 56-day calendar and its day
+         * 1 is the same day). The table is rebuilt and filled from the old one rather than renamed in
+         * place, because `ALTER TABLE … RENAME COLUMN` needs SQLite 3.25 and this app's `minSdk` predates
+         * it on devices the app still supports; the copy is a plain column-for-column `SELECT`, so no row
+         * and no value is lost or invented.
          */
         internal val MIGRATION_11_12 = object : Migration(11, 12) {
             override fun migrate(database: SupportSQLiteDatabase) {
-                // 1. The retained track: the same rows under its own two column names.
                 database.execSQL(
                     """
                     CREATE TABLE IF NOT EXISTS `posture_session_progress_new` (
@@ -989,8 +913,8 @@ abstract class AppDatabase : RoomDatabase() {
                     "ALTER TABLE `posture_session_progress_new` RENAME TO `posture_session_progress`"
                 )
 
-                // 2. The retired tables. `IF EXISTS` because a database that was created from scratch at
-                //    an older version may legitimately never have held one of them.
+                // `IF EXISTS` because a database that was created from scratch at an older version may
+                // legitimately never have held one of them.
                 database.execSQL("DROP TABLE IF EXISTS `user_progress`")
                 database.execSQL("DROP TABLE IF EXISTS `program_day_state`")
                 database.execSQL("DROP TABLE IF EXISTS `set_log`")
@@ -1015,84 +939,33 @@ abstract class AppDatabase : RoomDatabase() {
         }
 
         /**
-         * Version 13 → version 14: a target occurrence's **semantic payload** becomes a stored fact
-         * (§30 step 14).
+         * Version 13 → version 14: a target occurrence's **semantic payload** becomes a stored fact.
          *
-         * Until this step a persisted target slot remembered one thing about its occurrence:
-         * `program_workout_slot.targetOccurrenceKey`, the occurrence's identity. The occurrence that
-         * key names also carries a planned date and an ordered list of components — the rule and
-         * workout identities that say *what* the occurrence is — and a slot row has no column for
-         * any of them. So the semantics existed only in the value that produced the slot, and any
-         * later read had to invent them: parse the key, derive identities from a plan day, or reach
-         * back into the legacy scheduler. None of those is a fact about the occurrence; all three
-         * are guesses dressed as reads.
+         * Until this step a persisted target slot remembered only the occurrence's identity
+         * (`program_workout_slot.targetOccurrenceKey`). The occurrence that key names also carries a
+         * planned date and an ordered list of components — the rule and workout identities that say
+         * *what* the occurrence is — and a slot row has no column for any of them, so the semantics
+         * existed only in the value that produced the slot and any later read had to invent them.
          *
-         * Two tables are created, and they are two because of one property:
+         * Two tables, because a component list has three properties a single serialized column would
+         * lose: the order would have to be *parsed* back out of a blob instead of being part of the
+         * primary key; `ruleId` and `workoutId` would stop being independent fields; and a short, padded
+         * or placeholder component list would become fabricable. There is no nullable component row and
+         * no default identity, so a record either holds its real components or does not exist.
          *
-         * ```text
-         * program_target_occurrence
-         *   programId      TEXT   the Program it belongs to        } the membership identity,
-         *   occurrenceKey  TEXT   the occurrence's own key        }  and exactly that
-         *   plannedFor     TEXT   the calendar date it was planned for
+         * `(programId, occurrenceKey)` **is** the primary key of the parent table, which is what lets two
+         * Programs hold the same key independently and one Program hold it only once — and, because the
+         * pair is the key, what makes a stored record impossible to re-point at another Program or
+         * another key by a write. `occurrenceKey` is stored as an opaque token: nothing splits it, trims
+         * it, normalizes it or derives a component from its text.
          *
-         * program_target_occurrence_component
-         *   programId      TEXT   repeated from the parent
-         *   occurrenceKey  TEXT   repeated from the parent
-         *   position       INTEGER  the component's place in the presented order, from zero
-         *   ruleId         TEXT   the schedule rule's own identity
-         *   workoutId      TEXT   the workout's own identity
-         * ```
-         *
-         * ### Why normalized rows and not one serialized column
-         *
-         * The alternative — a single `TEXT` column holding an encoded component list — was rejected
-         * for three reasons, each of which is a way of losing something:
-         *
-         *  * **Order would stop being stored.** The presenter's order is part of the payload, and it
-         *    is part of the primary key here, so it cannot be lost or contradicted. A blob would have
-         *    to be *parsed* to recover the order, which means the read-back would depend on an
-         *    encoding convention rather than on stored rows.
-         *  * **A field would stop being a field.** `ruleId` and `workoutId` are two independent
-         *    identities stored in two independent columns. Reading either one back is a column
-         *    fetch, not a delimiter split.
-         *  * **A component would become fabricable.** A short list, a padded list, a list with a
-         *    placeholder token in it — all representable in a blob, none of them representable here.
-         *    There is no nullable component row and no default identity, so a record either holds
-         *    its real components or does not exist.
-         *
-         * ### The identity, and what this migration refuses to do
-         *
-         * `(programId, occurrenceKey)` **is** the primary key of the parent table, which is what makes
-         * two Programs able to hold the same key independently and one Program unable to hold it
-         * twice — and, because the pair is the key, what makes a stored record impossible to
-         * re-point at another Program or another key by a write. This is consistent with Stage 8,
-         * where the same pair became the slot's unique target identity.
-         *
-         * `occurrenceKey` is stored as an opaque token. Nothing in this schema, and nothing that reads
-         * it, splits it, trims it, normalizes it or derives a component from its text: the key's own
-         * string is not a serialization of anything. `plannedFor` and the two component identities
-         * are stored beside it as their own columns precisely so that no one ever has to read the key
-         * to recover them.
-         *
-         * ### What the migration does to existing data: nothing
-         *
-         * Two `CREATE TABLE` statements and one index, and **no** `UPDATE`, `INSERT`, `DELETE`,
-         * `ALTER` or `RENAME`. It creates storage; it writes no row and changes no existing one.
-         * There is deliberately **no** backfill of the new tables from `program_workout_slot`: a slot
-         * carries no components, so any such row would have to invent them, and a row that invents
-         * its own payload is worse than an absent one — a later read would return the invention
-         * believing it was stored. A target occurrence that has not been persisted through this
-         * stage's path simply has no semantic record yet, and its absence is honest.
+         * It creates storage and writes no row: there is deliberately **no** backfill from
+         * `program_workout_slot`, because a slot carries no components and any such row would have to
+         * invent them — and a row that invents its own payload is worse than an absent one, since a
+         * later read would return the invention believing it was stored.
          *
          * The `CASCADE` foreign keys are the ownership graph, not a convenience: an occurrence is
-         * destroyed with its Program, and its components with the occurrence. That is what keeps a
-         * component row from outliving the occurrence whose identity it repeats.
-         *
-         * Version 7 to 12 devices are not affected differently: they run the earlier steps of the
-         * chain first, which is what `ProgramMigrationPreservationTest` executes on a real engine.
-         *
-         * Visible to the unit tests on purpose, like every step before it: the statements are the
-         * deployable proof of the change and the schema suites compare them token for token.
+         * destroyed with its Program, and its components with the occurrence.
          */
         internal val MIGRATION_13_14 = object : Migration(13, 14) {
             override fun migrate(database: SupportSQLiteDatabase) {
@@ -1136,77 +1009,38 @@ abstract class AppDatabase : RoomDatabase() {
          * Version 14 → version 15: a revision's **explicit target schedule source** becomes a stored
          * fact.
          *
-         * Until this step a revision stored only its legacy `program_schedule`, and every would-be
-         * target scheduling entry point had to *invent* the target rules it needed: pick a rule
-         * identity, pick a workout identity, pick an anchor date, and — for a derived rule — pick the
-         * rule it derives from. None of those is in the legacy vocabulary, so each was a guess dressed
-         * as a read. This step gives the application somewhere honest to state them.
+         * Until this step a revision stored only its legacy `program_schedule`, and every would-be target
+         * scheduling entry point had to *invent* the target rules it needed: a rule identity, a workout
+         * identity, an anchor date and — for a derived rule — the rule it derives from. None of those is
+         * in the legacy vocabulary, so each was a guess dressed as a read.
          *
-         * ```text
-         * program_target_schedule_rule
-         *   revisionId              TEXT     the immutable revision that states it     } membership
-         *   ruleId                  TEXT     the rule's own identity                  } identity,
-         *   workoutId               TEXT     the workout the rule produces            }  and exactly it
-         *   cadenceType             TEXT     DAILY | EVERY_N_DAYS | SESSIONS_PER_WEEK
-         *                                       | FIXED_WEEKDAYS | DERIVED_EXCLUDING
-         *   cadenceDays             INTEGER  the interval, for EVERY_N_DAYS only
-         *   cadenceSessionsPerWeek  INTEGER  the frequency, for SESSIONS_PER_WEEK only
-         *   cadenceWeekdays         TEXT     the named days, for FIXED_WEEKDAYS only
-         *   cadenceSourceRuleId     TEXT     the named source, for DERIVED_EXCLUDING only
-         *   anchorDate              TEXT     the date the rule is anchored to
-         *
-         * program_target_program_day_binding
-         *   revisionId              TEXT     the immutable revision that states it
-         *   workoutId               TEXT     the target workout identity
-         *   programDayId            TEXT     the plan day this workout presents
-         * ```
-         *
-         * ### Why two tables, and why four cadence columns
-         *
-         * Not columns on `program_revision`: a revision states a *list* of rules and a *list* of
-         * bindings, and both the order and the membership of those lists are part of what is stored. A
-         * set of columns could hold one rule, or one rule behind a delimiter that a read would then
-         * have to parse — and §30 step 14 already rejected that shape for an occurrence's components.
+         * Two tables, not columns on `program_revision`: a revision states a *list* of rules and a *list*
+         * of bindings, and both the order and the membership of those lists are part of what is stored.
          *
          * The cadence is a **discriminator plus one payload column per form** rather than one encoded
-         * value, for the three reasons that shape exists: the payload is a field, so reading it back is
-         * a column fetch rather than a delimiter split; a form that has no payload cannot be confused
-         * with a form whose payload is zero, because absent stays absent; and `SessionsPerWeek` cannot
-         * be normalized into a weekday set or an interval on the way through. The entity's own guard
-         * holds the discriminator and its payload consistent, exactly as `program_revision`'s guard
-         * holds `scheduleType` and `scheduleWeekdays`.
+         * value, for the three reasons that shape exists: the payload is a field, so reading it back is a
+         * column fetch rather than a delimiter split; a form that has no payload cannot be confused with
+         * a form whose payload is zero, because absent stays absent; and `SessionsPerWeek` cannot be
+         * normalized into a weekday set or an interval on the way through. The entity's own guard holds
+         * the discriminator and its payload consistent, exactly as `program_revision`'s guard holds
+         * `scheduleType` and `scheduleWeekdays`.
          *
-         * ### The identities, and what they refuse
+         * `(revisionId, ruleId)` **is** the primary key of the rule table: one revision may state a rule
+         * once, two revisions may state the same rule identity independently, and a stored rule can never
+         * be re-pointed at another revision by a write. `(revisionId, workoutId)` is the primary key of
+         * the binding table for the same reason — one workout presents one plan day per revision, so
+         * which day it presents is a fact rather than a preference.
          *
-         * `(revisionId, ruleId)` **is** the primary key of the rule table: one revision may state a
-         * rule once, two revisions may state the same rule identity independently, and a stored rule
-         * can never be re-pointed at another revision by a write. `(revisionId, workoutId)` is the
-         * primary key of the binding table for the same reason — one workout presents one plan day per
-         * revision, so which day it presents is a fact rather than a preference.
+         * The binding's `programDayId` cascades with its plan day, and its `revisionId` cascades with its
+         * revision. What a foreign key cannot say is that the day belongs to *this* revision, and the
+         * repository refuses that case explicitly rather than storing a binding that would present one
+         * revision's schedule against another revision's plan.
          *
-         * The binding's `programDayId` cascades with its plan day, and its `revisionId` cascades with
-         * its revision. What a foreign key cannot say is that the day belongs to *this* revision, and
-         * the repository refuses that case explicitly rather than storing a binding that would present
-         * one revision's schedule against another revision's plan.
-         *
-         * ### What this migration does to existing data: nothing
-         *
-         * Two `CREATE TABLE` statements and **no** `UPDATE`, `INSERT`, `DELETE`, `ALTER` or `RENAME`.
-         * It creates storage; it writes no row and changes no existing one.
-         *
-         * There is deliberately **no** backfill from `program_revision.scheduleType`,
-         * `scheduleWeekdays` or `scheduleSessionsPerWeek`. Those columns say when a revision's legacy
-         * slots fall; a target rule also needs a rule identity, a workout identity, an anchor date and,
-         * for a derived rule, its source — none of which those columns carry. Any row manufactured from
-         * them would have to invent those four facts, and an invented row that later reads back as
-         * *stored* is worse than an absent one. So an upgraded revision states no target source, and a
-         * read reports that as a typed absence rather than a plausible-looking default.
-         *
-         * Version 7 to 13 devices are not affected differently: they run the earlier steps of the chain
-         * first, which is what `ProgramMigrationPreservationTest` executes on a real engine.
-         *
-         * Visible to the unit tests on purpose, like every step before it: the statements are the
-         * deployable proof of the change and the schema suites compare them token for token.
+         * It creates storage and writes no row: there is deliberately **no** backfill from
+         * `program_revision.scheduleType`, `scheduleWeekdays` or `scheduleSessionsPerWeek`, because those
+         * columns carry none of the four facts a target rule needs. An upgraded revision therefore states
+         * no target source, and a read reports that as a typed absence rather than a plausible-looking
+         * default.
          */
         internal val MIGRATION_14_15 = object : Migration(14, 15) {
             override fun migrate(database: SupportSQLiteDatabase) {
@@ -1250,7 +1084,7 @@ abstract class AppDatabase : RoomDatabase() {
         }
 
         /**
-         * §30 step 28: the user's **exercise preference** becomes revision content.
+         * The user's **exercise preference** becomes revision content.
          *
          * One nullable column and nothing else — no table, because a preference is a handful of ids
          * belonging to exactly one immutable revision, which is the same reasoning
@@ -1261,10 +1095,7 @@ abstract class AppDatabase : RoomDatabase() {
          *
          * Nullable rather than an empty string so the absence is stored as itself; a blank string would
          * have to be re-read as an absence anyway, and one representation per value is the format's own
-         * determinism rule (§11).
-         *
-         * Visible to the unit tests on purpose, like every step before it: the statements are the
-         * deployable proof of the change and the schema suites compare them token for token.
+         * determinism rule.
          */
         internal val MIGRATION_15_16 = object : Migration(15, 16) {
             override fun migrate(database: SupportSQLiteDatabase) {
@@ -1275,17 +1106,16 @@ abstract class AppDatabase : RoomDatabase() {
         }
 
         /**
-         * Version 16 → version 17: a plan element's **historical focus** becomes a stored fact, and
-         * §19's snapshot carries it.
+         * Version 16 → version 17: a plan element's **historical focus** becomes a stored fact, and the
+         * session snapshot carries it.
          *
-         * Two nullable columns and nothing else — no table, no repository, no new ownership. The same
-         * reasoning `preferredExerciseIds` gave for §30 step 28 applies: a focus assignment belongs to
-         * exactly the element that represents it, so it belongs on that element's row.
+         * Two nullable columns and nothing else — no table, no repository, no new ownership: a focus
+         * assignment belongs to exactly the element that represents it, so it belongs on that element's
+         * row.
          *
          *  * `program_exercise.focus` — the focus the Focus Planner assigned this element when it was
-         *    generated. `PlanReconciler` used to drop `GeneratedElement.focus` here, which is why §27
-         *    could not honestly fill `recentExposureByFocus`: the fact existed transiently and then
-         *    nowhere.
+         *    generated. Without this column `PlanReconciler` drops `GeneratedElement.focus`, so
+         *    `recentExposureByFocus` cannot be filled: the fact would exist transiently and then nowhere.
          *  * `session_snapshot_exercise.focus` — a **copy** of that value, frozen at session start for
          *    the same reason the prescription is copied: a later revision, a regeneration or a
          *    superseding adjustment must not re-explain which focus a workout that already happened was
@@ -1299,10 +1129,7 @@ abstract class AppDatabase : RoomDatabase() {
          *
          * Both columns are nullable rather than empty strings so the absence is stored as itself; a blank
          * token would have to be re-read as an absence anyway, and one representation per value is the
-         * format's own determinism rule (§11).
-         *
-         * Visible to the unit tests on purpose, like every step before it: the statements are the
-         * deployable proof of the change and the schema suites compare them token for token.
+         * format's own determinism rule.
          */
         internal val MIGRATION_16_17 = object : Migration(16, 17) {
             override fun migrate(database: SupportSQLiteDatabase) {
@@ -1316,19 +1143,17 @@ abstract class AppDatabase : RoomDatabase() {
         }
 
         /**
-         * Version 17 -> version 18: the app-owned **progression relation catalogue** (§15).
+         * Version 17 -> version 18: the app-owned **progression relation catalogue**.
          *
          * One table and nothing else — no column is added, altered or dropped, and no existing Program
          * or adaptive table is touched. A ladder is a *definition* this app authors, not a fact derived
          * from rows a device already holds, so there is nothing in an upgraded database to convert:
-         *
-         *  * `program_exercise` holds what one revision's plan prescribes, not what a family may progress
-         *    to. Deriving a ladder from it would invent a ladder from one plan's snapshot, and a plan may
-         *    legitimately contain a single rung of a family (or none).
-         *  * `program_family_progression_state` holds where a family *currently* is inside one revision.
-         *    That is history, not a definition: a current position is one rung, and reading it as a
-         *    hierarchy would fabricate the other rungs (§15 forbids reaching for it).
-         *  * `program_adaptive_decision_record` holds what was decided once. A decision is not a ladder.
+         * `program_exercise` holds what one revision's plan prescribes, not what a family may progress
+         * to (and a plan may legitimately contain a single rung of a family, or none);
+         * `program_family_progression_state` holds where a family *currently* is, which is history, not
+         * a definition — a current position is one rung, and reading it as a hierarchy would fabricate
+         * the other rungs; and `program_adaptive_decision_record` holds what was decided once, which is
+         * not a ladder.
          *
          * So this step creates the storage and **seeds nothing**: an upgraded device declares no ladder
          * for any family, and production therefore keeps reporting
@@ -1341,9 +1166,6 @@ abstract class AppDatabase : RoomDatabase() {
          * `(familyId, exerciseId)` primary key makes "one exercise is one position in its family's
          * ladder" a table constraint rather than a caller convention. No index is declared: `familyId`
          * is the key's leading column and the only column the table is ever read by.
-         *
-         * Visible to the unit tests on purpose, like every step before it: the statement is the
-         * deployable proof of the change and the schema suites compare it token for token.
          */
         internal val MIGRATION_17_18 = object : Migration(17, 18) {
             override fun migrate(database: SupportSQLiteDatabase) {

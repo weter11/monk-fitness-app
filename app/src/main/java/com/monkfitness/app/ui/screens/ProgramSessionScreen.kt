@@ -56,30 +56,19 @@ import com.monkfitness.app.ui.programs.SessionStage
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
-/** How long the rest between two sets of one occurrence lasts. The same minute the app always used. */
 private const val REST_SECONDS = 60
 
 /**
- * **The workout session screen** — the one production workout runtime (§30 step 15, §19, §27).
+ * **The workout session screen** — the one production workout runtime.
  *
- * It exists to replace the retired day-based `WorkoutScreen`, and it is deliberately thin: **every**
- * operation it offers is a call on [ProgramSessionController], which calls `SessionRuntime`. The screen
- * starts nothing, counts nothing, decides nothing about completion and writes nothing:
+ * It is deliberately thin: **every** operation it offers is a call on [ProgramSessionController], which
+ * calls `SessionRuntime`. The screen starts nothing, counts nothing, decides nothing about completion and
+ * writes nothing — opening the route starts or restores, Confirm set appends one set row, Finish and
+ * Cancel are the controller's, and Back is not a fact about the workout.
  *
- * ```text
- * opening the route   controller.open(slotId)   → start, or restore what is already in progress
- * Confirm set         controller.confirmSet(…)  → one appended set row, position from the stored rows
- * Finish              controller.finish()       → session + opportunity + adaptive, one transaction
- * Cancel              controller.cancel()       → CANCELLED; the opportunity is left as it was
- * Back                controller.back()         → nothing at all: leaving is not a fact about the workout
- * ```
- *
- * The attempt's identity is the **slot** it is opened for, and its persisted identity is the session the
- * runtime returns. Nothing here reconstructs a day from a calendar: a session is restored by what is
- * stored, which is what makes "close the app mid-workout and come back" work without a second model.
- *
- * The rest countdown between two sets is the screen's own affordance (and the only state it owns): it
- * decides nothing about the workout, and every set the user confirms is confirmed explicitly.
+ * The attempt's identity is the **slot** it is opened for, and it is restored by what is stored — which is
+ * what makes "close the app mid-workout and come back" work without a second model. The rest countdown is
+ * the screen's own affordance and the only state it owns; every set is confirmed explicitly.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -96,8 +85,7 @@ fun ProgramSessionScreen(
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
 
-    // The screen the workout is running on stays on: the affordance the navigation host used to apply
-    // from the shipped step machine's state, now owned by the only screen that knows a workout is running.
+    // The screen a workout is running on stays on, owned by the only screen that knows one is running.
     val view = LocalView.current
     LaunchedEffect(state.isPresenting) { view.keepScreenOn = state.isPresenting }
 
@@ -406,7 +394,6 @@ fun ProgramSessionScreen(
     }
 }
 
-/** One occurrence: its name, its set progress and its next target. */
 @Composable
 private fun SessionExerciseRow(
     exercise: SessionExerciseUi,

@@ -36,12 +36,8 @@ import java.time.LocalDate
 import java.time.ZoneOffset
 
 /**
- * The Program System's entry point in the app's **one** navigation graph.
- *
- * It is a plain destination like any other: three entries, no state machine and no second graph. The
- * screens below it (My Programs, Detail, Editor, Import) are the same graph's destinations, reached with
- * stable identifiers — a `programId` string, and nothing else — so §16's rule about navigation
- * arguments holds by construction.
+ * The Program System's entry point in the app's **one** navigation graph: a plain destination, whose
+ * children (My Programs, Detail, Editor, Import) are reached with a `programId` string and nothing else.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -100,16 +96,9 @@ fun ProgramsScreen(
 }
 
 /**
- * **Create Program** — §7's two creation entry paths, and §2's two modes.
- *
- * ```text
- * Build it myself → MANUAL
- * Build for me    → GENERATED
- * ```
- *
- * Both open the same editor, with the draft's mode set to the user's choice. It is deliberately not a
- * third mode and not a wizard: the mode is *content* (§2, §6), and the editor is the one place a plan is
- * built.
+ * **Create Program**: both creation entry paths open the same editor, with the draft's mode set to the
+ * user's choice. Deliberately not a third mode and not a wizard — the mode is *content*, and the editor
+ * is the one place a plan is built.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -155,7 +144,6 @@ fun ProgramCreateChoiceScreen(
     }
 }
 
-/** One entry of the Programs hub: a title, the sentence that explains it and the tap that opens it. */
 @Composable
 private fun ProgramEntry(titleRes: Int, descriptionRes: Int, onClick: () -> Unit) {
     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -171,29 +159,13 @@ private fun ProgramEntry(titleRes: Int, descriptionRes: Int, onClick: () -> Unit
 }
 
 /**
- * Shows the last operation's outcome, **awaits the snackbar, and only then clears it** (P2 `UI-01`).
- *
- * §15's four classes are what the user must be able to tell apart, so the duration is not a detail: a
- * [ProgramNotice.Done] disappears by itself, while a refusal, an invalid file and a failure stay until
- * the user dismisses them — a failed operation must never scroll past looking like a completed one.
- *
- * The lifecycle is what makes that true. The effect is keyed on [notice], so the moment the notice
- * changes this coroutine is cancelled and relaunched — which means clearing the notice *inside* it,
- * as this host used to do, cancelled `showSnackbar` at its very first suspension point and the user
- * saw nothing: `Generation unavailable`, a refusal, a save failure could all vanish unread. The order
- * is therefore
- *
- * ```text
- * notice published → effect starts → old snackbar dismissed → showSnackbar(...) awaited
- *                 → onShown() clears the notice → the key change retires the (already finished) effect
- * ```
- *
- * `showSnackbar` suspends until the snackbar is dismissed — immediately for the action-labeled
- * indefinite ones (the user pressed OK), after its duration for the Short ones — so "awaited" is
- * exactly "handled by the user or timed out". A newer notice published meanwhile simply replaces
- * this coroutine with one for the newer value, and the dismissal above guarantees the older message
- * does not sit on top of it. The notice itself is domain input: this host decides no new taxonomy,
- * it only decides *when* the controller may clear it.
+ * Shows the last operation's outcome, **awaits the snackbar, and only then clears it**. Clearing the
+ * notice *inside* this effect would cancel `showSnackbar` at its first suspension point, so a refusal or
+ * a failure could vanish unread. `showSnackbar` suspends until dismissal, so "awaited" is exactly
+ * "handled by the user or timed out"; a newer notice replaces this coroutine, and the dismissal above
+ * keeps the older message from sitting on top of it. A [ProgramNotice.Done] times out on its own, while
+ * a refusal, an invalid file and a failure stay until dismissed — a failed operation must never scroll
+ * past looking like a completed one.
  */
 @Composable
 fun ProgramNoticeHost(
@@ -220,7 +192,6 @@ fun ProgramNoticeHost(
     }
 }
 
-/** Localized name of where a Program came from. */
 @Composable
 fun sourceLabel(source: ProgramSource): String = stringResource(
     when (source) {
@@ -230,7 +201,7 @@ fun sourceLabel(source: ProgramSource): String = stringResource(
     }
 )
 
-/** Localized name of a lifecycle state. Archive is not one and is labelled separately (§3). */
+/** Localized name of a lifecycle state. Archive is not one and is labelled separately. */
 @Composable
 fun lifecycleLabel(status: LifecycleStatus): String = stringResource(
     when (status) {
@@ -241,7 +212,7 @@ fun lifecycleLabel(status: LifecycleStatus): String = stringResource(
     }
 )
 
-/** Localized name of one of §2's two permanent modes. */
+/** Localized name of one of the two permanent modes. */
 @Composable
 fun modeLabel(mode: ProgramMode): String = stringResource(
     when (mode) {
@@ -250,7 +221,6 @@ fun modeLabel(mode: ProgramMode): String = stringResource(
     }
 )
 
-/** Localized name of a plan day's kind. */
 @Composable
 fun dayTypeLabel(type: ProgramDayType): String = stringResource(
     when (type) {
@@ -261,7 +231,6 @@ fun dayTypeLabel(type: ProgramDayType): String = stringResource(
     }
 )
 
-/** Localized description of how long a revision runs (§20). */
 @Composable
 fun durationLabel(duration: ProgramDuration): String = when (duration) {
     is ProgramDuration.FixedDays ->
@@ -270,7 +239,6 @@ fun durationLabel(duration: ProgramDuration): String = when (duration) {
     ProgramDuration.Indefinite -> stringResource(R.string.programs_duration_indefinite)
 }
 
-/** Localized description of when a revision's slots fall (§20). */
 @Composable
 fun scheduleLabel(schedule: ProgramSchedule): String = when (schedule) {
     is ProgramSchedule.FixedWeekdays ->
@@ -280,7 +248,6 @@ fun scheduleLabel(schedule: ProgramSchedule): String = when (schedule) {
         stringResource(R.string.programs_schedule_flexible, schedule.sessionsPerWeek)
 }
 
-/** Localized name of an attempt's state in the history list (§19). */
 @Composable
 fun sessionStatusLabel(status: SessionStatus): String = stringResource(
     when (status) {
@@ -326,7 +293,6 @@ fun dateLabel(date: LocalDate): String =
         .withLocale(java.util.Locale.getDefault())
         .format(date)
 
-/** Localized summary of one My Programs row: where it is and whether it is filed away. */
 @Composable
 fun programRowSummary(row: ProgramRowUi): String {
     val lifecycle = lifecycleLabel(row.lifecycleStatus)

@@ -6,15 +6,13 @@ import com.monkfitness.app.R
 /**
  * What the user chose in Settings → Language.
  *
- * This type keeps two things apart that the app used to mix: the **selected mode** and the **locale
- * the app actually resolves resources against**. [SYSTEM_DEFAULT] is not a language — it is the
- * *absence* of an application-level locale, so selecting it clears the app locale and lets Android
- * resolve resources against the device's own locale list (falling back to `values/`, English, for a
- * device language this app does not ship). Every other entry is one of the app's supported languages
- * and carries the real Android language tag that identifies it.
+ * [SYSTEM_DEFAULT] is not a language — it is the *absence* of an application-level locale, so its tag
+ * is `null` and Android resolves resources against the device's own locale list (falling back to
+ * `values/` for a device language this app does not ship). Every other entry carries the real Android
+ * language tag that identifies it.
  *
- * The tag is the identifier; [labelRes] is copy. A label is translated per language and is never used
- * to look a language up, and the tags of this enum are the app's one list of supported languages —
+ * The tag is the identifier; [labelRes] is copy, translated per language and never used to look a
+ * language up. The tags of this enum are the app's one list of supported languages —
  * `res/xml/locale_config.xml`, the picker and the localization tests all derive from it.
  *
  * Declaration order **is** picker order: System default first, then the languages.
@@ -30,11 +28,8 @@ enum class AppLanguage(val tag: String?, @StringRes val labelRes: Int) {
     ITALIAN("it", R.string.language_italian);
 
     /**
-     * Whether this entry means "the device decides", rather than naming a language.
-     *
-     * A system-default selection must never be written to the platform as a locale: it is the empty
-     * application-locale list, and it must stay out of `locale_config.xml`, which declares only the
-     * languages the app can actually present.
+     * Whether this entry means "the device decides", rather than naming a language. Such a selection
+     * must never be written to the platform as a locale, and must stay out of `locale_config.xml`.
      */
     val isSystemDefault: Boolean get() = tag == null
 
@@ -48,8 +43,8 @@ enum class AppLanguage(val tag: String?, @StringRes val labelRes: Int) {
         /**
          * The entry a language tag means, or `null` when the app does not ship that language.
          *
-         * Only the primary subtag is read, so the region and script a tag carries are irrelevant:
-         * `pt-BR`, `es-419` and `bg_BG` are languages this app has, while `fr` is not one of them.
+         * Only the primary subtag is read, so region and script are irrelevant: `pt-BR`, `es-419` and
+         * `bg_BG` are languages this app has, while `fr` is not one of them.
          */
         fun fromTag(tag: String?): AppLanguage? {
             val primary = tag

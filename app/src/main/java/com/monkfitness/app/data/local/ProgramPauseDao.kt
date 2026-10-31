@@ -6,7 +6,7 @@ import androidx.room.Query
 import com.monkfitness.app.data.model.ProgramPauseEntity
 
 /**
- * Persistence for the `program_pause` table — the pause intervals of one Program (§3, §23).
+ * Persistence for the `program_pause` table — the pause intervals of one Program.
  *
  * Keeping the intervals is what makes "this program was paused" explainable afterwards, so the DAO
  * reads them back as history as well as writing them: [pausesOfProgram] returns every interval of a
@@ -14,21 +14,19 @@ import com.monkfitness.app.data.model.ProgramPauseEntity
  *
  * [closePause] records the end of an interval the caller has already decided to end. It performs no
  * lifecycle transition: it does not check the Program's status, does not open a new interval, does
- * not resume anything, and does not create or touch a revision. Whether a pause should start or end
- * is lifecycle (§3) and is not decided here.
+ * not resume anything, and does not create or touch a revision.
  */
 @Dao
 interface ProgramPauseDao {
 
-    /** Stores one pause interval. */
     @Insert
     suspend fun insertPause(pause: ProgramPauseEntity)
 
-    /** The interval with [pauseId], or `null` when no such interval is stored. */
+    /** The interval, or `null` when none is stored. */
     @Query("SELECT * FROM `program_pause` WHERE `pauseId` = :pauseId LIMIT 1")
     suspend fun pauseById(pauseId: String): ProgramPauseEntity?
 
-    /** Every pause interval of one Program, earliest start first. */
+    /** Every interval of one Program, earliest start first. */
     @Query("SELECT * FROM `program_pause` WHERE `programId` = :programId ORDER BY `startedAt` ASC, `pauseId` ASC")
     suspend fun pausesOfProgram(programId: String): List<ProgramPauseEntity>
 

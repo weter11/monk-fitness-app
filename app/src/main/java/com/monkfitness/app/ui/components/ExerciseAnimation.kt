@@ -79,10 +79,9 @@ fun ExerciseAnimatedVisual(
             SkeletonEngine(definition, style)
         }
 
-        // C2 — the camera mode. The default presentation is the exercise's own static frame: one zoom
-        // and one anchor for the whole rep, derived before the first frame is drawn, so the subject
-        // cannot push in and pull out as it moves. The dynamic per-frame fit (C1's "camera push-in")
-        // is the opt-in mode, OFF by default.
+        // The camera mode. The default presentation is the exercise's own static frame: one zoom and one
+        // anchor for the whole rep, derived before the first frame is drawn, so the subject cannot push in
+        // and pull out as it moves. The dynamic per-frame fit is the opt-in mode, OFF by default.
         var dynamicCamera by rememberSaveable { mutableStateOf(false) }
 
         BoxWithConstraints(modifier = modifier) {
@@ -127,7 +126,7 @@ fun ExerciseAnimatedVisual(
                 camera = camera,
                 engine = engine,
                 environment = metadata.environment,
-                // B-5 — the Support Declaration resolves through the SINGLE R8 derivation
+                // The Support Declaration resolves through the SINGLE derivation
                 // (`SupportDefinition.supportPoints`), not a hand-rolled copy of it.
                 supportedPoints = metadata.support.supportPoints,
                 staticFrame = staticFrame,

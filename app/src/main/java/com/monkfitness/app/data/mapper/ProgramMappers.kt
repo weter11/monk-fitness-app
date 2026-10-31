@@ -11,16 +11,16 @@ import com.monkfitness.app.domain.program.ProgramSource
  * `program` row ⇄ `Program`, and nothing else.
  *
  * The row is the Program's identity and its non-structural facts; it carries no plan, no mode and no
- * selection (§23), so this mapper never loads a revision and never fabricates one: the aggregate a
- * caller may need — a Program together with its current revision — is assembled by the repository
- * that deliberately loads both, not here. A mapper that fetched a revision would be a hidden database
- * call inside a value translation.
+ * selection, so this mapper never loads a revision and never fabricates one: the aggregate a caller may
+ * need — a Program together with its current revision — is assembled by the repository that
+ * deliberately loads both. A mapper that fetched a revision would be a hidden database call inside a
+ * value translation.
  *
- * Both directions are total and deterministic: every stored field is mapped, the two vocabulary
- * columns are resolved against the domain enums by name, and no clock, no id generation and no
- * default value appears. Domain invariants (a named Program, a lifecycle that agrees with when it
- * actually started, an archive stamp that cannot precede creation) are enforced by the `Program`
- * constructor, so a row that violates one fails the load instead of loading "approximately".
+ * Both directions are total and deterministic: every stored field is mapped, the vocabulary columns are
+ * resolved against the domain enums by name, and no clock, no id generation and no default value
+ * appears. Domain invariants (a named Program, a lifecycle that agrees with when it actually started, an
+ * archive stamp that cannot precede creation) are enforced by the `Program` constructor, so a row that
+ * violates one fails the load instead of loading "approximately".
  */
 
 /** The domain value of one stored Program row. */

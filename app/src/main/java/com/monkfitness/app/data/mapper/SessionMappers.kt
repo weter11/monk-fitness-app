@@ -26,7 +26,7 @@ import com.monkfitness.app.domain.workout.WorkoutSessionSnapshot
  * The session rows ⇄ the session aggregate: `workout_session` + `session_snapshot` +
  * `session_snapshot_exercise` + `session_exercise` + `program_set_log`.
  *
- * This is the boundary §19 turns on, so the direction it reads in is the careful one:
+ * The direction it reads in is the careful one:
  *
  *  * **a session is always loaded from its own snapshot.** The presentation the user was shown is the
  *    stored `session_snapshot` / `session_snapshot_exercise` rows and nothing else. There is no join
@@ -39,7 +39,7 @@ import com.monkfitness.app.domain.workout.WorkoutSessionSnapshot
  *    `EffectiveWorkout` reads them from.
  *  * **a confirmed set is a row, and no row means no set.** Set results are the stored
  *    `program_set_log` rows in set-index order. A gap or a zero row is refused loudly rather than
- *    filled in: an exercise that was not performed has no row at all (§12), so a placeholder
+ *    filled in: an exercise that was not performed has no row at all, so a placeholder
  *    `0`-repetition set would state work that did not happen.
  *  * **nothing is derived and nothing is invented.** No clock is read, no identity is minted, no
  *    missing snapshot is fabricated to make a session load, and no status is inferred from stamps.
@@ -53,11 +53,11 @@ import com.monkfitness.app.domain.workout.WorkoutSessionSnapshot
  * The domain session of one stored session row and every row that belongs to it.
  *
  * @throws IllegalArgumentException when the session has no stored snapshot — a session without the
- *   presentation it was started under is not loadable as a session (§19) — when the schedule of the
- *   snapshot's elements disagrees with the session (a stored element whose day is outside the
- *   revision, a set row whose occurrence is not part of this session, a mismatched session identity),
- *   or when the assembled value violates a domain invariant (sets not accumulating as `1..n`, a
- *   session exercise the snapshot did not present, a status that disagrees with its finish stamp).
+ *   presentation it was started under is not loadable as a session — when the snapshot's elements
+ *   disagree with the session (a stored element whose day is outside the revision, a set row whose
+ *   occurrence is not part of this session, a mismatched session identity), or when the assembled value
+ *   violates a domain invariant (sets not accumulating as `1..n`, a session exercise the snapshot did
+ *   not present, a status that disagrees with its finish stamp).
  */
 internal fun sessionDomain(
     session: WorkoutSessionEntity,

@@ -9,13 +9,11 @@ import java.time.DayOfWeek
  * Two rules run through all of them. The form must be **deterministic** — the same value always stores
  * the same bytes, whatever order the caller happened to build it in, so a stored row can be compared,
  * diffed and re-derived without ambiguity. And it must be **lossless**: a per-set prescription is a
- * list of targets, one per set, and `12 / 10 / 8 / 6` cannot be recovered from a single `10`, which is
- * precisely why §10 requires the plan to record what each set asks for.
+ * list of targets, one per set, and `12 / 10 / 8 / 6` cannot be recovered from a single `10`.
  *
  * These are converters, not a vocabulary: nothing here maps a name to different text, decides what a
- * prescription means, or gives an id a shape. Spelled-out enums are stored as their own names by the
- * mapper layer, and the values here are opaque strings and integers that the data layer does not
- * interpret.
+ * prescription means, or gives an id a shape. The values here are opaque strings and integers that the
+ * data layer does not interpret.
  *
  * Visible to the unit tests on purpose: this is the code that decides whether a per-set prescription
  * survives storage, and it is pinned there token for token.
@@ -23,11 +21,9 @@ import java.time.DayOfWeek
 class ProgramTypeConverters {
 
     /**
-     * Stores a per-set prescription — repetitions or seconds — as its targets in set order.
-     *
      * The list is the source of truth for the set count as well, so no separate "how many sets" column
      * can contradict it, and a collapsed scalar is not representable: `[12, 10, 8, 6]` stores four
-     * numbers, in the order the sets are presented (§10).
+     * numbers, in the order the sets are presented.
      */
     @TypeConverter
     fun toPerSetTargets(targets: List<Int>): String {
@@ -46,10 +42,10 @@ class ProgramTypeConverters {
         }
 
     /**
-     * Stores a fixed-weekday schedule as its day names in ascending week order, so Monday-first is the
-     * only order this column ever holds. A weekday set has no meaningful insertion order — the same
-     * three days are the same schedule whichever way they were added — and storing them in the order a
-     * caller happened to build the set in would make two equal schedules compare unequal.
+     * Stored in ascending week order, so Monday-first is the only order this column ever holds. A
+     * weekday set has no meaningful insertion order — the same three days are the same schedule
+     * whichever way they were added — and storing them in build order would make two equal schedules
+     * compare unequal.
      */
     @TypeConverter
     fun toScheduleWeekdays(weekdays: Set<DayOfWeek>): String =
@@ -69,8 +65,6 @@ class ProgramTypeConverters {
         }
 
     /**
-     * Stores the adjustments a snapshot had already applied, in application order.
-     *
      * Order is part of the record — two adjustments applied in the other order are a different
      * presentation — and an empty capture is stored as the empty string rather than `null`, so "no
      * adaptive change" is a value and not a missing one.

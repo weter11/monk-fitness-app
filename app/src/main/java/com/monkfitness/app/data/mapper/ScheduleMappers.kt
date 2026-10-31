@@ -15,21 +15,19 @@ import com.monkfitness.app.domain.program.WorkoutSlot
 /**
  * The scheduling rows ⇄ their domain values: one planned opportunity to train, and one pause interval.
  *
- * A slot carries an `attempts` list in the domain, and the slot table has no such column — by design
- * (§23): the link between a slot and its sessions is owned by `workout_session.slotId`, and a second
- * copy on the slot row could disagree with it. Reading therefore takes the attempts the repository
- * read from the sessions of that slot, in start order, and writing stores the slot's own columns only
- * — the sessions that make an attempt exist are written by the transaction that starts them.
+ * A slot carries an `attempts` list in the domain, and the slot table has no such column — by design:
+ * the link between a slot and its sessions is owned by `workout_session.slotId`, and a second copy on
+ * the slot row could disagree with it. Reading therefore takes the attempts the repository read from the
+ * sessions of that slot, in start order, and writing stores the slot's own columns only.
  *
- * Nothing here decides a scheduling question: no date is generated, no status is derived from dates
- * or from sessions, no missed slot is inferred and no horizon is extended. The status and the
- * completion stamp are stored and returned as the schema's own `require` holds them
- * (`COMPLETED` ⇔ a completion stamp), and `every slot a program has` is answered by the repository's
- * ordered read rather than by this file (§20).
+ * Nothing here decides a scheduling question: no date is generated, no status is derived from dates or
+ * from sessions, no missed slot is inferred and no horizon is extended. The status and the completion
+ * stamp are stored and returned as the schema's own `require` holds them (`COMPLETED` ⇔ a completion
+ * stamp), and "every slot a program has" is answered by the repository's ordered read.
  *
  * A pause maps one-to-one: identity, owner, start and end. An open interval is `endedAt == null`, and
  * whether that agrees with the Program's lifecycle is a lifecycle rule owned by the layer that holds
- * both (§3), not a check performed here.
+ * both, not a check performed here.
  */
 
 /**

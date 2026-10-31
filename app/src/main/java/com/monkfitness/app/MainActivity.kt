@@ -39,12 +39,9 @@ import androidx.lifecycle.lifecycleScope
 import kotlinx.coroutines.launch
 
 /**
- * The app's single Activity.
- *
- * It owns no language of its own (localization stage §8): the app language is an application-level
- * setting, applied by the platform through `AppLanguageManager` and read by every `stringResource` call
- * in the tree below. A language change therefore recreates this Activity, which is the platform's normal
- * way of re-reading resources, and the app needs no second mechanism to make the UI follow.
+ * The app's single Activity. It owns no language of its own: the app language is application-level and
+ * applied by the platform, so a change recreates this Activity — the platform's own way of re-reading
+ * resources, with no second mechanism needed to make the UI follow.
  */
 class MainActivity : AppCompatActivity() {
     private val viewModel: MainViewModel by viewModels()
@@ -52,26 +49,20 @@ class MainActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        // The one-time hand-off of the language a pre-localization install stored for itself (§5). It is
-        // triggered here, and not from the Application object, because the app-locale API reaches the
-        // platform through the *active* AppCompat-attached Activity: asked any earlier, it silently does
-        // nothing on Android 13+ and the user's own choice would be lost on upgrade.
-        //
-        // It runs in a coroutine rather than in a `runBlocking` on the main thread, which this code did at
-        // first and which froze the app: the hand-off reads and writes DataStore, and DataStore notifies its
-        // collectors through the dispatcher they were collected on — the main thread — so blocking the main
-        // thread while a `viewModelScope` flow is collecting deadlocks the write. The cost of not blocking is
-        // one frame in the system language on the first launch after an upgrade; the cost of blocking is an
-        // app that never finishes starting.
+        // Triggered here, not from the Application object: the app-locale API reaches the platform
+        // through the *active* AppCompat-attached Activity, and asked any earlier it silently does
+        // nothing on Android 13+ — the user's own choice would be lost on upgrade. It runs in a
+        // coroutine, never `runBlocking` on the main thread: the hand-off reads and writes DataStore,
+        // which notifies collectors through the dispatcher they were collected on (the main thread), so
+        // blocking while a `viewModelScope` flow collects deadlocks the write.
         lifecycleScope.launch {
             viewModel.migrateLanguageSelectionIfNeeded()
         }
 
         viewModel.handleNotificationIntent(intent)
         setContent {
-            // Keeping the screen on is the *session screen's* own business now (§30 step 15): it is the
-            // only place that knows a workout is running, and the shipped step machine this used to read
-            // is gone with the runtime it belonged to.
+            // Keeping the screen on belongs to the session screen — the only place that knows a workout
+            // is running.
             MonkFitnessTheme {
                 MainApp(viewModel)
             }
@@ -230,9 +221,8 @@ fun MainApp(viewModel: MainViewModel) {
                     onBack = { navController.popBackStack() }
                 )
             }
-            // ---- the Program System (§30 step 14) -------------------------------------------------
-            // Destinations of the app's ONE NavHost. They are addressed by stable identifiers — a
-            // `programId`, and one of §2's two mode names — never by a domain object (§16).
+            // Destinations of the app's ONE NavHost. Addressed by stable identifiers — a `programId`, and
+            // one of the two mode names — never by a domain object.
             composable(MainViewModel.ROUTE_PROGRAMS) {
                 ProgramsScreen(
                     onBack = { navController.popBackStack() },

@@ -6,7 +6,7 @@ import androidx.room.Index
 import androidx.room.PrimaryKey
 
 /**
- * One started workout session (§19, §23 `WorkoutSession`).
+ * One started workout session.
  *
  * It is persisted runtime state: created once, when the user starts it, and it survives the screen
  * closing, the process being recreated, an app restart and a reboot. Going back does not cancel it;
@@ -24,15 +24,12 @@ import androidx.room.PrimaryKey
  *
  * [status] and [finishedAt] are held consistent at construction: an `IN_PROGRESS` session has not
  * finished, and a completed or cancelled one says when it did. `CANCELLED` is not a quiet `COMPLETED` —
- * the partial work it recorded stays recorded (§12) — which is why the two are separate tokens rather
- * than one flag.
+ * the partial work it recorded stays recorded — which is why the two are separate tokens rather than one
+ * flag.
  *
- * @property sessionId identity of this session.
  * @property slotId the opportunity it attempts. No uniqueness: a slot may be attempted repeatedly.
- * @property programId the Program it belongs to.
  * @property revisionId the revision it started under — identity and scope, not a source of
  *   presentation.
- * @property status `IN_PROGRESS`, `COMPLETED` or `CANCELLED` (token column).
  * @property startedAt when the user started it, in epoch milliseconds.
  * @property finishedAt when it was completed or cancelled, in epoch milliseconds, or `null` while it is
  *   in progress.

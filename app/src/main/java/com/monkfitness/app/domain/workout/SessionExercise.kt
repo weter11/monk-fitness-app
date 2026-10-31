@@ -8,23 +8,14 @@ import com.monkfitness.app.domain.prescription.PrescriptionDimension
 /**
  * One exercise occurrence as it ran inside one session.
  *
- * The link back to the plan is [programExerciseId]: this is the *same element* the session's snapshot
- * presented, which is what makes "what was planned" and "what was performed" comparable without
- * guessing. [prescription] is the one that was presented — copied into the snapshot at session start
- * — so an edit made to the program while the session runs cannot change what the session is measured
- * against.
+ * [programExerciseId] links back to the same element the snapshot presented, which is what makes "what was
+ * planned" and "what was performed" comparable without guessing. [prescription] is the one that was
+ * presented, copied into the snapshot at session start, so an edit made while the session runs cannot
+ * change what it is measured against.
  *
- * [results] accumulates confirmed sets in the order they happened, which is why their indices must be
- * `1..n` with no gaps: confirming a set appends it, and a set that was never confirmed is absent
- * rather than inserted as a placeholder. [skipped] is the user's explicit "not this one", and it is
- * exactly equivalent to having no results — a skipped exercise observed nothing (§12).
- *
- * @property sessionExerciseId identity of this occurrence within the session.
- * @property programExerciseId the plan element it presents.
- * @property exerciseId the library key of the exercise, as presented.
- * @property prescription what was presented for it, per set.
- * @property results the confirmed sets, in confirmation order.
- * @property skipped whether the user explicitly skipped it.
+ * [results] accumulates confirmed sets in the order they happened, which is why their indices are `1..n`
+ * with no gaps: a set never confirmed is absent rather than a placeholder. [skipped] is the user's
+ * explicit "not this one", exactly equivalent to having no results — a skipped exercise observed nothing.
  */
 data class SessionExercise(
     val sessionExerciseId: SessionExerciseId,
@@ -52,7 +43,6 @@ data class SessionExercise(
         }
     }
 
-    /** How many sets were confirmed for this occurrence. */
     val completedSetCount: Int
         get() = results.size
 

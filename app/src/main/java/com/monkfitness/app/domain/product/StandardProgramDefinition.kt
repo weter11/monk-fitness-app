@@ -10,10 +10,8 @@ import com.monkfitness.app.domain.program.ProgramSchedule
 import java.time.DayOfWeek
 
 /**
- * Product-owned, immutable definition of the built-in Standard Program.
- *
- * This value contains no persistence identities and is deliberately independent of generators,
- * planners, adaptive policy, and the legacy runtime. A bootstrap maps it to target Program rows.
+ * Product-owned, immutable definition of the built-in Standard Program: no persistence identities,
+ * independent of generators, planners and adaptive policy. A bootstrap maps it to Program rows.
  */
 object StandardProgramDefinition {
     val mode: ProgramMode = ProgramMode.MANUAL

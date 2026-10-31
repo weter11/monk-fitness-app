@@ -7,14 +7,8 @@ import com.monkfitness.app.domain.adaptive.decision.AdaptiveAction
 /**
  * The stored representation of the adaptive vocabulary: enum names, nothing else.
  *
- * Names are the stable form because the audit trail outlives the code that wrote it — an ordinal
- * would silently re-point at a different constant the moment an enum member is inserted, while a
- * name either resolves or fails loudly on read. Nothing here maps a name to different text: the
- * domain enums are the vocabulary, and these converters only spell it into a column.
- *
- * §30 step 15 removed the Stage-1 pair (`AdaptiveReasonCode`): the token it spelled belonged to the
- * retired decision rows, which `MIGRATION_11_12` drops. [AdaptiveState] and [AdaptiveAction] stay
- * because the target engine and the target decision rows use them (§30 step 11).
+ * Names, not ordinals: the audit trail outlives the code that wrote it, and a name either resolves or
+ * fails loudly on read, while inserting an enum member would silently re-point an ordinal.
  */
 class AdaptiveTypeConverters {
 

@@ -7,41 +7,22 @@ import com.monkfitness.app.domain.workout.SessionStatus
 import java.time.Instant
 
 /**
- * Whether a prescription dimension has a **unit contract** — one which the facts can be compared in.
- *
- * Two dimensions have one (§10): repetitions per set and duration per set. A `SetResult` is measured in
- * exactly one of those two units, and `SessionExercise` checks a set against the prescription it was
- * performed under.
- *
- * The other three dimensions (`SET_BASED`, `DIFFICULTY_BASED`, `REST_BASED`) are named by the model and
- * deliberately have no subtype yet (§10: *"their algorithms, their coefficients and their units are not
- * decided here and must not be guessed here"*), and `SessionExercise.isLoggedInThePrescribedUnit`
- * accordingly claims nothing about them. A comparable series in one of those dimensions would therefore
- * have to invent the unit of comparison — so a plan element prescribed in one of them produces **no**
- * series and **no** volume, and is reported as a deferred measure instead of as a zero (§17: only values
- * with an explicitly defined comparable context are permissible).
+ * Whether a prescription dimension has a unit contract the facts can be compared in: repetitions per
+ * set or duration per set. The other three dimensions have no subtype yet, so a series in one of them
+ * would have to invent its unit of comparison — hence no series, no volume, and a deferred measure
+ * instead of a zero.
  */
 val PrescriptionDimension.hasComparableUnit: Boolean
     get() = this == PrescriptionDimension.REP_BASED || this == PrescriptionDimension.TIME_BASED
 
 /**
- * The context two observations must share to be comparable at all (§12, §17).
+ * The context two observations must share to be comparable at all: the exercise and the dimension it
+ * progresses in, and nothing else — that is the whole of what the facts record about a performed set.
+ * A `SetLog` has no progression level, difficulty or family, and inventing one to make two exercises
+ * comparable is exactly the invented conversion this model forbids.
  *
- * §12 states the rule in one line — *"comparable observations require compatible exercise/progression
- * context"* — and §17 says what volume is meaningful in: *"comparable exercise/family contexts"*. The
- * context this layer defines is the **exercise and the dimension it progresses in**, and nothing else,
- * because that is the whole of what the target facts record about a performed set: which exercise it was,
- * which unit it was measured in, and what was actually done. There is no progression level, no difficulty
- * and no family in a `SetLog`, and inventing any of them to make two different exercises comparable is
- * exactly the invented conversion §17 forbids (*"no invented conversion such as 1 push-up = X load
- * units"*).
- *
- * The consequence is stated plainly: **two exercises are never one context**, and repetitions are never
- * compared with seconds. A comparison across variants (*"different exercise variants are not
- * automatically directly comparable"*, §12) is not attempted here either.
- *
- * @property exerciseId the library key every observation in this context was performed under.
- * @property dimension the unit they were measured in.
+ * Consequences: two exercises are never one context, repetitions are never compared with seconds, and
+ * cross-variant comparison is not attempted.
  */
 data class ComparableContext(val exerciseId: String, val dimension: PrescriptionDimension) {
 
@@ -55,22 +36,15 @@ data class ComparableContext(val exerciseId: String, val dimension: Prescription
 }
 
 /**
- * One confirmed set as a comparable observation (§12's *Exposure Observation*, one unit of it).
+ * One confirmed set as a comparable observation.
  *
- * The two carry the session it belongs to, because an observation that cannot be attributed to the
- * workout that produced it cannot be read back, and because the *status* of that workout is part of what
- * the observation is: a set confirmed in an attempt that was later cancelled is a real observation of
- * real work (§12), and it is reported with `CANCELLED` beside it rather than promoted to a completed
- * workout's set or dropped as if it had not happened.
+ * It carries its session, because an observation that cannot be attributed to the workout that produced
+ * it cannot be read back, and because that workout's status is part of what the observation is: a set
+ * confirmed in a later-cancelled attempt is real work, reported with `CANCELLED` beside it rather than
+ * promoted or dropped. The program id is kept per observation so an aggregate series can still say
+ * which Program each point came from.
  *
- * @property programId the Program the attempt belongs to — kept per observation so an aggregate series
- *   can still say which Program each point came from.
- * @property sessionId the attempt that performed it.
- * @property sessionStatus how that attempt ended, or that it is still running.
- * @property setIndex 1-based position of the set inside its occurrence.
- * @property performedAt when the set was confirmed.
- * @property repetitions repetitions actually performed; `0` for a timed set.
- * @property seconds seconds actually performed; `0` for a repetition set.
+ * `repetitions` is `0` for a timed set and `seconds` is `0` for a repetition set.
  */
 data class PerformanceObservation(
     val programId: ProgramId,
@@ -92,16 +66,15 @@ data class PerformanceObservation(
         }
     }
 
-    /** Whether this observation was measured in repetitions. */
     val isRepetitionObservation: Boolean
         get() = seconds == 0
 
     companion object {
 
         /**
-         * The deterministic order of one context's observations: when each happened, then the attempt
-         * and the set they belong to. Performed-at alone is not enough — a sweep of twenty sets can share
-         * a clock reading — so the identity is the tiebreak and the sequence is a function of the facts.
+         * When each happened, then the attempt and the set it belongs to. Performed-at alone is not
+         * enough — a sweep of twenty sets can share a clock reading — so identity is the tiebreak and
+         * the sequence is a function of the facts.
          */
         val ORDER: Comparator<PerformanceObservation> =
             compareBy({ it.performedAt }, { it.sessionId.value }, { it.setIndex })
@@ -109,24 +82,13 @@ data class PerformanceObservation(
 }
 
 /**
- * §21's **comparable performance history for one exercise**: every observation of one comparable context,
- * in the order it happened.
+ * Every observation of one comparable context, in the order it happened — measured in the context's own
+ * unit, deterministically ordered. There is no aggregation across series and deliberately no field
+ * readable as "how well did I do overall": one number over several exercises would be a universal score.
  *
- * *"Comparable"* is the whole content of this type. The series is per context ([ComparableContext]) and
- * its invariants hold that reading: every observation is measured in the context's own unit, and the
- * sequence is ordered deterministically. There is no aggregation across series here, and there is
- * deliberately no field that could be read as "how well did I do overall" — a single number over several
- * exercises would be the universal score §17 forbids.
- *
- * [bestRepetitions] and [bestSeconds] are the **largest single set observed in this context**. They are
- * named for what they measure rather than as "PR" on purpose: see [ProgressMeasure.PROGRAM_PR] and the
- * reason recorded with it — the target facts record no progression level or difficulty per plan element,
- * so a personal record in any stronger sense than *"the most repetitions of this exercise in one set"*
- * has no comparable context to be defined against, and inventing one is what the blueprint forbids. What
- * is reported here needs no such invention: it is one set, of one exercise, in one unit.
- *
- * @property context the exercise and the unit.
- * @property observations every confirmed set of that context, oldest first.
+ * [bestRepetitions] and [bestSeconds] are the largest single set observed here, named for what they
+ * measure rather than "PR": the facts record no progression level or difficulty, so a record in any
+ * stronger sense has no comparable context to be defined against.
  */
 data class ExercisePerformanceSeries(
     val context: ComparableContext,
@@ -149,7 +111,6 @@ data class ExercisePerformanceSeries(
         }
     }
 
-    /** How many sets were observed in this context. */
     val performedSets: Int
         get() = observations.size
 
@@ -161,7 +122,6 @@ data class ExercisePerformanceSeries(
     val bestSeconds: Int?
         get() = observations.maxOfOrNull { it.seconds }?.takeIf { it > 0 }
 
-    /** The most recent observation of this context. */
     val latest: PerformanceObservation
         get() = observations.last()
 }

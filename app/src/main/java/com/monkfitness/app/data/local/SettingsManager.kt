@@ -31,10 +31,9 @@ class SettingsManager(private val context: Context) {
         /**
          * The key the **pre-localization** builds stored the chosen language under.
          *
-         * Nothing writes it any more: the application locale is the app's one language state (§5 of the
-         * localization brief), and this key survives only so the one-time hand-off in
-         * `AppLanguageManager.migrateLegacySelection` can read the choice an existing user already made.
-         * The hand-off removes it, after which there is nothing here to compete with the platform.
+         * Nothing writes it any more: this key survives only so the one-time hand-off in
+         * `AppLanguageManager.migrateLegacySelection` can read the choice an existing user already made,
+         * and the hand-off removes it.
          */
         val LEGACY_LANGUAGE_KEY = stringPreferencesKey("language")
         val NOTIFICATION_HOUR = intPreferencesKey("notification_hour")
@@ -53,20 +52,18 @@ class SettingsManager(private val context: Context) {
         val NUTRITION_EXCLUDED_FOODS = stringSetPreferencesKey("nutrition_excluded_foods")
         val NUTRITION_AVAILABLE_PRODUCTS = stringSetPreferencesKey("nutrition_available_products")
         /**
-         * The anchor of the retained **daily tracks**: the day their first 56-day cycle began (§4).
+         * The anchor of the retained **daily tracks**: the day their first 56-day cycle began.
          *
-         * It belonged to the shipped 56-day program and is now the posture/mobility track's and the
-         * nutrition planner's phase — nothing else reads it, and no Program does.
+         * Nothing else reads it, and no Program does.
          */
         val TRACK_START_DATE = stringPreferencesKey("track_start_date")
 
         /**
          * The key the same anchor was stored under while the shipped 56-day program existed.
          *
-         * Read as a fallback, **never written**: an install that predates §30 step 15 keeps the track
+         * Read as a fallback, **never written**: an install that predates the rename keeps the track
          * position it already had instead of being silently moved to "today". Preserving the rows of a
-         * retained feature means preserving the calendar they were recorded against, so the one-time read
-         * is part of that preservation and not a compatibility shim — nothing new is ever stored here.
+         * retained feature means preserving the calendar they were recorded against.
          */
         val LEGACY_START_DATE_KEY = stringPreferencesKey("program_start_date")
         val NUTRITION_WARNING_DISMISSED_FOR = stringPreferencesKey("nutrition_warning_dismissed_for")
@@ -129,11 +126,9 @@ class SettingsManager(private val context: Context) {
     /**
      * The language a pre-localization build stored for this install, or `null` when it stored none.
      *
-     * There is deliberately **no default**: the old flow read an absent value as `"ru"`, which would move
-     * every user who never chose a language into Russian. Absence means "the user never chose", and the
-     * app answers that with the system language.
-     *
-     * Read once at start-up by `AppLanguageManager.migrateLegacySelection`, which is also the only caller.
+     * There is deliberately **no default**: reading an absent value as `"ru"` would move every user who
+     * never chose a language into Russian. Absence means "the user never chose", and the app answers that
+     * with the system language.
      */
     suspend fun readLegacyLanguage(): String? = context.dataStore.data.first()[LEGACY_LANGUAGE_KEY]
 
@@ -300,9 +295,9 @@ class SettingsManager(private val context: Context) {
     /**
      * The retained daily tracks' anchor, as an ISO date.
      *
-     * The new key is read first and the pre-§30-step-15 key second, so an existing install keeps the
-     * position it had. A device that has never stored either reads "today" and is stamped with it by
-     * [ensureTrackStartDate], which is exactly how the anchor has always come into being.
+     * The new key is read first and the legacy key second, so an existing install keeps the position it
+     * had. A device that has never stored either reads "today" and is stamped with it by
+     * [ensureTrackStartDate].
      */
     val trackStartDateFlow: Flow<String> = context.dataStore.data.map { preferences ->
         preferences[TRACK_START_DATE]
@@ -323,14 +318,10 @@ class SettingsManager(private val context: Context) {
         }
     }
 
-    // C3's "Start Revised Program" is gone (§16): its intent is the target architecture's
-    // *Edit / Copy → a new immutable Revision → lifecycle Start*, and keeping a second way to restart a
-    // program under a new name would be exactly the cycle semantics §16 retires.
-
     /**
-     * C3 Full Reset: atomically clears every preference this app owns, returning DataStore
-     * to first-launch state. The next [ensureTrackStartDate] call stamps a fresh anchor for the
-     * retained daily tracks and onboarding restarts because IS_ONBOARDING_COMPLETED is gone.
+     * Full Reset: atomically clears every preference this app owns, returning DataStore to first-launch
+     * state. The next [ensureTrackStartDate] call stamps a fresh anchor for the retained daily tracks, and
+     * onboarding restarts because IS_ONBOARDING_COMPLETED is gone.
      */
     suspend fun clearAll() {
         context.dataStore.edit { it.clear() }

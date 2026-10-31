@@ -37,35 +37,25 @@ import com.monkfitness.app.domain.program.ProgramSchedule
  *    a broken plan, not a row to skip.
  *  * **saving** derives the rows from the value: a day's position is the day's own, and an element's
  *    position is its place in the day's ordered list, because the domain's plan element is an
- *    occurrence *in an order* and carries no position of its own (§9). Saving a loaded revision
- *    therefore reproduces its positions, and a stored gap in element positions is not a domain
- *    violation — the order is what the domain preserves, and nothing is renumbered on a load.
+ *    occurrence *in an order* and carries no position of its own. Saving a loaded revision therefore
+ *    reproduces its positions, and a stored gap in element positions is not a domain violation — the
+ *    order is what the domain preserves, and nothing is renumbered on a load.
  *
- * Two structural facts are stored as a discriminator plus its payload (§20) and are mapped
- * explicitly: a revision runs for a fixed number of days or indefinitely, and its slots fall on fixed
- * weekdays or at a deterministic weekly frequency. Neither form is collapsed into the other — an
- * indefinite program has no length, and reporting a fake `N / 30` for it is what §21 forbids.
+ * Two structural facts are stored as a discriminator plus its payload and are mapped explicitly: a
+ * revision runs for a fixed number of days or indefinitely, and its slots fall on fixed weekdays or at
+ * a deterministic weekly frequency. Neither form is collapsed into the other — an indefinite program
+ * has no length, and reporting a fake `N / 30` for it is forbidden.
  *
- * A stored prescription in one of the three dimensions §10 names but does not implement
+ * Both schedule forms cross the boundary losslessly: fixed weekdays store their day set and **no**
+ * frequency (`null`), while a flexible frequency stores the number it runs at, and a stored flexible
+ * revision with no frequency is invalid persisted data that fails loudly here, exactly as a weekday
+ * schedule with no weekdays does. Nothing is dropped, derived or defaulted in either direction.
+ *
+ * A stored prescription in one of the three dimensions the domain names but does not implement
  * (`SET_BASED`, `DIFFICULTY_BASED`, `REST_BASED`) **cannot be loaded**: those dimensions are
- * representable in the schema and have no domain subtype yet, so there is no value to produce.
- * Inventing one, or reading it as a repetition prescription, would change what the plan says. It
- * fails loudly and names the row instead.
- *
- * ### Both schedule forms cross the boundary losslessly
- *
- * The deterministic sessions-per-week frequency of `ProgramSchedule.FlexiblePerWeek` is revision content
- * (§6 lists frequency and preferred weekdays among the changes that create a revision), so it is stored
- * beside its discriminator: the version-8 → version-9 correction added
- * `program_revision.scheduleSessionsPerWeek`, and both directions map it —
- *
- *  * fixed weekdays store their day set and **no** frequency (`null`);
- *  * a flexible frequency stores the number it runs at, and a stored flexible revision with no frequency
- *    is invalid persisted data that fails loudly here, exactly as a weekday schedule with no weekdays
- *    does. Nothing is dropped, derived or defaulted in either direction.
- *
- * The gap this mapper used to refuse in both directions is closed by
- * `docs/PROGRAM_SCHEDULE_FREQUENCY_CORRECTION.md`; `PlanMapperTest` pins the round trip value by value.
+ * representable in the schema and have no domain subtype, so there is no value to produce. Inventing
+ * one, or reading it as a repetition prescription, would change what the plan says. It fails loudly
+ * and names the row instead.
  */
 
 /** The three stored tables of one revision, as a repository writes them. */
@@ -79,10 +69,9 @@ internal data class RevisionRows(
  * The domain revision of one stored revision row, its day rows and its element rows.
  *
  * @throws IllegalArgumentException when an element row names a day the revision does not contain —
- *   dropping it would silently shorten a plan — when the schedule is a flexible frequency (see the
- *   file's gap note), or when the assembled value violates a domain invariant (a revision with no
- *   days, days not numbered `1..n`, a repeated day identity, a prescription in an unimplemented
- *   dimension).
+ *   dropping it would silently shorten a plan — or when the assembled value violates a domain
+ *   invariant (a revision with no days, days not numbered `1..n`, a repeated day identity, a
+ *   prescription in an unimplemented dimension).
  */
 internal fun revisionDomain(
     revision: ProgramRevisionEntity,
@@ -197,13 +186,8 @@ private fun scheduleTypeOf(schedule: ProgramSchedule): String = when (schedule) 
 }
 
 /**
- * The **Goals & Focus** configuration one revision row stores (§8) — the third discriminator-plus-
- * payload pair on `program_revision`, after the duration and the schedule.
- *
- * ```text
- * focusGoal      ''      ''       BALANCED   FOCUSED          CUSTOM
- * focusTargets   null    null     null        PUSH,PULL        PUSH:40,LEGS:60
- * ```
+ * The **Goals & Focus** configuration one revision row stores — the third discriminator-plus-payload
+ * pair on `program_revision`, after the duration and the schedule.
  *
  * The `null` goal is read as [FocusPlan.Balanced], and that reading is faithful rather than a
  * default: a revision written before Goals & Focus existed was built for the whole vocabulary with no
@@ -211,14 +195,12 @@ private fun scheduleTypeOf(schedule: ProgramSchedule): String = when (schedule) 
  * carries no database default either — the mapper is the only place the decision is made, and it is
  * made once.
  *
- * Reading is **strict in both directions**, like the two pairs above it:
- *
- *  * a stored goal token that is not a [Goal] member is invalid persisted data, not a configuration;
- *  * a `FOCUSED` row whose targets are missing, blank or not focus names is invalid;
- *  * a `CUSTOM` row whose share tokens are not `NAME:percent`, or whose percentages do not sum to
- *    [FocusPlan.FULL_ALLOCATION], is invalid — §8's rule is the domain's own, so the domain's own
- *    constructor states it, and a stored 90% share fails here rather than silently loading as
- *    something the user did not ask for.
+ * Reading is **strict in both directions**, like the two pairs above it: a stored goal token that is
+ * not a [Goal] member is invalid persisted data; a `FOCUSED` row whose targets are missing, blank or
+ * not focus names is invalid; and a `CUSTOM` row whose share tokens are not `NAME:percent`, or whose
+ * percentages do not sum to [FocusPlan.FULL_ALLOCATION], is invalid — the domain's own constructor
+ * states that rule, so a stored 90% share fails here rather than silently loading as something the
+ * user did not ask for.
  *
  * The order of the stored targets is the domain's canonical order, so a loaded configuration is
  * value-equal to the one that was saved and a re-saved revision is a byte-identical row.
@@ -238,7 +220,7 @@ private fun focusesOf(revision: ProgramRevisionEntity): List<Focus> =
         storedToken(token, Focus.entries, "program_revision.focusTargets")
     }
 
-/** The shares a `CUSTOM` revision states, read as a configuration that must sum to 100% (§8). */
+/** The shares a `CUSTOM` revision states, read as a configuration that must sum to 100%. */
 private fun sharesOf(revision: ProgramRevisionEntity): List<FocusAllocation> =
     storedFocusTargets(revision).map { token ->
         val parts = token.split(SHARE_SEPARATOR)
@@ -284,7 +266,7 @@ private fun storedFocusTargets(revision: ProgramRevisionEntity): List<String> {
  *
  * A focus name for a `FOCUSED` configuration and `NAME:percent` for a `CUSTOM` one — two shapes in
  * one converted column, told apart by the discriminator on the same row, exactly as `perSetTargets`
- * holds repetitions for one dimension and seconds for another (§10).
+ * holds repetitions for one dimension and seconds for another.
  */
 private fun FocusPlan.storedFocusTargets(): String? = when (this) {
     FocusPlan.Balanced -> null
@@ -300,11 +282,7 @@ private const val TARGET_SEPARATOR: String = ","
 private const val SHARE_SEPARATOR: String = ":"
 
 /**
- * The **exercise preference** one revision row stores (§9's *user choice*), or `null` for none.
- *
- * ```text
- * preferredExerciseIds   null        pullups,dips
- * ```
+ * The **exercise preference** one revision row stores, or `null` for none.
  *
  * The user's order is stored verbatim and read back verbatim. That is the one place in this mapper
  * where a canonical order would be wrong: [FocusPlan] has a vocabulary order that makes any two
@@ -321,7 +299,7 @@ private const val SHARE_SEPARATOR: String = ":"
  * Reading is strict where the domain is strict: a stored value that names the same exercise twice is
  * invalid persisted data and fails here, because a preference whose order has two answers at the same
  * position is not a preference at all. Whether each id names a real shipped exercise is **not** decided
- * here — this mapper has no catalogue, and inventing the check would be a second vocabulary (§5).
+ * here — this mapper has no catalogue, and inventing the check would be a second vocabulary.
  */
 private fun preferenceOf(revision: ProgramRevisionEntity): ExercisePreference =
     ExercisePreference(preferredIdsOf(revision))
@@ -343,7 +321,7 @@ private fun preferredIdsOf(revision: ProgramRevisionEntity): List<String> {
  *
  * `null` rather than an empty string for the empty case, for the same reason `focusTargets` does it: the
  * absence is a fact worth storing as itself, and a blank string would have to be re-read as an absence
- * anyway — one representation per value (§11).
+ * anyway — one representation per value.
  */
 private fun ExercisePreference.storedExerciseIds(): String? =
     exerciseIds.takeIf { it.isNotEmpty() }?.joinToString(PREFERENCE_SEPARATOR)
@@ -409,10 +387,10 @@ internal fun ProgramExercise.toEntity(programDayId: ProgramDayId, position: Int)
 /**
  * The prescription one stored dimension token and per-set target list describe.
  *
- * @throws IllegalArgumentException when the token is not one of the five §10 dimensions, when the
- *   dimension is one of the three with no domain subtype yet, or when the domain constructor refuses
- *   the targets (an empty list, a target that is not positive) — a stored prescription the domain
- *   cannot state is invalid persisted data.
+ * @throws IllegalArgumentException when the token is not one of the five dimensions, when the dimension
+ *   is one of the three with no domain subtype, or when the domain constructor refuses the targets (an
+ *   empty list, a target that is not positive) — a stored prescription the domain cannot state is
+ *   invalid persisted data.
  */
 internal fun prescriptionOf(
     dimensionToken: String,

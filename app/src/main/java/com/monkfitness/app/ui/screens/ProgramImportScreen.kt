@@ -26,19 +26,13 @@ import com.monkfitness.app.platform.ProgramDocumentImport
 import com.monkfitness.app.ui.programs.ProgramsController
 
 /**
- * **Import Program** — §5's flow, on §30 step 13's platform boundary:
- *
- * ```text
- * ACTION_OPEN_DOCUMENT → content:// URI → bounded read → the import service's review
- *   → Program name / plan summary → planned start date → the activation checkbox → Confirm
- * ```
+ * **Import Program**: Android's document picker, a bounded read, and the import service's review.
  *
  * The screen parses nothing: the bytes go to [ProgramsController.reviewImport], which hands them to the
- * import service, and the review the user sees is the *pipeline's* own draft (§7 of the transfer
- * document: the draft's constructor is internal, so a screen could not assemble one). The two choices on
- * the review — the planned start date and whether the imported Program becomes the active one — are held
- * until the confirmation, and travel with it into the one transaction that writes the Program and its
- * initial schedule.
+ * import service, and the review the user sees is the *pipeline's* own draft (its constructor is internal,
+ * so a screen could not assemble one). The two choices on the review — the planned start date and whether
+ * the imported Program becomes the active one — are held until the confirmation and travel with it into
+ * the one transaction that writes the Program and its initial schedule.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -63,7 +57,7 @@ fun ProgramImportScreen(
                     ProgramDocumentImport.read(context, uri)
                 } catch (failure: Throwable) {
                     // A revoked grant, a provider that is gone or a stream that failed part-way is
-                    // reported: it is never read as an empty file (§15).
+                    // reported: it is never read as an empty file.
                     controller.reportUnreadableFile()
                     return@runAction
                 }

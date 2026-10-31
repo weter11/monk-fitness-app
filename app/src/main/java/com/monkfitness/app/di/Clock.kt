@@ -3,22 +3,10 @@ package com.monkfitness.app.di
 import java.time.Instant
 
 /**
- * The clock the composition root injects — §26: "*`Clock` and ID generation are injectable*".
- *
- * Nothing in the persistence layer reads the device's time on its own: the repositories take the
- * moment they stamp a row as a value (`ProgramAdaptiveRepository` takes `now: () -> Instant`), which
- * is what makes "the state stamp comes from the injected clock" a claim a test can measure instead of
- * a promise about a hidden call. This interface is the production side of that contract: it is what
- * the composition root hands over, so the clock a process runs on is decided in one place.
- *
- * It is deliberately a *port*, not a utility: an implementation returns an instant and decides
- * nothing else. It reads no calendar, resolves no track day, validates no window and starts no
- * timer — which day a date is belongs to the calendar that owns it (the Scheduler's, for a Program's
- * opportunities; `domain.track.TrackCalendar`'s, for the retained daily tracks), and the moment a row
- * was written is persistence's. A clock with a rule in it would put a scheduling decision in the wiring.
- *
- * The domain stays clock-free (§11): this port lives beside the composition root and the layers that
- * receive a clock receive it as a plain value they were given.
+ * The injected clock the composition root hands over, so the clock a process runs on is decided in one
+ * place. It is a port, not a utility: it returns an instant and decides nothing else — which day a date
+ * belongs to is the owning calendar's rule, the moment a row was written is persistence's, and the
+ * domain stays clock-free.
  */
 fun interface Clock {
 
@@ -33,14 +21,8 @@ fun interface Clock {
 
     companion object {
 
-        /**
-         * The production clock: the device's own time.
-         *
-         * It reads `java.time`, which this app already uses in production sources
-         * (`domain/usecase/ProgramCalendar`, `MainViewModel`'s `LocalDate.now()`), so it introduces no
-         * dependency the app did not already carry. It is a real-time clock and nothing more: it does
-         * not advance itself, snap to a minute boundary or compensate for anything.
-         */
+        /** The production clock: the device's own time, with no rule in it — it does not advance itself
+         * or snap to a minute boundary. */
         fun system(): Clock = Clock { Instant.now() }
     }
 }
