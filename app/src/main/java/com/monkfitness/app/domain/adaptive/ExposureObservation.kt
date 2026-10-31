@@ -23,6 +23,32 @@ enum class ExposureLevel {
 }
 
 /**
+ * What one completed set actually amounted to, as the adaptive layer records it (§12).
+ *
+ * A set is measured in one unit, exactly as it was prescribed in one unit: a repetition set carries
+ * [completedReps] and no seconds, a timed set carries [durationSeconds] and no repetitions. That is the
+ * same rule `SetResult` enforces where the set is confirmed, restated here because an observation is a
+ * record of what happened rather than a live handle on the set row it came from.
+ *
+ * @property completedReps repetitions performed; `0` for a timed set.
+ * @property durationSeconds seconds performed; `0` for a repetition set.
+ */
+data class PerformedSetAmount(
+    val completedReps: Int,
+    val durationSeconds: Int
+) {
+
+    init {
+        require(completedReps >= 0) { "completedReps must be >= 0, was $completedReps" }
+        require(durationSeconds >= 0) { "durationSeconds must be >= 0, was $durationSeconds" }
+        require((completedReps > 0) != (durationSeconds > 0)) {
+            "a set is measured in repetitions or in time, and a set that was not performed is " +
+                "absent rather than recorded as zero: reps=$completedReps seconds=$durationSeconds"
+        }
+    }
+}
+
+/**
  * One exercise occurrence, as observed: what actually happened to it (§12).
  *
  * This is the unit the adaptive stage reasons over — not the slot, not the session and not the
@@ -43,12 +69,19 @@ enum class ExposureLevel {
  *  * [prescribedSets] is what was presented to the user (the session's own snapshot), not what today's
  *    plan says, so a later edit cannot change what this observation is measured against.
  *
+ * [performedAmounts] is additive to those counts and is deliberately not read by any rule yet: it
+ * carries what each completed set amounted to — repetitions or seconds — one entry per completed set in
+ * set order, when the producer has it. `null` means the amounts were not recorded, which is a different
+ * fact from zero work: the counts already state that work happened.
+ *
  * @property exerciseId the library key of the exercise, as presented.
  * @property sessionId the session the occurrence ran in.
  * @property sessionExerciseId identity of the occurrence within that session.
  * @property level partial or full execution.
  * @property completedSets sets that were actually completed, `>= 1`.
  * @property prescribedSets sets that were presented, `>= 1`.
+ * @property performedAmounts what each completed set amounted to, one entry per set in set order, or
+ *   `null` when the amounts were not recorded.
  * @property startedAt when the occurrence began.
  * @property finishedAt when the occurrence ended, or `null` if it has not ended.
  */
@@ -59,6 +92,7 @@ data class ExposureObservation(
     val level: ExposureLevel,
     val completedSets: Int,
     val prescribedSets: Int,
+    val performedAmounts: List<PerformedSetAmount>? = null,
     val startedAt: Instant,
     val finishedAt: Instant? = null
 ) {
@@ -72,6 +106,10 @@ data class ExposureObservation(
         require(completedSets >= 1) {
             "an observation records work that happened; a skipped exercise or a missed slot " +
                 "produces no observation rather than a zero one, was completedSets=$completedSets"
+        }
+        require(performedAmounts == null || performedAmounts.size == completedSets) {
+            "the performed amounts are recorded one per completed set, in set order: " +
+                "performedAmounts=${performedAmounts?.size} completedSets=$completedSets"
         }
         require((level == ExposureLevel.FULL) == (completedSets >= prescribedSets)) {
             "the level must agree with the counts: level=$level completedSets=$completedSets " +

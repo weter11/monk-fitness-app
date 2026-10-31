@@ -20,6 +20,7 @@ import com.monkfitness.app.domain.adaptive.FamilyProgressionState
 import com.monkfitness.app.domain.adaptive.IntensityEntry
 import com.monkfitness.app.domain.adaptive.IntensityLoad
 import com.monkfitness.app.domain.adaptive.LoadProfile
+import com.monkfitness.app.domain.adaptive.PerformedSetAmount
 import com.monkfitness.app.domain.adaptive.RecoveryContext
 import com.monkfitness.app.domain.adaptive.VolumeLoad
 import com.monkfitness.app.domain.adaptive.decision.AdaptiveAdjustment
@@ -553,6 +554,14 @@ class ProgramAdaptiveIntegration(
                     level = if (completed >= prescribed) ExposureLevel.FULL else ExposureLevel.PARTIAL,
                     completedSets = completed,
                     prescribedSets = prescribed,
+                    // The per-set amounts are carried, not interpreted: the counts above still say how
+                    // many sets happened, and nothing reads these yet (§12).
+                    performedAmounts = occurrence.results.map { result ->
+                        PerformedSetAmount(
+                            completedReps = result.completedReps,
+                            durationSeconds = result.durationSeconds
+                        )
+                    },
                     startedAt = session.startedAt,
                     finishedAt = session.finishedAt
                 )
