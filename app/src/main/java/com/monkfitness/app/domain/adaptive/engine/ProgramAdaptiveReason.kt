@@ -20,7 +20,7 @@ import com.monkfitness.app.domain.adaptive.decision.AdaptiveAction
  *
  *  * [holdingReasons] — everything that ends in `HOLD` (including `RECOVERY_ENTERED`, `RECOVERY_HELD`
  *    and `RECOVERY_EXITED`, which are `HOLD` decisions about a family that is in the recovery *state*);
- *  * [changeReasons] — the three reasons that accompany a change the engine is asking the plan's
+ *  * [changeReasons] — the four reasons that accompany a change the engine is asking the plan's
  *    presentation for.
  */
 enum class ProgramAdaptiveReason {
@@ -96,6 +96,15 @@ enum class ProgramAdaptiveReason {
     /** Confirmed negative performance: the family is asked to move down its own hierarchy. */
     SUSTAINED_NEGATIVE,
 
+    /**
+     * The user is returning after a long gap: the same exercise is prescribed lighter for one window.
+     *
+     * No policy emits this yet. It is a change reason because it accompanies a `REGRESS`, and it is
+     * supplied by a caller that has already measured the gap to the within-range prescription step —
+     * the reason travels with the request rather than being re-derived by this stage.
+     */
+    RETURN_AFTER_GAP,
+
     /** The presented exercise is not a variant the family declares as available, and another one is. */
     VARIANT_REALIGNED;
 
@@ -112,6 +121,7 @@ enum class ProgramAdaptiveReason {
         get() = when (this) {
             SUSTAINED_POSITIVE -> AdaptiveAction.PROGRESS
             SUSTAINED_NEGATIVE -> AdaptiveAction.REGRESS
+            RETURN_AFTER_GAP -> AdaptiveAction.REGRESS
             VARIANT_REALIGNED -> AdaptiveAction.CHANGE_VARIANT
             else -> AdaptiveAction.HOLD
         }
@@ -144,6 +154,7 @@ enum class ProgramAdaptiveReason {
         val changeReasons: List<ProgramAdaptiveReason> = listOf(
             SUSTAINED_POSITIVE,
             SUSTAINED_NEGATIVE,
+            RETURN_AFTER_GAP,
             VARIANT_REALIGNED
         )
     }
