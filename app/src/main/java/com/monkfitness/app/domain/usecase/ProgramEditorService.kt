@@ -30,85 +30,37 @@ import java.time.Instant
 import java.time.LocalDate
 
 /**
- * The Manual Program Editor — §30 step 6, over the persistence of steps 3 and 4 and beside the
- * lifecycle decisions of step 5.
+ * The Manual Program Editor: `load/create → Draft → edit → validate → Review → Save`.
  *
- * ### The flow this class implements
+ * Two properties hold the design. **Draft-first**: an edit happens to a `ProgramEditorDraft` value, replaced
+ * never mutated, and a revision exists only after [save] decides one is warranted. **Revision-immutable**: a
+ * save never writes into an existing revision — a structural change is a *new* revision with new identities
+ * for its days and elements, while the revision it supersedes keeps describing exactly what it described,
+ * which is what lets a session that ran under it stay explained.
  *
- * ```text
- * load/create → Draft → edit → validate → Review → Save
- * ```
+ * The draft names its own entry point rather than carrying a flag that could disagree with it: no Program and
+ * no base revision is a create (new Program, first revision and plan in one transaction); a base revision
+ * with no Program is a copy (a new user-owned Program carrying the copied structure); a Program plus the
+ * revision it was opened from is an edit, which writes a new revision **only** if the structure changed.
+ * Editing the built-in Program in place is refused — [copyDraft] is the copy-before-edit path.
  *
- * Both halves of that are deliberate. **Draft-first**: the editor never touches a saved Program's
- * revision while the user works — every edit happens to a `ProgramEditorDraft` (a value the editor's
- * operations replace, never mutate), and a revision exists only after [save] has been asked for one
- * and has decided one is warranted. **Revision-immutable**: a save never writes into an existing
- * revision. A structural change is a *new* revision, with new identities for its days and its
- * elements, saved by [ProgramPlanRepository.saveNewRevision], while the revision it supersedes keeps
- * describing exactly what it described — which is what lets a session that ran under it stay
- * explained (§6, §19, §23).
+ * Validation runs before anything is written, so an unfinished draft cannot reach a DAO, and the rules are
+ * the domain's own.
  *
- * ### The entry points, and how the draft says which one it is
+ * It takes no `ProgramScheduleRepository`: creating or re-saving a Program does not schedule it, and the
+ * guarantee is the absence of the collaborator rather than a promise not to use one. The creation unit and
+ * its save-then-reconcile pairing are composed above this class by [ProgramSaveService], which asks the
+ * Scheduler and [prepareCreation] for their answers and performs the single transactional write.
  *
- * §7's editor supports Create, Edit, Copy and the review of an import, and the draft names its own
- * entry point rather than carrying a flag that could disagree with it:
+ * Exercises stay opaque ids here: the editor never resolves one or writes exercise metadata.
  *
- * | entry point | draft | what [save] does |
- * | --- | --- | --- |
- * | create (`Build it myself`, MANUAL) | no Program, no base revision | a new Program, its first revision and its plan, in one transaction (§27) |
- * | copy | no Program, a base revision | a new Program — owned by the user whatever the source's [ProgramSource] was (§4) — carrying the structure that was copied |
- * | edit | a Program and the revision it was opened from | a new revision of that Program, **only** if the structure changed (§6) |
- * | Standard Program | — | editing it in place is refused; [copyDraft] on it is the §4 copy-before-edit path |
- *
- * ### What this layer decides, and why none of it is below it
- *
- * The blueprint's layering is `Room entity ⇄ mapper ⇄ domain ⇄ use case ⇄ UI` (§25), and the
- * decisions here are the ones neither storage nor a DAO could make without becoming policy:
- *
- *  * **whether a save warrants a revision.** The comparison is a value comparison between the draft's
- *    plan and the plan the save is measured against ([ProgramStructure]); it is not "the user pressed
- *    Save", because §6 says a rename, a description, a planned start date, a lifecycle change, a
- *    selection and an archive create no revision — and a no-op save creates nothing at all.
- *  * **which save is atomic.** A save that creates a Program is one transaction (§27's
- *    `Create / Copy / Import → Program + Revision + initial Slots`), and a save that edits one is one
- *    transaction around the revision that is written and the Program facts that change with it. A
- *    failure anywhere leaves **no** new revision and **no** moved pointer.
- *  * **what a draft may not become.** Validation runs before anything is written, so an unfinished
- *    draft cannot reach a DAO at all — and the validation's rules are the domain's own (§7's plan a
- *    revision must be able to hold, plus the entry points above), not the database's.
- *  * **that the built-in Program is not edited in place.** §4's rule is enforced here for
- *    [editDraft] and for [save], through the same [StandardProgramProtected] failure the lifecycle
- *    layer raises, so "editing Standard means creating a user copy first" has one implementation.
- *
- * ### What it deliberately does not do
- *
- *  * **No slot writes.** Creating or re-saving a Program does not schedule it: no date is chosen, no
- *    slot is added, and no slot is reconciled when a revision changes, because §20's scheduling is
- *    §30 step 7's. The constructor takes no `ProgramScheduleRepository` at all — the guarantee is the
- *    absence of the collaborator, not a promise not to use one. §27's *creation unit* and §27's
- *    *Save → future-slot reconciliation* are therefore **not** this class's to perform: they are
- *    composed above it by [ProgramSaveService], which asks the Scheduler and this class's
- *    [prepareCreation] for their answers and performs the single transactional write. A caller that
- *    needs a created Program to have initial slots must go through that path rather than through
- *    [save]'s structure-level create entry.
- *  * **No generation.** `Generate`/`Regenerate` are the Generated editor's (§30 step 10); a draft's
- *    mode is content, and this class stores it without ever producing a plan.
- *  * **No adaptive work and no import/export.** Steps 11–13.
- *  * **No re-minting of the Exercise Library.** An exercise is an opaque id here (§10): the editor
- *    never resolves one, never checks it against a catalogue and never writes exercise metadata.
- *
- * @param programRepository the Program aggregate: the facts a draft edits (name, description) and the
- *   transaction that creates a Program with its first revision.
- * @param planRepository the revision mechanism: reading the revision a draft was opened from, and
- *   saving a new one. No revision is ever updated through it (§6) — it exposes no such operation.
- * @param clock the clock the factual timestamps come from. A revision's `createdAt`, a Program's
- *   `createdAt`/`updatedAt` and the `updatedAt` a save stamps are all read from it, once, at the
- *   moment the save decides them (§26).
- * @param idGenerator mints every identity a save persists: a new Program's, a new revision's, and —
- *   for every save — the identities of that revision's days and plan elements (§26).
- * @param inTransaction runs a block in one database transaction. Production takes the database's own
- *   `withTransaction` from the composition root; the editor composes two writes in the edit path and
- *   one in the create path (§27).
+ * @param programRepository the Program aggregate: the facts a draft edits and the transaction that creates a
+ *   Program with its first revision.
+ * @param planRepository reading the revision a draft was opened from and saving a new one — it exposes no
+ *   update, so no revision is ever modified.
+ * @param clock the factual timestamps, read once at the moment the save decides them.
+ * @param idGenerator every identity a save persists, including the days and elements of the revision.
+ * @param inTransaction the editor composes two writes in the edit path and one in the create path.
  */
 class ProgramEditorService(
     private val programRepository: ProgramRepository,
@@ -119,56 +71,38 @@ class ProgramEditorService(
 ) {
 
     /**
-     * The identities a draft's days and plan elements are addressed by while it is being edited.
-     *
-     * They are the draft's own handles: minting one here never stores anything, and [mintRevision]
-     * mints fresh identities for the revision it writes, so no draft handle can reach a revision's
-     * rows.
+     * The draft's own handles: minting one stores nothing, and [mintRevision] mints fresh identities for the
+     * revision it writes, so no draft handle can reach a revision's rows.
      */
     private val draftIds: DraftIdSource = DraftIdSource { idGenerator.newId() }
 
-    // ---------------------------------------------------------------- opening a draft (§7)
-
     /**
-     * A new, empty **MANUAL** draft — the editor's `Build it myself` entry path (§7).
+     * A new, empty **MANUAL** draft — the `Build it myself` entry path.
      *
-     * It is empty on purpose: no days, no name. A draft may be unfinished; a revision may not, and
-     * validation is what stands between the two.
+     * Empty on purpose: a draft may be unfinished, a revision may not, and validation stands between them.
      */
     fun newDraft(name: String = "", description: String = ""): ProgramEditorDraft =
         ProgramEditorDraft(name = name, description = description)
 
-    /** The editor's `edit` step over [draft]: every operation answers with the next draft (§7). */
+    /** The `edit` step over [draft]: every operation answers with the next draft. */
     fun editor(draft: ProgramEditorDraft): ProgramDraftEditor = ProgramDraftEditor(draft, draftIds)
 
-    /** The draft's validation — §7's `validate` step, decided from the draft alone. */
     fun validate(draft: ProgramEditorDraft): ProgramDraftValidation = draft.validation()
 
     /**
-     * The Program and its first revision a create or copy save would produce — validated, minted with
-     * fresh identities, and **written nowhere** (§27's creation unit, before its other two halves).
+     * The Program and its first revision a create or copy save would produce — validated, minted with fresh
+     * identities, and **written nowhere**.
      *
-     * This is the seam the application-level Save orchestration composes against: the editor answers
-     * *"what Program and first revision does this draft describe?"* and the orchestration answers the
-     * two questions that are not the editor's — which initial opportunities the Scheduler decides for
-     * that pair ([com.monkfitness.app.domain.usecase.ProgramScheduler.initialSlotsFor]), and the one
-     * transactional `createProgram(program, revision, slots)` that stores them together. Nothing here
-     * opens a transaction or touches a row, so a caller that is refused — or one whose scheduling leg
-     * fails before the write — has still written nothing at all.
+     * This is the seam [ProgramSaveService] composes against: the editor answers *what Program and first
+     * revision does this draft describe*, and the orchestration answers the two questions that are not the
+     * editor's — the initial opportunities, and the one transactional `createProgram(program, revision, slots)`.
+     * Nothing here opens a transaction or touches a row.
      *
-     * The planned start date arrives as a **value** rather than being read here: §3 makes it a fact of
-     * the Program and §6 says it is no part of the structure, and the layer that receives the user's
-     * creation request is the layer that decides what date it names (an exact choice, or *today* from
-     * the injected clock). The Scheduler never invents one — a Program created without an anchor could
-     * not be planned at all ([com.monkfitness.app.domain.program.ProgramSchedulingRefusal
-     * .NoSchedulingAnchor]).
+     * The planned start date arrives as a **value** rather than being read: it is a Program fact and no part
+     * of the structure, and the layer that receives the user's creation request decides what date it names.
      *
-     * @param draft a draft that names no Program: a create (`Build it myself` / `Build for me`) or a
-     *   copy. An edit is refused here — it has a Program, and its save is [save]'s own path.
-     * @param plannedStartDate the date the Program is **planned** to start on. A plan, never a start:
-     *   the lifecycle stays `NOT_STARTED` and `actualStartDate` stays `null`.
-     * An unfinished draft is a [ProgramEditorRejection.InvalidDraft] result, decided before any
-     * identity reaches storage — and nothing is stored either way, whichever way it is decided.
+     * @param draft a draft that names no Program: a create or a copy. An edit is refused here.
+     * @param plannedStartDate the date the Program is **planned** to start on. A plan, never a start.
      */
     fun prepareCreation(
         draft: ProgramEditorDraft,
@@ -210,14 +144,10 @@ class ProgramEditorService(
     }.rejecting()
 
     /**
-     * A draft that edits [programId]'s current plan.
+     * A draft that edits [programId]'s current plan, opened from the Program as stored: its facts and the
+     * plan of the revision `currentRevisionId` points at. Nothing is written.
      *
-     * The draft is opened from the Program as it is stored: its name, its description, and the plan of
-     * the revision `currentRevisionId` points at. Nothing is written — an editor session that is
-     * abandoned leaves no trace — and the revision is only read, never modified.
-     *
-     * Refused for the built-in Standard Program: §4 lets it be selected, copied and shared, and
-     * editing it means creating a user copy first, which is [copyDraft].
+     * Refused for the built-in Program: editing it means creating a user copy first, which is [copyDraft].
      */
     suspend fun editDraft(programId: ProgramId): ProgramEditorResult<ProgramEditorDraft> =
         editorResult {
@@ -229,17 +159,12 @@ class ProgramEditorService(
         }.rejecting()
 
     /**
-     * A draft that **copies** [programId] into a Program the user will own — the §4 path for editing
-     * the Standard Program, and the general `Copy` operation of §4.
+     * A draft that **copies** [programId] into a Program the user will own — the path for editing the
+     * built-in Program, and the general `Copy` operation.
      *
-     * The draft names no Program: a copy is a new Program, created when it is saved. Its base revision
-     * is the source's current plan, and its days are that plan as the working arrangement to edit —
-     * the source is not modified in any way by opening this draft, and the copy's own identities are
-     * minted at save ([mintRevision]), so nothing of the source's is shared (§6, §23).
-     *
-     * The name is the caller's, because how "Copy of X" is phrased is a UI decision; the copy's source
-     * is [ProgramSource.USER] whatever the source's was, which is what "a copy is the user's own"
-     * means (§4).
+     * The draft names no Program: a copy is a new Program, created when it is saved, and its identities are
+     * minted at save, so nothing of the source's is shared. The name is the caller's because "Copy of X" is a
+     * UI decision; the copy's source is [ProgramSource.USER] whatever the source's was.
      */
     suspend fun copyDraft(
         programId: ProgramId,
@@ -265,16 +190,12 @@ class ProgramEditorService(
         )
     }.rejecting()
 
-    // ---------------------------------------------------------------- review (§7)
-
     /**
-     * What saving [draft] would do — §7's `Review` step, decided the same way [save] decides it.
+     * What saving [draft] would do — decided the same way [save] decides it.
      *
-     * An *invalid* draft is a successful review carrying its findings: the point of the step is to
-     * show the user what is wrong with the draft, so a review that refused to look at it would have
-     * nothing to show. A draft whose Program or base revision is not stored, on the other hand, is a
-     * [ProgramEditorRejection] — the same one the save would produce — because a review of a plan
-     * nobody can save is not a review.
+     * An *invalid* draft is a successful review carrying its findings: the point of the step is to show the
+     * user what is wrong, so a review that refused to look would have nothing to show. A draft whose Program
+     * or base revision is not stored is a rejection — a review of a plan nobody can save is not a review.
      */
     suspend fun review(draft: ProgramEditorDraft): ProgramEditorResult<ProgramDraftReview> =
         editorResult {
@@ -286,27 +207,17 @@ class ProgramEditorService(
             )
         }.rejecting()
 
-    // ---------------------------------------------------------------- save (§6, §7, §27)
-
     /**
      * Saves [draft]: at most one new revision, or none.
      *
-     * The order is the contract:
+     * The order is the contract: validate first, so the DAOs only ever see a plan a revision can hold; then
+     * dispatch on the entry point; then, for an edit, compare — a structure matching the Program's *current*
+     * revision creates no revision, which also makes saving the same draft twice idempotent; then write, in
+     * one transaction, so a failure leaves no partial revision and no moved pointer.
      *
-     *  1. **validate first.** An invalid draft is rejected and nothing is written, so the DAOs only
-     *     ever see a plan a revision can hold (§7, §28).
-     *  2. **then dispatch on the entry point** — create, copy, or a revision of an existing Program.
-     *  3. **then compare, for an edit.** A structure that matches the Program's *current* revision
-     *     creates no revision (§6), which also makes saving the same draft twice idempotent: the
-     *     second save finds the plan it just wrote and changes nothing.
-     *  4. **then write**, in one transaction per operation, so a failure leaves no partial revision and
-     *     no moved pointer (§27).
-     *
-     * The Program's own facts travel with the save: a name or a description that differs from the
-     * stored one is written — no revision, because §6 says so — in the same transaction as the
-     * revision, so a save either applies both or neither. Facts this stage deliberately does not
-     * carry (the planned start date, the lifecycle, the selection, the archive stamp) are untouched by
-     * every path here.
+     * The Program's own facts travel with the save: a changed name or description is written with no revision,
+     * in the same transaction, so a save applies both or neither. The planned start date, lifecycle, selection
+     * and archive stamp are untouched by every path here.
      */
     suspend fun save(draft: ProgramEditorDraft): ProgramEditorResult<ProgramSaveOutcome> =
         editorResult {
@@ -322,25 +233,18 @@ class ProgramEditorService(
             }
         }.rejecting()
 
-    // ---------------------------------------------------------------- a revision for a non-structural reason (§6)
-
     /**
-     * A new revision whose **structure is the current one, unchanged** — minted because something
-     * outside the structure changed, and reported to the caller so it can say what it is attaching.
+     * A new revision whose **structure is the current one, unchanged** — minted because something outside the
+     * structure changed, and reported so the caller can say what it is attaching.
      *
-     * It carries the same three facts a structural [save] reports — the Program, the new revision and
-     * the draft-handle to saved-identity correspondence — so a caller that attaches a plan-day-named
-     * statement to it re-points that statement through the editor's own correspondence rather than
-     * guessing which of the new revision's days was meant.
+     * It carries the same three facts a structural [save] reports, so a caller attaching a plan-day-named
+     * statement re-points it through the editor's own correspondence instead of guessing which of the new
+     * revision's days was meant. The correspondence is keyed by the **current** revision's plan-day identities
+     * — the handles a caller can honestly hold — and days are re-identified rather than reused.
      *
-     * The correspondence is keyed by the **current** revision's plan-day identities, because those
-     * are the handles a caller can honestly hold: it opened its statement against what is stored
-     * now. Nothing about a day's `position`, `name`, date or weekday is consulted, and the days are
-     * re-identified rather than reused (§6: a new revision's days are new rows).
-     *
-     * This is the *minted, unwritten* half of the target-only change, deliberately separate from
-     * [saveTargetScheduleRevision] so the caller can compare the new revision's statement against
-     * what is stored and decline to write anything. It writes no row and moves no pointer.
+     * This is the *minted, unwritten* half of a target-only change, separate from
+     * [saveTargetScheduleRevision] so the caller can compare against what is stored and decline to write. It
+     * writes no row and moves no pointer.
      */
     suspend fun prepareTargetScheduleRevision(
         programId: ProgramId
@@ -369,10 +273,8 @@ class ProgramEditorService(
     /**
      * Writes the revision [prepareTargetScheduleRevision] minted, and nothing else.
      *
-     * The Program's own facts are untouched: a target-only change alters no name, no description and
-     * no structural content, so there is no facts write here and nothing for a facts-only save to
-     * have done. §6's single writer — [ProgramPlanRepository.saveNewRevision] — is the one this calls,
-     * and it moves `currentRevisionId` in its own transaction, so the revision this supersedes stays
+     * No facts write: a target-only change alters no name, no description and no structure.
+     * `saveNewRevision` moves `currentRevisionId` in its own transaction, so the revision it supersedes stays
      * current until that write lands.
      */
     suspend fun saveTargetScheduleRevision(
@@ -387,22 +289,13 @@ class ProgramEditorService(
         )
     }.rejecting()
 
-    // ---------------------------------------------------------------- the mechanism
-
     /**
      * Saves [draft] as a new revision of the Program it edits, or as nothing at all.
      *
-     * Four rules are visible in this method and none of them is negotiable:
-     *
-     *  * the Program is loaded, so the comparison is made against the plan that is actually stored
-     *    rather than against the one the draft remembers;
-     *  * the built-in Program is refused (§4) before anything is read from its plan;
-     *  * a structure identical to the current revision's creates **no** revision, and a save whose
-     *    name and description are also unchanged writes **nothing** (§6's no-op save);
-     *  * the revision is minted with new identities ([mintRevision]) and written by
-     *    [ProgramPlanRepository.saveNewRevision], which moves `currentRevisionId` in its own
-     *    transaction — the facts write goes first, still pointing at the revision it was loaded from,
-     *    because a Program row written afterwards would point back at the plan it replaced.
+     * The comparison is against the plan actually stored, not the one the draft remembers; an identical
+     * structure creates **no** revision, and a save whose facts are unchanged too writes nothing. The facts
+     * write goes **first**, while the Program still points at the revision it was loaded from — a Program row
+     * written afterwards would point back at the plan it replaced.
      */
     private suspend fun saveRevisionOf(draft: ProgramEditorDraft): ProgramSaveOutcome {
         val programId = requireNotNull(draft.programId) {
@@ -451,8 +344,8 @@ class ProgramEditorService(
     /**
      * Saves a copy: a new Program whose plan is the structure [draft] holds.
      *
-     * The revision the draft was opened from must still be stored — a copy's provenance is a fact, and
-     * a draft whose source is gone is a stale draft rather than a copy of nothing.
+     * The revision the draft was opened from must still be stored — a copy's provenance is a fact, and a draft
+     * whose source is gone is a stale draft rather than a copy of nothing.
      */
     private suspend fun saveCopyOf(draft: ProgramEditorDraft): ProgramSaveOutcome {
         val baseRevisionId = requireNotNull(draft.baseRevisionId) {
@@ -463,16 +356,13 @@ class ProgramEditorService(
     }
 
     /**
-     * Creates a Program, its first revision and that revision's plan as one unit (§27).
+     * Creates a Program, its first revision and that revision's plan as one unit.
      *
-     * The Program is the user's — [ProgramSource.USER] — and is `NOT_STARTED` with no planned or
-     * actual start: creating a Program is not starting it, and a planned start date is a Program fact
-     * that §6 says creates no revision, which the lifecycle layer already owns
-     * ([ProgramLifecycleService.setPlannedStartDate]).
+     * The Program is the user's and `NOT_STARTED`: creating is not starting, and a planned start date is a
+     * Program fact the lifecycle layer already owns.
      *
-     * **No slots are written.** §27's creation unit mentions initial slots, and §30 step 7 is what
-     * decides them: the scheduler owns how a duration and a schedule become dates, so a creation here
-     * passes none and a Program is unscheduled until the scheduler says otherwise.
+     * **No slots are written.** The creation unit mentions initial slots, but the Scheduler decides them —
+     * composing that is [ProgramSaveService]'s job — so a Program created here is unscheduled.
      */
     private suspend fun createProgramFrom(draft: ProgramEditorDraft): ProgramSaveOutcome {
         val at = clock.now()
@@ -507,24 +397,17 @@ class ProgramEditorService(
     }
 
     /**
-     * The revision a save would persist for [draft]: the draft's plan, **re-identified** — together
-     * with the correspondence from each drafted plan-day handle to the identity that handle became.
+     * The revision a save would persist for [draft]: the draft's plan, **re-identified**, with the
+     * correspondence from each drafted plan-day handle to the identity it became.
      *
-     * This is the seam the whole stage turns on, and the method states it in one sentence: a save
-     * mints a new revision identity, a new identity for every day and a new identity for every plan
-     * element, and changes nothing else. That is why a revision never reuses a row of the revision it
-     * replaces (a plan day and a plan element are rows of their own — §6, §23), why a copy shares
-     * nothing with its source, and why the draft's own handles are never persisted.
+     * A save mints a new revision identity, a new identity for every day and every element, and changes
+     * nothing else — which is why a revision never reuses a row of the one it replaces, why a copy shares
+     * nothing with its source, and why the draft's handles are never persisted.
      *
-     * The second half of that sentence is why the correspondence is **reported** rather than
-     * re-derived: a caller that stated a `workoutId -> ProgramDayId` binding against a draft handle
-     * cannot know the saved identity in advance, and the editor is the only component that performs
-     * the re-identification. Reporting it here is what lets that binding be authored explicitly
-     * without anything downstream guessing which of the revision's days was meant.
-     *
-     * The `require` is the first half of that sentence as a guard: if re-identifying a plan ever
-     * changed its content — a reordered day, a dropped element, a rewritten prescription — the save
-     * would fail loudly instead of persisting a plan the user never reviewed.
+     * The correspondence is **reported** rather than re-derived: the editor is the only component that
+     * re-identifies, so a caller that stated a `workoutId -> ProgramDayId` binding against a handle cannot
+     * know the saved identity any other way. The `require` makes a re-identification that changed content fail
+     * loudly instead of persisting a plan the user never reviewed.
      */
     private fun mintRevision(
         draft: ProgramEditorDraft,
@@ -533,9 +416,9 @@ class ProgramEditorService(
         at: Instant
     ): MintedRevision {
         val plan = draft.withRenumberedDays()
-        // A list rather than an `associate`: two draft days that somehow shared a handle would
-        // collapse into one map entry and two revision days would then be minted the same identity —
-        // which the rule table's composite primary key would refuse much later, for the wrong reason.
+        // A list rather than an `associate`: two draft days sharing a handle would collapse into one map entry,
+        // and two revision days would then be minted the same identity — which the rule table's composite key
+        // would refuse much later, for the wrong reason.
         val mintedDays = plan.days.map { day -> day.programDayId to ProgramDayId(idGenerator.newId()) }
         require(mintedDays.map { it.second }.distinct().size == mintedDays.size) {
             "saving a draft mints a distinct identity for every plan day"
@@ -570,13 +453,12 @@ class ProgramEditorService(
     /**
      * The structure a save compares [draft] against, and the ordinal a new revision would carry.
      *
-     * An edit is compared against the Program's **current** revision — not against the revision the
-     * draft was opened from — because "did the plan change?" is a question about what is stored now,
-     * and answering it against a stale starting point would create a second revision for a change the
-     * user already saved. A copy is compared against its source, which is informative rather than
-     * decisive: a copy creates a Program even when nothing was changed.
+     * An edit compares against the Program's **current** revision, not the one the draft was opened from:
+     * "did the plan change?" is a question about what is stored now, and a stale starting point would create
+     * a second revision for a change the user already saved. A copy compares against its source, which is
+     * informative rather than decisive — a copy creates a Program even when nothing changed.
      *
-     * @return `null` for a create, which has nothing to be compared against.
+     * @return `null` for a create, which has nothing to compare against.
      */
     private suspend fun basePlanFor(draft: ProgramEditorDraft): BasePlan? = when {
         draft.editsExistingProgram -> {
@@ -598,7 +480,6 @@ class ProgramEditorService(
         else -> null
     }
 
-    /** The draft an editor session starts from: the stored Program's facts and its current plan. */
     private fun draftOf(program: Program, revision: ProgramRevision): ProgramEditorDraft =
         ProgramEditorDraft(
             programId = program.programId,
@@ -613,17 +494,16 @@ class ProgramEditorService(
             preferredExercises = revision.preferredExercises
         )
 
-    /** The stored Program [programId] names, or a [EditorProgramMissing] refusal (§28). */
+    /** The stored Program [programId] names, or a [EditorProgramMissing] refusal. */
     private suspend fun existingProgram(programId: ProgramId): Program =
         programRepository.programById(programId) ?: throw EditorProgramMissing(programId)
 
     /**
-     * §4's copy-before-edit rule, for the operations that change a Program's own content.
+     * The copy-before-edit rule, for operations that change a Program's own content.
      *
-     * Selection, copying and — through [copyDraft] and [saveCopyOf] — editing-by-copy are unaffected,
-     * because those are the three things §4 lets the built-in Program receive. The failure is the
-     * lifecycle layer's own [StandardProgramProtected], so the rule has one implementation and the
-     * refusal one sentence.
+     * Selection, copying and editing-by-copy are unaffected — those are the three things the built-in Program
+     * does receive. The failure is the lifecycle layer's own [StandardProgramProtected], so the rule has one
+     * implementation and the refusal one sentence.
      */
     private fun guardedForEdit(program: Program) {
         if (program.source.isBuiltIn) throw StandardProgramProtected(program.programId)
@@ -636,10 +516,8 @@ private data class BasePlan(val structure: ProgramStructure, val nextRevisionNum
 /**
  * A minted revision and the correspondence that produced its plan-day identities.
  *
- * Private to the editor because the editor is the only component that mints them: §6 re-identifies
- * every plan day on every save, and a caller that wants to state a `workoutId -> ProgramDayId` binding
- * against the draft it authored needs to learn which identity that handle became. The two travel
- * together so the correspondence can never be reported for a different revision than the one it minted.
+ * Private because the editor is the only component that mints them; the two travel together so the
+ * correspondence can never be reported for a different revision than the one it minted.
  */
 private data class MintedRevision(
     val revision: ProgramRevision,
@@ -647,23 +525,19 @@ private data class MintedRevision(
 )
 
 /**
- * A new revision minted for a reason that is **not** a structural change, together with everything a
- * caller needs to attach a plan-day-named statement to it.
+ * A new revision minted for a reason that is **not** a structural change, with everything a caller needs to
+ * attach a plan-day-named statement to it.
  *
- * It is public, unlike the structural [MintedRevision], because a target-only change is performed by
- * the save boundary rather than by a draft save, and the boundary has to be able to *decline* to
- * write the revision after comparing the statement it would carry against what is stored. That
- * comparison needs the minted correspondence before the write, not after.
+ * Public, unlike the structural [MintedRevision], because a target-only change is performed by the save
+ * boundary rather than by a draft save, and that boundary has to be able to *decline* to write the revision
+ * after comparing the statement it would carry against what is stored — a comparison that needs the minted
+ * correspondence before the write.
  *
- * The two halves travel together for the same reason [MintedRevision]'s do: the correspondence can
- * never be reported for a different revision than the one it minted.
- *
- * @property program the Program as it will stand once this revision is saved — the *same* Program,
- *   with `currentRevisionId` and `updatedAt` already describing the revision this mints. A
- *   target-only change never creates a Program.
+ * @property program the Program as it will stand once this revision is saved — the *same* Program, with
+ *   `currentRevisionId` and `updatedAt` already describing it. A target-only change never creates a Program.
  * @property revision the minted revision, whose structure equals the current one exactly.
- * @property mintedProgramDays the correspondence from each **current** revision's plan-day identity
- *   — the handle a caller honestly holds — to the identity that day becomes in [revision].
+ * @property mintedProgramDays the correspondence from each **current** plan-day identity to the identity that
+ *   day becomes in [revision].
  */
 class MintedTargetScheduleRevision(
     val program: Program,
@@ -671,23 +545,18 @@ class MintedTargetScheduleRevision(
     val mintedProgramDays: Map<ProgramDayId, ProgramDayId>
 )
 
-// ---------------------------------------------------------------- the failures the mechanism throws
-
 /**
- * A Program an editor operation names is not stored (§28 `INVALID_DATA`).
- *
- * Thrown inside the operation so the result boundary can map it to a
- * [ProgramEditorRejection.Refused] naming §28's `ProgramNotFound`; it never reaches a caller as an
- * exception.
+ * Thrown inside the operation so the result boundary maps it to a rejection naming `ProgramNotFound`; it never
+ * reaches a caller as an exception.
  */
 internal class EditorProgramMissing(val programId: ProgramId) :
     RuntimeException(ProgramOperationRefusal.ProgramNotFound(programId).message)
 
-/** A revision a draft names is not stored, so the draft's provenance is not real (§23). */
+/** A revision a draft names is not stored, so the draft's provenance is not real. */
 internal class RevisionMissing(val revisionId: RevisionId) :
     RuntimeException("no revision '${revisionId.value}' is stored (§23)")
 
-/** The draft is not finished, so nothing was written (§7's validate step). */
+/** The draft is not finished, so nothing was written: the validate step rejected it. */
 internal class DraftRejected(val validation: ProgramDraftValidation) :
     RuntimeException(
         "the draft cannot be saved: " + validation.issues.joinToString("; ") { it.message }
@@ -695,7 +564,7 @@ internal class DraftRejected(val validation: ProgramDraftValidation) :
 
 /**
  * Runs [block], mapping anything the storage layer threw onto [ProgramEditorResult.Failed] rather than
- * absorbing it (§28's `SYSTEM_FAILURE`, §33's prohibition on turning a failure into an empty result).
+ * absorbing it.
  */
 internal inline fun <T> editorResult(block: () -> T): ProgramEditorResult<T> = try {
     ProgramEditorResult.Success(block())
@@ -703,7 +572,6 @@ internal inline fun <T> editorResult(block: () -> T): ProgramEditorResult<T> = t
     ProgramEditorResult.Failed(failure)
 }
 
-/** Maps an operation's internal failures onto the typed rejections the caller receives. */
 private fun <T> ProgramEditorResult<T>.rejecting(): ProgramEditorResult<T> = when (this) {
     is ProgramEditorResult.Success -> this
     is ProgramEditorResult.Rejected -> this

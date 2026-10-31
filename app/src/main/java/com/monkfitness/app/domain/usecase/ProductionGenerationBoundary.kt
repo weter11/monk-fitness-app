@@ -14,117 +14,38 @@ import com.monkfitness.app.domain.usecase.ExerciseGenerationFacts.DimensionOf
 import com.monkfitness.app.domain.usecase.ExerciseGenerationFacts.GenerationFocusSource
 
 /**
- * The **production generation boundary** — the one place where the app's own exercise catalogue is
- * stated to the pure Generated Planner as `GenerationCandidate`s.
+ * The production generation boundary: the one place where the app's own catalogue is stated to the pure
+ * Generated Planner as `GenerationCandidate`s.
  *
- * ```text
- * production exercise catalogue            ← the shipped `Exercise` list
- *          ↓
- * ProductionGenerationBoundary              ← this file: adapter + application layer
- *          ↓
- * GenerationCandidate<Equipment>           ← the generated-domain's own value
- *          ↓
- * GeneratedPlanner                          ← untouched, and untouched by anything below this line
- * ```
+ * It lives here because the two cannot meet anywhere else: the generated package may not import
+ * `android`, `androidx`, the data layer or the legacy engine (`ProgramGeneratedArchitectureTest` enforces
+ * that by name), while the catalogue is an Android-flavoured `private val` inside `WorkoutGenerator`. So
+ * this file names `WorkoutGenerator` and nothing in `domain/program/generated` does; the planner is handed
+ * finished candidates and never learns a catalogue or a resource exists.
  *
- * ### Why this lives here and not in the generated domain
+ * Focus membership is a boundary gap and stays visible. The catalogue's category, sub-category and
+ * `exerciseToFamiliesMap` are not [com.monkfitness.app.domain.program.Focus], and mapping one onto the
+ * other would invent a training fact the data does not contain — so membership is an explicit input
+ * ([GenerationFocusSource]), and an exercise the source does not state is named in
+ * [ProductionGenerationCatalogue.unclassifiedExerciseIds] instead of being quietly admitted. This file
+ * never substitutes the whole vocabulary (an exercise that trains everything is a candidate for nothing),
+ * never substitutes an empty set (`GenerationCandidate` refuses it at construction), and never derives
+ * membership from those three identifiers — the architecture suite bans them by name.
  *
- * The generated planner is pure by construction (§30 step 10, §25): its package may not import
- * `android`, `androidx`, the data layer, the UI or a legacy engine, and
- * `ProgramGeneratedArchitectureTest` enforces that by name. The production catalogue is an
- * Android-flavoured data model — `@StringRes` labels, drawables, an equipment enum — held in a
- * `private val` inside the legacy `WorkoutGenerator`. So the two cannot meet anywhere but in the
- * application layer, and this is that meeting point: it reads the catalogue and it **names**
- * `WorkoutGenerator`, while nothing in `domain/program/generated` names either. The generated planner
- * never learns that a catalogue, a legacy engine or an Android resource exists; it is handed finished
- * candidates.
+ * With no source supplied the catalogue classifies nothing and yields **no** candidates and **all**
+ * exercises unclassified; that is the honest answer, not a plan built on a guess.
  *
- * The legacy `WorkoutGenerator` is read **here and only here**, as the app's single current source of
- * exercise truth — exactly the justification `ProgramExerciseLibrary` records for its own read of the
- * same list. Removing the legacy engine is a later stage's removal; this stage only declines to let
- * the generator depend on it.
- *
- * ### Where each of the four facts comes from
- *
- * | fact the planner needs | production source of truth |
- * | --- | --- |
- * | exercise identity, family, training domain, body region, required equipment | `Exercise.toConfigurationMetadata()` — the app's own derived metadata, over the exercise's own fields. Nothing here is restated: the id, the family, the category, the sub-category and the equipment set are the catalogue's, read through the mapper that already exists. |
- * | `PrescriptionDimension` | `Exercise.isTimerBased` (see [DimensionOf]). A timed exercise is prescribed in seconds and every other one in repetitions — the rule the plan editor already applies when a user adds an exercise by hand, so generation and hand-authoring cannot disagree about an exercise's dimension. |
- * | focus membership | **not held anywhere in production** — supplied through [GenerationFocusSource], and an exercise the source does not state is reported, never defaulted. See below. |
- * | the user's available equipment | the caller's own `Set<Equipment>`, forwarded verbatim. See "Equipment is forwarded, never filtered" below. |
- *
- * ### Focus membership is a boundary gap, and it stays visible
- *
- * The catalogue's own groupings are **not** the focus vocabulary, and this file refuses to pretend
- * otherwise. It holds a category (`STRENGTH` / `MOBILITY` / `STRETCHING` / `POSTURE`), a sub-category
- * (a body region), and a training-style map (`exerciseToFamiliesMap`, whose values are
- * `ExerciseCategoryFilter`s such as `CALISTHENICS`, `NECK` or `LOWER_BACK`). None of those three is a
- * [com.monkfitness.app.domain.program.Focus] (`PUSH` / `PULL` / `LEGS` / `CORE` / `MOBILITY` /
- * `POSTURE` / `CONDITIONING`), and mapping one onto the other would be inventing a training fact the
- * data does not contain — the same gap `ProgramsController.generateDraft` records as
- * `GENERATION_UNAVAILABLE`, and the same `NoExerciseFamilyClassification` the adaptive side recorded.
- *
- * So membership is an **explicit input**, and an exercise the source does not classify is named in
- * [ProductionGenerationCatalogue.unclassifiedExerciseIds] instead of being quietly admitted. Three
- * things this file deliberately does *not* do:
- *
- *  * it never substitutes the whole focus vocabulary for a missing answer (an exercise that trains
- *    everything is not a candidate for anything);
- *  * it never substitutes an empty set — `GenerationCandidate` refuses that at construction, and that
- *    refusal is the right one, as its own KDoc states;
- *  * it never derives membership from the category, the sub-category or the training-style map. The
- *    architecture suite bans those three identifiers from this file by name and pins the catalogue's
- *    real groupings in the test that reads them, so a future "obviously this is a push exercise"
- *    refactor is a failing test rather than a silent change in what the generator trains.
- *
- * The consequence is honest rather than convenient: with no classification source supplied, the
- * catalogue classifies nothing and the boundary yields **no** candidates and **all** exercises
- * unclassified. That is the state P23 inherited, and it remains the correct answer to *this* class's
- * question — it says the app states no focus classification, rather than presenting a plan built from
- * a guess.
- *
- * **P24 closed the gap from the other side rather than from this one.** The port is unchanged, the
- * three refusals above are unchanged, and this file names no focus anywhere: what changed is that
- * production now has something to hand the port —
- * [ProductionFocusClassification], an explicit table of what each shipped exercise trains — and
- * [ProgramGenerationService] is the one caller that reads the catalogue through it. A source that
- * states nothing still yields no candidates, still refuses at [generationRequest], and is still
- * reported as [NoExerciseStatesItsFocus] rather than generated around.
- *
- * ### Equipment is forwarded, never filtered
- *
- * The available equipment is passed into [generationRequest] exactly as the caller states it, and
- * this file applies **no** normalisation to it. That is a deliberate refusal to inherit the legacy
- * `isAccessibleWith` reading, in which an empty set means *"no equipment was configured, so constrain
- * nothing"*. Generation's reading is the strict one: an empty available set means the user has
- * nothing, so only exercises requiring nothing are selectable. Reusing the legacy rule here would
- * silently offer bar-and-band exercises to a user who has declared no equipment — the exact hidden
- * default this boundary exists to prevent. The catalogue's own required-equipment sets are already
- * normalised at construction (`Equipment.NONE` is dropped by the generator's factories), so no
- * candidate ever *requires* `NONE`; the test asserts that rather than filtering for it here.
- *
- * ### It holds no state and decides nothing
- *
- * Every function here is a function of its arguments: the same catalogue and the same stated facts
- * produce the same candidates in the same order, on any device, in any process. No clock, no random
- * source, no repository, no DAO, no persistence, no scheduling, no adaptive policy, and no business
- * rule of its own — selection, allocation, reconciliation and the equipment constraint are all the
- * generated planner's, and none of them is restated or second-guessed here.
+ * No clock, no random source, no repository, no policy of its own: every function here is a function of
+ * its arguments, so the same catalogue and stated facts give the same candidates in the same order.
  */
 object ProductionGenerationBoundary {
 
     /**
-     * The catalogue's reading as candidates, plus what it could not state.
+     * Two fields rather than one filtered list: an exercise that was never classified is a **fact about
+     * the catalogue**, not a failure, so the caller can report it or supply a classification and retry.
+     * Collapsing them would make "nothing was classified" and "some things were" indistinguishable.
      *
-     * The two halves are separate fields rather than one filtered list, because an exercise that was
-     * never classified is a **fact about the catalogue** and not a failure: the caller can report it,
-     * record it as a declared gap, or supply a classification and try again. Collapsing the two into a
-     * single list would make "nothing was classified" and "some things were" indistinguishable.
-     *
-     * @property candidates the exercises this catalogue can state completely, in the catalogue's own
-     *   order. Empty exactly when every exercise was unclassified.
-     * @property unclassifiedExerciseIds the exercises the focus source did not state, in the
-     *   catalogue's own order. Never defaulted and never inferred.
+     * Both lists keep the catalogue's own order.
      */
     data class ProductionGenerationCatalogue(
         val candidates: List<GenerationCandidate<Equipment>>,
@@ -154,14 +75,10 @@ object ProductionGenerationBoundary {
     }
 
     /**
-     * Reads the **shipped** catalogue — the app's own list, with no equipment filter, exactly as
-     * `ProgramExerciseLibrary` reads it for membership.
-     *
-     * No filter, because a candidate list is a *statement about the library*, not a selection: whether
-     * an exercise is usable for this user is `GenerationRequest`'s question, and it answers it by
-     * *reporting* an unusable candidate rather than by removing it (§9's "hard execution constraints
-     * must never be silently violated"). Filtering here would hide the very fact the planner is
-     * supposed to report.
+     * Read with no equipment filter, as `ProgramExerciseLibrary` reads it: a candidate list is a
+     * *statement about the library*, not a selection. Whether an exercise is usable for this user is
+     * `GenerationRequest`'s question and it answers by *reporting* an unusable candidate; filtering here
+     * would hide the fact the planner is supposed to report.
      */
     fun catalogueOfShippedExercises(
         focusSource: GenerationFocusSource
@@ -169,12 +86,9 @@ object ProductionGenerationBoundary {
         catalogueOf(WorkoutGenerator().getExerciseLibrary(), focusSource)
 
     /**
-     * Reads [exercises] as candidates — the boundary itself, with the catalogue as an argument so the
-     * mapping is a function of the exercises and the stated facts alone.
-     *
-     * Order is the catalogue's own: the generated planner ranks candidates itself (§9's total
-     * deterministic ranking, ending in the canonical id), so re-ordering here could only invent a
-     * preference the caller never stated.
+     * Order is the catalogue's own: the planner ranks candidates itself with a total deterministic
+     * order ending in the canonical id, so re-ordering here could only invent a preference the caller
+     * never stated.
      */
     fun catalogueOf(
         exercises: List<Exercise>,
@@ -192,18 +106,19 @@ object ProductionGenerationBoundary {
     }
 
     /**
-     * The generation request this catalogue supports: §30 step 10's pure input, assembled from the
-     * production catalogue and the caller's configuration.
+     * The generation request this catalogue supports: every field forwarded unchanged from the caller,
+     * with nothing defaulted, filtered, sorted or substituted — the only decision here is whether a
+     * request can be stated at all.
      *
-     * Every field is a value the caller already holds and every one is forwarded unchanged — the focus
-     * configuration, the weekly rhythm, the Program's duration, the plain signals, the policy and above
-     * all the user's available equipment. Nothing is defaulted, filtered, sorted or substituted here;
-     * the only decision this function makes is whether a request can be stated at all.
+     * A catalogue that classified nothing is **refused**, not assembled into an empty request: an empty
+     * candidate list would be a plan of nothing reading as a success, so the caller sees "the app states
+     * no focus classification" rather than "your program has no exercises".
      *
-     * A catalogue that classified nothing is **refused**, not assembled into an empty request. An
-     * empty candidate list would be a plan of nothing reading as a success (§33), and the honest answer
-     * is a refusal that names the gap — so the caller sees "the app states no focus classification"
-     * rather than "your program has no exercises".
+     * `availableEquipment` is passed through exactly as stated, with no normalisation. That deliberately
+     * declines the legacy `isAccessibleWith` reading in which an empty set means "nothing configured, so
+     * constrain nothing": here an empty set means the user has nothing, so only exercises requiring
+     * nothing are selectable. Inheriting the legacy rule would silently offer bar-and-band exercises to a
+     * user who declared no equipment.
      */
     fun generationRequest(
         catalogue: ProductionGenerationCatalogue,
@@ -231,12 +146,8 @@ object ProductionGenerationBoundary {
     }
 
     /**
-     * This one exercise as the planner's own candidate.
-     *
-     * A field-for-field conversion of facts the catalogue already holds: its own metadata through
-     * [toConfigurationMetadata], the focuses the caller stated, and its own prescription dimension.
-     * The only branch is the one the catalogue's own data makes — a timed exercise is prescribed in
-     * seconds, every other one in repetitions — and no field is invented, defaulted or widened.
+     * A field-for-field conversion of facts the catalogue already holds. The only branch is the one the
+     * data makes — timed in seconds, everything else in repetitions — and no field is invented or widened.
      */
     private fun Exercise.asCandidate(focuses: Set<com.monkfitness.app.domain.program.Focus>):
         GenerationCandidate<Equipment> = GenerationCandidate(

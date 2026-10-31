@@ -5,39 +5,26 @@ import com.monkfitness.app.domain.program.ProgramPauseWindow
 import java.time.ZoneId
 
 /**
- * The target-owned adapter from the *persisted* pause interval to the date window the target
- * temporal stage reads.
+ * The target-owned adapter from the *persisted* pause interval (`ProgramPause`, Instants) to the date
+ * window the target temporal stage suppresses on (`ProgramPauseWindow`, LocalDates).
  *
- * ```text
- * ProgramPause            startedAt / endedAt   (Instants, persisted, §3)
- * ProgramPauseWindow      firstDate / lastDate  (LocalDates, what a target pass suppresses on)
- * ```
+ * Two facts make this a policy rather than a formality: an instant is not a date, so the zone is an
+ * explicit argument and never read from the device here; and a closed interval has both ends, so an
+ * open pause has no honest conversion — this refuses it rather than inventing a last date (not
+ * `today`, not the run window's last date), all of which would suppress occurrences the model says
+ * were not paused.
  *
- * Two facts make this conversion a policy rather than a formality:
- *
- *  * **An instant is not a date.** Which day a pause covers depends on the calendar it is read in, so
- *    the zone is an explicit argument and never read from the device here. A window computed in
- *    UTC and a window computed in the user's calendar are different suppressions on the same row.
- *  * **A closed interval has both ends; an open one does not.** A `ProgramPauseWindow` is a closed
- *    interval by construction, so an open pause has no honest conversion at all. This adapter
- *    therefore refuses it rather than inventing a last date — not `today`, not the run window's
- *    last date, not the far future, all of which would silently suppress occurrences that the model
- *    says were not paused.
- *
- * The refusal is not a duplicate of the lifecycle rule that would have closed the interval. It is
- * the observation that the invariant already holds: a pause can only be opened by `PAUSE`, which is
- * legal only from `RUNNING`, and a Program can only enter `RUNNING` through `START` or `RESUME` —
- * both of which close the open interval. A Program that is starting therefore has no open pause,
- * and an open one here is stored data that contradicts the lifecycle the same Program reports.
+ * The refusal is not a duplicate of the lifecycle rule: it observes that the invariant already holds.
+ * A pause opens only from `RUNNING`, and `RUNNING` is entered only through `START` or `RESUME`, both
+ * of which close the interval — so an open one here is stored data contradicting the lifecycle.
  */
 object TargetSchedulePauseAdapter {
 
     /**
-     * Converts the persisted intervals of a Program into the date windows a target pass suppresses
-     * on, in the calendar named by [zone].
+     * Converts the persisted intervals into the date windows a target pass suppresses on, in [zone].
      *
-     * @throws IllegalArgumentException when an interval is still open, which the start point this
-     *   adapter serves makes unreachable — see the class comment.
+     * @throws IllegalArgumentException when an interval is still open — unreachable from the start
+     *   point this adapter serves, where an open interval would contradict the lifecycle.
      */
     fun windowsOf(pauses: List<ProgramPause>, zone: ZoneId): List<ProgramPauseWindow> =
         pauses.map { pause ->

@@ -42,68 +42,34 @@ import java.time.Instant
 import java.time.LocalDate
 
 /**
- * The Program System's lifecycle and selection decisions — §30 step 5, over the persistence of steps
- * 3 and 4.
+ * The Program System's lifecycle and selection decisions, over the persistence primitives.
  *
- * ### What this layer is, and what it refuses to be
+ * Its whole job is the decisions a repository must not make, and they are all rules about Programs: which
+ * lifecycle transitions are legal (a planned start date is not one), that selection is one global fact and
+ * never a Program flag, that deleting the selected Program falls back to the built-in Standard Program as a
+ * *technical* fallback while archiving the selection is refused, that the built-in Program is selectable and
+ * copyable but not editable or deletable, that a Program with an `IN_PROGRESS` session is not deletable and
+ * the selection is never cleared behind the user's back, and that a lifecycle, selection, rename, archive or
+ * planned-start change creates **no** revision.
  *
- * The blueprint's layering is `Room entity ⇄ mapper ⇄ domain ⇄ use case ⇄ UI` (§25), and this class
- * is the fourth of those. Its entire job is the decisions the blueprint will not let the repositories
- * make — because a repository that decided them would be a data layer making policy — and the
- * blueprint is explicit about which ones those are (§3, §4, §29):
+ * The built-in Program is *required* rather than seeded here: deciding what the app's own program plans is a
+ * content decision above this layer, so a caller that has not seeded one gets `StandardProgramNotSeeded`
+ * instead of a silently missing fallback.
  *
- *  * which lifecycle transitions are legal, and that a planned start date is not one of them;
- *  * that selection is one global fact and never a Program flag;
- *  * that deleting the selected Program selects the built-in Standard Program as a *technical*
- *    fallback, and that archiving the selected Program is refused until the user picks another one;
- *  * that the built-in Standard Program is selectable, copyable and shareable but not editable or
- *    deletable directly;
- *  * that a Program with an `IN_PROGRESS` session is not deletable, and that the selection is not
- *    cleared behind the user's back to make such a delete succeed;
- *  * that a lifecycle, selection, rename, archive or planned-start change creates **no** revision,
- *    while a structural change must go through the immutable-revision mechanism.
- *
- * Each of those is a *rule about Programs*, so it lives above the repositories and is decided from
- * domain values; each repository below stays what step 3 made it — a persistence primitive. Nothing
- * here asks a DAO a question a DAO cannot answer, and no decision moves downward: [ProgramRepository]
- * still stores what it is told, [AppStateRepository] still writes one row, and
- * [ProgramScheduleRepository] still records an interval the caller decided to open or close.
- *
- * ### Why the Standard Program is not seeded here
- *
- * §3's delete-fallback rule needs the built-in Program to exist. Seeding it — deciding what the
- * app's own program plans — is a content decision with the editor, the scheduler and the Focus
- * Planner behind it (§30 steps 6–10), none of which exist yet. This layer therefore *requires* the
- * Standard Program rather than inventing it: [ProgramLifecycleService] is constructed with the id the
- * app has chosen, and [StandardProgram] documents the contract. A caller that has not seeded one yet
- * gets a [ProgramLifecycleService.StandardProgramNotSeeded] refusal rather than a silently-missing
- * fallback, because a fallback that is absent when the rule needs it is worse than no fallback.
- *
- * ### Transactions
- *
- * §27 names `Delete Program → complete ownership cascade` as an atomic operation, and the delete path
- * here is the composition of that: the selection is moved *before* the Program is deleted, because the
- * schema's `app_state.selectedProgramId` is `ON DELETE NO ACTION` — the database itself refuses to
- * delete a Program the state still names, which is the mechanism that makes "never silently clear the
- * selection" a storage-level guarantee rather than a convention. The move and the delete are therefore
- * ordered so the constraint can hold, and the delete is delegated to the cascade step 3 shipped. The
- * remaining atomic operations of §27 (`Start Workout`, `Confirm Set`, `Complete Workout + Adaptive`)
- * belong to steps 8 and 12 and are deliberately absent.
+ * Delete order is load-bearing: the selection moves **before** the Program is deleted, because
+ * `app_state.selectedProgramId` is `ON DELETE NO ACTION` — the database itself refuses to delete a Program
+ * the state still names, which makes "never silently clear the selection" a storage guarantee.
  *
  * @param programRepository the Program aggregate: read, update its non-structural facts, delete it.
- * @param scheduleRepository the slots and the pause intervals; read for the open-pause fact, write for
- *   opening and closing an interval.
- * @param sessionRepository the sessions; read for the `IN_PROGRESS` guard (§29).
+ * @param scheduleRepository the slots and pause intervals; read for the open-pause fact, write for opening
+ *   and closing an interval.
  * @param appStateRepository the single global state row: the selection and the next-Program facts.
- * @param planRepository the revision mechanism a structural change must go through (§6). Read-only
- *   here — [copyProgram] needs the plan it copies, and nothing in this stage mints a revision except
- *   a structural edit, which the editor stage will own.
- * @param clock the clock the factual timestamps come from. `actualStartDate` is a fact (§3), so the
- *   moment a Program started is read from the injected clock and never from a field.
- * @param idGenerator mints a new Program's identity and its copy's revision identity (§26).
- * @param standardProgramId the identity of the app's built-in Program (§4). Required, not defaulted.
- * @param inTransaction runs a block in one database transaction, for the operations §27 requires to be
- *   atomic. Production takes it from the composition root, exactly as the repositories do.
+ * @param planRepository read-only here: [copyProgram] needs the plan it copies, and nothing in this stage
+ *   mints a revision except a structural edit, which the editor owns.
+ * @param clock `actualStartDate` is a fact, so the moment a Program started is read from here and never from
+ *   a field.
+ * @param standardProgramId the identity of the app's built-in Program. Required, not defaulted.
+ * @param inTransaction runs a block in one database transaction, for the operations that must be atomic.
  */
 class ProgramLifecycleService(
     private val programRepository: ProgramRepository,
@@ -117,16 +83,12 @@ class ProgramLifecycleService(
     private val inTransaction: suspend (suspend () -> Unit) -> Unit
 ) {
 
-    // ---------------------------------------------------------------- the read surface (§21, §22)
-
     /**
-     * The My Programs view: every saved Program, each paired with the global selection and its
-     * open-pause fact (§21).
+     * The My Programs view: every saved Program, each paired with the global selection and its open-pause
+     * fact.
      *
-     * The join is here because it has to be somewhere above the repositories — a Program carries no
-     * selection flag (§3) and no pause state, so a list of `Program` values cannot answer either
-     * question on its own — and it is a *read*, so a failure propagates as [ProgramOperationResult.Failure]
-     * rather than as an empty list (§33).
+     * The join has to happen above the repositories — a Program carries no selection flag and no pause
+     * state — and it is a *read*, so a failure propagates rather than becoming an empty list.
      */
     suspend fun myPrograms(): ProgramOperationResult<MyPrograms> = storageOutcome {
         val state = appStateRepository.state()
@@ -139,11 +101,8 @@ class ProgramLifecycleService(
     }
 
     /**
-     * One Program, or a [ProgramNotFound] refusal when no such Program is stored.
-     *
-     * The refusal rather than `null`: §33 forbids turning an absent row into an empty result, and a
-     * caller asking for a Program it has an id for has either a stale id or a bug — both worth
-     * distinguishing from a successful empty.
+     * The refusal rather than `null`: a caller asking for a Program it has an id for has either a stale id
+     * or a bug, and turning an absent row into an empty result would hide both.
      */
     suspend fun program(programId: ProgramId): ProgramOperationResult<Program> = storageOutcome {
         programRepository.programById(programId)
@@ -151,21 +110,11 @@ class ProgramLifecycleService(
     }.refusingOn(programId)
 
     /**
-     * The revision [programId]'s `currentRevisionId` points at — §22's *"current Revision"*, and the
-     * only read of a Program's structural facts that does not go through the editor.
+     * The revision [programId]'s `currentRevisionId` points at — the pointer decides, this method never
+     * falls back to "the newest by number".
      *
-     * §22's Program Detail is *current-state management*: it shows the Program's mode, its schedule and
-     * which revision those facts belong to, and all three live on the revision rather than on the
-     * Program (§6, §23). The detail screen cannot ask a repository for them (§25: the UI reaches no
-     * data layer), so the read is here, beside the selection read, over the collaborator this service
-     * already holds read-only for [copyProgram]. No new collaborator, no new decision: the pointer
-     * decides which revision is current, exactly as the export path reads it (§17 of the transfer
-     * document), and this method does not fall back to "the newest by number".
-     *
-     * A Program that is not stored is [ProgramOperationRefusal.ProgramNotFound]; a Program whose
-     * pointer names a revision that is not stored is **invalid persisted data** and propagates as a
-     * [ProgramOperationResult.Failure] rather than being reported as a Program with no plan (§23, §28,
-     * §33).
+     * A Program whose pointer names a revision that is not stored is **invalid persisted data** and
+     * propagates as a failure rather than being reported as a Program with no plan.
      */
     suspend fun currentRevision(programId: ProgramId): ProgramOperationResult<ProgramRevision> =
         storageOutcome {
@@ -173,19 +122,13 @@ class ProgramLifecycleService(
             planRepository.currentRevision(programId) ?: throw RevisionNotStored(program.currentRevisionId)
         }.refusingOn(programId)
 
-    // ---------------------------------------------------------------- selection (§3, §21)
-
     /**
-     * Selects [programId] as the Program the user is currently in.
+     * Selection is the one global `AppState` row, so this touches no Program — which is what makes "one
+     * selected Program at a time" a storage fact: the row has one `selectedProgramId`, so a second
+     * selection *replaces* the first.
      *
-     * Selection is global `AppState`, so this writes the one state row and touches no Program —
-     * which is what makes "only one selected Program at a time" a storage-level fact: the row has one
-     * `selectedProgramId`, so selecting a second Program *replaces* the first rather than adding to a
-     * set of them. Built-in Programs are selectable (§4); nothing else about the selection depends on
-     * the source.
-     *
-     * A selection of a Program that is not stored is refused, because a state row pointing at nothing
-     * is the stale pointer §29's `NO ACTION` exists to prevent.
+     * Selecting a Program that is not stored is refused, because a state row pointing at nothing is the
+     * stale pointer the schema's `NO ACTION` exists to prevent.
      */
     suspend fun selectProgram(programId: ProgramId): ProgramOperationResult<AppState> = storageOutcome {
         programRepository.programById(programId) ?: throw ProgramMissing(programId)
@@ -196,13 +139,11 @@ class ProgramLifecycleService(
     }.refusingOn(programId)
 
     /**
-     * Configures which Program starts next and whether that start is automatic (§3).
+     * Both halves are the user's explicit choice and separate facts: auto-start defaults to off, and it
+     * **never resumes a paused Program**.
      *
-     * Both halves are the user's explicit choice, and the two are separate facts: `nextProgramAutoStart`
-     * defaults to off, and **auto-start never resumes a paused Program** (§3). This method makes no
-     * attempt to enforce the latter, and that is deliberate — the rule constrains the *scheduler* that
-     * will consume this state (§30 step 7), and a guard here would be a second place that could
-     * disagree with it. It records the choice and nothing more.
+     * That rule is not enforced here on purpose — it constrains the scheduler that consumes this state, and
+     * a guard here would be a second place that could disagree with it.
      */
     suspend fun configureNextProgram(
         nextProgramId: ProgramId?,
@@ -214,44 +155,34 @@ class ProgramLifecycleService(
         updated
     }
 
-    // ---------------------------------------------------------------- lifecycle (§3)
-
     /**
-     * Starts [programId]: `NOT_STARTED → RUNNING`, recording the moment as the factual
-     * `actualStartDate` (§3).
+     * Starts [programId]: `NOT_STARTED → RUNNING`, recording the moment as the factual `actualStartDate`.
      *
-     * The two rules this method exists to keep are both invisible in its body, and that is the point:
-     *
-     *  * **a planned start date never starts a Program.** Nothing here reads `plannedStartDate`. The
-     *    only path from `NOT_STARTED` to `RUNNING` is this call, and it is the user's.
-     *  * **`actualStartDate` is factual.** The stamp is the clock's `now()`, not a plan, and it is
-     *    written once, here.
-     *
-     * The pause interval is closed if one is open, because a Program that starts cannot be paused; the
-     * transition guard would have refused it otherwise.
+     * The two rules are invisible in the body, and that is the point: nothing here reads `plannedStartDate`
+     * — the only path from `NOT_STARTED` to `RUNNING` is this call and it is the user's — and the stamp is
+     * the clock's `now()`, written once, not a plan.
      */
     suspend fun startProgram(programId: ProgramId): ProgramOperationResult<Program> =
         lifecycle(programId, START)
 
-    /** Pauses [programId]: `RUNNING → PAUSED`, opening a pause interval (§3). */
+    /** Pauses [programId]: `RUNNING → PAUSED`, opening a pause interval. */
     suspend fun pauseProgram(programId: ProgramId): ProgramOperationResult<Program> =
         lifecycle(programId, PAUSE)
 
-    /** Resumes [programId]: `PAUSED → RUNNING`, closing the open pause interval (§3). */
+    /** Resumes [programId]: `PAUSED → RUNNING`, closing the open pause interval. */
     suspend fun resumeProgram(programId: ProgramId): ProgramOperationResult<Program> =
         lifecycle(programId, RESUME)
 
-    /** Completes [programId]: `RUNNING|PAUSED → COMPLETED`, terminal (§3). */
+    /** Completes [programId]: `RUNNING|PAUSED → COMPLETED`, terminal. */
     suspend fun completeProgram(programId: ProgramId): ProgramOperationResult<Program> =
         lifecycle(programId, COMPLETE)
 
     /**
-     * Archives [programId]: a stamp, not a lifecycle state (§3, §29).
+     * Archives [programId]: a stamp, not a lifecycle state.
      *
-     * Archiving retains all history and stops future planning, creates no revision, and is refused only
-     * by the one rule that makes it unsafe — archiving the *selected* Program requires the user to
-     * choose another one first (§3). The refusal is not "the Program is archived", and it is not the
-     * lifecycle: an archived Program keeps the lifecycle it reached.
+     * Archiving retains all history, stops future planning and creates no revision; an archived Program
+     * keeps the lifecycle it reached. It is refused only by the one rule that makes it unsafe — archiving
+     * the *selected* Program requires the user to choose another one first.
      */
     suspend fun archiveProgram(programId: ProgramId): ProgramOperationResult<Program> {
         val refusal = guardSelectionForArchive(programId)
@@ -259,12 +190,12 @@ class ProgramLifecycleService(
         return lifecycle(programId, ARCHIVE)
     }
 
-    /** Removes the archive stamp. Lifecycle untouched, history untouched (§29). */
+    /** Removes the archive stamp. Lifecycle untouched, history untouched. */
     suspend fun unarchiveProgram(programId: ProgramId): ProgramOperationResult<Program> =
         lifecycle(programId, UNARCHIVE)
 
     /**
-     * Renames [programId] and/or sets its description. Not a structural change, so no revision (§6).
+     * Renames [programId] and/or sets its description. Not a structural change, so no revision.
      *
      * The blank-name guard is a domain invariant of [Program], so it applies here as everywhere.
      */
@@ -285,11 +216,10 @@ class ProgramLifecycleService(
     }.refusingOn(programId)
 
     /**
-     * Sets the date a Program is *planned* to start. A plan, not a fact (§3).
+     * Sets the date a Program is *planned* to start: a plan, not a fact.
      *
-     * This is the method whose entire content is the rule it does not enforce: it writes a
-     * `LocalDate`, changes no lifecycle, sets no `actualStartDate` and creates no revision (§6).
-     * Passing the planned date does not start the Program; only [startProgram] does.
+     * This method's entire content is the rule it does not enforce — it writes a `LocalDate`, changes no
+     * lifecycle, sets no `actualStartDate` and creates no revision. Only [startProgram] starts.
      */
     suspend fun setPlannedStartDate(
         programId: ProgramId,
@@ -302,25 +232,16 @@ class ProgramLifecycleService(
         planned
     }.refusingOn(programId)
 
-    // ---------------------------------------------------------------- archive and delete (§4, §29)
-
     /**
-     * Deletes [programId] and everything it owns (§29).
+     * Deletes [programId] and everything it owns.
      *
-     * Three rules gate it, in the order the database's own constraints force:
+     * Three rules gate it, in the order the database's own constraints force: the built-in Program is not
+     * deletable; a Program with an `IN_PROGRESS` session is not deletable and the selection is **not**
+     * cleared to make it pass; and when the Program being deleted *is* the selection, the selection moves to
+     * the built-in Program first — the "technical fallback", not a user choice, done *before* the delete so
+     * `ON DELETE NO ACTION` can hold rather than being worked around.
      *
-     *  1. the built-in Standard Program is not deletable (§4);
-     *  2. a Program with an `IN_PROGRESS` session is not deletable (§29), and the selection is **not**
-     *     cleared to make it pass — a workout in flight has an owner;
-     *  3. when the Program being deleted *is* the selection, the selection moves to the built-in
-     *     Standard Program first (§3), because the schema's `ON DELETE NO ACTION` refuses to delete a
-     *     Program the state row still names. That move is the "technical fallback" the blueprint names:
-     *     it is not a user choice, it is what keeps the state row valid, and it happens *before* the
-     *     delete so the constraint can hold rather than being worked around.
-     *
-     * The cascade itself is the schema's (step 3): revisions, days, elements, slots, sessions,
-     * snapshots, occurrences, sets, pauses, family states, decisions and adjustments go with the
-     * Program row, and the global tables that are not Program-owned survive (§29).
+     * The cascade itself is the schema's; the global tables that are not Program-owned survive.
      */
     suspend fun deleteProgram(programId: ProgramId): ProgramOperationResult<ProgramId> {
         if (programId == standardProgramId) {
@@ -344,18 +265,14 @@ class ProgramLifecycleService(
     }
 
     /**
-     * Copies [programId] into a new user-owned Program with the same plan (§4).
+     * Copies [programId] into a new user-owned Program with the same plan.
      *
-     * The copy is the way the built-in Standard Program gets edited — "editing Standard means creating
-     * a user copy first" (§4) — and a copy of any Program is the user's own, so a copy may be edited,
-     * renamed and deleted freely. The plan is copied through the revision mechanism: a *new* revision
-     * identity for the new Program, carrying the same structure, because reusing the source's revision
-     * identity would make two Programs share one plan row (§6, §23). No revision of the *source* is
-     * created — copying changes nothing about the Program it copies (§6).
+     * The copy is how the built-in Program gets edited — "editing Standard means creating a user copy first"
+     * — and a copy of any Program is the user's own, so it may be edited, renamed and deleted freely. The
+     * name is the caller's because the UI decides how "Copy of X" is phrased; the copy's [ProgramSource] is
+     * [ProgramSource.USER] regardless of the source's, which is what "a copy is the user's own" means.
      *
-     * The name is the caller's, because the UI decides how "Copy of X" is phrased; the copy's
-     * [ProgramSource] is [ProgramSource.USER] regardless of the source's, which is what
-     * "a copy is the user's own" means (§4).
+     * No revision of the *source* is created: copying changes nothing about the Program it copies.
      */
     suspend fun copyProgram(
         programId: ProgramId,
@@ -367,10 +284,9 @@ class ProgramLifecycleService(
             ?: throw ProgramMissing(programId)
         val now = clock.now()
         val copiedId = ProgramId(idGenerator.newId())
-        // The plan is copied as *new rows*: a fresh revision identity, and fresh identities for every
-        // day and every occurrence, because a day and an element are rows of their own and reusing the
-        // source's would make two Programs share one plan instead of one copying the other (§6, §23).
-        // Structure and prescriptions are carried across unchanged — that is what is being copied.
+        // Copied as *new rows*: fresh identities for the revision, every day and every occurrence, because
+        // reusing the source's would make two Programs share one plan instead of one copying the other.
+        // Structure and prescriptions carry across unchanged — that is what is being copied.
         val copiedRevision = source.currentRevision.copy(
             revisionId = com.monkfitness.app.domain.common.RevisionId(idGenerator.newId()),
             programId = copiedId,
@@ -406,21 +322,15 @@ class ProgramLifecycleService(
         copy
     }.refusingOn(programId)
 
-    // ---------------------------------------------------------------- the mechanism
-
     /**
      * One lifecycle transition: decide it, refuse it, or apply it.
      *
-     * The decision is [ProgramLifecyclePolicy]'s — pure, over two statuses and the open-pause fact —
-     * and this method owns everything the decision needs to *become* stored state:
-     *
-     *  * the Program is loaded so the decision is made on the truth rather than on an assumption;
-     *  * a refused transition is returned, and nothing is written (§28: an expected state is a result);
-     *  * an allowed transition applies [Program.applying], which changes the lifecycle and the stamps
-     *    the lifecycle requires and nothing else — in particular no `currentRevisionId` (§6);
-     *  * `PAUSE` opens a pause interval and `RESUME`/`COMPLETE` close it, because a pause is an
-     *    interval and the interval is what "frozen" means (§3);
-     *  * the write is the repository's non-structural update, so no plan row is touched (§6).
+     * The decision is [ProgramLifecyclePolicy]'s — pure, over two statuses, the open-pause fact and the
+     * archive stamp. What this method owns is everything that turns that decision into stored state: a
+     * refused transition is returned and nothing is written (an expected state is a result, not a failure);
+     * an allowed one applies [Program.applying], which changes the lifecycle and its stamps and nothing else
+     * — in particular no `currentRevisionId`; `PAUSE` opens an interval and `RESUME`/`COMPLETE` close it,
+     * because a pause *is* an interval; and the write is the non-structural update, so no plan row is touched.
      */
     private suspend fun lifecycle(
         programId: ProgramId,
@@ -429,8 +339,8 @@ class ProgramLifecycleService(
         val program = programRepository.programById(programId) ?: throw ProgramMissing(programId)
         val openPause = scheduleRepository.pausesOfProgram(programId).any { it.isOpen }
         val decision = if (transition == ARCHIVE || transition == UNARCHIVE) {
-            // Archive is not a lifecycle state (§3): it has its own guard and never consults the
-            // transition table, so an archived Program can still be completed or resumed.
+            // Archive is not a lifecycle state: it has its own guard and never consults the transition
+            // table, so an archived Program can still be completed or resumed.
             if (transition == ARCHIVE) {
                 ProgramLifecyclePolicy.archiveDecision(program.lifecycleStatus, program.isArchived)
             } else {
@@ -473,12 +383,11 @@ class ProgramLifecycleService(
     }
 
     /**
-     * The §29 `IN_PROGRESS` guard, before any row is removed.
+     * The `IN_PROGRESS` guard, before any row is removed.
      *
-     * Read through the session repository's own list read, because "this Program has a workout in
-     * flight" is a fact about sessions the delete path must see. Not counted in SQL on purpose: the
-     * count would have to be interpreted, and the one `IN_PROGRESS` session that matters is easier to
-     * name in the refusal than a number is.
+     * Read through the session repository's list read because "this Program has a workout in flight" is a
+     * fact about sessions the delete path must see. Not counted in SQL on purpose: the one session that
+     * matters is easier to name in the refusal than a number is to interpret.
      */
     private suspend fun guardDeletable(programId: ProgramId): ProgramOperationResult.Refused? {
         val inProgress = sessionRepository.sessionsOfProgram(programId)
@@ -490,9 +399,7 @@ class ProgramLifecycleService(
         }
     }
 
-    /**
-     * The §3 archive-of-selection guard: archiving the selected Program requires choosing another one.
-     */
+    /** The archive-of-selection guard: archiving the selected Program requires choosing another one. */
     private suspend fun guardSelectionForArchive(programId: ProgramId): ProgramOperationResult.Refused? {
         val state = appStateRepository.state() ?: return null
         return if (state.selectedProgramId == programId) {
@@ -506,22 +413,22 @@ class ProgramLifecycleService(
     }
 
     /**
-     * §4's copy-before-edit rule, for the operations that change a Program's own content: the built-in
-     * Program's content is the app's, not the user's.
+     * The copy-before-edit rule, for operations that change a Program's own content: the built-in Program's
+     * content is the app's, not the user's.
      *
-     * Selection, copying and — through [copyProgram] — editing-by-copy are unaffected, because those
-     * are the three things §4 lets the built-in Program receive.
+     * Selection, copying and — through [copyProgram] — editing-by-copy are unaffected, because those are the
+     * three things the built-in Program does receive.
      */
     private fun guardEditable(program: Program) {
         if (program.source.isBuiltIn) throw StandardProgramProtected(program.programId)
     }
 
     /**
-     * Moves the selection to the built-in Standard Program, the §3 technical fallback.
+     * Moves the selection to the built-in Standard Program, the technical fallback.
      *
-     * Refused loudly when the Standard Program is not seeded: the fallback is a rule the architecture
-     * depends on, so a caller that reaches it with nothing to fall back to learns that rather than
-     * having the selection silently cleared (§33).
+     * Refused loudly when the Program is not seeded: the fallback is a rule the architecture depends on, so
+     * a caller that reaches it with nothing to fall back to learns that rather than having the selection
+     * silently cleared.
      */
     private suspend fun moveSelectionToStandard(deletedProgramId: ProgramId) {
         val standard = programRepository.programById(standardProgramId)
@@ -533,34 +440,29 @@ class ProgramLifecycleService(
 
 }
 
-// ---------------------------------------------------------------- the failures the mechanism throws
-
 /**
- * The Program an operation was attempted on is not stored (§28 `INVALID_DATA`).
- *
- * Thrown inside the operation so the result boundary can map it to a [ProgramOperationResult.Refused]
- * naming [ProgramNotFound]; it never reaches a caller as an exception.
+ * Thrown inside the operation so the result boundary can map it to a refusal naming `ProgramNotFound`; it
+ * never reaches a caller as an exception.
  */
 internal class ProgramMissing(programId: ProgramId) : RuntimeException(ProgramNotFound(programId).message)
 
 /**
- * A Program's `currentRevisionId` names a revision that is not stored (§23): the row and its pointer
- * disagree, which is invalid persisted data rather than an expected state, so it reaches the caller as
- * [ProgramOperationResult.Failure] instead of a refusal or an empty plan.
+ * The row and its pointer disagree: invalid persisted data rather than an expected state, so it reaches the
+ * caller as a failure instead of a refusal or an empty plan.
  */
 internal class RevisionNotStored(revisionId: RevisionId) :
     RuntimeException("the revision '${revisionId.value}' a Program's pointer names is not stored (§23)")
 
-/** §4: the built-in Standard Program's content is protected. */
+/** The built-in Standard Program's content is protected. */
 internal class StandardProgramProtected(programId: ProgramId) :
     RuntimeException(StandardProgramCannotBeEdited.message + " — program '${programId.value}'")
 
 /**
- * The §3 delete-fallback needed the built-in Program and it is not stored.
+ * The delete-fallback needed the built-in Program and it is not stored: the declared id names nothing, so
+ * the fallback cannot fire.
  *
- * The id the caller declared as the Standard Program names nothing, so the technical fallback cannot
- * fire. Reported rather than absorbed, because clearing the selection instead would be exactly the
- * silent state repair §3 and §29 forbid.
+ * Reported rather than absorbed, because clearing the selection instead would be exactly the silent state
+ * repair the delete path forbids.
  */
 class StandardProgramNotSeeded(
     val expectedStandardProgramId: ProgramId,
@@ -570,11 +472,10 @@ class StandardProgramNotSeeded(
         "cannot fall back to it after deleting '${deletedProgramId.value}' (§3)"
 )
 
-/** A lifecycle decision was refused (§3), reported as a typed result rather than raised. */
+/** A lifecycle decision was refused, reported as a typed result rather than raised. */
 internal class RefusedTransition(val decision: ProgramTransitionResult.Refused) :
     RuntimeException(decision.reason)
 
-/** Maps a storage outcome's internal failures onto the typed refusals the caller receives. */
 private fun <T> ProgramOperationResult<T>.refusingOn(programId: ProgramId): ProgramOperationResult<T> =
     when (this) {
         is ProgramOperationResult.Success -> this

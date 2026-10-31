@@ -7,14 +7,12 @@ import com.monkfitness.app.domain.program.target.TargetOccurrencePresenter
 import com.monkfitness.app.domain.program.target.TargetProgramDayBinding
 import com.monkfitness.app.domain.program.target.TargetScheduleDecision
 
-/** Immutable result of applying one already-computed target schedule decision. */
 data class TargetScheduleApplicationResult(
     val decision: TargetScheduleDecision,
     val presentations: List<TargetOccurrencePresentation>,
     val persistenceResult: TargetScheduleSlotPersistenceResult
 )
 
-/** Application boundary from a target schedule decision to target slot persistence. */
 class TargetScheduleApplicationService(
     private val slotPersister: TargetScheduleSlotPersister
 ) {
