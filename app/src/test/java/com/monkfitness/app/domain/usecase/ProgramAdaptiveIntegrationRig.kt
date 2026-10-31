@@ -366,13 +366,15 @@ internal class ProgramAdaptiveIntegrationRig private constructor(
         level: Int = 1,
         precedingProgressQualifyingWindows: Int = 1,
         qualifyingWindowsSinceLastChange: Int? = null,
+        adaptationState: com.monkfitness.app.domain.adaptive.AdaptiveState =
+            com.monkfitness.app.domain.adaptive.AdaptiveState.HOLD,
         revision: RevisionId = RevisionId(revisionId(1))
     ): FamilyProgressionState {
         val state = FamilyProgressionState(
             revisionId = revision,
             familyId = FAMILY,
             progressionLevel = level,
-            adaptationState = com.monkfitness.app.domain.adaptive.AdaptiveState.HOLD,
+            adaptationState = adaptationState,
             currentExerciseId = "pushup",
             updatedAt = COMPLETION_MOMENT,
             precedingProgressQualifyingWindows = precedingProgressQualifyingWindows,

@@ -412,14 +412,18 @@ class ProgramAdaptiveIntegration(
      * precedingRegressQualifyingWindows   +1 when §7's regression conditions held, else 0
      * precedingRecoveryQualifyingWindows  +1 when §14's reduced-absorption pattern held, else 0
      * recoveryQualifyingWindows           +1 while the family is in recovery, else 0
-     * qualifyingWindowsSinceLastChange    0 after a level change, else +1 — and `null` while the family
-     *                                     has never changed level, because "never changed" is not "0 ago"
+     * qualifyingWindowsSinceLastChange    0 after a level change, else +1 for a window the family did not
+     *                                     spend in recovery — and `null` while the family has never changed
+     *                                     level, because "never changed" is not "0 ago"
      * ```
      *
      * Each of those is a count of **windows**, and this window is one of them: a window cannot count
      * itself, which is why the engine reports the verdict it decided on and this method only advances the
      * bookkeeping. A realignment is not a level change and does not reset the cooldown (§15's decision
-     * 4); it is still one eligible window and is counted as one.
+     * 4); it is still one eligible window and is counted as one. A window the family spends in recovery
+     * is the one kind that is **not** eligible: §14's safety state outranks progression and no level
+     * change can be made from it, so the count holds there instead of being spent — otherwise a family
+     * leaving recovery would find its cooldown already elapsed for weeks it could not use.
      */
     private fun stateAfter(
         result: ProgramAdaptiveResult,
@@ -459,9 +463,13 @@ class ProgramAdaptiveIntegration(
             precedingRecoveryQualifyingWindows =
                 advanced(stored?.precedingRecoveryQualifyingWindows, verdict.recoveryQualifying),
 
+            // The cooldown is spent by windows the family could have changed level in, so a window it
+            // spent in recovery holds the count: §14's state outranks progression, and charging a family
+            // for weeks it could not use would make the cooldown elapse on its behalf.
             qualifyingWindowsSinceLastChange = when {
                 levelChange -> 0
                 stored?.qualifyingWindowsSinceLastChange == null -> null
+                result.state == AdaptiveState.RECOVERY -> stored.qualifyingWindowsSinceLastChange
                 else -> stored.qualifyingWindowsSinceLastChange + 1
             },
             recoveryQualifyingWindows = if (result.state == AdaptiveState.RECOVERY) {
