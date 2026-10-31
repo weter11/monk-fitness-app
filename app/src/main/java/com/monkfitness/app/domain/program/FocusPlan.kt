@@ -1,57 +1,43 @@
 package com.monkfitness.app.domain.program
 
 /**
- * The **Goals** a Program can be built for (§8).
+ * The **Goals** a Program can be built for: exactly three, with no fourth mode and no hidden goal the
+ * generator may fall back to.
  *
- * §8 names exactly three, and this enum is exactly those three: there is no fourth mode, no
- * "semi-automatic" variant and no hidden goal the generator may fall back to. The goal is a
- * *planning* vocabulary, not an amount of work: it says how the planning horizon should be
- * distributed over the focuses, and nothing about volume, intensity or difficulty.
+ * The goal is a *planning* vocabulary, not an amount of work: it says how the planning horizon should
+ * be distributed over the focuses, and nothing about volume, intensity or difficulty. Each goal is a
+ * different **form of the focus configuration**, which [FocusPlan] expresses — so this enum is
+ * *derived*: [FocusPlan.goal] answers it, and nothing stores a second, separately writable goal that
+ * could disagree with the configuration it describes.
  *
- * The three goals are not three flavours of the same thing — each is a different **form of the
- * focus configuration**, and [FocusPlan] is where that form is expressed:
- *
- * ```text
- * BALANCED  the whole focus vocabulary is eligible, with no share stated by the user
- * FOCUSED   the user names the focuses to train, with no share stated by the user
- * CUSTOM    the user states every focus's share as a percentage
- * ```
- *
- * Because the form and the goal are the same fact, this enum is *derived*: [FocusPlan.goal] answers
- * it, and nothing stores a second, separately writable goal that could disagree with the
- * configuration it is supposed to describe.
- *
- * No coefficient, weight or physiological score is attached to any value here. Where §8 leaves a
- * number open, the number lives in the planner's own explicit policy (see `GenerationPolicy`) and
- * is documented there as an owner decision rather than being presented as a fact.
+ * No coefficient, weight or physiological score is attached to any value: where a number is open, it
+ * lives in the planner's own explicit policy and is documented there as an owner decision rather than
+ * presented as a fact.
  */
 enum class Goal {
 
-    /** Every focus is eligible and the user stated no share (§8's `BALANCED`). */
+    /** Every focus is eligible and the user stated no share. */
     BALANCED,
 
-    /** The user named the focuses to train and stated no share (§8's `FOCUSED`). */
+    /** The user named the focuses to train and stated no share. */
     FOCUSED,
 
-    /** The user stated every focus's share; the shares sum to 100% (§8's `CUSTOM`). */
+    /** The user stated every focus's share; the shares sum to 100%. */
     CUSTOM
 }
 
 /**
- * The **Focus** vocabulary of the Focus Planner (§8) — exactly the seven values §8 names.
+ * The **Focus** vocabulary of the Focus Planner — exactly seven values.
  *
- * Focus is a planning dimension of its own, and the one thing this type must never be confused with
- * is a *day type*. `ProgramDayType.TRAINING`, `MOBILITY` and `POSTURE_MOBILITY` say what kind of
- * work a day is for; they are not seven values and they are not this vocabulary. A day is a place in
- * the plan; a focus is what the slot planned for it emphasizes. The two are related only by whatever
- * the caller states explicitly (the exercise's own focus membership, supplied as an input) — never by
- * a rule inferred here from a day type, a category name or an exercise's presence in a list.
+ * Focus is a planning dimension of its own, and the one thing this type must never be confused with is
+ * a *day type*. `ProgramDayType.TRAINING`, `MOBILITY` and `POSTURE_MOBILITY` say what kind of work a
+ * day is for; a day is a place in the plan, a focus is what the slot planned for it emphasizes. The
+ * two are related only by what the caller states explicitly — never by a rule inferred here from a day
+ * type, a category name or an exercise's presence in a list.
  *
  * The declaration order is the **canonical order** of the vocabulary: ties are broken by it, stored
- * collections are written in it, and two equal configurations therefore compare equal whatever order
- * a caller happened to build them in (the same determinism rule `ProgramTypeConverters` applies to
- * weekday sets). Iterating a `Set<Focus>` is never an ordering decision anywhere in this domain.
- *
+ * collections are written in it, and two equal configurations therefore compare equal whatever order a
+ * caller built them in. Iterating a `Set<Focus>` is never an ordering decision anywhere in this domain.
  * Values are persisted by name, never by ordinal.
  */
 enum class Focus {
@@ -79,16 +65,12 @@ enum class Focus {
 }
 
 /**
- * One focus's share of a [FocusPlan.Custom] configuration, in whole percent (§8).
+ * One focus's share of a [FocusPlan.Custom] configuration, in whole percent.
  *
  * The unit is a **percentage of the plan's focus allocation** — the user's own statement of how the
  * planning horizon should be split. It is not a volume, not a load and not a physiological quantity:
- * nothing here converts it into sets, repetitions or minutes, and no conversion is invented later
- * either. A share is positive, because a focus stated as `0%` is a focus the user did not ask for;
- * the way to say that is to leave it out of the configuration.
- *
- * @property focus the focus this share belongs to.
- * @property percent the share of the plan, in whole percent, strictly positive.
+ * nothing here converts it into sets, repetitions or minutes. A share is positive, because a focus
+ * stated as `0%` is a focus the user did not ask for; the way to say that is to leave it out.
  */
 data class FocusAllocation(
     val focus: Focus,
@@ -104,61 +86,37 @@ data class FocusAllocation(
 }
 
 /**
- * A Program's **Goals & Focus** configuration — §8's goal and focus vocabulary as one value (§7's
- * *Goals & Focus* editor section).
+ * A Program's **Goals & Focus** configuration — the goal and focus vocabulary as one value.
  *
- * It is a structural fact of a revision (§6 lists *goals/focus* among the changes that create one),
- * so it is a value with no identity: two revisions that differ only here differ structurally, and a
- * draft's configuration is what `Save` would persist.
+ * It is a structural fact of a revision, so it is a value with no identity: two revisions that differ
+ * only here differ structurally, and a draft's configuration is what `Save` would persist.
  *
- * ### The three forms, and why there is no fourth
+ * Each form states exactly what the user stated and nothing more. [Balanced] and [Focused] state no
+ * share, so none is stored and none is invented — how the horizon is spread over the eligible focuses
+ * is the planner's policy, not the user's configuration. [Custom] stores the user's percentages
+ * verbatim, and they must sum to exactly [FULL_ALLOCATION], enforced at construction so an invalid
+ * allocation cannot be represented, let alone saved. Storing percentages for every goal with defaults
+ * for the two that state none was rejected deliberately: a default share is a number the user never
+ * chose, presented as if they had.
  *
- * Each form states exactly what the user stated and nothing more:
- *
- *  * [Balanced] — *"spread the plan over everything"*. No share is stated, so none is stored, and
- *    no share is invented for it. The planner's own even spread is its policy, not the user's
- *    configuration.
- *  * [Focused] — *"train these focuses"*. The user names focuses and states no share, so none is
- *    invented: the named focuses are the ones eligible for allocation and the planner's own policy
- *    decides how the horizon is spread over them.
- *  * [Custom] — *"here is every share"*. The percentages are the user's, they are stored verbatim,
- *    and they must sum to exactly [FULL_ALLOCATION] — §8's rule, enforced at construction so an
- *    invalid allocation cannot be represented, let alone saved.
- *
- * The alternative reading — storing percentages for every goal, with defaults for the two that do
- * not state any — was rejected deliberately: a default share is a number the user never chose,
- * presented as if they had. That is the failure mode §8's *"custom percentages"* wording and §33's
- * *"silently overwrite user choices"* prohibition both point at.
- *
- * ### No ranking is modelled
- *
- * [Focused] carries a **set** of focuses in canonical order, not a priority order. §8 lists
- * *"explicit priority"* among the things the Focus Planner considers, and naming the focuses a plan
- * should be built around *is* that priority; a rank order between them is not stated by the
- * blueprint, and inventing one would decide something the user did not. Whether a future stage wants
- * a ranked form is an owner decision, and it would be an additive form here rather than a re-reading
- * of this one.
+ * No ranking is modelled. [Focused] carries a **set** of focuses in canonical order, not a priority
+ * order: naming the focuses a plan should be built around *is* the priority, and inventing a rank
+ * between them would decide something the user did not.
  */
 sealed interface FocusPlan {
 
-    /** The goal this configuration is an instance of (§8). Derived, never stored twice. */
+    /** The goal this configuration is an instance of. Derived, never stored twice. */
     val goal: Goal
 
     /**
-     * The whole focus vocabulary eligible for allocation under this configuration, in canonical
-     * order.
+     * The whole focus vocabulary eligible for allocation under this configuration, in canonical order.
      *
-     * This is the configuration's own statement of *what may be trained*: every focus for
-     * [Balanced], the named ones for [Focused], and the allocated ones for [Custom]. It says nothing
-     * about how much of each — that is the planner's own policy for the first two forms and the
-     * user's percentages for the third.
+     * It states *what may be trained* and nothing about how much of each — that is the planner's policy
+     * for [Balanced] and [Focused], and the user's percentages for [Custom].
      */
     val eligibleFocuses: List<Focus>
 
-    /**
-     * *"Spread the plan over everything."* The default for a Program whose user has not configured
-     * Goals & Focus (§8's `BALANCED`).
-     */
+    /** *"Spread the plan over everything."* The default for a Program whose user has not configured Goals & Focus. */
     data object Balanced : FocusPlan {
 
         override val goal: Goal
@@ -168,11 +126,7 @@ sealed interface FocusPlan {
             get() = Focus.entries.toList()
     }
 
-    /**
-     * *"Train these focuses."* §8's `FOCUSED`: a non-empty set of focuses, with no share stated.
-     *
-     * @property focuses the focuses the plan is built around, in canonical order, each at most once.
-     */
+    /** *"Train these focuses."* A non-empty set of focuses, with no share stated. */
     data class Focused(val focuses: List<Focus>) : FocusPlan {
 
         init {
@@ -198,10 +152,8 @@ sealed interface FocusPlan {
     }
 
     /**
-     * *"Here is every share."* §8's `CUSTOM`: whole percentages over the focus vocabulary, summing
-     * to exactly [FULL_ALLOCATION].
-     *
-     * @property allocations one share per focus, in canonical order, each focus at most once.
+     * *"Here is every share."* Whole percentages over the focus vocabulary, summing to exactly
+     * [FULL_ALLOCATION].
      */
     data class Custom(val allocations: List<FocusAllocation>) : FocusPlan {
 
@@ -244,19 +196,14 @@ sealed interface FocusPlan {
 
     companion object {
 
-        /** The total a [Custom] configuration's shares must sum to (§8: *"must sum to 100%"*). */
+        /** The total a [Custom] configuration's shares must sum to. */
         const val FULL_ALLOCATION: Int = 100
 
-        /**
-         * The configuration a Program starts with, and the one a revision written before Goals &
-         * Focus existed reads as: the whole vocabulary, no share stated (§8 `BALANCED`).
-         */
+        /** The configuration a Program starts with, and the one a revision written before Goals & Focus existed reads as. */
         val DEFAULT: FocusPlan = Balanced
 
-        /** §8's `FOCUSED` configuration, with its focuses held in canonical order. */
         fun focused(focuses: Collection<Focus>): Focused = Focused(canonical(focuses))
 
-        /** §8's `CUSTOM` configuration, with its shares held in canonical order. */
         fun custom(allocations: Collection<FocusAllocation>): Custom =
             Custom(canonical(allocations.map { it.focus }).map { focus ->
                 allocations.first { it.focus == focus }
@@ -266,9 +213,9 @@ sealed interface FocusPlan {
          * [focuses] in the vocabulary's own declaration order — the canonical order every stored and
          * compared collection here is written in.
          *
-         * It reads `Focus.entries` rather than the argument's iteration order on purpose: a `Set` has
-         * no meaningful order, and letting one decide the plan would make generation depend on
-         * something the user cannot see (§9's *"no unordered Set iteration as implicit ranking"*).
+         * It reads `Focus.entries` rather than the argument's iteration order on purpose: a `Set` has no
+         * meaningful order, and letting one decide the plan would make generation depend on something
+         * the user cannot see.
          */
         fun canonical(focuses: Collection<Focus>): List<Focus> {
             val present = focuses.toSet()

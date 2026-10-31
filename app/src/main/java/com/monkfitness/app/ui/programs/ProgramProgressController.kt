@@ -18,23 +18,22 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import java.time.LocalDate
 
-/** One attempt, as the Progress screen's history list shows it. */
 data class ProgressHistoryRowUi(
     val plannedFor: LocalDate,
     val status: SessionStatus,
     val performedSets: Int,
     val exposedExercises: Int,
-    /** The measured length of the attempt, in seconds, or `null` when it was not measurable (§21). */
+    /** The measured length of the attempt, in seconds, or `null` when it was not measurable. */
     val durationSeconds: Long?,
     /** The Program the attempt belongs to, so an aggregate history says where each row came from. */
     val programName: String
 )
 
 /**
- * One exercise's own performance progression (§21), as far as the facts carry it.
+ * One exercise's own performance progression, as far as the facts carry it.
  *
  * The *unit* travels with the exercise because it is what makes two observations comparable at all: a
- * repetition count and a duration are never added, averaged or compared against each other (§17).
+ * repetition count and a duration are never added, averaged or compared against each other.
  */
 data class ProgressPerformanceRowUi(
     val exerciseId: String,
@@ -43,20 +42,19 @@ data class ProgressPerformanceRowUi(
     val best: Int
 )
 
-/** One Program's own streak, with the name the screen can show. */
 data class ProgressStreakRowUi(
     val programName: String,
     val current: Int,
     val longest: Int
 )
 
-/** Everything the Progress screen shows, computed from the target facts and nothing else (§21). */
+/** Everything the Progress screen shows, read from the Progress layer and nothing else. */
 data class ProgramProgressUiState(
     val loading: Boolean = true,
     val hasProgram: Boolean = false,
     val programName: String? = null,
     val lifecycleStatus: LifecycleStatus? = null,
-    /** Whether the numbers below are one Program's or the aggregate §21 calls "All Programs". */
+    /** Whether the numbers below are one Program's or the aggregate the layer calls "All Programs". */
     val isAggregate: Boolean = false,
     val completed: Int = 0,
     val missed: Int = 0,
@@ -68,12 +66,11 @@ data class ProgramProgressUiState(
     val streaks: List<ProgressStreakRowUi> = emptyList(),
     val history: List<ProgressHistoryRowUi> = emptyList(),
     val performance: List<ProgressPerformanceRowUi> = emptyList(),
-    /** The measures §21 lists that the target facts cannot carry yet, reported as such (§12, §17). */
+    /** The measures the layer lists that the target facts cannot carry yet, reported as such. */
     val deferred: List<DeferredMeasure> = emptyList(),
     val notice: ProgramNotice? = null
 ) {
 
-    /** How many opportunities the calendar has seen, decided or still ahead. */
     val opportunityCount: Int
         get() = completed + missed + upcoming + superseded
 
@@ -87,35 +84,17 @@ data class ProgramProgressUiState(
 }
 
 /**
- * The Progress screen's state holder — §21's measures, read from §30 step 9's layer.
+ * The Progress screen's state holder: the Progress layer's own measures, read and never recomputed here.
  *
- * ### What changed in §30 step 15
+ * The calendar's counts, the frequency, the session duration, the streaks, the attempts themselves and the
+ * list of measures that cannot be computed yet all come from [ProgramProgressService].
  *
- * The screen used to show the shipped 56-day program's own numbers: a weekly completion grid built from
- * `UserProgress`, a "volume" bar chart summed out of the retired `set_log`, a frequency chart built from
- * the same rows, a completion percentage and a personal-record list — all computed here, from legacy
- * tables, for a program that no longer exists.
- *
- * It now reads **the target Progress layer** and computes nothing itself:
- *
- * ```text
- * completed / missed / upcoming / superseded   ProgramProgressService.calendarProgress   (§21)
- * frequency, session duration, streaks         ProgramProgressService.trainingProgress   (§21)
- * the attempts themselves                      ProgramProgressService.history            (§21)
- * the measures that cannot be computed yet     the layer's own DeferredMeasure list      (§12, §17)
- * ```
- *
- * ### The scope is the selection, or everything
- *
- * A selected Program is measured on its own; with no selection the screen shows §21's **All Programs**
- * aggregate, which is a view over every Program's facts and not an entity — so `isAggregate` says which
- * of the two the numbers are, instead of the screen having to guess.
+ * A selected Program is measured on its own; with no selection the screen shows the **All Programs**
+ * aggregate, which is a view over every Program's facts and not an entity — so `isAggregate` says which of
+ * the two the numbers are instead of the screen having to guess.
  *
  * Nothing here decides what a measure *is*: a threshold, a rate or an average with a second home is a
  * number that can disagree with the layer that owns it.
- *
- * @param lifecycle the selection, and the Program names the streak and history rows are labelled with.
- * @param progress §30 step 9's measures and history.
  */
 class ProgramProgressController(
     private val lifecycle: ProgramLifecycleService,
@@ -124,15 +103,14 @@ class ProgramProgressController(
 
     private val mutableState = MutableStateFlow(ProgramProgressUiState())
 
-    /** The screen's state. */
     val state: StateFlow<ProgramProgressUiState> = mutableState.asStateFlow()
 
     /**
-     * Reads the selected Program (or the aggregate) and every measure §21 asks for.
+     * Reads the selected Program (or the aggregate) and every measure the Progress layer reports.
      *
-     * A failure is reported and never rendered as a zero: "you have no completed workouts" and "the
-     * history could not be read" are different facts, and a screen that showed the first for the second
-     * would be claiming something about the user's training that nothing measured (§12, §15, §33).
+     * A failure is reported and never rendered as a zero: "you have no completed workouts" and "the history
+     * could not be read" are different facts, and a screen that showed the first for the second would be
+     * claiming something about the user's training that nothing measured.
      */
     suspend fun load() {
         mutableState.update { state -> state.copy(loading = true, notice = null) }
@@ -206,7 +184,6 @@ class ProgramProgressController(
         }
     }
 
-    /** Clears the sentence the screen is showing. */
     fun dismissNotice() {
         mutableState.update { state -> state.copy(notice = null) }
     }
@@ -214,9 +191,9 @@ class ProgramProgressController(
     /**
      * The best observation of a series, in the series' **own** unit.
      *
-     * It is not a personal record: §21's `PROGRAM_PR` needs a comparable progression context the facts do
-     * not carry, and the layer reports it as deferred for exactly that reason. This is *"the best set of
-     * this exercise this Program recorded"*, which is what the observations do support (§17).
+     * Not a personal record: `PROGRAM_PR` needs a comparable progression context the facts do not carry, and
+     * the layer reports it as deferred for exactly that reason. This is *"the best set of this exercise
+     * this Program recorded"*, which is what the observations do support.
      */
     private fun bestOf(observations: List<com.monkfitness.app.domain.progress.PerformanceObservation>): Int =
         observations.maxOfOrNull { observation ->

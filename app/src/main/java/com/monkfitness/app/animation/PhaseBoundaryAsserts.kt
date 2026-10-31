@@ -1,42 +1,24 @@
 package com.monkfitness.app.animation
 
 /**
- * Phase 6 (R2) — root-authority boundary assertions
- * (IMPLEMENTATION_RUNTIME_SKELETON plan §P6; RFC_RUNTIME_SKELETON_ARCHITECTURE §5 R2,
- * §3 rotation-space rule, §6 phase boundaries).
+ * Root-authority boundary assertions: from the end of build until publish, [ConstraintSolver] is
+ * the sole subsystem that may translate or rotate the root (pelvis). [SkeletonPipeline.runStages]
+ * captures A at window entry (the last lawful authoring write), checks the pelvis is bit-identical
+ * after the limb stage, switches the protected reference to the settled root at the solve, and
+ * checks again after finalize + publish.
  *
- * R2: from the end of build until publish, [ConstraintSolver] is the sole subsystem that
- * translates or rotates the root (pelvis). [SkeletonPipeline.runStages] instruments the phase
- * boundaries with this utility:
+ * The reference switches ONLY at the explicit solve site — never inferred from retained Frame
+ * History: that pose shares the reused, per-build-mutated node tree, so history-based inference
+ * both false-fires and misses.
  *
- *  - **capture A** at window entry (post-build / post-injection — the last lawful authoring
- *    write),
- *  - **Check 1** after Phase 1 ([IkStage.apply]): the pelvis must be bit-identical to A,
- *  - **capture B** after Phase 2 ([ConstraintSolver.solve]) — the authorized mover's settled
- *    root becomes the protected reference (no equality claim against A),
- *  - **Check 2** after Phase 3/4 ([SkeletonPoseFinalizer.finalize] + publish): the pelvis must
- *    be bit-identical to the protected reference.
+ * Debug-only by construction: callers gate on `BuildConfig.DEBUG` and release builds compile the
+ * mechanism out. Comparison is EXACT: legitimate movers are known, transforms are otherwise only
+ * ever assigned by value, and there is no drift tolerance to grant.
  *
- * The protected reference switches ONLY at the explicit solve-branch site in `runStages` —
- * never inferred from retained Frame History (`previous`/`prePrevious`/
- * `previousSmoothingRoot`), per the Phase 5 R10 armed-state lesson (P5 pitfall 1: the history
- * pose shares the reused, per-build-mutated node tree, so history-based inference both
- * false-fires and misses).
- *
- * Debug-only by construction: [SkeletonPipeline] calls [captureRoot] only under
- * `BuildConfig.DEBUG` — release builds compile the mechanism out entirely (same placement as
- * the P1 [RuntimeContextSnapshot] enforcement helper). Comparison is EXACT (bit-identical
- * float values): legitimate movers are known, transforms are otherwise only ever assigned by
- * value, and P0-class characterization guarantees mean no drift tolerance exists to grant.
- *
- * The scope of the ROOT guard is deliberately the ROOT ONLY (pelvis node local position +
- * local rotation): child joints legitimately move via limb re-bakes and FK propagation and
- * are not part of R2.
- *
- * Phase 7 (R3) reuses this utility for the Settled-Contact Guarantee ([SettledContactSnapshot]
- * / [captureSettledContacts]) with the same debug gating and exact-compare semantics, but a
- * DISJOINT reference set: the world positions of the settled-contact end-effectors named by
- * the frame's Settlement Result (RFC §3.2/§4.3) — never the root, never the declaration list.
+ * The root guard covers the ROOT ONLY (pelvis local position + rotation); child joints
+ * legitimately move via limb re-bakes and FK propagation. The settled-contact guard reuses the
+ * same idiom over a disjoint set: the world positions of the end-effectors named by the frame's
+ * Settlement Result — never the root, never the declaration list.
  */
 internal object PhaseBoundaryAsserts {
 
@@ -53,11 +35,9 @@ internal object PhaseBoundaryAsserts {
         internal val capturedAt: String
     ) {
         /**
-         * Throws [IllegalStateException] ("R2 violation: …") if [pose]'s pelvis transform no
-         * longer bit-matches this snapshot. Absent hierarchy / absent pelvis node is NOT a
-         * violation here — those are the same structural early-outs the solver itself takes
-         * (no root exists to protect); the pipeline pins its capture point before relying on
-         * this.
+         * Throws [IllegalStateException] if [pose]'s pelvis transform no
+         * longer bit-matches this snapshot. An absent hierarchy / pelvis is NOT a violation — the
+         * same structural early-outs the solver takes, since no root exists to protect.
          */
         fun assertUnchanged(pose: SkeletonPose, windowDescription: String) {
             val pelvis = findPelvis(pose) ?: return
@@ -77,8 +57,8 @@ internal object PhaseBoundaryAsserts {
     }
 
     /**
-     * Captures the pelvis transform of [pose] by value, or `null` when there is no hierarchy /
-     * no pelvis node to protect. [capturedAt] labels the boundary for the failure message.
+     * Captures the pelvis transform by value, or `null` when there is no hierarchy / no pelvis
+     * node to protect. [capturedAt] labels the boundary for the failure message.
      */
     fun captureRoot(pose: SkeletonPose, capturedAt: String): RootTransformSnapshot? {
         val pelvis = findPelvis(pose) ?: return null
@@ -92,12 +72,10 @@ internal object PhaseBoundaryAsserts {
     }
 
     /**
-     * Phase 7 (R3) — immutable by-value snapshot of the WORLD positions of a frame's settled
-     * contact end-effectors (plan §P7; reuses this utility's P6 exact-compare idiom for a
-     * multi-joint reference set). Produced from the [SettlementInfo] the ConstraintSolver
-     * fixed at Phase 2 exit — the Settlement Result is the SOLE reference source: the joint
-     * set comes from its `declaredContactJoints` member, never reconstructed from the pose's
-     * Contact Declarations, retained chains, solver heuristics, or Frame History.
+     * Immutable by-value snapshot of the WORLD positions of a frame's settled contact
+     * end-effectors. The Settlement Result is the SOLE reference source: the joint set comes from
+     * its `declaredContactJoints`, never reconstructed from the pose's Contact Declarations,
+     * retained chains, solver heuristics or Frame History.
      */
     class SettledContactSnapshot internal constructor(
         private val joints: Array<Joint>,
@@ -108,13 +86,12 @@ internal object PhaseBoundaryAsserts {
         internal val capturedAt: String
     ) {
         /**
-         * Throws [IllegalStateException] ("R3 violation: …") if any settled contact
-         * end-effector's world position in [pose] no longer bit-matches its post-solve
-         * snapshot. R3: once the ConstraintSolver settles a contact end-effector, no later
-         * subsystem — including the SkeletonPoseFinalizer — may move it until the frame is
-         * published. Comparison walks the WHOLE reference set (every joint the Settlement
-         * Result lists) with exact float equality, unlike the root snapshot there is no
-         * structural early-out: the carrier arrays always hold the flattened world value.
+         * Throws [IllegalStateException] if any settled contact
+         * end-effector's world position no longer bit-matches its post-solve snapshot: once the
+         * ConstraintSolver settles an end-effector, no later subsystem — including the Finalizer —
+         * may move it until the frame is published. Walks the WHOLE reference set with exact
+         * equality; unlike the root snapshot there is no structural early-out, since the carrier
+         * arrays always hold the flattened world value.
          */
         fun assertUnchanged(pose: SkeletonPose, windowDescription: String) {
             for (i in joints.indices) {
@@ -134,11 +111,9 @@ internal object PhaseBoundaryAsserts {
     }
 
     /**
-     * Phase 7 (R3) — snapshots the world positions of the settled-contact end-effectors
-     * listed by the pose's [SettlementInfo] (the canonical Settlement Result: populated by
-     * the ConstraintSolver at Phase 2 exit from its final FK + flatten). Returns `null` when
-     * the frame has no Settlement Result — the legitimate "no settle ran" case (contact-less
-     * CUSTOM frames skip the solve; the early-return path never fixes a Result).
+     * Snapshots the world positions of the settled-contact end-effectors listed by the pose's
+     * [SettlementInfo]. Returns `null` when the frame has no Settlement Result — the legitimate
+     * "no settle ran" case (contact-less CUSTOM frames skip the solve entirely).
      */
     fun captureSettledContacts(pose: SkeletonPose, capturedAt: String): SettledContactSnapshot? {
         val result = pose.settlementResult ?: return null

@@ -1,8 +1,7 @@
 # AGENTS.md — Monk Fitness App
 
-Android app (Kotlin, Compose, Room, MVVM) for an 8-week adaptive strength/mobility program. Exercise
-demos come from a procedural animation runtime ("MonkEngine"): **pose = intent, engine = geometry,
-validation = observer.**
+Android app (Kotlin, Compose, Room, MVVM) for an 8-week adaptive strength/mobility program. Exercise demos
+come from a procedural animation runtime ("MonkEngine"): **pose = intent, engine = geometry, validation = observer.**
 
 ## Build & test
 
@@ -23,11 +22,10 @@ export GRADLE_USER_HOME="$(pwd)/.gradle-home"
 | `docs/ARCHITECTURE_V2.md` | Carrier contract: `SkeletonPose` intent vs. state, ownership per subsystem. |
 | `docs/MIGRATION_RULES.md` | Enforced pose coding standard; prohibited legacy patterns. |
 | `docs/VALIDATION.md` | Validation poses and the validation subsystem. |
-| `docs/TOOLCHAIN_PROVISIONING.md` | Local build/test toolchain. |
 
-Reference only, not required reading: `docs/CODING_RULES.md`, `docs/ENGINE_ARCHITECTURE.md` (file/joint
-map), `docs/BIOMECHANICS.md`, `docs/API_CONTRACTS.md`, `docs/STABILIZATION_AUDIT.md` (forward work),
-the matrices under `docs/architecture/`, `docs/MonkEngine Design Principles.md` (philosophy).
+Reference only, not required reading: `docs/CODING_RULES.md`, `docs/ENGINE_ARCHITECTURE.md` (file/joint map),
+`docs/BIOMECHANICS.md`, `docs/API_CONTRACTS.md`, `docs/STABILIZATION_AUDIT.md` (forward work), the matrices under
+`docs/architecture/`, `docs/MonkEngine Design Principles.md` (philosophy).
 
 ## Rules
 
@@ -39,5 +37,9 @@ the matrices under `docs/architecture/`, `docs/MonkEngine Design Principles.md` 
 - **Small tasks go straight to implementation.** Docs, one pose, a contained bug fix: change, build,
   test, open the PR. An Execution Plan is not a precondition for small changes; write one for large
   or architectural work.
+- **Comments say WHY only.** A reason, invariant, unit or trap — never a restatement of the code, an
+  RFC/section/phase/PR reference, a changelog or provenance note, a section banner. Public API gets 1-2
+  lines of KDoc, and only when the name is not self-explanatory.
+- **Tests assert behaviour.** No test that merely lists constant values or a closed field list.
 - **History is not guidance.** `docs/HISTORICAL/` is a read-only record; when a doc conflicts with
   live code, the code wins.

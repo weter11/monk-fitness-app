@@ -11,30 +11,26 @@ import com.monkfitness.app.domain.program.ProgramExerciseOrigin
 import com.monkfitness.app.domain.program.renumbered
 
 /**
- * §7's four levels of authority, as a value a screen can show and a test can assert.
+ * Four levels of authority, as a value a screen can show and a test can assert: pinned > explicit user
+ * override > compatible user change > pure generated content.
  *
- * ```text
- * PINNED  >  EXPLICIT USER OVERRIDE  >  COMPATIBLE USER CHANGE  >  PURE GENERATED CONTENT
- * ```
- *
- * The distinction between the first two is [ProgramExercise.isPinned], and the distinction between
- * the last two is whether what the user holds agrees with what the planner would produce. Nothing is
- * stored twice: a *level* is a reading of a plan element at the moment of reconciliation, which is
- * exactly what §7 means by *"compatible" versus "conflicting" is a comparison the editor makes when
- * it reconciles, not a property to be frozen here"*.
+ * The distinction between the first two is [ProgramExercise.isPinned], and between the last two is
+ * whether what the user holds agrees with what the planner would produce. Nothing is stored twice: a
+ * *level* is a reading of a plan element at the moment of reconciliation, because "compatible" versus
+ * "conflicting" is a comparison the editor makes when it reconciles, not a property to freeze here.
  */
 enum class PreservationLevel {
 
-    /** Pinned: never automatically changed (§7's highest level). */
+    /** Pinned: never automatically changed — the highest level of authority. */
     PINNED,
 
     /** The user's own element, which the plan does not agree with: kept, and shown as a conflict. */
     USER_OVERRIDE,
 
-    /** The user's own element, which the plan agrees with: kept, and nothing to report (§7). */
+    /** The user's own element, which the plan agrees with: kept, and nothing to report. */
     COMPATIBLE,
 
-    /** The generator's own element — the only level a regenerate pass may replace (§7). */
+    /** The generator's own element — the only level a regenerate pass may replace. */
     GENERATED
 }
 
@@ -59,19 +55,12 @@ enum class ChangeKind {
  *
  * A *replacement* is deliberately reported as its two halves — a [ChangeKind.DROPPED] and a
  * [ChangeKind.ADDED] on the same day — rather than as an inferred pairing. Pairing them would mean
- * asserting which new element "stands in for" which old one, and the planner has no such relation: it
- * produced the elements its focuses needed, and an element that left the plan left it. A screen is
- * free to pair them; the domain does not invent the relation.
+ * asserting which new element "stands in for" which old one, and the planner has no such relation: an
+ * element that left the plan left it. A screen is free to pair them; the domain does not invent the
+ * relation.
  *
- * @property level which of §7's four levels the element belongs to.
- * @property kind what happened to it.
- * @property dayPosition the plan day's 1-based position.
- * @property exerciseId the exercise the change is about, or `null` for a whole-day change.
- * @property programExerciseId the element's draft identity, or `null` for a whole-day change.
- * @property programDayId the day's identity, for a whole-day change.
- * @property agreesWithPlan whether the element matches what the plan produces for that day — the
- *   distinction between §7's *compatible* and *conflicting* user changes. Meaningful for
- *   [ChangeKind.PRESERVED]; `true` for an addition and `false` for a removal.
+ * @property agreesWithPlan whether the element matches what the plan produces for that day. Meaningful
+ *   for [ChangeKind.PRESERVED]; `true` for an addition and `false` for a removal.
  */
 data class ReconciliationChange(
     val level: PreservationLevel,
@@ -84,30 +73,27 @@ data class ReconciliationChange(
 )
 
 /**
- * What a reconciliation did — §7's *"conflicts with user choices are shown explicitly"*, as a value.
+ * What a reconciliation did — "conflicts with user choices are shown explicitly", as a value.
  *
  * The report is the whole reason `Regenerate` can be trusted: every element of the previous draft is
- * accounted for at most once, so "the plan was not replaced wholesale" is not a claim about the code
- * but a count a caller (or a test) can read. The helpers below are the questions a caller actually
- * asks — what survived, what changed, what the user would want to know about.
- *
- * @property changes every change, in day order and then in plan order within the day.
+ * accounted for at most once, so "the plan was not replaced wholesale" is a count a caller (or a test)
+ * can read rather than a claim about the code.
  */
 data class ReconciliationReport(val changes: List<ReconciliationChange>) {
 
     /**
-     * Whether the plan and the draft already agreed: nothing was added, nothing was dropped and no
-     * day was removed.
+     * Whether the plan and the draft already agreed: nothing was added, nothing was dropped and no day
+     * was removed.
      *
      * This is *not* the same as an empty report. A report names every element the draft holds, so a
      * regeneration that agrees with the draft still reports all of them as preserved — which is what
-     * makes "the plan was not replaced wholesale" countable. What a caller usually means by "nothing
-     * changed" is this predicate, and [conflicts] is what is worth showing when it is true.
+     * makes "the plan was not replaced wholesale" countable. This predicate is what a caller usually
+     * means by "nothing changed", and [conflicts] is what is worth showing when it is true.
      */
     val changedNothing: Boolean
         get() = addedCount == 0 && droppedCount == 0 && removedDayCount == 0
 
-    /** Every change at one of §7's levels. */
+    /** Every change at one of the four levels. */
     fun withLevel(level: PreservationLevel): List<ReconciliationChange> =
         changes.filter { it.level == level }
 
@@ -155,59 +141,42 @@ data class ReconciledPlan(
 )
 
 /**
- * §7's regeneration, as **reconciliation and never replacement**.
+ * Regeneration, as **reconciliation and never replacement**: the plan keeps everything the user owns,
+ * and may change only what the generator produced.
  *
- * ### The one sentence this file implements
- *
- * ```text
- * the plan keeps everything the user owns, and may change only what the generator produced
- * ```
- *
- * Applied per day, in the previous draft's own order, that sentence decides the whole algorithm:
+ * Applied per day, in the previous draft's own order, that one sentence decides the whole algorithm:
  *
  *  * a **pinned** element is kept where it is — its day, its place, its prescription, its pin and its
- *    identity. §7's *"pinned: never automatically change"* has no exception here, not even for a
- *    pinned element the plan disagrees with: disagreement is *reported*
- *    ([ReconciliationReport.conflicts]) and never acted on.
- *  * a **user-authored** element is kept for the same reasons — §7's *"explicit user override: never
- *    silently replace"* and its *"an element the user modified inside a Generated Program must be
- *    treated as user-authored/override state and preserved"*. It is kept whether or not the plan
- *    agrees with it; agreement decides only how it is *reported* (compatible or override).
+ *    identity. "Pinned: never automatically change" has no exception here, not even for a pinned element
+ *    the plan disagrees with: disagreement is *reported* ([ReconciliationReport.conflicts]) and never
+ *    acted on.
+ *  * a **user-authored** element is kept for the same reasons, whether or not the plan agrees with it;
+ *    agreement decides only how it is *reported* (compatible or override).
  *  * a **generated** element may change — and even then only when it has to. An element that already
- *    says what the plan says (same exercise, same prescription) *keeps its identity*, so a
- *    regeneration that changes one element does not churn the other twenty. §7's *"unchanged
- *    generated plan stays unchanged"* is that rule, and re-minting an unchanged element would be a
- *    hidden whole-plan replacement in slow motion.
- *  * a **newly needed** element is added with a fresh draft identity, and an element the plan no
- *    longer produces is dropped. Dropped elements are always generated ones: an element the user owns
- *    is not the plan's to remove, and there is no code path here that could remove one.
+ *    says what the plan says (same exercise, same prescription) *keeps its identity*, so a regeneration
+ *    that changes one element does not churn the other twenty: re-minting an unchanged element would be
+ *    a whole-plan replacement in slow motion.
+ *  * a **newly needed** element is added with a fresh draft identity, and an element the plan no longer
+ *    produces is dropped. Dropped elements are always generated ones: an element the user owns is not
+ *    the plan's to remove, and no code path here could remove one.
  *
- * ### An element the user owns **stands in** for the plan's element it agrees with
+ * An element the user owns **stands in** for the plan's element it agrees with. Matching is one-to-one
+ * against everything the draft holds, on what an element *says* — the exercise and the prescription,
+ * together, greedily in plan order — not on identity or position. That is what makes the *compatible*
+ * level real rather than a label: when the user's own element is what the plan would have produced
+ * anyway, it satisfies that plan element and nothing is added beside it. The alternative — treating the
+ * user's element as extra content and adding the plan's identical element next to it — would duplicate
+ * the exercise on the day. The user's own content therefore comes **first** on a day, and the
+ * generator's content follows in plan order around it.
  *
- * Matching is one-to-one against everything the draft holds, and it is on what an element *says* —
- * the exercise and the prescription, together, greedily in plan order — not on identity or position.
- * That is what makes §7's *compatible user change* a real level rather than a label: when the user's
- * own element is what the plan would have produced anyway, it satisfies that plan element, so nothing
- * is added beside it. The alternative — treating the user's element as extra content and adding the
- * plan's identical element next to it — would duplicate the exercise on the day, which is not what
- * "the user had already made this change" means.
+ * Identities here are working handles, not persisted facts: `Save` re-mints every day and element
+ * identity into the revision it writes, so nothing here decides what is stored. What it does decide is
+ * what the user *sees* between regeneration and save — an element that survived with its identity is
+ * the same element to every screen, and one that was replaced is recognisably new.
  *
- * The user's own content therefore comes **first** on a day, and the generator's content follows in
- * plan order around it — which is §8's *"establishes pinned/manual/fixed workouts first; fills
- * remaining slots around them"*, read one day at a time.
- *
- * ### Identity, and why it matters so little and so much
- *
- * A draft's identities are working handles: `Save` re-mints every day and element identity into the
- * revision it writes, so nothing here decides what is persisted. What it does decide is what the user
- * *sees* between regeneration and save — an element that survived with its identity is the same
- * element to every screen, and one that was replaced is recognisably new.
- *
- * ### What it never touches
- *
- * No revision (there is none in scope), no slot, no session, no history, no date and no clock: this
- * file is given a draft and a plan and returns days. The Scheduler still owns which dates those days
- * land on (§20), and a regeneration neither creates, moves nor cancels an opportunity.
+ * It touches no revision, slot, session, history, date or clock: it is given a draft and a plan and
+ * returns days. The Scheduler still owns which dates those days land on, and a regeneration neither
+ * creates, moves nor cancels an opportunity.
  */
 object PlanReconciler {
 
@@ -215,8 +184,7 @@ object PlanReconciler {
      * Reconciles [plan] with the plan [previous] already holds.
      *
      * @param previous the draft being regenerated — the record of everything the user owns.
-     * @param plan the plan the generator just produced.
-     * @param ids where the identities of added days and elements come from (§26).
+     * @param ids where the identities of added days and elements come from.
      */
     fun reconcile(
         previous: ProgramEditorDraft,
@@ -244,7 +212,6 @@ object PlanReconciler {
         val changes: List<ReconciliationChange> = emptyList()
     ) {
 
-        /** This reconciliation with one plan day reconciled. */
         fun withPosition(
             position: Int,
             previousDay: ProgramDay?,
@@ -355,9 +322,9 @@ object PlanReconciler {
     /**
      * The plan's elements matched one-to-one against a day's elements.
      *
-     * Two occurrences of one exercise are matched as two occurrences (§9) rather than collapsed: a
-     * match removes the element it consumed, so the second plan element of the same exercise looks
-     * for a second element to be satisfied by.
+     * Two occurrences of one exercise are matched as two occurrences rather than collapsed: a match
+     * removes the element it consumed, so the second plan element of the same exercise looks for a
+     * second element to be satisfied by.
      */
     private fun List<ProgramExercise>.matchAgainst(planned: List<GeneratedElement>): Matches =
         planned.fold(Matches(emptyList(), this)) { state, element ->
@@ -376,20 +343,20 @@ object PlanReconciler {
     private fun ProgramExercise.saysTheSameAs(element: GeneratedElement): Boolean =
         exerciseId == element.exerciseId && prescription == element.prescription
 
-    /** Whether the plan produces an element like this one anywhere on the day — §7's *compatible*. */
+    /** Whether the plan produces an element like this one anywhere on the day — the *compatible* case. */
     private fun List<GeneratedElement>.agreesWith(element: ProgramExercise): Boolean =
         any { it.exerciseId == element.exerciseId && it.prescription == element.prescription }
 
     /**
-     * Whether the user owns this element — §7's two highest levels together.
+     * Whether the user owns this element — the two highest levels together.
      *
-     * Both are kept; they differ only in what is reported about them, which is why one predicate
-     * answers "may the plan change this?" and [preservationLevel] answers "under which level?".
+     * Both are kept; they differ only in what is reported about them, which is why one predicate answers
+     * "may the plan change this?" and [preservationLevel] answers "under which level?".
      */
     private val ProgramExercise.isOwnedByTheUser: Boolean
         get() = isPinned || origin == ProgramExerciseOrigin.USER_AUTHORED
 
-    /** §7's level for an element the user owns: a pin outranks authorship. */
+    /** The level for an element the user owns: a pin outranks authorship. */
     private fun ProgramExercise.preservationLevel(agreesWithPlan: Boolean): PreservationLevel = when {
         isPinned -> PreservationLevel.PINNED
         agreesWithPlan -> PreservationLevel.COMPATIBLE
@@ -399,18 +366,15 @@ object PlanReconciler {
     /**
      * The plan element as a draft element, with an identity of its own and the generator's origin.
      *
-     * [GeneratedElement.focus] is carried across here, and this line is the **only** semantic
-     * responsibility P29 adds to the pure generated package. The focus is not something this file
-     * derives or classifies: the Focus Planner already assigned it to this element, and
-     * `GeneratedSlot` already asserts that the slot's elements are exactly its assignment's focuses in
-     * order. Materialising the element into a draft simply threw that existing fact away, and §19's
-     * snapshot then had no focus to freeze — which is why no honest read of *historical* focus existed
-     * until this copy was made.
+     * [GeneratedElement.focus] is carried across here, and that copy is the whole point: the focus is
+     * not derived or classified — the Focus Planner already assigned it and `GeneratedSlot` already
+     * asserts the slot's elements are exactly its assignment's focuses in order. Dropping it when the
+     * element was materialized into a draft left a session snapshot with no focus to freeze.
      *
-     * No persistence, no repository and no inference is introduced: the value is read off the element
-     * being converted and written onto the domain element beside it. `ProgramExercise.focus` is
-     * nullable, and a preserved element keeps whatever it already stated rather than being relabelled
-     * from the current plan — reconciliation must not rewrite history either.
+     * No persistence and no inference is introduced: the value is read off the element being converted.
+     * `ProgramExercise.focus` is nullable, and a preserved element keeps whatever it already stated
+     * rather than being relabelled from the current plan — reconciliation must not rewrite history
+     * either.
      */
     private fun GeneratedElement.asGeneratedElement(ids: DraftIdSource): ProgramExercise = ProgramExercise(
         programExerciseId = ProgramExerciseId(ids.newId()),
@@ -424,10 +388,10 @@ object PlanReconciler {
     /**
      * A day the plan added: a training day, unnamed.
      *
-     * The type is [ProgramDayType.TRAINING] because a slot is a workout — §8's focus dimension is not
-     * a day type, and generated days are all loaded work. The name is left `null` on purpose: the
-     * domain does not author user-facing text (§25), so a generated day is presented by its position
-     * and its type like any other unnamed day.
+     * The type is [ProgramDayType.TRAINING] because a slot is a workout — focus is not a day type, and
+     * generated days are all loaded work. The name is left `null` on purpose: the domain does not author
+     * user-facing text, so a generated day is presented by its position and its type like any other
+     * unnamed day.
      */
     private fun newGeneratedDay(position: Int, ids: DraftIdSource): ProgramDay = ProgramDay(
         programDayId = ProgramDayId(ids.newId()),
@@ -438,11 +402,11 @@ object PlanReconciler {
     /**
      * A day that already exists, kept as the user has it, ready to hold work.
      *
-     * Its identity, its name and its type survive — the user renamed it, or typed it, and neither is
-     * the plan's to change. The one exception is a rest day: a rest day prescribes nothing (§20) and
-     * there is no rest day in a generated plan, so a rest day that now holds elements is a training
-     * day. The alternative — dropping the plan's elements to keep the day a rest day — would discard
-     * the plan to preserve a type.
+     * Its identity, its name and its type survive — the user renamed it, or typed it, and neither is the
+     * plan's to change. The one exception is a rest day: a rest day prescribes nothing and there is no
+     * rest day in a generated plan, so a rest day that now holds elements is a training day. The
+     * alternative — dropping the plan's elements to keep the day a rest day — would discard the plan to
+     * preserve a type.
      */
     private fun ProgramDay.asWorkDay(): ProgramDay =
         if (type == ProgramDayType.REST) copy(type = ProgramDayType.TRAINING) else this

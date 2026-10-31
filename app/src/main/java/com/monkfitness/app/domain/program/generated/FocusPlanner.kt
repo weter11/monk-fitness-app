@@ -5,26 +5,12 @@ import com.monkfitness.app.domain.program.Focus
 import com.monkfitness.app.domain.program.FocusPlan
 
 /**
- * The **Focus Planner** (§8) — which focus every slot of a planning horizon is for.
+ * Which focus every slot of a planning horizon is for: one primary and `0–2` secondary focuses.
  *
- * ### What it decides, and what it does not
- *
- * It decides, for each training slot of the plan, **one primary focus and `0–2` secondary focuses**,
- * and it decides them for the horizon *as a whole*: the slots of a plan are not planned one workout
- * at a time and then collected, they are apportioned out of one running account of what the plan
- * still owes each focus. That is the difference between §8's *"operates over the whole planning
- * horizon"* and a per-workout rule, and it is visible in the shape of the code: one fold over the
- * slots, one account of exposure, one deterministic comparison repeated until the horizon is full.
- *
- * It does **not** decide which exercise realizes a focus (that is the generator's selection), when a
- * slot is on the calendar (Scheduler, §20), whether a workout happened (session runtime, §19), or
- * anything adaptive at all: it reads [GenerationPreferences] as plain input and computes no evidence,
- * no progression and no recovery policy (§30 step 10 is before the Adaptive Engine).
- *
- * ### The arithmetic, in one place
- *
- * Exposure is apportioned with integer arithmetic only — no weight, no coefficient and no score is
- * attached to an exercise, and nothing here is multiplied by a physiological quantity:
+ * The slots are apportioned out of one running account of what the plan still owes each focus, not
+ * planned one workout at a time and then collected — that is what makes it a horizon rather than a
+ * per-workout rule, and it is one fold over the slots in the code. Exposure is apportioned with
+ * integer arithmetic only: no weight, coefficient or score is attached to an exercise.
  *
  * ```text
  * weight(focus)      BALANCED → every eligible focus weighs the same
@@ -33,58 +19,35 @@ import com.monkfitness.app.domain.program.FocusPlan
  * need(focus, t)     weight(focus) · t  −  covered(focus) · total weight
  * ```
  *
- * where `t` is the number of the assignment being made (1-based, counted across the whole plan) and
- * `covered` is what the focus has already had — the exposure the caller supplied plus the assignments
- * this pass has already made. The focus with the largest `need` is chosen; ties are broken by the
- * vocabulary's canonical order, which is the only tie-break in this file and is deterministic by
- * construction.
+ * `t` is the number of the assignment being made (1-based, counted across the whole plan) and
+ * `covered` is the exposure the caller supplied plus what this pass has already assigned; the largest
+ * `need` wins, and ties break on the vocabulary's canonical order — the only tie-break here, and
+ * deterministic by construction. Counting `t` across the whole plan is what makes the remaining
+ * horizon part of the comparison, and including the caller's exposure is what suppresses a focus that
+ * has already had its share without a special case. A focus over its share has a *negative* `need`
+ * and is left alone.
  *
- * The formula has three properties worth stating, because each of them is a §8 requirement that this
- * shape satisfies rather than approximates:
- *
- *  * **target deficit** — a focus the plan owes more of has a larger `need`, and a focus that has
- *    already had more than its share has a *negative* `need` and is left alone;
- *  * **recent exposure** — because `covered` includes what the caller supplied, exposure that
- *    already happened suppresses further allocation of that focus without any special case;
- *  * **remaining horizon** — `t` counts across the whole plan, so the same request planned over three
- *    slots and over twelve produces different plans: what the horizon can still hold is part of the
- *    comparison, not a post-processing step.
- *
- * ### The soft rules, and why they are soft
- *
- * Two inputs can *demote* the focus that `need` would choose — a primary within the recent window
+ * Two inputs can demote the focus `need` would choose — a primary within the recent window
  * ([GenerationPolicy.recoveryWindowSlots]) and a focus whose recent load has reached
  * [GenerationPolicy.recentLoadThreshold]. Both demote it **only while another eligible focus still
- * needs exposure**; when none does, the demoted focus is chosen anyway. That fallback is the whole
- * difference between a preference and §14's forbidden universal hard rule: a rule with no fallback
- * would make the same focus impossible on two consecutive slots no matter what the plan owes, and
- * would be a 48-hour rule expressed in slots. Nothing here moves a workout, changes a frequency,
- * changes a duration, replaces a focus the user stated or cancels anything — §14's list of what
- * recovery may not do is a list of things this type has no vocabulary to express.
+ * needs exposure**; when none does, the demoted focus is chosen anyway. That fallback is what keeps
+ * them preferences rather than a forbidden universal hard rule: a rule with no fallback would make
+ * the same focus impossible on two consecutive slots and would be a 48-hour rule expressed in slots.
+ * The recovery context ([RecoveryContext.CAUTIOUS]) narrows how many secondary focuses a slot may
+ * take, and is the only effect it has.
  *
- * The recovery *context* ([RecoveryContext.CAUTIOUS]) narrows how many secondary focuses a slot may
- * take — §14's *"more conservative"* — and is the only effect it has.
- *
- * ### Determinism
- *
- * The pass is a function of its arguments. It reads no clock, no random source, no map iteration
- * order and no mutable state: the account is an immutable value rolled forward by `fold`, focuses are
- * compared in `Focus.entries` order, and the same arguments produce the same assignments every time,
- * in any process, on any device (§9's *"same inputs must produce the same generated result"*).
+ * Determinism: no clock, no random source, no map iteration order and no mutable state — the account
+ * is an immutable value rolled forward by `fold`, focuses are compared in `Focus.entries` order, and
+ * the same arguments produce the same assignments every time, in any process, on any device.
  */
 object FocusPlanner {
 
     /**
      * The focus assignment of every slot of a plan, in plan order.
      *
-     * @param focus the Goals & Focus configuration being planned for.
-     * @param slotCount how many slots the horizon holds.
      * @param plannableFocuses the focuses that can actually be planned — the configuration's eligible
      *   focuses, minus the ones no usable exercise trains. Allocation runs over this set, so the plan
      *   never owes exposure to a focus it cannot train.
-     * @param preferences the caller's plain signals (recent exposure, recent load, recovery).
-     * @param policy this stage's explicit numbers.
-     * @return one [FocusAssignment] per slot, or an empty list when nothing is plannable.
      */
     fun allocate(
         focus: FocusPlan,
@@ -113,19 +76,14 @@ object FocusPlanner {
     }
 
     /**
-     * The relative weight of each plannable focus under [focus] — the planner's reading of the
-     * configuration, and the only place a configuration becomes a number.
+     * The relative weight of each plannable focus under [focus] — the only place a configuration
+     * becomes a number.
      *
-     * * `BALANCED` gives every plannable focus the same weight, because the user stated no share and
-     *   no share is invented for them;
-     * * `FOCUSED` gives the named focuses the same weight and every other focus none, because the
-     *   user named focuses and stated no share;
-     * * `CUSTOM` uses the user's own percentages, verbatim.
-     *
-     * The values are **relative** — they are compared with each other inside one plan and are never
-     * read as a quantity of anything. A `BALANCED` plan's weights are not "1 unit of work" and a
-     * `CUSTOM` plan's are not "100 units"; both are shares of one plan, and the arithmetic above
-     * subtracts exposure from them in the same unit the caller reported exposure in.
+     * `BALANCED` weighs every plannable focus the same, because the user stated no share and none is
+     * invented for them; `FOCUSED` weighs the named focuses the same and every other focus none;
+     * `CUSTOM` uses the user's own percentages verbatim. The values are **relative** — compared with
+     * each other inside one plan, never read as a quantity of anything — and exposure is subtracted
+     * from them in the unit the caller reported it in.
      */
     fun weightsOf(focus: FocusPlan, plannableFocuses: List<Focus>): Map<Focus, Int> =
         when (focus) {
@@ -140,9 +98,8 @@ object FocusPlanner {
      * The weight every focus carries in a `BALANCED` plan, and in the named focuses of a `FOCUSED`
      * one.
      *
-     * The two forms share the number deliberately: it is a *relative* weight, and both forms mean
-     * "the same amount of attention to each of these", so a plan that intends equal attention is one
-     * number rather than two that could drift apart.
+     * The two forms share the number deliberately: it is a *relative* weight, both mean "the same
+     * amount of attention to each of these", and one number cannot drift from itself.
      */
     private const val BALANCED_WEIGHT: Int = 1
 
@@ -185,7 +142,7 @@ object FocusPlanner {
          * The focuses this slot serves: the primary (always one) and the secondaries the horizon
          * still owes (none, one or two).
          *
-         * The secondaries are taken while a focus still has a **positive** deficit, which is what
+         * Secondaries are taken only while a focus still has a **positive** deficit, which is what
          * makes `0` secondaries a real outcome rather than a special case: once every plannable focus
          * has had at least its share, a slot is built around one focus instead of stacking more.
          */
@@ -205,7 +162,7 @@ object FocusPlanner {
             }
         }
 
-        /** How many secondary focuses this slot may take, from §14's recovery context. */
+        /** How many secondary focuses this slot may take, from the recovery context. */
         private fun secondaryLimit(recovery: RecoveryContext, policy: GenerationPolicy): Int =
             when (recovery) {
                 RecoveryContext.CAUTIOUS -> policy.cautiousSecondaryFocusLimit

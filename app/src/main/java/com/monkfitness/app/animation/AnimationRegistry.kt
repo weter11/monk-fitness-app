@@ -6,7 +6,6 @@ object AnimationRegistry {
     private val registry = mutableMapOf<String, PoseBuilder>()
 
     init {
-        // Core registrations
         register("world_greatest_stretch", DynamicWorldsGreatestStretchPose())
         register("birddog_hold", StaticBirdDogHoldPose())
         register("birddog_reps", AlternatingBirdDogPose())
@@ -60,21 +59,16 @@ object AnimationRegistry {
         register("wall_sit_hold", WallSitPose())
         register("ankle_mobility_standard", AnkleMobilityPose())
         register("calf_stretch_hold", CalfStretchPose())
-        // Animation-coverage phase (batch 2) — the upper-body pull / bar-support family.
         register("row_standard", RowsPose())
         register("dip_parallel_bar", DipsPose())
         register("band_pull_aparts_standard", BandPullApartPose())
         register("yt_raises_standard", YTRaisesPose())
-        // Animation-coverage phase (batch 3) — the hip-mobility / hip-rotation family.
         register("hip_circles_hold", HipCirclesPose())
         register("leg_swings_hold", LegSwingsPose())
         register("ninety_ninety_hips", NinetyNinetyHipsPose())
         register("piriformis_stretch_hold", PiriformisStretchPose())
-        // Animation-coverage phase (batch 4) — the cervical-mobility family.
         register("chin_tuck_standard", ChinTuckPose())
         register("neck_circles_hold", NeckCirclesPose())
-        // Animation-coverage phase (batch 5) — the phase's tail: the three exercises the earlier,
-        // family-grouped batches could not carry (a shoulder CAR, a ballistic jack and a kneeling fold).
         register("shoulder_cars_standard", ShoulderCarsPose())
         register("jumping_jack_standard", JumpingJacksPose())
         register("child_pose_hold", ChildPose())

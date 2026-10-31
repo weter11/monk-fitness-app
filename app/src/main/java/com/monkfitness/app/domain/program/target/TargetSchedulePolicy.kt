@@ -15,7 +15,7 @@ data class TargetSupersededOccurrence(
     val reason: TargetSupersessionReason
 )
 
-/** Pure temporal interpretation of a Stage 5 target plan at an explicit as-of date. */
+/** Pure temporal interpretation of a target plan at an explicit as-of date. */
 data class TargetScheduleDecision(
     val targetPlan: TargetPlan,
     val preserved: List<TargetExistingOccurrence>,

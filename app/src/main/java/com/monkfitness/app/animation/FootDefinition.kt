@@ -20,8 +20,8 @@ data class FootDefinition(
     private val scratchHoriz = Vector3()
 
     /**
-     * Procedurally computes Heel and Toe positions from Ankle and a forward direction.
-     * The ankle remains the rotational pivot (origin in this context).
+     * Computes heel and toe positions from the ankle and a forward direction; the ankle stays the
+     * rotational pivot.
      */
     fun computeHeelToe(ankle: Vector3, forward: Vector3, outHeel: Vector3, outToe: Vector3) {
         val dir = forward.normalizedCopy()
@@ -29,15 +29,11 @@ data class FootDefinition(
     }
 
     /**
-     * Orientation-aware overload. Promotes the ankle to a real joint: the authored
-     * [ankleRotation] is composed with the neutral (shank-perpendicular) foot
-     * [neutralForward] so dorsi/plantar-flexion and inversion/eversion are honored
-     * instead of being dropped. The existing pitch clamp is applied to the *resulting*
-     * foot direction as a safety bound, never as the only degree of freedom. When
-     * [ankleRotation] is the identity rotation the result is identical to
-     * [computeHeelToe], preserving all flat-foot rendering.
-     *
-     * Allocation-free: writes into [scratchDir]/[scratchHoriz] and the outputs.
+     * Orientation-aware overload: the authored [ankleRotation] is composed with the neutral
+     * (shank-perpendicular) [neutralForward] so dorsi/plantar-flexion and inversion/eversion are
+     * honoured instead of dropped. The pitch clamp then bounds the *resulting* direction — a safety
+     * bound, never the only degree of freedom. Identity [ankleRotation] reproduces [computeHeelToe],
+     * so flat-foot rendering is unchanged. Allocation-free.
      */
     fun computeHeelToe(
         ankle: Vector3,
@@ -49,7 +45,7 @@ data class FootDefinition(
         // Compose the authored ankle orientation with the neutral foot direction.
         SkeletonMath.rotAround(neutralForward, ankleRotation.axis, ankleRotation.angle, scratchDir)
         scratchDir.normalize()
-        // Pitch clamp remains a bound on the resulting foot direction, not the sole DOF.
+        // The clamp bounds the resulting foot direction; it is not the sole DOF.
         applyPitchClamp(scratchDir)
         writeHeelToe(ankle, scratchDir, outHeel, outToe)
     }
@@ -60,9 +56,8 @@ data class FootDefinition(
     }
 
     /**
-     * Clamps the elevation (pitch) of [dir] into [minPitch]..[maxPitch] in place,
-     * leaving the horizontal heading untouched. Used as a safety bound on the
-     * articulated foot direction. The output is always unit length.
+     * Clamps the elevation (pitch) of [dir] into [minPitch]..[maxPitch] in place, leaving the
+     * horizontal heading untouched. The output is always unit length.
      */
     private fun applyPitchClamp(dir: Vector3) {
         val pitch = atan2(dir.y, sqrt(dir.x * dir.x + dir.z * dir.z))
@@ -74,12 +69,11 @@ data class FootDefinition(
                 scratchHoriz.x /= hMag
                 scratchHoriz.z /= hMag
             } else {
-                // Purely vertical direction: the horizontal heading is degenerate, so there is
-                // no in-plane direction to preserve. Without a fallback heading the reconstructed
-                // vector below collapses to (0, sin(clamped), 0) — a NON-unit vector (|sin 45°|
-                // = 0.707) — which then scales heel/toe bones ~29% short (the R1 foot-derivation
-                // defect). Fall back to a stable +X heading so the clamped foot direction stays
-                // unit length and the derived bones keep their full footLength·ratio magnitude.
+                // Purely vertical direction: the horizontal heading is degenerate. Without a
+                // fallback heading the reconstructed vector below collapses to (0, sin(clamped), 0)
+                // — a NON-unit vector (|sin 45°| = 0.707) — which scales the heel/toe bones ~29%
+                // short. A stable +X heading keeps the direction unit length and the derived bones
+                // at their full footLength·ratio magnitude.
                 scratchHoriz.set(1f, 0f, 0f)
             }
             dir.set(

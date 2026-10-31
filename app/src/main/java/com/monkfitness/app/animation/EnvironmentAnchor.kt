@@ -1,8 +1,5 @@
 package com.monkfitness.app.animation
 
-/**
- * EnvironmentAnchorType represents types of world objects.
- */
 enum class EnvironmentAnchorType {
     FLOOR,
     BAR,
@@ -12,9 +9,7 @@ enum class EnvironmentAnchorType {
     RINGS
 }
 
-/**
- * EnvironmentAnchor describes fixed objects in the world for poses to attach/refer to.
- */
+/** A fixed object in the world that a pose can attach to or refer to. */
 data class EnvironmentAnchor(
     val id: String,
     val type: EnvironmentAnchorType,

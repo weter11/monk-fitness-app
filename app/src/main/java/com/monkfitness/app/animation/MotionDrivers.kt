@@ -2,11 +2,7 @@ package com.monkfitness.app.animation
 
 import kotlin.math.*
 
-/**
- * Immutable driver class representing alternating body and limb motion.
- * Typically used for exercises with a clear left-right alternation sequence
- * (e.g., alternating lunges, mountain climbers, running, high knees, marching, skaters).
- */
+/** Driver values for alternating left-right motion (lunges, mountain climbers, running, marching). */
 data class AlternatingMotion(
     val phase: Float,
     val left: Float,
@@ -18,11 +14,7 @@ data class AlternatingMotion(
     val pelvisDrop: Float
 )
 
-/**
- * Immutable driver class representing symmetrical, bilateral body and limb motion.
- * Typically used for exercises where left and right sides move in unison
- * (e.g., standard air squats, push-ups, symmetrical jumps, symmetrical extensions).
- */
+/** Driver values for symmetrical motion, where both sides move in unison (squats, push-ups). */
 data class BilateralMotion(
     val phase: Float,
     val left: Float,
@@ -34,10 +26,7 @@ data class BilateralMotion(
     val pelvisDrop: Float
 )
 
-/**
- * Immutable driver class representing explosive jump patterns.
- * Models preparation/crouch, flight (airborne), landing absorption, and recovery phases.
- */
+/** Driver values for explosive jump patterns: preparation/crouch, flight, landing absorption. */
 data class JumpMotion(
     val phase: Float,
     val left: Float,
@@ -49,10 +38,7 @@ data class JumpMotion(
     val pelvisDrop: Float
 )
 
-/**
- * Immutable driver class representing continuous, non-alternating cyclic motion.
- * Typically used for exercises with continuous, phase-shifted loops (e.g., bicycle crunches, skaters, thoracic rotations).
- */
+/** Driver values for continuous, non-alternating cyclic motion with phase-shifted loops. */
 data class ContinuousMotion(
     val phase: Float,
     val left: Float,
@@ -65,17 +51,15 @@ data class ContinuousMotion(
 )
 
 /**
- * Stateless authoring utility producing normalized, smooth, branchless biomechanical drivers for exercise poses.
+ * Stateless authoring utility producing normalized, smooth, branchless biomechanical drivers, so pose
+ * builders need no ad-hoc trig and transitions stay continuous with no velocity spikes.
  *
- * This utility completely eliminates redundant trigonometric and algebraic phase calculations in pose builders,
- * ensuring zero velocity spikes and mathematically continuous transitions in the animation pipeline.
+ * All values are normalized to 0..1 over `progress` in 0..1.
  */
 object MotionDrivers {
 
     private const val PI_F = Math.PI.toFloat()
     private const val TWO_PI_F = PI_F * 2f
-
-    // --- PHASE-BASED PURE MATHEMATICAL primitves (allocation-free, stateless, deterministic) ---
 
     @JvmStatic
     fun PositiveHalfSine(progress: Float): Float = max(0f, sin(progress * TWO_PI_F))
@@ -151,11 +135,7 @@ object MotionDrivers {
     @JvmStatic fun easeInOut(t: Float) = EaseInOut(t)
 
 
-    // --- Existing composite state models preserved for backwards compatibility ---
 
-    /**
-     * Generates normalized drivers for alternating left-right movements.
-     */
     fun alternating(progress: Float): AlternatingMotion {
         val p = progress.coerceIn(0f, 1f)
 
@@ -185,9 +165,7 @@ object MotionDrivers {
         )
     }
 
-    /**
-     * Generates normalized drivers for bilateral (symmetrical) movements.
-     */
+
     fun bilateral(progress: Float): BilateralMotion {
         val p = progress.coerceIn(0f, 1f)
 
@@ -218,9 +196,7 @@ object MotionDrivers {
         )
     }
 
-    /**
-     * Generates normalized drivers for explosive jump exercises.
-     */
+
     fun jump(progress: Float): JumpMotion {
         val p = progress.coerceIn(0f, 1f)
 
@@ -256,9 +232,7 @@ object MotionDrivers {
         )
     }
 
-    /**
-     * Generates normalized drivers for continuous, non-alternating cyclic exercises.
-     */
+
     fun continuous(progress: Float): ContinuousMotion {
         val p = progress.coerceIn(0f, 1f)
 

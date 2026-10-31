@@ -1,9 +1,6 @@
 package com.monkfitness.app.animation
 
-/**
- * SupportContact represents one contact with the environment.
- * Optionally refers to an EnvironmentAnchor by anchorId.
- */
+/** One contact with the environment, optionally bound to an EnvironmentAnchor by `anchorId`. */
 data class SupportContact(
     val point: SupportPoint,
     val supportsWeight: Boolean = true,

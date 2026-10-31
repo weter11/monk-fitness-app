@@ -8,48 +8,27 @@ import com.monkfitness.app.domain.program.ProgramMode
 import java.time.DayOfWeek
 
 /**
- * The transfer format's **reader**: JSON text, as the [ProgramTransferDocument] it declares — §5's
- * *parse* and *schema validation* steps.
+ * The transfer format's reader: JSON text, as the [ProgramTransferDocument] it declares — the *parse* and
+ * *schema validation* steps.
  *
- * ### The order is the pipeline
- *
- * §5 fixes the order of the steps, and this file walks them in that order because the order is what
- * makes each refusal the *right* one:
- *
- * ```text
- * the byte limit        a document is read into memory, so how large it may be is part of the format
- * parse                 Json.read: a syntax failure produces no value at all
- * the marker            "format": "monkfitness.program"  → not a program file, before anything is read
- * formatVersion         present, a whole number, and supported → before the schema, because a version
- *                       this reader does not know is a document whose schema it does not know either
- * the schema            every field, kind and token → unknown fields refused, not ignored
- * ```
- *
- * ### The reader is an allowlist, field by field
+ * The order is the pipeline, and the order is what makes each refusal the right one: the byte limit, the
+ * parse (a syntax failure produces no value at all), the marker, then `formatVersion` — before the schema,
+ * because a version this reader does not know is a document whose schema it does not know either — then
+ * the schema itself.
  *
  * Every record's allowed field names are literals here, and a field that is not among them is a finding
- * ([ProgramTransferIssue.UnknownField]) rather than something quietly stepped over. That is what makes
- * §2's *"allowlist design, not a blacklist"* mechanical: the format carries exactly what this file
- * reads, and a document that carries more was written by something else. The allowed set is chosen
- * *per variant* (`FIXED_DAYS` carries `days`, `INDEFINITE` does not), so a record that carries the
+ * ([ProgramTransferIssue.UnknownField]) rather than something quietly stepped over. The allowed set is
+ * chosen *per variant* (`FIXED_DAYS` carries `days`, `INDEFINITE` does not), so a record that carries the
  * other variant's field is a finding rather than a second reading of one fact.
  *
- * ### One pass, every finding
+ * Sibling fields are read independently and their findings are collected, so a document with four problems
+ * reports four — a user fixing a file by hand gets the whole list rather than one line per attempt. The
+ * gate is at the top: **a document is produced only when there is not one finding**, so a value built
+ * best-effort from a partly broken document can never be mistaken for a valid one.
  *
- * The reading is a chain of `Read` steps, each of which answers *the value, or nothing, and what was
- * wrong with the way*. Sibling fields are read independently and their findings are collected, so a
- * document with four problems reports four — a user fixing a file by hand gets the whole list rather
- * than one line per attempt. The gate is at the top: **a document is produced only when there is not
- * one finding**, so a value built best-effort from a partly broken document can never be mistaken for a
- * valid one.
- *
- * ### What this file does *not* do
- *
- * It never decides whether the document describes a *valid program*: a fixed duration of `0` days, a
- * blank exercise id, a rest day with elements, an empty weekday list and a custom focus that does not
- * sum to 100% all read perfectly here and are refused one layer up ([ProgramTransferValidation], §6).
- * The separation is §5's own — *schema validation* then *semantic validation* — and keeping it means
- * the schema layer has no business rule to duplicate and the semantic layer has no parsing to redo.
+ * It never decides whether the document describes a *valid program*: a fixed duration of `0` days, a blank
+ * exercise id, a rest day with elements and a custom focus that does not sum to 100% all read perfectly
+ * here and are refused one layer up ([ProgramTransferValidation]).
  */
 internal object ProgramTransferReader {
 
@@ -126,12 +105,10 @@ internal object ProgramTransferReader {
         return document ?: throw SchemaViolation(issues)
     }
 
-    // ------------------------------------------------------------------ the document's own shape
-
     /**
      * The `format` marker, as findings rather than as a refusal: a *missing* marker is a missing required
-     * field, while a marker that *is* there and says something else is not this format at all — and that
-     * is a sentence about the file rather than about a program.
+     * field, while a marker that *is* there and says something else is not this format at all — a sentence
+     * about the file rather than about a program.
      */
     private fun markerIssues(record: JsonValue.JsonObject): List<ProgramTransferIssue> =
         when (val marker = record.named("format")) {
@@ -180,10 +157,10 @@ internal object ProgramTransferReader {
         val days = fieldOf(record, REVISION, "days")
             .then { value -> arrayOf(value, "$REVISION.days") }
             .then { elements -> dayList(elements) }
-        // §30 step 28. Required, not optional: the writer always writes it, empty included, so "the user
-        // named nothing" is a stated `[]` and not an absent key (§11's one representation per value).
-        // Reading it as optional would mean an absent field and an empty list are the same document, and
-        // they are not — one is a file that did not say, the other is a file that said "nothing".
+        // Required, not optional: the writer always writes it, empty included, so "the user named nothing"
+        // is a stated `[]` and not an absent key. Reading it as optional would make an absent field and an
+        // empty list the same document, and they are not — one is a file that did not say, the other is a
+        // file that said "nothing".
         val preferred = fieldOf(record, REVISION, "preferredExercises")
             .then { value -> arrayOf(value, "$REVISION.preferredExercises") }
             .then { elements -> preferredIdList(elements) }
@@ -209,18 +186,16 @@ internal object ProgramTransferReader {
     }
 
     /**
-     * The user's exercise preference, in the user's own order (§9's *user choice*).
+     * The user's exercise preference, in the user's own order.
      *
-     * A **schema** read, and it reads exactly three things: that every element is text, that no element is
-     * blank, and that no exercise is named twice. Nothing here decides whether an id names a real shipped
-     * exercise — that is §5's separate *exerciseId validation* step and it belongs to
-     * [ProgramTransferValidation], which holds the library. Duplication is refused here rather than there
-     * because a preference is an *order*, and two entries claiming the same position make the order mean
-     * two things at once; that is a property of the shape, not of any catalogue.
+     * A **schema** read: every element is text, no element is blank, and no exercise is named twice.
+     * Whether an id names a real shipped exercise is a separate step and belongs to
+     * [ProgramTransferValidation], which holds the library. Duplication is refused here because a
+     * preference is an *order*, and two entries claiming the same position make the order mean two things
+     * at once — a property of the shape, not of any catalogue.
      *
-     * The order is preserved exactly. No sorting, no de-duplicating-in-order, no canonicalisation: an
-     * array in a document is already the order, and any of those operations would silently re-rank what
-     * the user stated.
+     * The order is preserved exactly: no sorting, no de-duplicating-in-order, no canonicalisation. An array
+     * in a document is already the order, and any of those would silently re-rank what the user stated.
      */
     private fun preferredIdList(elements: List<JsonValue>): Read<List<String>> {
         val path = "$REVISION.preferredExercises"
@@ -377,8 +352,6 @@ internal object ProgramTransferReader {
         return Read(focus, issues)
     }
 
-    // ------------------------------------------------------------------ the plan
-
     private fun dayList(elements: List<JsonValue>): Read<List<DayTransfer>> {
         val days = elements.mapIndexed { index, element -> day(element, index) }
         return collect(days)
@@ -515,19 +488,15 @@ internal object ProgramTransferReader {
         return Read(share, issues)
     }
 
-    // ------------------------------------------------------------------ the primitives
-
     /**
      * What one step of the reading produced: the value, or nothing, plus what was wrong with the way.
      *
      * A value and its findings travel together rather than as an exception, which is what lets a document
-     * with several problems report all of them — a user fixing a file by hand should not have to run the
-     * import once per mistake. Nothing here *throws* for a finding; the top of [read] is where a
-     * document with any finding is refused.
+     * with several problems report all of them. Nothing here *throws* for a finding; the top of [read] is
+     * where a document with any finding is refused.
      */
     private class Read<T>(val value: T?, val issues: List<ProgramTransferIssue>) {
 
-        /** This reading, then [next] on its value, with both sets of findings. */
         fun <R> then(next: (T) -> Read<R>): Read<R> = value
             ?.let { present -> next(present).let { after -> Read(after.value, issues + after.issues) } }
             ?: Read(null, issues)
@@ -592,7 +561,7 @@ internal object ProgramTransferReader {
      *
      * Absent is a value here — an unnamed day states no name — so the reading answers `null` with no
      * finding when the field is not there, and a finding when it is there and is not text. The caller
-     * cannot tell the two apart from the value alone, and does not need to: the top of [read] refuses the
+     * cannot tell the two apart from the value alone and does not need to: the top of [read] refuses the
      * document whenever *any* finding exists, so a malformed optional field can never be silently read as
      * an absent one.
      */

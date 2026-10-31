@@ -5,100 +5,82 @@ import com.monkfitness.app.domain.common.ProgramExerciseId
 import com.monkfitness.app.domain.prescription.Prescription
 
 /**
- * Where a draft's working identities come from (§26: *identity generation is injectable*).
+ * Where a draft's working identities come from.
  *
- * A draft addresses its days and its plan elements by id, so the editor's operations that *add*
- * something need one. The generator is a port rather than a call so that the editor stays pure — it
- * imports nothing but the domain and `kotlin.` — and so that a test can supply a sequence it can read
- * back. Identity minted here is the draft's own handle and is **never** persisted: `Save` re-mints
- * every day and element identity into the revision it writes (§6, §23).
+ * A draft addresses its days and plan elements by id, so the editor's *add* operations need one. The
+ * generator is a port rather than a call so the editor stays pure — it imports nothing but the domain
+ * and `kotlin.` — and so a test can supply a sequence it can read back. Identity minted here is the
+ * draft's own handle and is **never** persisted: `Save` re-mints every day and element identity into
+ * the revision it writes.
  */
 fun interface DraftIdSource {
 
-    /** A new identity for one draft day or one draft plan element. */
     fun newId(): String
 }
 
 /**
  * The editor's **edit** step, as a value: every operation answers with the next draft.
  *
- * The editor is draft-first in the literal sense (§6, §7): `Generate`, `Regenerate`, and here every
- * manual change, alter only a draft, and a revision appears only when `Save` is asked for one. That
- * property is not a convention about how the code is written — it is this class's shape. There is no
- * mutating method, no `var`, and no reference to a `Program`, a `ProgramRevision` or a repository
- * anywhere in it: an operation takes a draft and returns a draft, so the only way to reach storage is
- * through [com.monkfitness.app.domain.usecase.ProgramEditorService.save].
+ * `Generate`, `Regenerate` and every manual change alter only a draft, and a revision appears only when
+ * `Save` is asked for one. That property is this class's shape: there is no mutating method, no `var`,
+ * and no reference to a `Program`, a `ProgramRevision` or a repository — an operation takes a draft and
+ * returns a draft, so the only way to reach storage is through
+ * [com.monkfitness.app.domain.usecase.ProgramEditorService.save].
  *
  * The operations are *total* for every addressable target and *partial* only where the domain itself
  * is: a draft that does not hold the day an operation names is a caller bug and fails loudly, and a
- * rest day may not be produced with elements still in it (§20) — the user removes them first, one
- * deliberate action per element, instead of losing them to an implicit tidy-up (§33).
+ * rest day may not be produced with elements still in it — the user removes them first, one deliberate
+ * action per element, instead of losing them to an implicit tidy-up.
  *
  * Adding an exercise never checks it against anything: a manual program is free-form, its
- * prescriptions are unrestricted by generator ranges, and the same exercise may appear as often as
- * the user wants as long as every occurrence keeps its own identity (§2, §9, §10). That is why
- * [duplicatingExercise] exists at all: repeating an exercise is an ordinary plan edit, not a
- * conflict.
- *
- * @param draft the draft this editor is editing.
- * @param ids where the identities of newly added days and elements come from.
+ * prescriptions are unrestricted by generator ranges, and the same exercise may appear as often as the
+ * user wants as long as every occurrence keeps its own identity. That is why [duplicatingExercise]
+ * exists: repeating an exercise is an ordinary plan edit, not a conflict.
  */
 class ProgramDraftEditor(val draft: ProgramEditorDraft, private val ids: DraftIdSource) {
-
-    // ---------------------------------------------------------------- the Program's own facts
 
     /** The working name. A name that is blank is a draft state, not an error — validation's job. */
     fun renamed(name: String): ProgramDraftEditor = next(draft.copy(name = name))
 
-    /** The working description. Not a structural change (§6). */
+    /** The working description. Not a structural change. */
     fun described(description: String): ProgramDraftEditor = next(draft.copy(description = description))
 
-    /** The working mode. Changing it *is* structural, and §2 makes the switch explicit. */
+    /** The working mode. Changing it *is* structural, and the switch is explicit. */
     fun withMode(mode: ProgramMode): ProgramDraftEditor = next(draft.copy(mode = mode))
 
-    /** The working duration (§20). */
     fun withDuration(duration: ProgramDuration): ProgramDraftEditor = next(draft.copy(duration = duration))
 
-    /** The working schedule (§20). */
     fun withSchedule(schedule: ProgramSchedule): ProgramDraftEditor = next(draft.copy(schedule = schedule))
 
     /**
-     * The working Goals & Focus configuration (§8, §7's *Goals & Focus* step).
+     * The working Goals & Focus configuration.
      *
-     * It is an ordinary working fact of the draft — structural content (§6), so a save that changes it
-     * and nothing else still creates a revision — and it is what the Generated Planner is built from.
-     * The editor neither validates nor interprets it here: a `FocusPlan` is already a value that
-     * cannot exist in an invalid state (a custom allocation that does not sum to 100% is refused by
-     * its own constructor), so there is nothing left for this operation to check.
+     * It is structural content, so a save that changes it and nothing else still creates a revision, and
+     * it is what the Generated Planner is built from. The editor neither validates nor interprets it: a
+     * `FocusPlan` cannot exist in an invalid state, so there is nothing left to check.
      */
     fun withFocus(focus: FocusPlan): ProgramDraftEditor = next(draft.copy(focus = focus))
 
     /**
      * The working **exercise preference**: the exercises generation should reach for, most preferred
-     * first (§9's *user choice*).
+     * first.
      *
      * Whole-value, like [withFocus] and for the same reason: an [ExercisePreference] cannot exist in an
-     * invalid state — a duplicate or a blank name is refused by its own constructor — so the editor has
-     * nothing left to validate and no reason to grow three near-identical operations that would each
-     * have to re-implement the ordering rules. The three *user actions* — add, remove, move — live on
-     * [ExercisePreference] as [ExercisePreference.preferring], [ExercisePreference.without] and
-     * [ExercisePreference.moved], and this is the single place a changed value reaches the draft.
-     *
-     * It is structural content for the reason [withFocus] is: §6 makes *program-behavior* changes
-     * revision-creating, so a save that reorders the preference and changes nothing else still creates
-     * a revision.
+     * invalid state, so the editor has nothing to validate and no reason to grow three near-identical
+     * operations that would each re-implement the ordering rules. The three *user actions* — add,
+     * remove, move — live on [ExercisePreference] as [ExercisePreference.preferring],
+     * [ExercisePreference.without] and [ExercisePreference.moved], and this is the single place a
+     * changed value reaches the draft. It is structural content, so a save that only reorders the
+     * preference still creates a revision.
      */
     fun withPreferredExercises(preference: ExercisePreference): ProgramDraftEditor =
         next(draft.copy(preferredExercises = preference))
 
-    // ---------------------------------------------------------------- days
-
     /**
      * Appends a day, or inserts it at [at] (1-based, `1..dayCount + 1`).
      *
-     * A day added as [ProgramDayType.REST] starts empty, which is the only shape a rest day may have
-     * (§20); any other type starts empty too and is what validation refuses to save until it plans
-     * something.
+     * A day added as [ProgramDayType.REST] starts empty, which is the only shape a rest day may have;
+     * any other type starts empty too and is what validation refuses to save until it plans something.
      */
     fun addingDay(
         type: ProgramDayType,
@@ -130,7 +112,6 @@ class ProgramDraftEditor(val draft: ProgramEditorDraft, private val ids: DraftId
         return next(draft.copy(days = plan.removing { it.programDayId == programDayId }.insertedAt(index, day).renumbered()))
     }
 
-    /** Names (or un-names, with `null`) the day with [programDayId]. */
     fun renamingDay(programDayId: ProgramDayId, name: String?): ProgramDraftEditor {
         planDayOrFail(programDayId)
         return next(draft.copy(days = draft.days.mappingDay(programDayId) { it.copy(name = name) }))
@@ -140,8 +121,8 @@ class ProgramDraftEditor(val draft: ProgramEditorDraft, private val ids: DraftId
      * Changes what kind of day [programDayId] is.
      *
      * Refused when the day still plans something and the new type is [ProgramDayType.REST], because a
-     * rest day prescribes no exercises (§20) and dropping the user's elements to make that true would
-     * be exactly the silent overwrite §33 forbids. The user's path is to remove them, one at a time.
+     * rest day prescribes no exercises and dropping the user's elements to make that true would be
+     * exactly the silent overwrite the domain forbids. The user's path is to remove them, one at a time.
      */
     fun retypingDay(programDayId: ProgramDayId, type: ProgramDayType): ProgramDraftEditor {
         val day = planDayOrFail(programDayId)
@@ -152,16 +133,13 @@ class ProgramDraftEditor(val draft: ProgramEditorDraft, private val ids: DraftId
         return next(draft.copy(days = draft.days.mappingDay(programDayId) { it.copy(type = type) }))
     }
 
-    // ---------------------------------------------------------------- plan elements
-
     /**
      * Adds one occurrence of [exerciseId] to the day with [programDayId], at [at] (1-based) or last.
      *
-     * The occurrence is [ProgramExerciseOrigin.USER_AUTHORED] by default, because the user is who put
-     * it there: a manual plan belongs to its author, and an element the generator produced is the
-     * generator's (§7, §9). The exercise is used as the user typed it — no range, no catalogue and no
-     * equipment check — and a second occurrence of the same exercise is a second element with its own
-     * identity.
+     * The occurrence is [ProgramExerciseOrigin.USER_AUTHORED] by default, because the user is who put it
+     * there: a manual plan belongs to its author, an element the generator produced is the generator's.
+     * The exercise is used as the user typed it — no range, no catalogue and no equipment check — and a
+     * second occurrence of the same exercise is a second element with its own identity.
      */
     fun addingExercise(
         programDayId: ProgramDayId,
@@ -190,7 +168,7 @@ class ProgramDraftEditor(val draft: ProgramEditorDraft, private val ids: DraftId
     }
 
     /**
-     * Repeats the element with [programExerciseId] directly after itself, as a new occurrence (§9).
+     * Repeats the element with [programExerciseId] directly after itself, as a new occurrence.
      *
      * The copy keeps the exercise, the prescription and the pin — that is what repeating an element
      * means — and gets its own identity, so changing one of the two later cannot change the other.
@@ -216,7 +194,7 @@ class ProgramDraftEditor(val draft: ProgramEditorDraft, private val ids: DraftId
         )
     }
 
-    /** Removes one occurrence — the one named, never every use of that exercise (§9). */
+    /** Removes one occurrence — the one named, never every use of that exercise. */
     fun removingExercise(
         programDayId: ProgramDayId,
         programExerciseId: ProgramExerciseId
@@ -253,7 +231,7 @@ class ProgramDraftEditor(val draft: ProgramEditorDraft, private val ids: DraftId
         )
     }
 
-    /** Sets what one occurrence prescribes, per set, in its dimension (§10). */
+    /** Sets what one occurrence prescribes, per set, in its dimension. */
     fun settingPrescription(
         programDayId: ProgramDayId,
         programExerciseId: ProgramExerciseId,
@@ -278,10 +256,10 @@ class ProgramDraftEditor(val draft: ProgramEditorDraft, private val ids: DraftId
     }
 
     /**
-     * Pins or unpins one occurrence (§7).
+     * Pins or unpins one occurrence.
      *
-     * Unpinning does not change the value — it only makes the element eligible for a future
-     * automatic change — which is why this is a plan edit and why it is structural (§6).
+     * Unpinning does not change the value — it only makes the element eligible for a future automatic
+     * change — which is why this is a plan edit and why it is structural.
      */
     fun settingPinned(
         programDayId: ProgramDayId,
@@ -306,8 +284,6 @@ class ProgramDraftEditor(val draft: ProgramEditorDraft, private val ids: DraftId
         )
     }
 
-    // ---------------------------------------------------------------- the mechanism
-
     private fun next(draft: ProgramEditorDraft): ProgramDraftEditor = ProgramDraftEditor(draft, ids)
 
     private fun planDayOrFail(programDayId: ProgramDayId): ProgramDay =
@@ -329,25 +305,24 @@ class ProgramDraftEditor(val draft: ProgramEditorDraft, private val ids: DraftId
 }
 
 /**
- * The days renumbered `1..n` in their current order — the numbering a revision must hold (§6).
+ * The days renumbered `1..n` in their current order — the numbering a revision must hold.
  *
- * Every edit that adds, removes or moves a day renumbers, and `Save` renumbers again before it mints
- * a revision, so a plan's positions are always a consequence of its order rather than a second fact
- * that can disagree with it.
+ * Every edit that adds, removes or moves a day renumbers, and `Save` renumbers again before it mints a
+ * revision, so a plan's positions are always a consequence of its order rather than a second fact that
+ * can disagree with it.
  */
 internal fun List<ProgramDay>.renumbered(): List<ProgramDay> =
     mapIndexed { index, day -> if (day.position == index + 1) day else day.copy(position = index + 1) }
 
-/** This draft with its days renumbered `1..n`, which is the shape `Save` persists. */
 internal fun ProgramEditorDraft.withRenumberedDays(): ProgramEditorDraft =
     copy(days = days.renumbered())
 
 /**
  * The index [position] (1-based, counted among `size` items) refers to.
  *
- * A position is offered to the user as "at 2 of 3" or "at the end", so `size + 1` — one past the
- * last item — is a legitimate insert; anything outside that range is a caller bug, and it is
- * reported with the value that was out of range instead of being clamped into a silent surprise.
+ * A position is offered to the user as "at 2 of 3" or "at the end", so `size + 1` — one past the last
+ * item — is a legitimate insert; anything outside that range is a caller bug, and it is reported with
+ * the value that was out of range instead of being clamped into a silent surprise.
  */
 private fun insertionIndex(position: Int?, size: Int, what: String): Int {
     if (position == null) return size
@@ -357,10 +332,7 @@ private fun insertionIndex(position: Int?, size: Int, what: String): Int {
     return position - 1
 }
 
-/**
- * A list with [item] inserted at [index] — built by concatenation, so nothing here is mutable state
- * a caller could later reach into.
- */
+/** A list with [item] inserted at [index] — built by concatenation, so nothing here is mutable state. */
 private fun <T> List<T>.insertedAt(index: Int, item: T): List<T> =
     take(index) + item + drop(index)
 

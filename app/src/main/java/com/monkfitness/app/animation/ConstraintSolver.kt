@@ -3,19 +3,14 @@ package com.monkfitness.app.animation
 import kotlin.math.*
 
 /**
- * A fixed support contact registered by [BasePose.bakeIkLimb] / the validation pose base
- * when a limb is baked against a [ContactConstraint]. It captures everything the global
- * constraint solver needs to re-solve that limb after the root (pelvis) has been
- * repositioned, without the pose having to micro-manage the root.
+ * A fixed support contact registered by [BasePose.bakeIkLimb], capturing everything the solver
+ * needs to re-solve that limb after the root has been repositioned.
  *
  * `endJoint` is the contact end-effector. The proximal chain is reconstructed from the fixed
- * skeleton topology via [chainForEnd]: the IK root is the joint whose world position seeds the
- * solve (`rootJoint`), the middle joint of the 2-bone chain is `middleJoint`, and the parent
- * frame whose rotation the offsets are authored in is `parentRotationJoint`. The solver now
- * supports any planted body part — ankles, hands, knees (kneeling), elbows/forearms (planks),
- * hips (seated), head (head-stand) and the toe/heel ends of the foot — not just ANKLE_* / HAND_*.
- * For the single-bone contacts (knee/elbow/hip/head/toe/heel) `middleJoint == endJoint` and the
- * re-bake treats the segment as one rigid bone.
+ * skeleton topology via [chainForEnd]: `rootJoint` is the joint whose world position seeds the
+ * solve, `middleJoint` the middle of the 2-bone chain, and `parentRotationJoint` the frame the
+ * offsets are authored in. Single-bone contacts (knee/elbow/hip/head/toe/heel) have
+ * `middleJoint == endJoint` and are re-baked as one rigid bone.
  */
 class ContactSpec(
     val endJoint: Joint,
@@ -32,40 +27,26 @@ class ContactSpec(
 )
 
 /**
- * PR-04 — global contact-constraint / root-repositioning layer.
+ * Global contact-constraint / root-repositioning layer.
  *
- * The engine is otherwise purely local (per-limb 2-bone IK + FK): it cannot satisfy
- * "fixed contacts + posture" simultaneously, so inconsistent authored geometry produces
- * penetration / folded limbs / floating contacts instead of redistributing the error
- * upstream. This solver is a deterministic, allocation-free relaxation that runs *between*
- * IK and FK: it gathers the fixed [ContactSpec]s (planted feet/hands) and repositions the
- * skeleton root (pelvis) so every contact is reached exactly, then re-bakes each contact
- * limb from the moved root. A fixed small number of iterations over {root transform, limb
- * IK} keeps it bounded and smooth (no flicker between frames).
+ * The engine is otherwise purely local (per-limb 2-bone IK + FK), so it cannot satisfy "fixed
+ * contacts + posture" at once and inconsistent authored geometry shows up as penetration, folded
+ * limbs or floating contacts rather than as error redistributed upstream. This is a deterministic,
+ * allocation-free relaxation that runs between IK and FK: it gathers the fixed [ContactSpec]s,
+ * repositions the root so every contact is reached, then re-bakes each contact limb from the moved
+ * root. A fixed small number of iterations keeps it bounded and smooth (no flicker between frames).
  *
- * Issue A fix — posture, not point-reach. The solver is **not** pelvis-translation-only
- * anymore. A contact is treated as a *surface/anchor constraint* to be honored where it is,
- * not a hard 3-D point the root must be dragged to at full extension:
- *  - The root is translated **only** to restore *reachability* (bring an out-of-band target
- *    into the biological band). A reachable contact is left in place and the limb is re-baked
- *    to aim at it — this stops the old bug where a straight limb whose target sat closer than
- *    L1 was forced to `maxReach`, lifting the pelvis into a floating "V" (Middle Split).
- *  - A straight limb whose target falls inside the proximal-bone length is re-baked as a
- *    (non-degenerate) bent limb, so it stays valid and keeps the contact on its surface
- *    instead of collapsing the knee onto the ankle.
- *  - When a reach residual remains (the root alone cannot satisfy asymmetric contacts), the
- *    correction is shared into a **pelvis tilt** (composed with the authored pelvis rotation,
- *    never replacing it) — a second DOF beyond translation. Symmetric stances have zero
- *    imbalance, so correct poses keep their exact authored orientation.
+ * A contact is a surface/anchor constraint honoured where it is, not a hard 3-D point the root is
+ * dragged to at full extension: the root is translated only to restore reachability, and a
+ * reachable contact is left in place with its limb re-baked to aim at it (forcing full extension
+ * lifted the pelvis into a floating "V", e.g. Middle Split). A straight limb whose target falls
+ * inside the proximal bone length is re-baked bent so it stays valid, and a residual the root alone
+ * cannot satisfy is shared into a pelvis tilt composed with the authored rotation. Symmetric stances
+ * have zero imbalance, so correct poses keep their exact authored orientation.
  *
- * Design notes (constitution: ENGINE.md §2/§5 — engine solves motion, poses declare
- * contacts):
- * - It never invents contacts; it only consumes those the pose already registered via the
- *   contact-bearing `bakeIkLimb` calls.
- * - It never moves a non-contact limb's authored shape; it only translates/tilts the root, so
- *   every other limb follows rigidly and stays correct.
- * - It preserves bone lengths (it re-bakes through the existing analytical IK + local-frame
- *   bake, exactly like the pose did).
+ * It never invents contacts (only consumes the registered ones), never moves a non-contact limb's
+ * authored shape (translating/tilting the root lets every other limb follow rigidly), and preserves
+ * bone lengths by re-baking through the same analytical IK and local-frame bake the pose used.
  */
 object ConstraintSolver {
 
@@ -73,30 +54,24 @@ object ConstraintSolver {
     private const val RELAX = 0.5f
     private const val EPS = 1e-3f
     private const val DEG2RAD = 3.1415927f / 180f
-    // Default overhead-bar grip height (world Y) used by the HANGING_UNDER_BAR seed when the pose
-    // registered no explicit bar contact. Mirrors the validation/vertical-pull convention (bar at 500).
+    // Default overhead-bar grip height (world Y) for the HANGING_UNDER_BAR seed when the pose
+    // registers no bar contact; mirrors the validation/vertical-pull convention (bar at 500).
     private const val DEFAULT_BAR_Y = 500f
 
-    // Phase 2 (F2/F7/F9) — the solver is the sole mover of the root/pelvis transform. When
-    // the solver owns posture, the root is *seeded* from the pose's declared
-    // [PostureIntent] (B1.1 formulas) and contact conflicts are resolved by `contactPrecedence`
-    // instead of the pose hand-computing `pelvisY`/`pelvisX`. When the flag is off the solver
-    // behaves exactly as before (relaxation + CCD on whatever root the pose authored), so the
-    // legacy path is preserved verbatim until the global flip.
+    // The solver is the sole mover of the root/pelvis transform: the root is seeded from the pose's
+    // declared [PostureIntent] and contact conflicts are resolved by `contactPrecedence`, instead of
+    // the pose hand-computing `pelvisY`/`pelvisX`.
     private const val POSTURE_SEED_RELAX = 0.5f
-    // Inter-frame temporal smoothing gain (F9): how strongly each frame eases the solved root
-    // toward the previously solved root. Small so the posture still settles but frames don't
-    // jitter when contacts are marginally inconsistent. Zero = no smoothing (strict per-frame solve).
+    // Inter-frame smoothing gain: how strongly each frame eases the solved root toward the previous
+    // one. Small so the posture still settles but frames don't jitter when contacts are marginally
+    // inconsistent. Zero = strict per-frame solve.
     private const val SMOOTH_GAIN = 0.25f
 
-    // Phase 5 (R10) — the solver keeps NO cross-frame memory of its own. The inter-frame
-    // relaxation state that Phase 2 carried in an identity-keyed `WeakHashMap<SkeletonPose,
-    // Vector3>` is now owned by SkeletonPipeline's Frame History (§4.5) and supplied to each
-    // solve explicitly via [solve]'s `previousSolvedRoot` parameter (RFC §5 R10: the solver's
-    // behavior is a function of current-frame inputs plus supplied history, never of object
-    // identity). Reintroducing any persistent pose-keyed / static previous-root cache here
-    // re-creates the V3 violation; the `arch/FrameHistoryOwnershipAuditTest` source audit and
-    // the `InterFrameSmoothingTest` behavioral suite pin the boundary.
+    // The solver keeps NO cross-frame memory of its own: inter-frame state is owned by
+    // SkeletonPipeline's Frame History and supplied per solve via [solve]'s `previousRootWorld`, so
+    // behaviour is a function of current-frame inputs plus supplied history, never of object
+    // identity. Any persistent pose-keyed or static previous-root cache here re-creates that
+    // violation; `arch/FrameHistoryOwnershipAuditTest` and `InterFrameSmoothingTest` pin it.
 
     // Persistent scratch — no hot-path allocation.
     private val zero = Vector3()
@@ -108,12 +83,10 @@ object ConstraintSolver {
     private val ikResult = SkeletonMath.IKResult()
     private val nodeMap = Array<SkeletonNode?>(Joint.entries.size) { null }
 
-    // Posture-DOF scratch (pelvis tilt relaxation, PR-04 / Issue A). The solver is no longer
-    // translation-only: when contacts are reachable it leaves the root where the contact pins it
-    // and, when an asymmetric reach residual exists, it shares the correction into a pelvis tilt
-    // (composed with the authored pelvis rotation) instead of dumping everything into one
-    // vertical translation. For symmetric contacts the imbalance is zero, so the authored pelvis
-    // orientation is preserved verbatim (a strict no-op for correct poses).
+    // Posture-DOF scratch: the solver is not translation-only. When contacts are reachable it leaves
+    // the root where the contact pins it, and an asymmetric reach residual is shared into a pelvis
+    // tilt composed with the authored rotation instead of one vertical translation. Symmetric
+    // contacts have zero imbalance, so a correct pose is a strict no-op.
     private val tiltDelta = JointRotation()
     private val authoredPelvisRot = JointRotation()
     private val authoredPelvisPos = Vector3()
@@ -124,10 +97,9 @@ object ConstraintSolver {
     private val imbA = Vector3(); private val imbB = Vector3()
     private const val TILT_GAIN = 0.01f
 
-    // Posture-pass (UNI-1) CCD scratch — reused shared matrix/rotation buffers (no hot-path
-    // allocation). The posture pass is a *true* solve: it distributes an unreachable/asymmetric
-    // contact residual across the limb's free joint angles (hip→knee→ankle / shoulder→elbow→
-    // wrist) instead of dumping everything into the pelvis translation/tilt alone.
+    // Posture-pass CCD scratch — reused matrix/rotation buffers (no hot-path allocation). The posture
+    // pass is a true solve: it distributes an unreachable/asymmetric residual across the limb's free
+    // joint angles (hip->knee->ankle / shoulder->elbow->wrist), not into the pelvis alone.
     private var activeRoots: List<SkeletonNode> = emptyList()
     private val authoredRotBuf = Array(Joint.entries.size) { JointRotation() }
     private val ccdDelta = JointRotation()
@@ -143,52 +115,44 @@ object ConstraintSolver {
     private const val POSTURE_DAMP = 0.5f
     // How strongly each CCD step is pulled back toward the authored joint angle (shape
     // regularization). Small so reachable contacts are still honoured; non-zero so an
-    // over-constrained residual is shared into the *closest* authored posture, not an arbitrary
-    // one (UNI-1: "best match the authored shape").
+    // over-constrained residual lands in the closest authored posture, not an arbitrary one.
     private const val POSTURE_REG = 0.1f
 
     /**
-     * Maps a contact end-effector to its proximal chain in the fixed skeleton topology.
-     * Returns null for joints that are not a supported contact limb (the solver then simply
-     * skips registration at bake time).
+     * Maps a contact end-effector to its proximal chain in the fixed skeleton topology. Returns null
+     * for joints that are not a supported contact limb (registration is then skipped at bake time).
      *
-     * Every contact is expressed as a 2-bone chain `(rootJoint -> middleJoint -> endJoint)`.
-     * The original scope only covered the two true 2-bone limbs (legs: HIP->KNEE->ANKLE and
-     * arms: SHOULDER->ELBOW->HAND). Issue D extends this to every other planted body part:
-     * knees, elbows/forearms, hips, head, and the toe/heel ends of the foot. For those the
-     * contact joint is the *end* of a single bone (the thigh, forearm, neck, foot, …), so the
-     * chain is modelled as a degenerate 2-bone limb with `middleJoint == endJoint` — the
-     * re-bake treats it as a rigid one-bone segment (see [solve]). `parentRotationJoint` is
-     * the frame in which that segment's offset is authored (the bone's actual parent, which
-     * for an identity-rotation link equals the historically-used pelvis/scapula frame, so the
-     * existing legs/arms entries are unchanged in meaning).
+     * Every contact is a 2-bone chain `(rootJoint -> middleJoint -> endJoint)`. Planted body parts
+     * that are the end of a single bone (knee, elbow/forearm, hip, head, toe/heel) are modelled as a
+     * degenerate chain with `middleJoint == endJoint`, re-baked as one rigid segment. The
+     * `parentRotationJoint` is the frame that segment's offset is authored in — the bone's actual
+     * parent, which for an identity-rotation link equals the pelvis/scapula frame the legs and arms
+     * entries have always used.
      */
     fun chainForEnd(end: Joint): ContactChain? = when (end) {
-        // --- Legs: 2-bone limb HIP -> KNEE -> ANKLE (unchanged) ---
         Joint.ANKLE_F -> ContactChain(Joint.HIP_F, Joint.PELVIS, Joint.KNEE_F)
         Joint.ANKLE_B -> ContactChain(Joint.HIP_B, Joint.PELVIS, Joint.KNEE_B)
         // Kneeling: the knee is the end of the thigh (1-bone). middle == end.
         Joint.KNEE_F -> ContactChain(Joint.HIP_F, Joint.PELVIS, Joint.KNEE_F)
         Joint.KNEE_B -> ContactChain(Joint.HIP_B, Joint.PELVIS, Joint.KNEE_B)
 
-        // --- Arms: 2-bone limb SHOULDER -> ELBOW -> HAND (unchanged) ---
         Joint.HAND_A -> ContactChain(Joint.SHOULDER_A, Joint.SCAPULA_A, Joint.ELBOW_A)
         Joint.HAND_P -> ContactChain(Joint.SHOULDER_P, Joint.SCAPULA_P, Joint.ELBOW_P)
         // Forearm / elbow plank: the elbow is the end of the forearm (1-bone). middle == end.
         Joint.ELBOW_A -> ContactChain(Joint.SHOULDER_A, Joint.SCAPULA_A, Joint.ELBOW_A)
         Joint.ELBOW_P -> ContactChain(Joint.SHOULDER_P, Joint.SCAPULA_P, Joint.ELBOW_P)
 
-        // --- Hips: seated / kneeling on the pelvis side. The hip is the end of the (identity)
-        //     pelvis->hip offset (1-bone), framed in the pelvis. middle == end. ---
+        // Hips: seated / kneeling. The hip is the end of the (identity) pelvis->hip offset
+        // (1-bone), framed in the pelvis. middle == end.
         Joint.HIP_F -> ContactChain(Joint.PELVIS, Joint.PELVIS, Joint.HIP_F)
         Joint.HIP_B -> ContactChain(Joint.PELVIS, Joint.PELVIS, Joint.HIP_B)
 
-        // --- Head: head-stand. The head is the end of the (identity) chest->neck->head chain,
-        //     modelled as a 1-bone neck segment framed in the chest. middle == end. ---
+        // Head: head-stand. The head is the end of the (identity) chest->neck->head chain,
+        // modelled as a 1-bone neck segment framed in the chest. middle == end.
         Joint.HEAD_POS -> ContactChain(Joint.CHEST, Joint.CHEST, Joint.HEAD_POS)
 
-        // --- Feet ends: toe / heel stands. The toe/heel is the end of the foot (1-bone,
-        //     ANKLE -> TOE/HEEL), framed in the ankle. middle == end. ---
+        // Toe / heel stands: the end of the foot (1-bone, ANKLE -> TOE/HEEL), framed in the ankle.
+        // middle == end.
         Joint.TOE_F -> ContactChain(Joint.ANKLE_F, Joint.ANKLE_F, Joint.TOE_F)
         Joint.TOE_B -> ContactChain(Joint.ANKLE_B, Joint.ANKLE_B, Joint.TOE_B)
         Joint.HEEL_F -> ContactChain(Joint.ANKLE_F, Joint.ANKLE_F, Joint.HEEL_F)
@@ -204,25 +168,18 @@ object ConstraintSolver {
     )
 
     /**
-     * Repositions the root so all registered fixed contacts are honored, then re-bakes each
-     * contact limb from the moved root. Mutates the supplied [pose] (its node local
-     * transforms and, at the end, runs a fresh FK + flatten).
+     * Repositions the root so all registered fixed contacts are honoured, then re-bakes each contact
+     * limb from the moved root. Mutates [pose]: node local transforms, then a fresh FK + flatten.
      *
-     * Branch B3 — posture universality: when the solver owns posture and the pose
-     * declares a non-[PostureIntent.Kind.CUSTOM] intent, the solver runs even with **no**
-     * contacts, so it can seed/pin the coarse pelvis height from the intent (the relaxation
-     * loop below is a strict no-op for contact-less poses, so production standing shapes are
-     * untouched apart from the engine-owned root height). A pose that neither registers
-     * contacts nor names a posture is still a pure no-op.
+     * When the pose declares a non-[PostureIntent.Kind.CUSTOM] intent the solver runs even with no
+     * contacts, to seed/pin the coarse pelvis height from it (the relaxation loop is a no-op for
+     * contact-less poses). A pose that neither registers contacts nor names a posture is a no-op.
      *
-     * Phase 5 (R10) — [previousRootWorld] is the Frame History input for Inter-Frame
-     * Smoothing: the settled root the previous frame produced, held and supplied by
-     * [SkeletonPipeline] (the RFC §4.5 owner of Frame History), or `null` on the first frame
-     * of the history window. The solver never derives it from its own memory — this method is
-     * a pure function of the current-frame inputs plus the supplied history, never of object
-     * identity (§5 R10). The value is in the solver's own root space (the pelvis node's local
-     * position — the root's world position for a body-root hierarchy), the exact
-     * representation the pre-P5 solver cache persisted, so easing numerics are unchanged.
+     * [previousRootWorld] is the Frame History input for inter-frame smoothing: the settled root the
+     * previous frame produced, or `null` on the first frame of the window. It is supplied by
+     * [SkeletonPipeline] and never derived from the solver's own memory, so this method is a pure
+     * function of current-frame inputs plus supplied history. The value is in the solver's own root
+     * space (the pelvis node's local position), so easing numerics are unchanged.
      */
     fun solve(
         pose: SkeletonPose,
@@ -230,7 +187,6 @@ object ConstraintSolver {
         previousRootWorld: Vector3? = null
     ) {
         val contacts = pose.contacts
-        // Phase B collapsed SOLVER_OWNS_POSTURE to its true branch (always on).
         val postureDriven = pose.postureIntent.kind != PostureIntent.Kind.CUSTOM
         if (contacts.isEmpty() && !postureDriven) return
         val roots = pose.roots
@@ -240,60 +196,48 @@ object ConstraintSolver {
         for (root in roots) collectNodes(root)
 
         val pelvis = nodeMap[Joint.PELVIS.index] ?: return
-        // Preserve the authored pelvis orientation so the solver only ever *adds* a posture
-        // correction, never wipes a deliberate lean (e.g. Deep Overhead Squat's folded pelvis).
+        // Preserve the authored pelvis orientation: the solver only ever *adds* a posture correction,
+        // never wipes a deliberate lean (e.g. Deep Overhead Squat's folded pelvis).
         authoredPelvisRot.copyFrom(pelvis.localRotation)
         authoredPelvisPos.set(pelvis.localPosition)
-        // UNI-6 — reset the recorded root-displacement deltas; they are recomputed below.
+        // Reset the recorded root-displacement deltas; they are recomputed below.
         pose.rootTranslationDelta = 0f
         pose.rootRotationDelta = 0f
-        // Phase 2 (R4/R6, registered defect V2): the solver is a secondary producer of the
-        // Bone-Lengths-Verified Flag and may only strengthen it (RFC §4.4 rule AND / §5 R6).
-        // Capture the primary authoring-time reading before settlement writes anything; the
-        // merged value is assigned exactly once at the end of solve() (merge-once).
+        // The solver is a secondary producer of the Bone-Lengths-Verified flag and may only
+        // strengthen it (merge rule AND): capture the primary authoring-time reading before
+        // settlement writes anything, and assign the merged value exactly once at the end.
         val primaryVerified = pose.boneLengthsVerified
 
-        // UNI-1: snapshot the authored joint configuration (the "goal shape") before any solver
-        // mutation, so the posture pass can regularize its CCD solution back toward the authored
-        // posture (it only bends joints as far as the contacts force it to).
+        // Snapshot the authored joint configuration (the "goal shape") before any mutation, so the
+        // posture pass can regularize back toward it — joints bend only as far as contacts force.
         activeRoots = roots
         for (i in nodeMap.indices) {
             val n = nodeMap[i]
             if (n != null) authoredRotBuf[i].copyFrom(n.localRotation)
         }
 
-        // Are any contacts anchored to a horizontal support (ground)? That is what enables the
-        // pelvis-tilt posture DOF: feet planted on the floor can be honored by tilting the trunk
-        // rather than by lifting the root out of the floor plane.
+        // A contact anchored to a horizontal support (ground) is what enables the pelvis-tilt DOF:
+        // feet planted on the floor can be honoured by tilting the trunk rather than lifting the root
+        // out of the floor plane.
         var hasGroundContact = false
         for (spec in contacts) {
             val c = spec.contact
             if (c != null && abs(c.normal.y) > 0.5f) { hasGroundContact = true; break }
         }
 
-        // Phase 2 (F2) — seed the root/pelvis from the pose's declared PostureIntent before
-        // relaxing. This replaces the pose's hand-computed `pelvisY` with an engine-derived exact
-        // value (B1.1 / B4). For CUSTOM intents the seed is a no-op, so non-posture poses are
-        // unchanged. (Phase B collapsed SOLVER_OWNS_POSTURE to its true branch.)
+        // Seed the root/pelvis from the declared PostureIntent before relaxing, replacing the pose's
+        // hand-computed `pelvisY`. CUSTOM is a no-op, so non-posture poses are unchanged.
         seedRootFromPostureIntent(pose, definition, pelvis)
 
-        // Phase 2 (F9) / Phase 5 (R10) — inter-frame temporal smoothing. Ease the seeded/solved
-        // root toward the root produced by the previous frame, so marginally inconsistent contacts
-        // don't jitter frame-to-frame. Disabled (gain 0) leaves the per-frame solve exact. The
-        // previous root arrives as a current-frame input ([previousRootWorld], supplied from the
-        // SkeletonPipeline's Frame History; the pipeline's runStages debug check owns the
-        // "first frame vs forgot to wire" trip-wire) — the solver holds no cross-frame memory
-        // of its own (RFC §5 R10).
-        // Phase 2 (R4/R6): local accumulation of this settlement's contact-limb findings. The
-        // carrier flag is written back exactly once after the loop, so a mid-settle assignment
-        // can never erase the primary reading captured above.
+        // Inter-frame smoothing: ease the seeded/solved root toward the previous frame's, so
+        // marginally inconsistent contacts don't jitter. Gain 0 leaves the per-frame solve exact.
+        // Local accumulation of this settlement's contact-limb findings; the carrier is written back
+        // exactly once after the loop, so a mid-settle assignment cannot erase the primary reading.
         var contactFindings = true
-        // Phase 4 (R5): local accumulation of Straight-Limb Fallback outcomes observed by the
-        // contact re-bake — from the solver's own branch decision (a straight spec re-baked bent
-        // because the moved root left it inside L1) and from the scratch reading of the straight
-        // solve it ran instead. Merged into the carrier exactly once after the loop (R6: the
-        // ConstraintSolver is a strengthen-only, OR producer per §4.4 — the merge can never
-        // erase an authoring-time `true`).
+        // Local accumulation of straight-limb fallback outcomes seen by the contact re-bake — from
+        // the solver's own branch decision (a straight spec re-baked bent because the moved root left
+        // it inside L1) and from the scratch reading of the straight solve. Merged into the carrier
+        // exactly once after the loop, OR-only, so it can never erase an authoring-time `true`.
         var straightFindings = false
         if (SMOOTH_GAIN > 0f) {
             val prev = previousRootWorld
@@ -305,15 +249,14 @@ object ConstraintSolver {
         }
 
         for (iter in 0 until MAX_ITERATIONS) {
-            // Forward kinematics so world positions reflect the current root placement.
+            // FK so world positions reflect the current root placement.
             for (root in roots) root.updateWorldTransforms(zero, identity)
 
-            // 1) Decide how far the root must move to satisfy *reachability* only. A contact is
-            //    left exactly where it is when its target is already within the biological band —
-            //    the limb is re-baked to AIM AT the contact (honoring it as a surface/anchor)
-            //    rather than being forced to full extension. The old code forced straight limbs
-            //    whose target sat closer than L1 to `maxReach`, which lifted the root to fake a
-            //    straight leg (the Issue A "point-reach, not posture" floating-pelvis bug).
+            // 1) How far the root must move to satisfy *reachability* only. A contact whose target
+            //    is already inside the biological band is left where it is and the limb is re-baked
+            //    to aim at it, rather than forced to full extension — forcing `maxReach` on a
+            //    straight limb whose target sat closer than L1 lifted the root to fake a straight
+            //    leg (the floating-pelvis bug).
             delta.set(0f, 0f, 0f)
             var moved = false
             for (spec in contacts) {
@@ -329,8 +272,8 @@ object ConstraintSolver {
                         2f * spec.length1 * spec.length2 * minCos
                 )
 
-                // Posture-aware: only translate to bring an *unreachable* contact into band. A
-                // reachable contact is never pushed to full extension.
+                // Only translate to bring an *unreachable* contact into band; a reachable contact is
+                // never pushed to full extension.
                 val desired = dist.coerceIn(minReach, maxReach)
 
                 val diff = desired - dist
@@ -344,29 +287,25 @@ object ConstraintSolver {
                 }
             }
 
-            // Apply the averaged correction (damped Jacobi step). The per-contact corrections are
-            // weighted by `contactPrecedence` (F7): a contact listed earlier wins conflicts, so the
-            // root is pulled harder toward the higher-priority contact's reach band. When the
-            // precedence list is empty every contact is equal (uniform mean), so symmetric stances
-            // don't double-count and N contacts don't overshoot.
+            // Apply the averaged correction (damped Jacobi step). Per-contact corrections are
+            // weighted by `contactPrecedence`: a contact listed earlier wins conflicts, so the root
+            // is pulled harder toward its reach band. An empty list means uniform mean, so symmetric
+            // stances don't double-count and N contacts don't overshoot.
             if (moved) {
                 applyRootDelta(pelvis, delta, contacts, pose.contactPrecedence)
             }
 
-            // 2) Posture DOF (Issue A): when a reach residual remains (the root alone cannot
-            //    satisfy the contacts), share the correction into a pelvis tilt instead of
-            //    dumping it all into a single translation. For symmetric ground contacts the
-            //    imbalance is zero, so the authored pelvis rotation is preserved (no-op).
+            // 2) Posture DOF: when a reach residual remains (the root alone cannot satisfy the
+            //    contacts), share it into a pelvis tilt instead of one translation. Symmetric ground
+            //    contacts have zero imbalance, so the authored pelvis rotation is preserved.
             if (moved && hasGroundContact) {
                 applyPelvisTilt(pelvis, contacts)
             }
 
             // 3) Re-bake every contact limb from the (possibly moved/tilted) proximal root to its
-            //    target, writing the offsets back into the parent's true local frame. Contacts are
-            //    honored as surface/anchor constraints: the end-effector stays on its support
-            //    plane, and a straight limb whose target sits inside the proximal-bone length is
-            //    re-baked as a (non-degenerate) bent limb — the reachable compromise — instead of
-            //    collapsing the knee onto the ankle.
+            //    target, writing offsets into the parent's true local frame. The end-effector stays
+            //    on its support plane, and a straight limb whose target sits inside the proximal
+            //    bone length is re-baked bent rather than collapsing the knee onto the ankle.
             for (spec in contacts) {
                 val parent = nodeMap[spec.rootJoint.index] ?: continue
                 val rotNode = nodeMap[spec.parentRotationJoint.index] ?: continue
@@ -376,9 +315,9 @@ object ConstraintSolver {
                 rootWorld.set(parent.worldPosition)
                 val parentRot = rotNode.worldRotation
 
-                // A straight limb can only be represented when the target is at least one bone
-                // (L1) away; inside that radius it would degenerate to a point. Fall back to the
-                // triangle IK so the limb stays valid and the contact stays on its surface.
+                // A straight limb is only representable when the target is at least one bone (L1)
+                // away; inside that radius it would degenerate to a point. Fall back to the triangle
+                // IK so the limb stays valid and the contact stays on its surface.
                 away.set(rootWorld).subtract(spec.targetWorld)
                 val reachMag = away.mag()
                 val canBeStraight = spec.straight && reachMag >= spec.length1 - 1e-3f
@@ -390,30 +329,29 @@ object ConstraintSolver {
                     )
                 } else {
                     // The parent frame rotation is set by the solver (translation and/or tilt), so
-                    // the contact's world-space pole is recomputed each pass and reused directly.
+                    // the world-space pole is recomputed each pass.
                     SkeletonMath.solveIK(
                         rootWorld, spec.targetWorld, spec.length1, spec.length2,
                         spec.pole, spec.constraint, ikResult, spec.contact
                     )
                 }
-                // Phase 4 (R5): record this re-bake's fallback outcome from branch evidence +
-                // scratch only — no independently reconstructed predicate. `!canBeStraight` on a
-                // straight spec means the solver itself executed the bent fallback for it.
+                // Record the fallback outcome from branch evidence and scratch only, never a
+                // reconstructed predicate: `!canBeStraight` on a straight spec means the solver
+                // itself executed the bent fallback.
                 if (spec.straight && (!canBeStraight || ikResult.straightIntentDropped)) {
                     straightFindings = true
                 }
 
-                // Phase 1 (F5): the re-baked contact limb must preserve both bone lengths too.
+                // The re-baked contact limb must preserve both bone lengths too.
                 if (!SkeletonMath.bonesExact(rootWorld, ikResult.joint, ikResult.end, spec.length1, spec.length2)) {
                     contactFindings = false
                 }
 
                 dir.set(ikResult.joint).subtract(rootWorld)
                 SkeletonMath.toLocalDirection(dir, parentRot, middle.localPosition)
-                // A 1-bone (degenerate) contact limb has `middle == end` (e.g. a kneeling knee,
-                // a planted elbow, a head-stand). Its IK result collapses to a single segment
-                // (joint == end == target), so the second offset would be zero and would wipe
-                // the bone length. Skip it: the segment is already written above.
+                // A 1-bone (degenerate) contact limb has `middle == end` (kneeling knee, planted
+                // elbow, head-stand): its IK result collapses to one segment, so the second offset
+                // would be zero and would wipe the bone length. The segment is written above.
                 if (middle !== end) {
                     dir.set(ikResult.end).subtract(ikResult.joint)
                     SkeletonMath.toLocalDirection(dir, parentRot, end.localPosition)
@@ -423,29 +361,25 @@ object ConstraintSolver {
             if (!moved) break
         }
 
-        // Phase 2 (R4/R6, merge-once): publish the strengthened stamp exactly once — the primary
-        // authoring-time reading ANDed with every contact limb's settlement finding. This replaces
-        // the former unconditional `pose.boneLengthsVerified = true`, which erased a primary
-        // `false` originating from a non-contact limb (registered defect V2) and thereby violated
-        // RFC §5 R6 (strengthen-only restamping).
+        // Publish the strengthened stamp exactly once: the primary authoring-time reading ANDed with
+        // every contact limb's settlement finding. An unconditional `true` here erased a primary
+        // `false` from a non-contact limb, which is why the merge is strengthen-only.
         pose.boneLengthsVerified = ValidationStampMerge.verified(primaryVerified, contactFindings)
 
-        // Phase 4 (R5, merge-once): the Straight-Intent-Dropped Flag strengthened exactly once
-        // with this settlement's fallback findings (RFC §4.4 rule OR; §5 R6 strengthen-only).
+        // The straight-intent-dropped flag strengthened exactly once with this settlement's fallback
+        // findings (merge rule OR, strengthen-only).
         pose.straightIntentDropped =
             ValidationStampMerge.dropped(pose.straightIntentDropped, straightFindings)
 
-        // UNI-1 — true posture pass. The loop above is a root-reposition relaxation (translate +
-        // tilt the pelvis, then re-bake each contact limb toward its target). When contacts are
-        // over-constrained or asymmetric the pelvis alone cannot settle them, so the residual is
-        // now distributed across the *free joint angles* of each contact limb via damped CCD. This
-        // is a genuine posture solve: it honours the contacts and keeps the configuration as close
-        // to the authored shape as the contacts allow, instead of leaving the residual uncorrected
-        // or floating the pelvis. For well-posed poses the residual is already ~0, so this pass is
-        // a strict no-op (the authored pose is preserved verbatim).
+        // True posture pass. The loop above is a root-reposition relaxation (translate + tilt the
+        // pelvis, then re-bake each contact limb). When contacts are over-constrained or asymmetric
+        // the pelvis alone cannot settle them, so the residual is distributed across the *free joint
+        // angles* of each contact limb via damped CCD — honouring the contacts while staying as close
+        // to the authored shape as they allow, instead of leaving the residual or floating the
+        // pelvis. For well-posed poses the residual is ~0 and this is a strict no-op.
         solvePosture(contacts)
 
-        // UNI-6 — record how far the solver displaced the root from its authored transform so the
+        // Record how far the solver displaced the root from its authored transform, so the
         // PELVIS_INTENT rule can surface unexpected root motion.
         val dxp = pelvis.localPosition.x - authoredPelvisPos.x
         val dyp = pelvis.localPosition.y - authoredPelvisPos.y
@@ -458,32 +392,24 @@ object ConstraintSolver {
         SkeletonMath.getRotationFromMatrix(outMatX, outMatY, outMatZ, rootDeltaRot)
         pose.rootRotationDelta = kotlin.math.abs(rootDeltaRot.angle)
 
-        // Phase 5 (R10) — the solved root is NOT persisted here. The former F9 cache write
-        // (`lastSolvedRoot[pose] = …`) was the V3 violation: cross-frame memory owned by the
-        // solver and keyed by SkeletonPose object identity. The pipeline commits its Frame
-        // History after finalization (`commitFrameHistory`) and supplies the previous root to
-        // the next solve as an explicit input, so this method ends its temporal work with the
-        // current frame.
+        // The solved root is NOT persisted here: that would be cross-frame memory keyed by
+        // SkeletonPose identity. The pipeline commits its Frame History after finalization
+        // (`commitFrameHistory`) and supplies the previous root to the next solve as an input, so
+        // this method ends its temporal work with the current frame.
 
         // Final FK + flatten so the finalized pose reflects the solved root placement.
         SkeletonPose.fromHierarchy(roots, pose)
 
-        // Phase 3 (IMPLEMENTATION_PLAN_RUNTIME_SKELETON.md, §3.2/§4.3) — populate the Settlement
-        // Result exactly once at Phase 2 exit. The world position is read AFTER `fromHierarchy`
-        // so it reflects the post-FK settled root (R2's settled-pelvis reading). Membership
-        // is fixed by RFC §4.3: settled root transform (world), settled-contact information,
-        // and Contact Conflict Resolution outcome — no copy of final joint rotations
-        // (RFC §3.2). The conflict-outcome payload is the precedence winner (earliest
-        // non-empty entry in `pose.contactPrecedence`); null when the list is empty
-        // (uniform-mean path) or no contacts were declared.
+        // Settlement result, populated exactly once. The world position is read AFTER
+        // `fromHierarchy` so it reflects the post-FK settled root. Membership is the settled root
+        // transform, the declared contacts and the conflict-resolution outcome — no copy of final
+        // joint rotations. The outcome is the precedence winner (earliest non-empty entry in
+        // `pose.contactPrecedence`), null when the list is empty (uniform-mean path) or no contacts
+        // were declared.
         //
-        // Scope discipline (audit B2): the field is named `declaredContactJoints` (not
-        // `settledContactJoints`) because the pre-existing solver does not track per-contact
-        // settlement outcomes; it re-bakes each declared contact's limb toward its target
-        // under a bounded iteration. Renaming the field explicitly avoids the
-        // documented-vs-data divergence. Actual per-contact settlement tracking and the
-        // Settled-Contact Guarantee are deferred to the later phase assigned to that
-        // responsibility; this call site records only the current Phase-3 contract.
+        // The field is named `declaredContactJoints`, not `settledContactJoints`, because the solver
+        // does not track per-contact settlement: it re-bakes each declared contact's limb toward its
+        // target under a bounded iteration, so naming it "settled" would claim data that isn't there.
         val settledRootWorld = Vector3(pelvis.worldPosition.x, pelvis.worldPosition.y, pelvis.worldPosition.z)
         val declaredContactJoints: List<Joint> = contacts.map { it.endJoint }
         val conflictWinner: Joint? = pickPrecedenceWinner(pose.contactPrecedence, contacts)
@@ -491,11 +417,8 @@ object ConstraintSolver {
     }
 
     /**
-     * Returns the precedence winner — the first end-joint whose name appears in [precedence]
-     * (i.e. the highest-priority contact). Returns `null` when [precedence] is empty
-     * (uniform-mean path — every contact is equal) or when no contact name matches any
-     * declared contact end-joint. Allocated per-call only on the populated branch; trivial cost
-     * given the call site is once per solve.
+     * The highest-priority contact: the first end joint whose name appears in [precedence]. Null
+     * when [precedence] is empty (uniform-mean path — every contact equal) or nothing matches.
      */
     private fun pickPrecedenceWinner(precedence: List<String>, contacts: List<ContactSpec>): Joint? {
         if (precedence.isEmpty() || contacts.isEmpty()) return null
@@ -507,27 +430,16 @@ object ConstraintSolver {
     }
 
     /**
-     * Phase 2 (F2) — seeds the root/pelvis transform from the pose's declared [PostureIntent]
-     * (B1.1 / B3). This is the engine-owned replacement for the pose's hand-computed `pelvisY`/
-     * `pelvisX` arithmetic: the solver derives the coarse pelvis height from the intent kind.
+     * Seeds the root/pelvis transform from the pose's declared [PostureIntent] — the engine-owned
+     * replacement for the pose hand-computing `pelvisY`/`pelvisX`.
      *
-     * Branch B3 — posture universality: the solver now owns the root for **every** pose that names
-     * a non-[PostureIntent.Kind.CUSTOM] intent, not just contact poses:
-     *  - **Non-contact poses** (most production STANDING / HANGING / SEATED shapes): the relaxation
-     *    loop below can never move the root (there is no anchored contact to satisfy), so the seed
-     *    is *pinned exactly* (`pelvis.y = seedY`). This is the engine-owned root: a STANDING pose's
-     *    `standH` is now derived by the solver, byte-identical to the value the pose used to write
-     *    by hand. The x/z stay authored (lateral/forward shift is a pose-level shape decision).
-     *  - **Contact poses** (squats/hangs/etc. that register fixed supports): the seed is *eased*
-     *    (damped) toward `seedY`, exactly as in M3, so the authored root and the contact relaxation
-     *    dominate; the regression contract (`ConstraintSolverPhase2Test.seatedSeedDoesNotRegress…`)
-     *    is preserved. The relaxation loop then refines the seed against the actual contacts.
+     * A contact-less pose can never be moved by the relaxation loop (there is no anchored contact to
+     * satisfy), so its seed is pinned exactly and the solver owns the coarse pelvis height. A
+     * contact-bearing pose is only eased toward it, so the authored root and the contact relaxation
+     * dominate. x/z always stay authored — lateral/forward shift is a pose-level shape decision.
      *
-     * [PostureIntent.Kind.CUSTOM] leaves the authored root untouched (the pose owns its own shape);
-     * this is the deliberate, reversible B3 fallback for poses whose root is genuinely shape-driven
-     * (planks, dynamic jumps, leans) rather than a simple postural template.
-     *
-     * Allocation-free: reuses [dir]/[delta] scratch. Deterministic.
+     * [PostureIntent.Kind.CUSTOM] leaves the authored root untouched: the pose owns its shape when
+     * that shape is genuinely shape-driven (planks, dynamic jumps, leans) rather than postural.
      */
     private fun seedRootFromPostureIntent(pose: SkeletonPose, def: SkeletonDefinition, pelvis: SkeletonNode) {
         val intent = pose.postureIntent
@@ -536,24 +448,25 @@ object ConstraintSolver {
         val seedY = postureSeedY(intent, def, pose)
         if (pose.contacts.isEmpty()) {
             // No anchored contact: the relaxation loop cannot move the root, so pin the seed
-            // exactly. The solver is the sole owner of the coarse pelvis height (B3).
+            // exactly — the solver is the sole owner of the coarse pelvis height.
             pelvis.localPosition.y = seedY
         } else {
-            // Contact-bearing pose: keep the M3 eased seed so the authored root + relaxation
-            // dominate; preserves the seated/hanging regression contract.
+            // Contact-bearing pose: only ease toward the seed, so the authored root and the
+            // relaxation dominate.
             pelvis.localPosition.y = SkeletonMath.lerp(pelvis.localPosition.y, seedY, POSTURE_SEED_RELAX)
         }
     }
 
     /**
-     * Phase 2 (F2) — the exact coarse pelvis-Y target implied by a [PostureIntent.Kind] (B1.1):
+     * The exact coarse pelvis-Y target implied by a [PostureIntent.Kind]:
      *  - [SEATED_NEAR_FLOOR]: floor (0) + seated hip height ≈ shin + small clearance.
-     *  - [HANGING_UNDER_BAR]: derived from the overhead bar the hands grip, falling back to the
-     *    default bar height when the pose supplied no bar contact. `barY - vertReach - torsoLength`.
+     *  - [HANGING_UNDER_BAR]: `barY - vertReach - torsoLength`, falling back to the default bar
+     *    height when the pose supplied no bar contact.
      *  - [STANDING]: floor + thigh + shin + a small stand clearance.
      *  - [CUSTOM]: the authored pelvis (callers skip seeding entirely).
-     * [tolerance] (from the intent) is intentionally NOT folded into the seed — it scopes how
-     * strictly the relaxation must honour the seed before the PELVIS_INTENT rule flags a residual.
+     *
+     * The intent's tolerance is deliberately NOT folded in: it scopes how strictly the relaxation
+     * must honour the seed before the PELVIS_INTENT rule flags a residual.
      */
     private fun postureSeedY(intent: PostureIntent, def: SkeletonDefinition, pose: SkeletonPose): Float {
         return when (intent.kind) {
@@ -561,7 +474,7 @@ object ConstraintSolver {
             PostureIntent.Kind.STANDING -> def.shinLength + def.thighLength + 25f
             PostureIntent.Kind.HANGING_UNDER_BAR -> {
                 // The bar height is the highest hand-grip contact plane; fall back to a default
-                // overhead bar when none is registered (e.g. a pure HANGING intent with no contacts).
+                // overhead bar when none is registered (a pure HANGING intent with no contacts).
                 var barY = DEFAULT_BAR_Y
                 for (spec in pose.contacts) {
                     val c = spec.contact
@@ -577,12 +490,10 @@ object ConstraintSolver {
     }
 
     /**
-     * Phase 2 (F7) — applies the accumulated per-contact root [delta] to [pelvis], weighting each
-     * contact by its position in [precedence]. A contact listed earlier wins conflicts: its
-     * correction is amplified and the lower-priority contacts are proportionally damped, so the
-     * root is pulled toward the highest-priority reachable contact. An empty precedence list yields
-     * the uniform mean (every contact equal), exactly preserving the legacy symmetric-stance
-     * behaviour. The result is the damped Jacobi step applied to the pelvis local position.
+     * Applies the accumulated per-contact root [delta] to [pelvis], weighting each contact by its
+     * position in [precedence]: earlier entries win conflicts, so the root is pulled toward the
+     * highest-priority reachable contact. An empty list yields the uniform mean, preserving
+     * symmetric-stance behaviour.
      */
     private fun applyRootDelta(
         pelvis: SkeletonNode,
@@ -596,8 +507,8 @@ object ConstraintSolver {
             pelvis.localPosition.add(delta)
             return
         }
-        // Map each contact end-joint name to its precedence weight (1.0 for index 0, linearly
-        // decreasing for later entries, floored at 0.25 so no contact is ever fully ignored).
+        // Precedence weight per contact: 1.0 at index 0, decreasing linearly, floored at 0.25 so no
+        // contact is ever fully ignored.
         var weightSum = 0f
         val weights = FloatArray(contacts.size)
         for (i in contacts.indices) {
@@ -612,26 +523,23 @@ object ConstraintSolver {
             pelvis.localPosition.add(delta)
             return
         }
-        // Weighted mean step.
         pelvis.localPosition.x += delta.x * weightSum / contacts.size.toFloat()
         pelvis.localPosition.y += delta.y * weightSum / contacts.size.toFloat()
         pelvis.localPosition.z += delta.z * weightSum / contacts.size.toFloat()
     }
 
     /**
-     * UNI-1 — CCD posture relaxation. For every contact, walks the kinematic chain from the
-     * end-effector up to its root joint and rotates each free joint (damped) so the end-effector
-     * is pulled onto its fixed target. Because it starts from the authored configuration and only
-     * moves joints as far as the contact forces, the converged posture is the closest reachable
-     * shape to the author's intent — a real posture solve, not a pelvis-only correction.
+     * CCD posture relaxation. For every contact, walks the chain from the end-effector up to its
+     * root joint and rotates each free joint (damped) so the end-effector is pulled onto its fixed
+     * target. Starting from the authored configuration and moving joints only as far as the contact
+     * forces makes the converged posture the closest reachable shape to the author's intent.
      *
-     * Allocation-free: reuses the shared [ccdDelta]/matrix scratch. Deterministic. No-op when the
-     * contacts are already satisfied (residual ≤ [POSTURE_EPS]), so non-over-constrained poses are
-     * untouched. Only the joints on the contact chain move, so non-contact limbs stay rigid.
+     * Allocation-free and deterministic. A no-op when the contacts are already satisfied (residual
+     * ≤ [POSTURE_EPS]), and only the joints on the contact chain move, so non-contact limbs stay
+     * rigid.
      */
     private fun solvePosture(contacts: List<ContactSpec>) {
         for (iter in 0 until POSTURE_MAX_ITERS) {
-            // World transforms for the current configuration.
             for (root in activeRoots) root.updateWorldTransforms(zero, identity)
 
             var maxResidual = 0f
@@ -645,9 +553,9 @@ object ConstraintSolver {
                 if (res > maxResidual) maxResidual = res
                 if (res <= POSTURE_EPS) continue
 
-                // CCD: from the end-effector upward to the root joint, rotate each joint to aim the
-                // end-effector at the target, re-evaluating FK after every joint so the next joint
-                // sees the updated end-effector position.
+                // CCD from the end-effector upward: rotate each joint to aim the end-effector at the
+                // target, re-evaluating FK after every joint so the next one sees the updated
+                // position (the order cannot be swapped).
                 var node: SkeletonNode? = end
                 while (node != null) {
                     ccdAim(node, end, spec.targetWorld)
@@ -662,23 +570,20 @@ object ConstraintSolver {
     }
 
     /**
-     * Rotates [node] (damped) so that the end-effector [end] is pulled toward [target]. The
-     * correction is a world-space shortest-arc rotation from `node→end` onto `node→target`,
-     * applied to [node]'s *local* rotation by conjugating with the parent frame (so it composes
-     * correctly through the FK chain). Honours [POSTURE_DAMP] for stable convergence.
+     * Rotates [node] (damped) so the end-effector [end] is pulled toward [target]: a world-space
+     * shortest-arc rotation from `node->end` onto `node->target`, applied to the *local* rotation by
+     * conjugating with the parent frame so it composes correctly through the FK chain.
      */
     private fun ccdAim(node: SkeletonNode, end: SkeletonNode, target: Vector3) {
         ccdA.set(end.worldPosition).subtract(node.worldPosition)
         ccdB.set(target).subtract(node.worldPosition)
         if (ccdA.mag() < 1e-5f || ccdB.mag() < 1e-5f) return
 
-        // World-space delta aligning the current end direction onto the target direction.
         SkeletonMath.getRotationToAlign(ccdA, ccdB, ccdDX, ccdDelta)
         ccdDelta.angle *= POSTURE_DAMP
         if (abs(ccdDelta.angle) < 1e-4f) return
 
-        // Parent world rotation P (identity for the body root), its matrix (ccdPX..Z), and the
-        // delta matrix (ccdDX..Z). New local L' = (P^-1 ∘ Delta ∘ P) ∘ L.
+        // P = parent world rotation (identity at the body root). New local L' = (P^-1 ∘ Delta ∘ P) ∘ L.
         val parent = node.parent
         if (parent == null) {
             ccdPX.set(1f, 0f, 0f); ccdPY.set(0f, 1f, 0f); ccdPZ.set(0f, 0f, 1f)
@@ -696,23 +601,19 @@ object ConstraintSolver {
         SkeletonMath.multiplyMatrices(ccdOpX, ccdOpY, ccdOpZ, ccdOldX, ccdOldY, ccdOldZ, ccdNewX, ccdNewY, ccdNewZ)
         SkeletonMath.getRotationFromMatrix(ccdNewX, ccdNewY, ccdNewZ, node.localRotation)
 
-        // UNI-1 shape regularization: nudge the joint back toward its authored angle by
-        // [POSTURE_REG] so the converged posture is the closest reachable shape to the author's
-        // intent (a slerp(current, authored, POSTURE_REG)). For well-posed contacts the residual
-        // is ~0 and this pass never runs, so authored poses are preserved verbatim.
+        // Shape regularization: nudge the joint back toward its authored angle by [POSTURE_REG]
+        // (slerp(current, authored, POSTURE_REG)), so the converged posture is the closest reachable
+        // shape to the author's intent. Well-posed contacts have ~0 residual and never get here.
         regularizeTowardAuthored(node)
     }
 
     /**
-     * Slerps [node]'s current local rotation a fraction [POSTURE_REG] of the way back toward its
-     * authored value (captured in [authoredRotBuf]). Allocation-free: reuses the shared matrix
-     * scratch. `current' = current ∘ (current⁻¹ ∘ authored)^POSTURE_REG`.
+     * Slerps [node]'s local rotation a fraction [POSTURE_REG] back toward its authored value (from
+     * [authoredRotBuf]): `current' = current ∘ (current⁻¹ ∘ authored)^POSTURE_REG`.
      */
     private fun regularizeTowardAuthored(node: SkeletonNode) {
         val auth = authoredRotBuf[node.joint.index]
-        // cur matrix
         SkeletonMath.rotationToMatrix(node.localRotation, ccdOldX, ccdOldY, ccdOldZ)
-        // auth matrix
         SkeletonMath.rotationToMatrix(auth, ccdPX, ccdPY, ccdPZ)
         // R = cur⁻¹ ∘ auth = transpose(cur) ∘ auth
         SkeletonMath.transposeMultiply(ccdOldX, ccdOldY, ccdOldZ, ccdPX, ccdPY, ccdPZ, ccdMX, ccdMY, ccdMZ)
@@ -726,21 +627,17 @@ object ConstraintSolver {
     }
 
     /**
-     * Adds a small pelvis-tilt correction that shares an asymmetric reach residual into a trunk
-     * rotation rather than a pure translation. `signedImbalance` is the net horizontal
-     * (left/right) offset of the ground contacts relative to their proximal roots; for a symmetric
-     * stance it is ~0 and the authored pelvis rotation is left untouched. The correction is
-     * composed *with* the authored rotation (never replacing it) and is bounded/deterministic.
-     * Allocation-free: reuses the shared matrix scratch.
+     * Shares an asymmetric reach residual into a small trunk rotation rather than a pure
+     * translation. For a symmetric stance the imbalance is ~0 and the authored rotation is
+     * untouched; the correction is composed *with* it, never replacing it.
      */
     private fun applyPelvisTilt(pelvis: SkeletonNode, contacts: List<ContactSpec>) {
         val imb = signedImbalance(contacts, pelvis) ?: return
         if (abs(imb) <= 1e-3f) return
 
-        // Small roll about the world X axis (lateral side-bend / Trendelenburg) to balance a
-        // lateral contact imbalance, damped so it converges. A lateral (Z-position) imbalance is
-        // corrected by a roll about the body's lateral/side-bend X axis — NOT a pitch about Z,
-        // which would tilt the trunk forward/back instead of dropping the passive hip (UNI-4).
+        // A lateral (Z-position) imbalance is corrected by a roll about the lateral/side-bend X
+        // axis (Trendelenburg), damped so it converges — NOT a pitch about Z, which would tilt the
+        // trunk forward/back instead of dropping the passive hip.
         tiltDelta.set(1f, 0f, 0f, imb * TILT_GAIN)
 
         // pelvis.localRotation = authoredPelvisRot * tiltDelta  (preserves deliberate lean).
@@ -751,10 +648,9 @@ object ConstraintSolver {
     }
 
     /**
-     * Net signed horizontal imbalance of the ground contacts: +1 per contact to the passive side
-     * (-Z) and -1 per contact to the active side (+Z), weighted by how far the contact's target is
-     * from its proximal root along the body's lateral axis. Returns null when no ground contact is
-     * present (so the caller skips the tilt entirely). Symmetric stances sum to ~0.
+     * Net signed lateral imbalance of the ground contacts, weighted by how far each target is from
+     * its proximal root along the lateral axis. Null when no ground contact is present, so the
+     * caller skips the tilt entirely. Symmetric stances sum to ~0.
      */
     private fun signedImbalance(contacts: List<ContactSpec>, pelvis: SkeletonNode): Float? {
         var sum = 0f
@@ -765,8 +661,8 @@ object ConstraintSolver {
             ground = true
             val root = nodeMap[spec.rootJoint.index] ?: continue
             val lateral = spec.targetWorld.z - root.worldPosition.z
-            // Passive side (+Z) joints are `_B`/`_P`; active side (-Z) are `_F`/`_A`.
-            // Central joints (head) contribute ~0 lateral offset and are harmless either way.
+            // Passive side (+Z) joints are `_B`/`_P`, active side (-Z) `_F`/`_A`. Central joints
+            // (head) contribute ~0 lateral offset and are harmless either way.
             val name = spec.endJoint.name
             val sign = if (name.endsWith("_B") || name.endsWith("_P")) 1f else -1f
             sum += sign * lateral

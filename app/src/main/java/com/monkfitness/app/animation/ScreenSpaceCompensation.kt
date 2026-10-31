@@ -27,46 +27,36 @@ class ScreenSpaceScale {
         alphaScale = 1.0f + (p - 1.0f) * settings.alphaStrength
     }
 
-    // Legacy fallback for backward-compatibility with 1.0f default zoom
+    // Legacy overload: 1.0f default zoom.
     fun update(p: Float, settings: ScreenSpaceSettings) {
         update(p, 1.0f, settings)
     }
 }
 
 /**
- * ScreenSpaceCompensation is a pure post-processing stage.
- * It is now the single source of truth for all camera-zoom and perspective-based visual scaling,
- * keeping Camera a pure mathematical coordinate projector.
+ * Pure post-processing stage and the single source of truth for camera-zoom and perspective-based
+ * visual scaling, which keeps [Camera] a pure coordinate projector.
  */
 class ScreenSpaceCompensation(
     private val settings: ScreenSpaceSettings = ScreenSpaceSettings.DEFAULT
 ) {
-    /**
-     * Updates the provided ScreenSpaceScale buffer using the perspectiveScale and dynamic zoom.
-     */
     fun computeScale(point: ProjectedPoint, zoom: Float, buffer: ScreenSpaceScale) {
         buffer.update(point.perspectiveScale, zoom, settings)
     }
 
-    /**
-     * Legacy overloaded signature for backward compatibility.
-     */
+    /** Legacy overload: default zoom. */
     fun computeScale(point: ProjectedPoint, buffer: ScreenSpaceScale) {
         computeScale(point, 1.0f, buffer)
     }
 
-    /**
-     * Batch process joints directly on indexed arrays in-place with dynamic zoom.
-     */
+    /** Batch, in place: one scale per joint. */
     fun computeScales(joints: Array<ProjectedPoint>, zoom: Float, scales: Array<ScreenSpaceScale>) {
         for (i in joints.indices) {
             scales[i].update(joints[i].perspectiveScale, zoom, settings)
         }
     }
 
-    /**
-     * Legacy overloaded signature for batch processing with default zoom.
-     */
+    /** Legacy batch overload: default zoom. */
     fun computeScales(joints: Array<ProjectedPoint>, scales: Array<ScreenSpaceScale>) {
         computeScales(joints, 1.0f, scales)
     }

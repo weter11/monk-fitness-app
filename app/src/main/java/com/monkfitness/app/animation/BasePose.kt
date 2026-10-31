@@ -2,14 +2,9 @@ package com.monkfitness.app.animation
 
 import com.monkfitness.app.animation.SkeletonPose.IntentBuilder
 
-/**
- * BasePose serves as a generalized biomechanical framework for all exercise poses,
- * abstracting and consolidating shared scratch buffers, body construction helpers,
- * IK wrappers, motion driver helpers, and support definitions.
- */
 abstract class BasePose : PoseBuilder {
 
-    // Common scratch buffers (allocation-free, thread-safe, reusable)
+    // Allocation-free scratch reused across builds.
     protected val zeroVector = Vector3(0f, 0f, 0f)
     protected val identityRotation = JointRotation()
     protected val axisX = Vector3(1f, 0f, 0f)
@@ -23,29 +18,22 @@ abstract class BasePose : PoseBuilder {
     protected val legScratch = SkeletonMath.NearStraightLimbResult()
     protected val jointsBuffer = SkeletonPose()
 
-    // Common body construction helpers
     protected fun buildTorso(pelvis: SkeletonNode, chest: SkeletonNode, torsoLength: Float) {
         chest.localPosition.set(-torsoLength, 0f, 0f)
     }
 
 
     /**
-     * Phase 7 (Gap 7 / F8 / W17) — declares the gaze as a world-space [HeadTarget] intent that
-     * the Finalizer ([SkeletonPoseFinalizer.resolveHeadTarget]) resolves into the neck/head local
-     * offsets. The head is written by the Finalizer resolver alone — the pose only *declares* the
-     * target. This path was verified byte-identical to the legacy direction path
-     * (`HeadTargetBaselineTest`, maxDeviation ~6e-5 across every gaze pose family), so the legacy
-     * `buildHead` fallback that previously ran when the `HEAD_TARGET_ENABLED` flag was off has been
-     * removed (Phase 7 complete). The head-orientation math is now inlined in the resolver.
+     * Declares the gaze as a world-space [HeadTarget] intent that
+     * [SkeletonPoseFinalizer.resolveHeadTarget] resolves into the neck/head local offsets; the head
+     * is written by the resolver alone.
      *
-     * @param gazeDir the authored world-space gaze direction; a synthetic [HeadTarget] is recorded
-     *   a fixed distance along it from the neck's **current-build** world position for the Finalizer
-     *   to resolve. Because the recorded target is an absolute world point and
-     *   [SkeletonPoseFinalizer.resolveHeadTarget] resolves the direction by subtracting the neck's
-     *   world position from it, this helper propagates the authored hierarchy itself before reading
-     *   that position: the node buffers are reused across builds, so a read taken before the
-     *   caller's authoring-FK pass would carry the *previous* build's tree state — and on a
-     *   builder's first build the template's zero transform — into the resolved head direction.
+     * The recorded target is an absolute world point a fixed distance along [gazeDir] from the
+     * neck's **current-build** world position, and the resolver recovers the direction by
+     * subtracting that position from it. So the authored hierarchy must be propagated before the
+     * read: node buffers are reused across builds, and a read taken before the caller's
+     * authoring-FK pass would carry the previous build's tree state — on a builder's first build,
+     * the template's zero transform — into the resolved head direction.
      */
     protected fun buildGaze(
         neck: SkeletonNode,
@@ -54,22 +42,20 @@ abstract class BasePose : PoseBuilder {
         gazeDir: Vector3,
         targetDistance: Float = 100f
     ) {
-        // The head-target origin must be THIS build's neck world position (see above). Propagating
-        // from the pose's own root here makes the helper independent of whether the caller has
-        // already run its authoring-FK pass; the callers' own pass re-runs the same idempotent
-        // propagation immediately afterwards, so this adds no second geometry path.
+        // Must read THIS build's neck world position (see above). Propagating from the pose's own
+        // root here makes the helper independent of whether the caller has already run its
+        // authoring-FK pass; that pass re-runs the same idempotent propagation.
         var gazeRoot: SkeletonNode = neck
         while (gazeRoot.parent != null) gazeRoot = gazeRoot.parent!!
         gazeRoot.updateWorldTransforms(zeroVector, identityRotation)
 
-        // Record the additive intent carrier (synthetic target along the authored gaze direction).
+        // Synthetic target along the authored gaze direction.
         tempV1.set(gazeDir)
         if (tempV1.mag() < 1e-4f) tempV1.set(0f, 1f, 0f) else tempV1.normalize()
         val nw = neck.worldPosition
         tempV2.set(nw.x + tempV1.x * targetDistance, nw.y + tempV1.y * targetDistance, nw.z + tempV1.z * targetDistance)
-        // The head is resolved by SkeletonPoseFinalizer.resolveHeadTarget (single source of truth).
-        // Declared through the sole-mutator IntentBuilder (B0 compile guard: §1.1 carriers are
-        // private-set on SkeletonPose, so only the builder may write them).
+        // Declared through the sole-mutator IntentBuilder: the carriers are private-set on
+        // SkeletonPose, so only the builder may write them.
         IntentBuilder(jointsBuffer).headTarget(tempV2.copy())
     }
 
@@ -84,37 +70,25 @@ abstract class BasePose : PoseBuilder {
     }
 
     /**
-     * Authors a thoracic **twist** of the chest about its local +Y (spine long) axis as a
-     * real 3-D local rotation. The chest is the IK root for both arms, so the whole upper
-     * chain (rib cage, neck, head and both shoulders) follows the twist via FK.
-     */
-    /**
-     * B2 (RFC_BRANCH_B_IMPLEMENTATION §2) — every trunk/hip/girdle/extremity helper now records its
-     * intent into the §1.1 `jointIntents` (chest/hip/girdle/ankle/wrist) and `spineIntent` carriers
-     * via the sole-mutator `IntentBuilder`, in addition to writing the node's `localRotation`. The
-     * Finalizer ([SkeletonPoseFinalizer.applyIntentCarriers]) consumes these carriers and re-derives
-     * the node rotations, making them live (the dead→live flip that completes B2). The node write is
-     * retained so build-time logic that reads a node's world transform (e.g. arm IK under a rotating
-     * chest) keeps working; the Finalizer re-application is idempotent, so output stays byte-identical.
+     * Records [rotation] as the joint's intent carrier in addition to writing the node's
+     * `localRotation`. The Finalizer re-derives node rotations from the carriers, but the node
+     * write has to stay: build-time logic that reads world transforms (arm IK under a rotating
+     * chest) depends on it, and re-application is idempotent, so output stays byte-identical.
      */
     protected fun declareJointIntent(joint: Joint, rotation: JointRotation) {
         IntentBuilder(jointsBuffer).joint(joint, rotation)
     }
 
     /**
-     * Carrier hygiene (per-frame O(1) intent complexity): every build starts from a clean
-     * §1.1 intent-carrier slate. Pose instances are long-lived singletons reused across
-     * animation frames, so any carrier left uncleared would accumulate one entry per frame,
-     * growing the Finalizer/Solver consume cost linearly forever (the leak fixed here:
-     * jointsBuffer.jointIntents grew +1–2 entries/frame on non-contact poses).
-     * [IntentBuilder.reset] clears exactly the per-build carriers; structural node trees
-     * ([ensureHierarchy]) are untouched. Subclasses author into the freshly-reset
-     * [jointsBuffer] via [onBuild]; they cannot forget the reset because [build] is final.
+     * Clears the per-build intent carriers before authoring. Pose instances are long-lived
+     * singletons reused across animation frames, so a carrier left uncleared accumulates one entry
+     * per frame and grows the Finalizer/Solver consume cost linearly. Structural node trees are
+     * untouched.
+     * Subclasses cannot forget the reset because [build] is final.
      *
-     * Phase 10 (R13): the final template also captures the build's [PoseContext.definition]
-     * so authoring helpers whose defaults are definition-owned (see [buildSpineCurve]) can
-     * resolve them without a signature migration at every call site. The reference is
-     * authoring/build-lifetime only — it never enters [SkeletonPose] state.
+     * Also captures the build's [PoseContext.definition] so helpers with definition-owned defaults
+     * can resolve them without a signature migration at every call site; the reference is
+     * authoring-lifetime only and never enters [SkeletonPose] state.
      */
     final override fun build(context: PoseContext): SkeletonPose {
         SkeletonPose.IntentBuilder(jointsBuffer).reset()
@@ -125,16 +99,15 @@ abstract class BasePose : PoseBuilder {
     }
 
     /**
-     * Phase 10 (R13) — the definition of the [build] currently in progress (or the most recent
-     * one; single-threaded animation authoring, same contract as [jointsBuffer]). Written only
-     * by the final [build] template; read by definition-owned helper defaults.
+     * Definition of the build in progress (single-threaded authoring, same contract as
+     * [jointsBuffer]); written only by the final [build] template.
      */
     private var buildDefinition: SkeletonDefinition? = null
 
     /**
-     * Resolve the current build's definition-owned anatomical forward (RFC §5 R13). Fails fast
-     * when no build has run: an axis-less spine default outside the authoring lifecycle has no
-     * definition to derive from and must not silently pick a constant.
+     * The current build's definition-owned anatomical forward. Fails fast outside the authoring
+     * lifecycle: an axis-less spine default has no definition to derive from and must not silently
+     * pick a constant.
      */
     private fun anatomicalForward(): Vector3 {
         val definition = buildDefinition
@@ -146,9 +119,8 @@ abstract class BasePose : PoseBuilder {
     }
 
     /**
-     * Post-finalize extension point for subclasses that need to adjust the built pose
-     * (e.g. override an inherited heading). Runs after [onBuild] has finalized the pose,
-     * still inside the final [build] template — so per-build carrier hygiene is preserved.
+     * Post-finalize hook for subclasses that need to adjust the built pose (e.g. override an
+     * inherited heading). Runs inside the final [build] template, so carrier hygiene holds.
      */
     protected open fun onPoseBuilt(pose: SkeletonPose) {}
 
@@ -156,14 +128,10 @@ abstract class BasePose : PoseBuilder {
     protected abstract fun onBuild(context: PoseContext): SkeletonPose
 
     /**
-     * Branch C (RFC_BRANCH_C_EXTREMITY_ARTICULATION) — authors a **wrist articulation** (grip) as
-     * the §1.3 [Extremity] intent. Composes the 2-DOF local rotation from [flexion] (flexion/
-     * extension about the mediolateral Z axis) and [deviation] (radial/ulnar deviation about the
-     * antero-posterior Y axis) via [SkeletonMath.buildWristRotation], so combined DOFs never drop
-     * one axis. The mixed-mode contract (mirroring Branch B): the wrist node's `localRotation` is
-     * written for build-time FK (and so the carrier value is byte-identical to the node path), and
-     * the articulation is recorded into `extremityArticulations[HAND_A/HAND_P]` for the Finalizer
-     * (W1) to consume as the single source of truth.
+     * Wrist grip: [flexion]/extension about the mediolateral Z axis plus radial/ulnar [deviation]
+     * about the antero-posterior Y axis, composed via [SkeletonMath.buildWristRotation] so combined
+     * DOFs never drop one axis. Writes the node's `localRotation` for build-time FK and records the
+     * articulation for the Finalizer, which owns it.
      */
     protected fun buildWristArticulation(
         extremity: Extremity,
@@ -176,11 +144,10 @@ abstract class BasePose : PoseBuilder {
     }
 
     /**
-     * Branch C — authors an **ankle articulation** (foot plant) as the §1.3 [Extremity] intent.
-     * Composes the 2-DOF local rotation from [dorsiflexion] (dorsi/plantar-flexion about the
-     * mediolateral Z axis) and [inversion] (inversion/eversion about the long X axis) via
-     * [SkeletonMath.buildAnkleRotation]. Mixed-mode: writes the ankle node `localRotation` for
-     * build-time FK and records `extremityArticulations[FOOT_F/FOOT_B]` for W1 to consume.
+     * Foot plant: [dorsiflexion] (dorsi/plantar-flexion about the mediolateral Z axis) plus
+     * [inversion] (inversion/eversion about the long X axis), composed via
+     * [SkeletonMath.buildAnkleRotation]. Writes the ankle node's `localRotation` for build-time FK
+     * and records the articulation for the Finalizer, which owns it.
      */
     protected fun buildAnkleArticulation(
         extremity: Extremity,
@@ -192,19 +159,21 @@ abstract class BasePose : PoseBuilder {
         IntentBuilder(jointsBuffer).extremity(extremity, JointRotation(ankleNode.localRotation.axis, ankleNode.localRotation.angle))
     }
 
+    /**
+     * Thoracic twist of the chest about its local +Y (spine long) axis. The chest is the IK root
+     * for both arms, so the whole upper chain follows the twist via FK.
+     */
     protected fun buildChestTwist(chest: SkeletonNode, twistRad: Float) {
         chest.localRotation.set(axisY, twistRad)
         declareJointIntent(Joint.CHEST, JointRotation(axisY, twistRad))
     }
 
     /**
-     * Authors a **clavicular** rotation on the proximal shoulder-girdle node, between the
-     * chest and the scapula (CHEST -> CLAVICLE -> SCAPULA -> SHOULDER). Elevation/depression
-     * (transverse X), protraction/retraction (vertical Y) and axial rotation (long Z) are real
-     * joint rotations that lift and carry the whole shoulder (glenoid) on overhead reaches —
-     * closing the clavicle-is-a-dead-node gap (UNI-7). Writes the composed rotation into the
-     * clavicle's [SkeletonNode.localRotation]; FK propagates it to the scapula and shoulder.
-     * [sideSign] mirrors elevation across the body mid-line (-1 left/active, +1 right/passive).
+     * Clavicular rotation on the proximal shoulder-girdle node (CHEST -> CLAVICLE -> SCAPULA ->
+     * SHOULDER): [elevation] about transverse X, [protraction] about vertical Y, [axialRotation]
+     * about long Z — real joint rotations that lift and carry the glenoid on overhead reaches. FK
+     * propagates them to scapula and shoulder. [sideSign] mirrors elevation across the body
+     * mid-line (-1 left/active, +1 right/passive).
      */
     protected fun buildClavicularRotation(
         clavicle: SkeletonNode,
@@ -214,31 +183,22 @@ abstract class BasePose : PoseBuilder {
         sideSign: Float
     ) {
         SkeletonMath.buildClavicularRotation(elevation, protraction, axialRotation, sideSign, clavicle.localRotation)
-        // B2: girdle articulation intent (jointIntents).
         declareJointIntent(clavicle.joint, JointRotation(clavicle.localRotation.axis, clavicle.localRotation.angle))
     }
 
     /**
-     * Authors a **two-segment spine curve**: a lower-spine rotation and a thoracic
-     * (chest) rotation about the same [axis], letting the two segments differ. Passing equal
-     * values reproduces a single overall bend split across the spine; passing e.g. a lower
-     * value of zero with a thoracic value expresses "thoracic extends while the lower back
-     * stays" (Issue E).
+     * Authors a two-segment spine curve: a lower-spine rotation and a thoracic (chest) rotation
+     * about the same [axis]. Equal values reproduce one overall bend split across the spine; a
+     * lower value of zero with a thoracic value expresses "thoracic extends while the lower back
+     * stays".
      *
-     * [lower] is the node that carries the lower-spine rotation. In the standard skeleton the
-     * hips attach to the PELVIS, so the lower trunk tilt MUST live on `pelvis` (not on `LUMBAR`)
-     * to keep the hips/legs inheriting the bend — otherwise planted feet drift. Pass
-     * `nodes.pelvis` here for pelvis-rooted trunks and `nodes.lumbar` only when the hips are
-     * themselves children of the lumbar. [chest] is always the CHEST node.
+     * [lower] must be `pelvis` for pelvis-rooted trunks, not `LUMBAR`: the hips attach to the
+     * pelvis, so the tilt has to live there or the planted feet drift. Use `nodes.lumbar` only when
+     * the hips are themselves children of the lumbar. [chest] is always the CHEST node.
      *
-     * Phase 5 (W13/G4, W14/G5): this is the SINGLE authorized way to express a trunk lean.
-     * A pose must never hand-write both `pelvis.localRotation` and `chest.localRotation` as
-     * independent angles (migration rule B7 / frozen A2) — call this once instead.
-     *
-     * Phase 10 (R13): the axis-less default is the current build definition's anatomical
-     * forward, not a call-site constant (RFC §5 R13 / §1 Spine Intent row); an explicit
-     * [axis] remains the author's override. [axisZ] stays untouched for the (non-R13) helpers
-     * that still use it as a plain axis literal.
+     * This is the single authorized way to express a trunk lean — never hand-write both
+     * `pelvis.localRotation` and `chest.localRotation` as independent angles. The axis-less default
+     * is the current build definition's anatomical forward; an explicit [axis] overrides it.
      */
     protected fun buildSpineCurve(
         lower: SkeletonNode,
@@ -249,53 +209,45 @@ abstract class BasePose : PoseBuilder {
     ) {
         lower.localRotation.set(axis, lowerRad)
         chest.localRotation.set(axis, thoracicRad)
-        // B2: the single declarative spine curve (lower + thoracic about a shared axis). The
-        // Finalizer consumes `spineIntent` to re-derive the pelvis/lumbar/chest rotation; the
-        // concrete node writes are also recorded per-joint in `jointIntents` so the unified
-        // consumer covers both segments unambiguously.
+        // Both segments are also recorded per-joint below so the unified consumer covers them
+        // unambiguously; `spineIntent` carries the single declarative curve.
         IntentBuilder(jointsBuffer).spine(lowerRad, thoracicRad, axis)
         declareJointIntent(lower.joint, JointRotation(axis, lowerRad))
         declareJointIntent(chest.joint, JointRotation(axis, thoracicRad))
     }
 
     /**
-     * W1 — opt an [extremity] out of engine-derived orientation and into an explicit author
-     * override. After this call the engine preserves the endpoint local positions the pose wrote on
-     * the HEEL/TOE (or PALM/KNUCKLES/FINGERTIPS) nodes verbatim, instead of deriving them from the
-     * limb + ankle/wrist articulation. Use only for stylized extremities the default derivation
-     * cannot express (pointed toe, curled grip). Poses that describe pure anatomy never call this —
-     * they get the default automatic derivation, restoring the pose→engine ownership boundary.
+     * Opts [extremity] out of engine-derived orientation: the endpoint positions the pose wrote on
+     * HEEL/TOE (or PALM/KNUCKLES/FINGERTIPS) are preserved verbatim instead of derived from the limb
+     * plus articulation. Only for stylized extremities the derivation cannot express (pointed toe,
+     * curled grip); pure-anatomy poses never call this.
      */
     protected fun overrideExtremityOrientation(pose: SkeletonPose, extremity: Extremity) {
         pose.overrideExtremityOrientation(extremity)
     }
 
     /**
-     * Declares the root-relative (pelvis-frame) forward direction of an extremity.
-     * Exercise intent: use when the constraint system admits multiple valid orientations
-     * and the exercise needs to select one (e.g. planted hand on the floor). The Finalizer
-     * transforms this to world space using the solved pelvis rotation and projects it onto
-     * the support plane.
+     * Declares the root-relative (pelvis-frame) forward direction of an extremity. Use when the
+     * constraint system admits several valid orientations and the exercise must pick one (e.g. a
+     * planted hand on the floor). The Finalizer transforms it to world space with the solved pelvis
+     * rotation and projects it onto the support plane.
      */
     protected fun setHeading(extremity: Extremity, rootRelativeDir: Vector3) {
         SkeletonPose.HeadingBuilder(jointsBuffer).set(extremity, rootRelativeDir)
     }
 
     /**
-     * Authors hip **flexion/extension** (sagittal plane, about the mediolateral Z axis) on a hip
-     * ball-joint node (UNI-10). This is the acetabular ball joint; FK carries the whole leg with it.
-     * The single, documented authoring path replaces ad-hoc raw `hip.localRotation` writes.
+     * Hip flexion/extension in the sagittal plane, about the mediolateral Z axis. This is the
+     * acetabular ball joint; FK carries the whole leg with it.
      */
     protected fun buildHipFlexion(hip: SkeletonNode, flexionRad: Float) {
         hip.localRotation.set(axisZ, flexionRad)
-        // B2: hip flexion intent (jointIntents).
         declareJointIntent(hip.joint, JointRotation(axisZ, flexionRad))
     }
 
     /**
-     * Authors hip **internal/external (femoral axial) rotation** about the femur's long X axis on
-     * a hip ball-joint node (UNI-10). This is the acetabular ball joint's axial DOF, kept *separate*
-     * from the IK pole (which only selects the knee-bend plane). [sideSign] (-1 left / +1 right)
+     * Femoral axial rotation about the femur's long X axis on the hip ball joint. Kept *separate*
+     * from the IK pole, which only selects the knee-bend plane. [sideSign] (-1 left / +1 right)
      * mirrors the twist across the mid-line.
      */
     protected fun buildHipRotation(hip: SkeletonNode, rotationRad: Float, sideSign: Float) {
@@ -318,28 +270,20 @@ abstract class BasePose : PoseBuilder {
         contact: ContactConstraint? = null
     ): SkeletonMath.IKResult {
         val parentRot = if (middleNode.parent != null) middleNode.parent!!.worldRotation else parentRotation
-        // Sanctioned build-scoped re-arm (Phase 2 decision F2 — not a strengthening merge):
-        // `isTransformsUpdated` was set by the previous frame's finalize; the first limb baked
-        // this build re-arms the optimistic `true` so the fresh write window's AND across limbs
-        // starts from the §4.4 default.
+        // Build-scoped re-arm, not a merge: `isTransformsUpdated` was set by the previous frame's
+        // finalize, so the first limb baked this build re-arms the optimistic `true` and the fresh
+        // write window's AND across limbs starts from that default.
         if (jointsBuffer.isTransformsUpdated) {
             jointsBuffer.boneLengthsVerified = true
-            // Phase 4 (R5): the Straight-Intent-Dropped Flag (OR identity = false) re-arms in
-            // the SAME sanctioned fresh-window block, so each build's write window opens with
-            // neither stamp carrying a previous build's reading. Not a strengthening merge
-            // (F2 pattern).
+            // The straight-intent-dropped flag (OR identity = false) re-arms in the SAME fresh
+            // window, so neither stamp opens a build carrying a previous build's reading.
             jointsBuffer.straightIntentDropped = false
             jointsBuffer.isTransformsUpdated = false
         }
-        // B1 (IkStage extraction) — forward the end joint + full IK context into the §1.1
-        // `limbTargets` carrier so the engine-owned IkStage can reproduce this solve byte-for-byte
-        // (dead→live flip).
-        // P12 (§12.7a state 3) — the registration effects above always run; the limb REALIZATION
-        // (solve + stamp folds + node writes) is performed by the bake ONLY while the engine stage
-        // is disabled (R5: the bake is the Active Limb Solver while the stage is off). With
-        // IK_STAGE_ACTIVE=true the stage owns realization and this bake contributes zero
-        // geometry — exactly one implementation realizes per configuration, counted on the
-        // solver-window counter at each realization site (§12.7b).
+        // Registration always runs — the carrier is intent, not realization. The solve, stamp folds
+        // and node writes below are gated: while IK_STAGE_ACTIVE the engine stage owns realization
+        // and this bake contributes zero geometry, so exactly one implementation realizes per
+        // configuration.
         jointsBuffer.limbTargets.add(
             WorldTarget(
                 endNode.joint,
@@ -352,11 +296,8 @@ abstract class BasePose : PoseBuilder {
                 constraint
             )
         )
-        // PR-04: if this limb carries a fixed support contact, register it so the global
-        // constraint solver can reposition the root and re-bake the limb to honor the contact.
-        // P12 (§12.5 acceptance): REGISTRATION runs in BOTH configurations — the ContactSpec is
-        // intent, not realization — so contact/stamp producers behave identically across the
-        // flag; only the limb solve + folds + node writes below are gated.
+        // A fixed support contact is registered so the global constraint solver can reposition the
+        // root and re-bake the limb to honour it.
         if (contact != null) {
             val chain = ConstraintSolver.chainForEnd(endNode.joint)
             if (chain != null) {
@@ -378,15 +319,13 @@ abstract class BasePose : PoseBuilder {
             }
         }
         if (IK_STAGE_ACTIVE) return ikBuffer
-        // §12.7b/WP-G realization-site evidence — ONE registration path for every realization
-        // site (see `SkeletonPose.registerLimbRealization`): the first realization of a build
-        // cycle re-arms the cycle's window count to 1 (however many limbs this implementation
-        // realizes), and each realized limb is recorded so a SECOND realization of the same limb
-        // inside this window is per-execution evidence instead of an invisible no-op.
+        // One registration path per realization site: the first realization of a build cycle
+        // re-arms the cycle's window count, and each realized limb is recorded so a second
+        // realization of the same limb is per-execution evidence instead of an invisible no-op.
         jointsBuffer.registerLimbRealization(endNode.joint, authoringWindow = true)
 
-        // Phase 1 (F6): a zero-length pole means the pose omitted one — derive the default world
-        // pole so the bend plane is always well-defined (the engine owns this, not the pose).
+        // A zero-length pole means the pose omitted one: derive the default world pole so the bend
+        // plane is always well-defined (the engine owns this, not the pose).
         val worldPole = if (pole.mag() < 1e-4f) {
             SkeletonMath.deriveDefaultPole(rootWorldPos, targetWorldPos, tempPoleWorld)
         } else {
@@ -398,28 +337,27 @@ abstract class BasePose : PoseBuilder {
             SkeletonMath.solveIK(rootWorldPos, targetWorldPos, length1, length2, worldPole, constraint, ikBuffer, contact)
         }
 
-        // Single source of truth: automatically propagate the solver's clamp amount into the
-        // pose so reachability is detected without per-pose manual bookkeeping.
+        // Propagate the solver's clamp amount into the pose so reachability is detected without
+        // per-pose manual bookkeeping.
         jointsBuffer.maxIkClampAmount =
             ValidationStampMerge.clamp(jointsBuffer.maxIkClampAmount, ikResult.clampAmount)
 
-        // Phase 4 (R5): fold this solve's Straight-Limb Fallback outcome into the carrier
-        // stamp (RFC §4.4 producer "Active Limb Solver (first write)", merge rule OR). The
-        // reading is the scratch's — it describes the branch THIS solve actually took.
+        // Fold this solve's straight-limb fallback outcome into the carrier stamp (merge rule OR).
+        // The reading is the scratch's — it describes the branch THIS solve actually took.
         jointsBuffer.straightIntentDropped =
             ValidationStampMerge.dropped(
                 jointsBuffer.straightIntentDropped,
                 if (straight) ikResult.straightIntentDropped else false
             )
 
-        // Phase 1 (F5): assert the solved chain preserved both bone lengths exactly and fold the
-        // result into the pose's single `boneLengthsVerified` stamp (AND across all limbs).
+        // Assert the solved chain preserved both bone lengths exactly and fold the result into the
+        // pose's single `boneLengthsVerified` stamp (AND across all limbs).
         val bonesOk = SkeletonMath.bonesExact(rootWorldPos, ikResult.joint, ikResult.end, length1, length2)
         jointsBuffer.boneLengthsVerified =
             ValidationStampMerge.verified(jointsBuffer.boneLengthsVerified, bonesOk)
 
-        // Store the limb offsets in the parent's true local frame so they survive the parent's
-        // full 3D world rotation exactly — no hand-fed inverse-Z scalar.
+        // Store the limb offsets in the parent's true local frame so they survive its full 3D world
+        // rotation exactly — no hand-fed inverse-Z scalar.
         tempV1.set(ikResult.joint).subtract(rootWorldPos)
         SkeletonMath.toLocalDirection(tempV1, parentRot, middleNode.localPosition)
 
@@ -429,29 +367,24 @@ abstract class BasePose : PoseBuilder {
         return ikResult
     }
 
-    // Common Motion helpers (internally utilizing stateless MotionDrivers)
+    // Stateless motion drivers.
     protected fun phase(progress: Float): Float = progress
     protected fun downMotion(progress: Float): Float = MotionDrivers.PushPhase(progress)
     protected fun alternating(progress: Float): AlternatingMotion = MotionDrivers.alternating(progress)
     protected fun parabolicFootLift(t: Float): Float = MotionDrivers.ParabolicLift(t)
 
     /**
-     * P12 (§12.4b) — the ONE sanctioned authoring-time **planning solve**. Computes a limb's
-     * intermediate placement (e.g. the bent-knee apex) so a pose can COMPOSE later Limb Targets
-     * from it inside `build()`, when the Active Limb Solver's result is not authoring input under
-     * activation (R5: the realization happens in the engine stage, after build returns).
+     * The one sanctioned authoring-time planning solve: computes a limb's intermediate placement
+     * (e.g. the bent-knee apex) so a pose can compose later limb targets from it inside `build()`,
+     * where the realized solver result is not authoring input.
      *
-     * It is NOT limb realization and NOT a second Active Limb Solver, mechanically:
-     *  - writes NO nodes and NO carrier state (registration effects do not run);
-     *  - does NOT count into the R5 solver-window counter (no Phase-1 realization happened);
-     *  - its result may be consumed ONLY to compose intent values (target coordinates) that the
-     *    pose then declares through `bakeIkLimb`/the Intent Builder — never as geometry;
-     *  - produces no Validation Stamp readings — the stamped solve for that limb is the
-     *    registered implementation's job under R5.
+     * It is not realization: no nodes and no carrier state are written, it does not count into the
+     * solver-window counter, and it produces no stamp readings. Consume the result only to compose
+     * declared intent values (target coordinates), never as geometry.
      *
-     * P12 admits exactly one family to this route (plan §12.5): the hip-flexor chain, whose arm
-     * targets are choreographed against the front knee's bent position. Adding any other caller
-     * requires a plan amendment; `PlanningSolveInventoryTest` pins the call sites.
+     * Only the hip-flexor chain is admitted — its arm targets are choreographed against the front
+     * knee's bent position; any other caller needs a plan amendment, and
+     * `PlanningSolveInventoryTest` pins the call sites.
      */
     protected fun planLimbPlacement(
         rootWorldPos: Vector3,
@@ -462,10 +395,9 @@ abstract class BasePose : PoseBuilder {
         constraint: IKConstraint,
         out: SkeletonMath.IKResult
     ): SkeletonMath.IKResult {
-        // A planning solve composes choreography intent, never realization: the authored
-        // pole must be explicit (a zero pole is rejected — default-pole DERIVATION is
-        // Default-Pole ownership, R13, and stays inside the registered limb-solver
-        // implementations only). The non-zero path forwards the authored pole verbatim.
+        // Composition intent, never realization: the authored pole must be explicit (a zero pole
+        // is rejected) because default-pole derivation belongs to the registered limb solvers, and
+        // doing it here would mimic their ownership.
         if (pole.mag() < 1e-4f) {
             throw IllegalArgumentException(
                 "planLimbPlacement requires an explicit non-zero pole (composition intent " +
@@ -480,16 +412,12 @@ abstract class BasePose : PoseBuilder {
 
 
     /**
-     * Phase 2 (F2/F7) — declares the coarse posture intent the [ConstraintSolver] should honour
-     * (seeding the root/pelvis height) and the contact-conflict precedence order. This is the
-     * pose-side half of moving root ownership into the engine: instead of hand-computing `pelvisY`/
-     * `pelvisX`, the pose names the posture (SEATED_NEAR_FLOOR / HANGING_UNDER_BAR / STANDING /
-     * CUSTOM) and lets the solver derive the exact pelvis; when the solver owns posture
-     * the solver (when it owns posture) seeds the pelvis from the declared PostureIntent, replacing the authored root arithmetic.
+     * Declares the coarse posture [kind] so the [ConstraintSolver] can seed the pelvis height
+     * instead of the pose hand-computing `pelvisY`/`pelvisX`.
      *
-     * [precedence] lists contact end-joint names in priority order (index 0 wins); an empty list
-     * means all contacts are equal. [tolerance] scopes how strictly the solver must honour the
-     * intent before the PELVIS_INTENT rule flags a residual.
+     * [precedence] lists contact end joints in priority order (index 0 wins); an empty list means
+     * all contacts are equal. [tolerance] is how strictly the solver must honour the intent before
+     * the PELVIS_INTENT rule flags a residual.
      */
     protected fun declarePosture(
         pose: SkeletonPose,
@@ -497,11 +425,10 @@ abstract class BasePose : PoseBuilder {
         tolerance: Float = 0f,
         precedence: List<Joint> = emptyList()
     ) {
-        // Route through the sole-mutator IntentBuilder (B0 compile guard).
+        // Sole-mutator builder: the intent carriers are private-set on SkeletonPose.
         IntentBuilder(pose).posture(kind, tolerance, precedence)
     }
 
-    // Common Support helpers building SupportContact collections allocation-free
     protected fun leftFoot(): SupportContact = SupportContact.LEFT_FOOT
     protected fun rightFoot(): SupportContact = SupportContact.RIGHT_FOOT
     protected fun bothFeet(): Set<SupportContact> = setOf(leftFoot(), rightFoot())
@@ -511,13 +438,9 @@ abstract class BasePose : PoseBuilder {
 }
 
 /**
- * B4 — authors a pelvis tilt (root rotation) and records it as a [Joint.PELVIS] joint intent on
- * [buffer] so the Finalizer (B2) consumes it idempotently. Package-level (not a [BasePose] member)
- * so both [BasePose] subclasses and poses that implement [PoseBuilder] directly can call it.
- *
- * Mirrors the mixed-mode form of [buildHipFlexion]/[buildChestTwist]: the node is still written for
- * build-time FK and the carrier reproduces the rotation, so output is byte-identical to a bare
- * `pelvis.localRotation.set`. Closes the last bare `pelvis.localRotation.set` gap in the B4 migration.
+ * Pelvis tilt (root rotation) recorded as a [Joint.PELVIS] intent on [buffer] so the Finalizer
+ * applies it idempotently. Package-level so poses implementing [PoseBuilder] directly can use it
+ * too; the node write is kept for build-time FK and the carrier reproduces the same rotation.
  */
 fun declarePelvisTilt(pelvis: SkeletonNode, buffer: SkeletonPose, axis: Vector3, angle: Float) {
     pelvis.localRotation.set(axis, angle)
@@ -525,25 +448,20 @@ fun declarePelvisTilt(pelvis: SkeletonNode, buffer: SkeletonPose, axis: Vector3,
 }
 
 /**
- * Package-level IK bake that mirrors [BasePose.bakeIkLimb] so poses implementing [PoseBuilder]
- * directly (the upper-body / dynamic family) can route through the engine's single IK solver path.
- *
- * This closes the H2 stabilization gap: those poses previously called [SkeletonMath.solveIK]
- * directly, which skipped the §1.1 `limbTargets` carrier, the `maxIkClampAmount` recording, and the
- * `boneLengthsVerified` stamp — so the engine-owned [IkStage] and the reachability/contact
- * diagnostics had no data for them. Routing through this helper reproduces the exact same
- * `middleNode`/`endNode` local positions (byte-identical for identity-rotation parents) while
- * populating those carriers, making the family consistent with every other production pose.
+ * Package-level form of [BasePose.bakeIkLimb] for poses implementing [PoseBuilder] directly, so
+ * they route through the engine's single IK path instead of calling [SkeletonMath.solveIK] and
+ * skipping the `limbTargets` carrier, `maxIkClampAmount` and the `boneLengthsVerified` stamp —
+ * without which the engine stage and the reachability/contact diagnostics have no data for them.
+ * Local positions are unchanged (byte-identical for identity-rotation parents).
  */
 private val bakeIkScratch1 = Vector3()
 private val bakeIkScratchPole = Vector3()
 
 /**
- * P12 (§12.4b) — package-level form of [BasePose.planLimbPlacement] for poses implementing
- * [PoseBuilder] directly. Same contract: composition ONLY — no registration, no node writes,
- * no stamps, no realization count. Callers may use the result solely to compose declared
- * intent values; consuming it as final geometry is a second Active Limb Solver and is audited
- * (LimbSolverOwnershipActivationContractTest / PlanningSolveInventoryTest).
+ * Package-level form of [BasePose.planLimbPlacement] for poses implementing [PoseBuilder]
+ * directly. Same contract: composition only — no registration, no node writes, no stamps, no
+ * realization count. Using the result as final geometry is a second Active Limb Solver and is
+ * audited.
  */
 fun planLimbPlacement(
     rootWorldPos: Vector3,
@@ -554,8 +472,7 @@ fun planLimbPlacement(
     constraint: IKConstraint,
     out: SkeletonMath.IKResult
 ): SkeletonMath.IKResult {
-    // See [BasePose.planLimbPlacement]: composition-only; the authored pole must be explicit
-    // (zero rejected); default-pole derivation stays in the registered implementations.
+    // See [BasePose.planLimbPlacement]: composition only, explicit pole required.
     if (pole.mag() < 1e-4f) {
         throw IllegalArgumentException(
             "planLimbPlacement requires an explicit non-zero pole (composition intent " +
@@ -584,11 +501,10 @@ fun bakeIkLimb(
     contact: ContactConstraint? = null
 ): SkeletonMath.IKResult {
     val parentRot = if (middleNode.parent != null) middleNode.parent!!.worldRotation else parentRotation
-    // Sanctioned build-scoped re-arm (Phase 2 decision F2 — not a strengthening merge); mirrors
-    // [BasePose.bakeIkLimb]: the first limb baked this build re-arms the optimistic `true`.
+    // Mirrors [BasePose.bakeIkLimb]: the first limb baked this build re-arms the optimistic `true`.
     if (buffer.isTransformsUpdated) {
         buffer.boneLengthsVerified = true
-        // Phase 4 (R5): dropped-flag re-arm mirrors the member path (fresh-window, F2 pattern).
+        // The dropped-flag re-arm sits in the same fresh window, as in the member path.
         buffer.straightIntentDropped = false
         buffer.isTransformsUpdated = false
     }
@@ -624,9 +540,7 @@ fun bakeIkLimb(
             )
         }
     }
-    // P12 (§12.7a): realization runs only while the engine stage is off; registration above is
-    // unconditional (§12.5 acceptance — limbTargets AND contacts register in both configs).
-    // Counter evidence per authoring cycle mirrors the member path (single registration point).
+    // Registration above is unconditional; realization runs only while the engine stage is off.
     if (IK_STAGE_ACTIVE) return ikBuffer
     buffer.registerLimbRealization(endNode.joint, authoringWindow = true)
     val worldPole = if (pole.mag() < 1e-4f) {
@@ -641,7 +555,7 @@ fun bakeIkLimb(
     }
     buffer.maxIkClampAmount =
         ValidationStampMerge.clamp(buffer.maxIkClampAmount, ikResult.clampAmount)
-    // Phase 4 (R5): package-level bake fold — mirrors the member path exactly (see above).
+    // Mirrors the member path's straight-intent fold.
     buffer.straightIntentDropped =
         ValidationStampMerge.dropped(
             buffer.straightIntentDropped,

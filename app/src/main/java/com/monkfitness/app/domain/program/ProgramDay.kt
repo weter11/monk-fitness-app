@@ -5,22 +5,14 @@ import com.monkfitness.app.domain.common.ProgramDayId
 /**
  * One day of a revision's plan.
  *
- * [position] is the day's place in the sequence — an ordering, not an identity. The architecture is
- * explicit that a date, a cycle number and a day number are never ownership identifiers, so which
- * calendar day this plan day eventually falls on is the Scheduler's decision and is not stored here
- * (§1).
+ * [position] is the day's place in the sequence — an ordering, not an identity. A date, a cycle number and
+ * a day number are never ownership identifiers, so which calendar day this plan day falls on is the
+ * Scheduler's decision and is not stored here.
  *
- * [exercises] is the day's ordered plan. The order is the user's (a manual program may arrange it
- * freely, §2), and every element is its own occurrence, so repeating an exercise is legal as long as
- * each occurrence has its own identity (§9). A rest day is the one type that prescribes nothing: it
- * may exist as a slot without a session (§20).
- *
- * @property programDayId identity of this plan day.
- * @property position 1-based place of this day in the revision.
- * @property type what the day is for.
- * @property name an optional user-facing label; `null` means the day is presented by its position
- *   and type.
- * @property exercises the ordered plan elements of the day.
+ * [exercises] is the day's ordered plan. The order is the user's (a manual program may arrange it freely),
+ * and every element is its own occurrence, so repeating an exercise is legal as long as each occurrence has
+ * its own identity. A rest day is the one type that prescribes nothing: it may exist as a slot without a
+ * session.
  */
 data class ProgramDay(
     val programDayId: ProgramDayId,
@@ -44,7 +36,6 @@ data class ProgramDay(
         }
     }
 
-    /** The ids of the exercises this day plans, in plan order. */
     val plannedExerciseIds: List<String>
         get() = exercises.map { it.exerciseId }
 }

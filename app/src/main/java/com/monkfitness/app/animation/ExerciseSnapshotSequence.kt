@@ -4,16 +4,11 @@ import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.graphics.Paint
 
-/**
- * Encapsulates a sequence of exercise snapshots, with support for producing
- * composite outputs like sprite sheets and contact sheets.
- */
+/** A sequence of exercise snapshots, with sprite-sheet and contact-sheet composites. */
 class ExerciseSnapshotSequence(
     val snapshots: List<ExerciseSnapshot>
 ) {
-    /**
-     * Combines all snapshots into a single sprite sheet of specified column width.
-     */
+    /** Combines all snapshots into one sprite sheet of [columns] columns. */
     fun toSpriteSheet(columns: Int = snapshots.size): Bitmap {
         if (snapshots.isEmpty()) {
             return Bitmap.createBitmap(1, 1, Bitmap.Config.ARGB_8888)
@@ -42,9 +37,7 @@ class ExerciseSnapshotSequence(
         return spriteSheet
     }
 
-    /**
-     * Combines all snapshots into a labeled contact sheet grid.
-     */
+    /** Combines all snapshots into a labelled contact-sheet grid. */
     fun toContactSheet(
         columns: Int = 4,
         spacing: Int = 10,
@@ -88,10 +81,8 @@ class ExerciseSnapshotSequence(
             val x = spacing + col * (cellWidth + spacing)
             val y = spacing + row * (cellHeight + spacing)
 
-            // Draw frame
             canvas.drawBitmap(snapshots[i].bitmap, x.toFloat(), y.toFloat(), null)
 
-            // Draw label
             val labelX = x + cellWidth / 2f
             val labelY = y + frameHeight + labelHeight - (labelHeight * 0.3f)
             val label = String.format("F:%d (P:%.2f)", snapshots[i].frameIndex, snapshots[i].progress)

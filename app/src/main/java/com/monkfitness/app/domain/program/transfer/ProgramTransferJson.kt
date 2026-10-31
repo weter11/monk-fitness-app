@@ -1,36 +1,19 @@
 package com.monkfitness.app.domain.program.transfer
 
 /**
- * The transfer format's **writer**: a document, as the exact bytes a share carries (§5, §11, §18).
+ * The transfer format's writer: a document, as the exact bytes a share carries.
  *
- * ### Determinism is the contract
+ * Determinism is the contract — the same Program must produce byte-equivalent JSON — so every source of
+ * variation is closed here: field order is the literals below, array order is the plan's order or the
+ * domain's canonical order, tokens are enum *names* and never ordinals (a reordered enum can never change
+ * a file), formatting is two-space indentation with `LF` and one trailing newline, numbers are decimal
+ * with no separators and no sign on a positive value, text carries the escapes JSON requires and nothing
+ * else, and no clock, locale or random source is ever read.
  *
- * §2 and the brief require the same Program to produce *byte-equivalent* JSON, and §11's round-trip
- * test is only meaningful if that holds. Every source of variation is therefore closed here:
- *
- * ```text
- * field order        the field lists below are literals, in the schema's own order
- * array order        a day list is the plan's order; a weekday list and a focus list are sorted by the
- *                    domain's canonical order; a per-set target list is the plan's order
- * tokens             enum *names*, never ordinals — a reordered enum can never change a file
- * formatting         two-space indentation, `LF`, one trailing newline; scalar arrays inline and
- *                    arrays of records one per line, by this writer's own rule
- * numbers            decimal, no separators, no sign on a positive value
- * text               the escapes JSON requires and nothing else; every other character raw UTF-8
- * clock              never read: nothing in this file can consult a clock, a locale or a random source
- * ```
- *
- * The last line is the strongest one: this file holds no collaborator at all — it is an `object` whose
- * only input is a document — so "no timestamp is generated merely to change the export" and "the same
- * Program input produces the same bytes" are properties of its shape rather than of its care,
- * and §18's *"do not export source lifecycle timestamps"* has nothing to leak *from*.
- *
- * ### What it cannot write
- *
- * The document it is handed has no identity, no timestamp, no lifecycle, no source and no runtime fact
- * (see [ProgramTransferDocument]), so a leaked `programId`, revision identity, archive stamp or
- * adaptive row is not expressible here: the writer's vocabulary is six leaf types and the schema in
- * [ProgramTransferJson.record]'s literals.
+ * The writer holds no collaborator at all — it is an `object` whose only input is a document — so "no
+ * timestamp is generated merely to change the export" is a property of its shape rather than of its care.
+ * The document it is handed has no identity, timestamp, lifecycle, source or runtime fact, so a leaked
+ * `programId`, revision identity, archive stamp or adaptive row is not expressible here.
  */
 object ProgramTransferJson {
 
@@ -38,8 +21,8 @@ object ProgramTransferJson {
      * The whole document, as the format's text — ending with exactly one newline.
      *
      * A trailing newline is part of the format rather than a courtesy: it makes the file a text file for
-     * every tool that reads one, and it is one more byte that a comparison of two documents either
-     * agrees about or does not.
+     * every tool that reads one, and it is one more byte a comparison of two documents either agrees
+     * about or does not.
      */
     fun write(document: ProgramTransferDocument): String =
         record(
@@ -58,8 +41,6 @@ object ProgramTransferJson {
             )
         ) + "\n"
 
-    // ------------------------------------------------------------------ the schema's own shapes
-
     private fun revision(depth: Int, revision: RevisionTransfer): String = record(
         depth,
         listOf(
@@ -68,11 +49,9 @@ object ProgramTransferJson {
             "schedule" to schedule(depth + 1, revision.schedule),
             "focus" to focus(depth + 1, revision.focus),
             "days" to array(depth + 1, revision.days.map { day -> day(depth + 2, it = day) }),
-            // §30 step 28: the user's exercise preference, in the user's own order. Written as an
-            // inline array of ids rather than a joined string, because the ORDER of this array is the
-            // meaning and an array is what says "this is an order" without a comment — and it is always
-            // written, empty included, so that "no preference" is a stated `[]` rather than an absent key
-            // (one representation per value, §11).
+            // The user's exercise preference, in the user's own order. An inline array of ids rather than
+            // a joined string, because the ORDER is the meaning; always written, empty included, so "no
+            // preference" is a stated `[]` rather than an absent key (one representation per value).
             "preferredExercises" to inlineArray(
                 revision.preferredExercises.map { exerciseId -> quoted(exerciseId) }
             )
@@ -174,8 +153,6 @@ object ProgramTransferJson {
         )
     )
 
-    // ------------------------------------------------------------------ the mechanism
-
     /** Two spaces per level — the format's indentation, read and written as a rule. */
     private fun indent(depth: Int): String = "  ".repeat(depth)
 
@@ -237,8 +214,8 @@ object ProgramTransferJson {
  * One home for the six strings, because the writer emits exactly what the reader accepts — a token
  * spelled twice is a format with two dialects, and the first symptom would be a file this app cannot
  * read back. Every *other* token in the format is a domain enum's own name (`ProgramMode.MANUAL`,
- * `ProgramDayType.REST`, `PrescriptionDimension.REP_BASED`, `Focus.PUSH`), which is the representation
- * the app's converters already persist, so those need no second list here.
+ * `ProgramDayType.REST`, `Focus.PUSH`), the representation the app's converters already persist, so
+ * those need no second list here.
  */
 internal object TransferTokens {
 

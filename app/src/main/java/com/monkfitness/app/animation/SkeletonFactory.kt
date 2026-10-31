@@ -34,7 +34,7 @@ class SkeletonNodes(
     val heelB: SkeletonNode,
     val toeB: SkeletonNode
 ) {
-    // Aliases to support standard humanoid conventions exactly as described in the PR
+    // Aliases for the standard humanoid naming conventions
     val spine: SkeletonNode get() = chest
     val shoulderB: SkeletonNode get() = shoulderP
     val elbowB: SkeletonNode get() = elbowP
@@ -59,18 +59,17 @@ object SkeletonFactory {
     fun createStandardSkeleton(): SkeletonNodes {
         val pelvis = SkeletonNode(Joint.PELVIS)
         // Two-segment spine: PELVIS -> LUMBAR -> CHEST. LUMBAR defaults to a pass-through
-        // (coincident with the pelvis, identity rotation), so with no authored lumbar motion
-        // the chest resolves to the exact same world transform as the old single PELVIS->CHEST
-        // link (Issue E). Authoring a lumbar rotation gives the lower spine independent DOF.
+        // (coincident with the pelvis, identity rotation), so without authored lumbar motion the
+        // chest resolves to the same world transform as a single PELVIS->CHEST link, while a
+        // lumbar rotation gives the lower spine independent DOF.
         val lumbar = pelvis.addChild(SkeletonNode(Joint.LUMBAR))
         val chest = lumbar.addChild(SkeletonNode(Joint.CHEST))
         val neck = chest.addChild(SkeletonNode(Joint.NECK_END))
         val head = neck.addChild(SkeletonNode(Joint.HEAD_POS))
 
-        // Shoulder girdle: CHEST -> CLAVICLE -> SCAPULA -> SHOULDER. The scapula
-        // carries the real elevation/depression + protraction/retraction DOF; the
-        // shoulder (glenoid) is the IK root and derives its live position from the
-        // scapula rotation rather than a raw translation (BIOMECHANICS.md §4/§10).
+        // Shoulder girdle: CHEST -> CLAVICLE -> SCAPULA -> SHOULDER. The scapula carries the real
+        // elevation/depression + protraction/retraction DOF; the shoulder (glenoid) is the IK root
+        // and derives its position from the scapula rotation rather than a raw translation.
         val clavicleA = chest.addChild(SkeletonNode(Joint.CLAVICLE_A))
         val scapulaA = clavicleA.addChild(SkeletonNode(Joint.SCAPULA_A))
         val shoulderA = scapulaA.addChild(SkeletonNode(Joint.SHOULDER_A))

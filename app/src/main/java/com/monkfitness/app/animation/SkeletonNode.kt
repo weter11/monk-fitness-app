@@ -1,8 +1,6 @@
 package com.monkfitness.app.animation
 
-/**
- * Mutable axis-angle rotation to avoid allocations.
- */
+/** Mutable axis-angle rotation, reused to avoid allocations. */
 class JointRotation(
     val axis: Vector3 = Vector3(0f, 0f, 1f),
     var angle: Float = 0f // radians
@@ -23,10 +21,7 @@ class JointRotation(
     }
 }
 
-/**
- * Lightweight node for hierarchical transforms (Forward Kinematics).
- * Optimized for zero-allocation per frame updates.
- */
+/** Lightweight node for hierarchical transforms (FK), optimised for zero-allocation per-frame updates. */
 class SkeletonNode(
     val joint: Joint,
     var parent: SkeletonNode? = null,
@@ -38,7 +33,7 @@ class SkeletonNode(
 
     val worldRotation: JointRotation = JointRotation()
 
-    // Persistent scratch buffers to completely avoid allocations during FK traversal
+    // Persistent scratch buffers, so FK traversal allocates nothing
     private val pX = Vector3()
     private val pY = Vector3()
     private val pZ = Vector3()
@@ -55,11 +50,9 @@ class SkeletonNode(
         return node
     }
 
-    /**
-     * Compute world transform inheriting from parent via full 3D matrix concatenation.
-     */
+    /** Computes the world transform, inheriting from the parent via full 3D matrix concatenation. */
     fun updateWorldTransforms(parentWorldPos: Vector3, parentWorldRotation: JointRotation) {
-        // Position propagation: Rotate local offset by parent's world rotation
+        // Position propagation: rotate the local offset by the parent's world rotation
         if (parentWorldRotation.angle != 0f) {
             SkeletonMath.rotAround(localPosition, parentWorldRotation.axis, parentWorldRotation.angle, worldPosition)
         } else {
@@ -67,7 +60,7 @@ class SkeletonNode(
         }
         worldPosition.add(parentWorldPos)
 
-        // Rotation propagation: Concatenate parent's world rotation with local rotation
+        // Rotation propagation: concatenate the parent's world rotation with the local one
         SkeletonMath.rotationToMatrix(parentWorldRotation, pX, pY, pZ)
         SkeletonMath.rotationToMatrix(localRotation, lX, lY, lZ)
         SkeletonMath.multiplyMatrices(pX, pY, pZ, lX, lY, lZ, wX, wY, wZ)
@@ -78,9 +71,7 @@ class SkeletonNode(
         }
     }
 
-    /**
-     * Flatten the hierarchy into the target joint map.
-     */
+    /** Flattens the hierarchy into the target joint map. */
     fun flatten(target: SkeletonPose) {
         target.setJoint(joint, worldPosition)
         target.setJointRotation(joint, worldRotation)

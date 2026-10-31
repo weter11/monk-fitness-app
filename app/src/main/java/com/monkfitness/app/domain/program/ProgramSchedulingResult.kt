@@ -6,20 +6,18 @@ import com.monkfitness.app.domain.common.SlotId
 import java.time.LocalDate
 
 /**
- * The outcome of a scheduling pass (§28's *"expected states are results, not exceptions"*).
+ * The outcome of a scheduling pass.
  *
- * A pass either produced a [ScheduleOutcome] or was refused for a rule of §3, §20 or §29 — a completed
- * Program is not planned, an archived one is not planned, a Program with no date to plan *from* is not
- * planned. Each of those is an ordinary, explainable answer to a question the user is allowed to ask,
- * so it is a value the caller branches on rather than an exception the caller catches; a storage
- * failure is the third case, surfaced rather than absorbed (§33: *"catch `Exception` and return empty
- * result"* is prohibited, and an empty [ScheduleOutcome] would be exactly that).
+ * A pass either produced a [ScheduleOutcome] or was refused for a rule: a completed Program is not
+ * planned, an archived one is not planned, a Program with no date to plan *from* is not planned. Each of
+ * those is an ordinary answer to a question the user is allowed to ask, so it is a value the caller
+ * branches on rather than an exception it catches; a storage failure is the third case, surfaced rather
+ * than absorbed — an empty [ScheduleOutcome] would be exactly that swallowing.
  *
- * The envelope is this stage's own rather than [ProgramOperationResult]'s, for the same reason the
- * editor's is: the value a pass produces is a scheduling outcome, not a Program, and the refusals are
- * about scheduling a plan. The *sentences* are shared where a rule is shared — a program that is not
- * stored is the same fact for every layer, and [ProgramSchedulingRefusal.ProgramNotFound] quotes the
- * one the lifecycle layer already owns rather than inventing a second wording for it.
+ * The envelope is this stage's own rather than [ProgramOperationResult]'s, because the value a pass
+ * produces is a scheduling outcome, not a Program, and the refusals are about scheduling a plan. The
+ * *sentences* are shared where a rule is shared: a program that is not stored is the same fact for every
+ * layer, so [ProgramSchedulingRefusal.ProgramNotFound] quotes the one the lifecycle layer already owns.
  */
 sealed interface ProgramSchedulingResult<out T> {
 
@@ -37,17 +35,15 @@ sealed interface ProgramSchedulingResult<out T> {
 }
 
 /**
- * The rules that can stop a scheduling pass (§3, §20, §29), each carrying the sentence that explains it.
+ * The rules that can stop a scheduling pass, each carrying the sentence that explains it.
  *
- * Typed rather than a message string, for the same reason the lifecycle layer's refusals are: a UI
- * wants the sentence, and a test wants to assert *which* rule fired without matching on prose.
+ * Typed rather than a message string, for the same reason the lifecycle layer's refusals are: a UI wants
+ * the sentence, and a test wants to assert *which* rule fired without matching on prose.
  *
- * Note what is **not** here. §28's example vocabulary includes `RevisionConflict`, and this stage has
- * no such mechanism on purpose: a pass works from the revision it is given — the Program's stored
- * current revision — and there is no draft, no optimistic-concurrency token and no staleness check to
- * fail. `NoFutureSlot`, also from §28's list, is likewise not a refusal here: a revision with no date
- * left is a pass that created nothing and still reconciled what it found, so it is reported in the
- * outcome ([SlotPlan.hasNoFutureDate]) rather than refusing a call that has real work to do.
+ * A `RevisionConflict` is absent on purpose: a pass works from the revision it is given — the Program's
+ * stored current revision — and there is no draft, no optimistic-concurrency token and no staleness check
+ * to fail. A revision with no date left is not a refusal either: it is a pass that created nothing and
+ * still reconciled what it found, reported in the outcome ([SlotPlan.hasNoFutureDate]).
  */
 sealed interface ProgramSchedulingRefusal {
 
@@ -55,7 +51,7 @@ sealed interface ProgramSchedulingRefusal {
     val message: String
 
     /**
-     * The Program is not stored (§28 `INVALID_DATA`).
+     * The Program is not stored.
      *
      * The same fact the lifecycle layer reports, quoted from it: one rule, one sentence.
      */
@@ -64,11 +60,11 @@ sealed interface ProgramSchedulingRefusal {
     }
 
     /**
-     * The Program is archived, and §29's archive *"stops future planning"*.
+     * The Program is archived, and archiving *"stops future planning"*.
      *
      * The refusal is about planning, not about the lifecycle: an archived Program keeps the lifecycle it
-     * reached, and unarchiving it makes it plannable again. What archiving stops is exactly this — the
-     * plan gaining opportunities the user has put away with the Program.
+     * reached, and unarchiving it makes it plannable again. What archiving stops is the plan gaining
+     * opportunities the user has put away with the Program.
      */
     data class ProgramArchived(val programId: ProgramId) : ProgramSchedulingRefusal {
         override val message: String =
@@ -77,10 +73,10 @@ sealed interface ProgramSchedulingRefusal {
     }
 
     /**
-     * The Program is completed, and a completed Program is terminal (§3).
+     * The Program is completed, and a completed Program is terminal.
      *
      * It cannot be resumed directly, so it cannot silently acquire opportunities the user did not ask
-     * for. A copy of it is, of course, its own Program and is planned normally.
+     * for. A copy of it is its own Program and is planned normally.
      */
     data class ProgramCompleted(val programId: ProgramId) : ProgramSchedulingRefusal {
         override val message: String =
@@ -91,10 +87,9 @@ sealed interface ProgramSchedulingRefusal {
     /**
      * The Program has no date to plan from: it has neither actually started nor been planned to start.
      *
-     * The Scheduler does not invent one. §3 is explicit that *"planned start date does not automatically
-     * start a Program"*, and the same rule read the other way is that a Program with no start date at
-     * all has no `day 1` — picking today would be the Scheduler deciding when the user's program begins,
-     * which is the user's decision to make.
+     * The Scheduler does not invent one. A planned start date does not automatically start a Program, and
+     * the same rule read the other way is that a Program with no start date at all has no `day 1` —
+     * picking today would be the Scheduler deciding when the user's program begins.
      */
     data class NoSchedulingAnchor(val programId: ProgramId) : ProgramSchedulingRefusal {
         override val message: String =
@@ -103,10 +98,10 @@ sealed interface ProgramSchedulingRefusal {
     }
 
     /**
-     * The revision the Program points at is not stored, so the plan to schedule cannot be read (§23).
+     * The revision the Program points at is not stored, so the plan to schedule cannot be read.
      *
-     * Reported rather than treated as "no plan": a Program always has a current revision, so a missing
-     * one is invalid data, not an empty plan.
+     * Reported rather than treated as "no plan": a Program always has a current revision, so a missing one
+     * is invalid data, not an empty plan.
      */
     data class RevisionMissing(val programId: ProgramId, val revisionId: RevisionId) :
         ProgramSchedulingRefusal {
@@ -118,26 +113,15 @@ sealed interface ProgramSchedulingRefusal {
 /**
  * What one scheduling pass did, as a value a caller can present and a test can measure.
  *
- * The outcome reports **the decision and its inputs' dates** — the anchor the plan was read from, the
- * day the pass was made on, the window it covered and the dates it found — because every one of those
- * is a fact a user can be shown (debug mode shows the scheduler horizon, §22) and a reviewer can check
- * without re-deriving the pass. It carries the same three lists the [SlotPlan] decided, so a caller
- * never has to go back to storage to find out what happened.
+ * The outcome reports **the decision and the dates it was read from** — the anchor, the day the pass was
+ * made on, the window and the dates it found — because each is a fact a user can be shown and a reviewer
+ * can check without re-deriving the pass. It carries the same three lists the [SlotPlan] decided, so a
+ * caller never has to go back to storage to find out what happened.
  *
- * Note the two absences, both deliberate. There is no count of anything *performed* — no completions, no
- * volume, no score — because a pass has no access to performance and a scheduling outcome that reported
- * it would be inventing one (§12). And there is no leftover total: an indefinite program's horizon is
- * a window, not a fraction of a program, so nothing here can be read as `N / 30` progress (§21).
- *
- * @property programId the Program the pass was about.
- * @property revisionId the revision it was scheduled from — read, never written.
- * @property anchor the date the plan's `day 1` falls on, as the pass read it.
- * @property asOf the date the pass was made on.
- * @property window the dates the pass covered, or `null` when the revision had none left.
- * @property scheduledDates the revision's training dates inside the window.
- * @property created the opportunities that were stored, in date order.
- * @property superseded the existing opportunities that stopped being ones, each with its rule.
- * @property missed the existing opportunities whose date passed untrained and unpaused.
+ * Two absences are deliberate. There is no count of anything *performed* — no completions, no volume, no
+ * score — because a pass has no access to performance and an outcome reporting it would be inventing one.
+ * And there is no leftover total: an indefinite program's horizon is a window, not a fraction of a
+ * program, so nothing here can be read as `N / 30` progress.
  */
 data class ScheduleOutcome(
     val programId: ProgramId,

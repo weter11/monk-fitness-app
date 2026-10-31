@@ -3,8 +3,8 @@ package com.monkfitness.app.animation
 import kotlin.math.*
 
 /**
- * SkeletonProjector is responsible for transforming a 3D SkeletonPose into a 2D ProjectedSkeleton.
- * Reuses internal buffers to eliminate per-frame allocations.
+ * Transforms a 3D SkeletonPose into a 2D ProjectedSkeleton, reusing internal buffers so a frame
+ * allocates nothing.
  */
 class SkeletonProjector {
     private val torsoPoints = Array(8) { ProjectedPoint() }
@@ -29,18 +29,15 @@ class SkeletonProjector {
     ) {
         val style = engine.style
 
-        // 1. Project Joints
         val jointEntries = Joint.entries
         for (i in 0 until jointEntries.size) {
             val joint = jointEntries[i]
             camera.project(pose.getJoint(joint), width, height, buffer.joints[joint.index])
         }
 
-        // 2. Indicators
         buffer.indicators[0].update(buffer.joints[Joint.HEAD_POS.index], Joint.HEAD_POS)
         buffer.indicators[1].update(buffer.joints[Joint.WRIST_A.index], Joint.WRIST_A, indicator = true)
 
-        // 3. Bones
         val engineBones = engine.bones
         buffer.boneCount = engineBones.size
         for (i in 0 until engineBones.size) {
@@ -55,13 +52,10 @@ class SkeletonProjector {
             }
         }
 
-        // 4. Torso faces
         updateTorsoFaces(pose, camera, style, width, height, buffer)
 
-        // 5. Ground
         updateGround(pose, camera, width, height, buffer, groundLevel)
 
-        // 6. Depth Range
         var dMin = Float.MAX_VALUE
         var dMax = Float.MIN_VALUE
         for (i in buffer.joints.indices) {
@@ -84,10 +78,10 @@ class SkeletonProjector {
         val hipF = pose.getJoint(Joint.HIP_F); val hipB = pose.getJoint(Joint.HIP_B)
         val shoulderA = pose.getJoint(Joint.SHOULDER_A); val shoulderP = pose.getJoint(Joint.SHOULDER_P)
 
-        // Retrieve torso rotation from the CHEST joint world rotation (first-class source of truth)
+        // Torso rotation comes from the CHEST world rotation — the first-class source of truth.
         val chestRot = pose.getJointRotation(Joint.CHEST)
 
-        // Derive lean (spine direction) and shVec (shoulder direction) from rotation instead of positions
+        // Derive lean (spine) and shVec (shoulder line) from the rotation, not from positions.
         val lean = SkeletonMath.rotAround(defaultSpineDir, chestRot.axis, chestRot.angle, tempV).normalize()
         val shVec = SkeletonMath.rotAround(defaultShoulderDir, chestRot.axis, chestRot.angle, tempV2).normalize()
         val chestNorm = lean.cross(shVec, tempV3).normalize()

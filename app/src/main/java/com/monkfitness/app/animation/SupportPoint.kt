@@ -1,8 +1,5 @@
 package com.monkfitness.app.animation
 
-/**
- * Represents a skeletal joint that may contact the environment.
- */
 enum class SupportPoint {
     LEFT_FOOT,
     RIGHT_FOOT,

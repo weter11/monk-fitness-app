@@ -6,49 +6,29 @@ import com.monkfitness.app.domain.common.RevisionId
 /**
  * One editor session's work in progress — deliberately **not** a [ProgramRevision].
  *
- * The editor is always draft-first (§6, §7): `Generate` and `Regenerate` only ever alter a draft,
- * and `Save` is what turns a draft into a new revision (or, for a no-op save, into nothing at all).
- * The two types therefore differ in exactly the ways that matter:
+ * `Generate` and `Regenerate` only ever alter a draft, and `Save` is what turns a draft into a new revision
+ * (or, for a no-op save, into nothing at all). The two types differ in exactly the ways that matter:
  *
  *  * a draft has **no revision identity** — there is no `revisionId` here, because nothing has been
  *    committed yet. What it carries instead is what it was opened from;
- *  * a draft may be **incomplete and untidy**: no days yet, a name the user has not typed, work that
- *    is still being arranged. A revision may not be any of those;
+ *  * a draft may be **incomplete and untidy**: no days yet, a name the user has not typed, work still
+ *    being arranged. A revision may not be any of those;
  *  * a draft is edited by producing the next draft; a revision is never edited at all.
  *
- * [programId] and [baseRevisionId] between them say which of the editor's four entry points (§7)
- * opened this draft, without needing a separate flag that could disagree with them:
+ * [programId] and [baseRevisionId] between them say which of the editor's four entry points opened this
+ * draft, without a separate flag that could disagree with them: neither means create (or review an
+ * import), only a base revision means copy, and both mean editing an existing Program.
  *
- * ```text
- * programId = null, baseRevisionId = null   → create (or review an import)
- * programId = null, baseRevisionId != null  → copy
- * programId != null, baseRevisionId != null → edit an existing Program
- * ```
+ * A draft holds the same *shapes* as a revision's content, because reconciliation runs on them: a
+ * generated element, an element the user authored and a pinned element are distinguishable on the draft,
+ * so a regenerate pass can keep the first two and replace only what neither claims. [mode] is the draft's
+ * own property, and saving a draft whose mode differs from the revision it was opened from is exactly the
+ * explicit mode switch a new revision records.
  *
- * A draft holds the same *shapes* as a revision's content ([ProgramDay] with [ProgramExercise] plan
- * elements), because reconciliation runs on them: a generated element, an element the user authored
- * and a pinned element are distinguishable on the draft, so a regenerate pass can keep the first two
- * and replace only what neither of them claims (§7). Which mode the draft is in ([mode]) is the
- * draft's own property, and saving a draft whose mode differs from the revision it was opened from
- * is exactly the explicit mode switch that a new revision records (§2).
- *
- * @property programId the Program being edited, or `null` when this draft will create a new one.
- * @property baseRevisionId the revision the draft started from, or `null`.
- * @property name the working name; may still be blank while the user is typing.
- * @property description the working description; may be empty.
- * @property mode the mode the draft is being edited in.
- * @property duration the working duration.
- * @property schedule the working schedule.
- * @property days the working plan, in the user's arrangement.
- * @property focus the working Goals & Focus configuration (§8, §7's *Goals & Focus* step). It is
- *   structural content (§6), it is what the Generated Planner is built from, and a save that changes
- *   it and nothing else still creates a revision.
- * @property preferredExercises the exercises the user would rather the generator reach for, most
- *   preferred first (§9's *user choice*, the first level of its priority order). It is working
- *   configuration of exactly the same kind as [focus] — a stated input to generation rather than plan
- *   content — so §6's *program-behavior changes create a new Revision* applies to it identically, and a
- *   save that changes it and nothing else still creates a revision. `ExercisePreference.NONE` is the
- *   absence: the user named nothing, which is a fact and never an implicit ranking.
+ * [focus] and [preferredExercises] are working configuration of the same kind: stated inputs to
+ * generation rather than plan content, and structural, so a save that changes either and nothing else still
+ * creates a revision. `ExercisePreference.NONE` is the absence — the user named nothing, which is a fact
+ * and never an implicit ranking.
  */
 data class ProgramEditorDraft(
     val programId: ProgramId? = null,
@@ -75,7 +55,6 @@ data class ProgramEditorDraft(
     val editsExistingProgram: Boolean
         get() = programId != null && baseRevisionId != null
 
-    /** Whether the draft is a generated plan being edited. */
     val isGenerated: Boolean
         get() = mode == ProgramMode.GENERATED
 }
