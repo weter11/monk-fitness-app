@@ -3,14 +3,9 @@ package com.monkfitness.app.poses
 import com.monkfitness.app.animation.*
 
 /**
- * Scapular pull-up (dead-hang -> active-hang) — biomechanics-first rewrite.
- *
- * This is the FIRST phase of every pull-up, isolated: the scapulae
- * depress and retract to raise the body a few units while the arms
- * stay essentially straight. The reach only shortens a little (141 -> 131
- * of 146 max), so the elbows barely flex — the motion is scapular,
- * not humeral/elbow. PING_PONG bounces dead-hang <-> active-hang.
- * Hands are FIXED on the bar; the body rises relative to them.
+ * Scapular pull-up (dead-hang → active-hang) — the FIRST phase of every pull-up, isolated: the scapulae
+ * depress and retract to raise the body a few units while the arms stay essentially straight (the reach
+ * only shortens `141 -> 131` of 146, so the elbows barely flex). PING_PONG bounces the two hangs.
  */
 class ScapularPullUpPose : BaseVerticalPullPose() {
 

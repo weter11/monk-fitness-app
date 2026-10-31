@@ -4,33 +4,19 @@ import com.monkfitness.app.animation.*
 import kotlin.math.*
 
 /**
- * BaseVerticalPullPose is the single owner of all shared Vertical-Pull-family scaffolding.
+ * BaseVerticalPullPose owns the Vertical-Pull family's shared scaffolding. Every member is a hanging,
+ * bar-supported vertical pull; what they share is engine plumbing and the pull mechanic:
  *
- * The Vertical Pull family is a biomechanics-first rewrite (not a modernization of the
- * old rigid-object math). Every member — dead hang, scapular pull-up, and the
- * overhand / wide / chin-up / neutral pull-ups — is a hanging, bar-supported
- * vertical pull. What they genuinely share is engine plumbing and the pull mechanics,
- * not choreography:
+ *  - the hierarchy, the fixed bar anchor + bar prop (oriented laterally so it passes under the hands),
+ *    IK baking via [BasePose.bakeIkLimb] with frame-relative poles, and the camera/environment;
+ *  - FIXED hand targets: the hands NEVER move, so the body is pulled up *relative to* the fixed
+ *    contacts, which is what makes the grip read as "attached";
+ *  - a scapula-led pull — the arms are IK'd to the bar, so the body height is derived from a desired
+ *    shoulder→bar reach. Because the bottom of a pull-up is the fully-extended position, the earliest
+ *    part of every rep can only be scapular (the body rises a few units while the arms stay straight);
+ *    the elbows bend only once the reach shortens.
  *
- *  - Skeleton hierarchy via [SkeletonFactory.createStandardSkeleton]
- *  - A fixed bar anchor + bar prop (oriented laterally so it passes under the hands)
- *  - Reusable, allocation-free IK buffers and scratch targets/poles
- *  - IK baking via [BasePose.bakeIkLimb] (frame-relative poles, stable in the chest/pelvis frame)
- *  - FIXED hand targets on the bar: the hands NEVER move, so the body is pulled
- *    up *relative to* the fixed contacts. This is what makes the grip read as "attached".
- *  - A scapula-led pull: the arms are IK'd to the fixed bar, so the body height
- *    is derived from a desired shoulder->bar reach. Because the bottom of a pull-up is
- *    the fully-extended (straight-arm) position, the earliest part of every rep can
- *    only be scapular (the body rises a few units while the arms stay straight); only
- *    once the reach shortens do the elbows bend. The scapular depression/retraction
- *    is therefore emergent AND reinforced by an explicit shoulder-girdle offset.
- *  - A breathing / stabilization micro-driver that is zero at the rep endpoints
- *  - Shared camera + ground/bar environment
- *  - Finalization (FK flatten, wrist mirroring, IK-clamp reporting)
- *
- * Everything that differs — grip width, grip mechanics, elbow path, how much the
- * chest leads to the bar — lives in the concrete variant, because it is Vertical
- * Pull biomechanics, not engine knowledge. No speculative helpers are added here.
+ * Grip width, grip mechanics, elbow path and how much the chest leads stay in the concrete variant.
  */
 enum class GripStyle { OVERHAND, UNDERHAND, NEUTRAL }
 
@@ -38,12 +24,9 @@ abstract class BaseVerticalPullPose : BasePose() {
 
     protected val barY = 500f
 
-    // R4: A vertical pull travels a large vertical distance (dead hang -> full
-    // contraction). At zoom 1.5 the subject overflowed the frame and the head
-    // clipped off the TOP of the viewport around the top of the rep (HEAD_VIEWPORT,
-    // ~frame 71+). Zoom 1.1 frames the full athlete — head to ankles — across the
-    // entire rep for every grip variant, without muting the validator. Yaw/pitch
-    // unchanged (the framing problem was vertical travel, not view angle).
+    // A vertical pull travels a large vertical distance. At zoom 1.5 the subject overflowed the
+    // frame and the head clipped off the TOP around ~frame 71+ (HEAD_VIEWPORT); 1.1 frames the full
+    // athlete head-to-ankles across the whole rep without muting the validator. Yaw/pitch unchanged.
     protected val verticalPullCamera = CameraDefinition(
         defaultYaw = 1.19f,
         defaultPitch = 0.22f,
@@ -110,12 +93,10 @@ abstract class BaseVerticalPullPose : BasePose() {
     protected open fun scapularRetractionAt(rep: Float): Float = SkeletonMath.lerp(0f, 4f, rep)
     protected open fun scapularDepressionAt(rep: Float): Float = SkeletonMath.lerp(0f, 1f, rep)
 
-    // Clavicular (proximal girdle) activation. The clavicle sits between the chest and the
-    // scapula (CHEST -> CLAVICLE -> SCAPULA -> SHOULDER) and contributes elevation,
-    // protraction and axial rotation on top of the scapula, raising the shoulder (glenoid)
-    // on overhead reaches (UNI-7). Defaults to 0 so the references keep the girdle near
-    // neutral (matching the scapula, which they also leave near neutral); production
-    // overhead variants opt in via these overrides.
+    // Clavicular (proximal girdle) activation. The clavicle sits between the chest and the scapula
+    // (CHEST -> CLAVICLE -> SCAPULA -> SHOULDER) and contributes elevation, protraction and axial
+    // rotation on top of the scapula (UNI-7). Defaults to 0 so references keep the girdle near neutral;
+    // production overhead variants opt in via these overrides.
     protected open fun clavicularElevationAt(rep: Float): Float = 0f
     protected open fun clavicularProtractionAt(rep: Float): Float = 0f
     protected open fun clavicularAxialAt(rep: Float): Float = 0f
@@ -127,7 +108,7 @@ abstract class BaseVerticalPullPose : BasePose() {
     override fun onBuild(context: PoseContext): SkeletonPose {
         val def = context.definition
         ensureHierarchy(def)
-        // B3 — every production pose declares its posture intent. This pose authors a
+        // Every production pose declares its posture intent. This pose authors a
         // shape-driven root, so it opts into CUSTOM (the solver leaves the authored root untouched).
         declarePosture(jointsBuffer, PostureIntent.Kind.CUSTOM)
 
@@ -135,10 +116,8 @@ abstract class BaseVerticalPullPose : BasePose() {
         val breath = breathWave(lift)
         val rep = lift
 
-        // --- 1. Pull height derived from a desired shoulder->bar reach ------------
-        // The arms are IK'd to the FIXED bar (see section 2), so the only free
-        // variable is how far the shoulder sits below the bar. That distance IS the
-        // pull: large = dead hang (straight arms), small = contracted (bent arms).
+        // The arms are IK'd to the FIXED bar, so the only free variable is how far the shoulder sits
+        // below the bar. That distance IS the pull: large = dead hang, small = contracted.
         val reach = SkeletonMath.lerp(bottomReach, topReach, rep)
 
         // Spine posture (subtle hollow -> neutral; chest leads up at the top).
@@ -165,27 +144,24 @@ abstract class BaseVerticalPullPose : BasePose() {
         pelvis!!.localPosition.set(comX, pelvisY, 0f)
 
         chest!!.localPosition.set(0f, def.torsoLength, 0f)
-        // Phase 5 (W13/G4, W14/G5): single spine-intent call. Lower segment is the
+        // Single spine-intent call. Lower segment is the
         // PELVIS (hips attach here, so the hanging legs inherit the lean).
         buildSpineCurve(pelvis!!, chest!!, torsoPitch, chestFlex)
 
         // Head follows the thorax by FK; a tiny gaze lift toward the bar at the top. Declared as a
-        // gaze target (Phase 7 Gap 7) while the legacy direction path still writes the head.
+        // gaze target while the legacy direction path still writes the head.
         val gaze = tempV3.set(0f, 1f, 0f)
         SkeletonMath.rotAround(gaze, axisZ, -chestFlex - breath * 0.03f, gaze)
         gaze.normalize()
         buildGaze(neck!!, head!!, def.neckLength, gaze)
 
-        // Shoulder girdle: scapular depression + retraction are REAL scapula rotations
-        // (BIOMECHANICS.md §4/§10) — the shoulder (glenoid) position is *derived* from the
-        // scapula's local rotation, never translated by hand. `depression`/`retraction`
-        // drive the scapula; the IK root (shoulder) inherits the resulting frame.
+        // Scapular depression + retraction are REAL scapula rotations (BIOMECHANICS.md §4/§10) — the
+        // glenoid position is *derived* from the scapula's local rotation, never translated by hand; the
+        // IK root (shoulder) inherits the resulting frame.
         SkeletonMath.buildScapularRotation(retraction, depression, -1f, scapulaA!!.localRotation)
         SkeletonMath.buildScapularRotation(retraction, depression, 1f, scapulaP!!.localRotation)
-        // Clavicle (UNI-7): proximal girdle node, composed between chest and scapula so the
-        // shoulder (glenoid) inherits BOTH girdle joints. Driven by the same rep activation as
-        // the scapula; defaults to 0 so references stay near-neutral, production pull-ups opt
-        // in via the clavicular*At overrides.
+        // Clavicle (UNI-7): composed between chest and scapula so the glenoid inherits BOTH girdle joints,
+        // driven by the same rep activation; defaults to 0 so references stay near-neutral.
         buildClavicularRotation(
             clavicleA!!,
             clavicularElevationAt(rep),
@@ -208,35 +184,31 @@ abstract class BaseVerticalPullPose : BasePose() {
 
         roots!!.forEach { it.updateWorldTransforms(zeroVector, identityRotation) }
 
-        // --- 2. FIXED hands on the bar (constant targets, never translated) ----
-        // The hand world targets are authored constants; the body moves relative to them.
         scratchShoulderA.set(shoulderA!!.worldPosition)
         scratchShoulderP.set(shoulderP!!.worldPosition)
 
         targetA.set(0f, barY, -gZ)
         targetP.set(0f, barY, gZ)
-        // Bake the arm in the SHOULDER's world frame: the IK root is the shoulder, whose frame
-        // now includes the scapula rotation, so the limb follows the girdle correctly.
+        // Bake in the SHOULDER's world frame: the IK root's frame now includes the scapula rotation, so
+        // the limb follows the girdle correctly.
         val armAPoleWorld = SkeletonMath.toWorldDirection(elbowPoleA, elbowA!!.parent!!.worldRotation, tempPoleWorld)
         bakeIkLimb(scratchShoulderA, targetA, def.upperArmLength, def.forearmLength, armAPoleWorld, def.armIKConstraint, shoulderA!!.worldRotation, elbowA!!, handA!!, armABuffer)
         val armPPoleWorld = SkeletonMath.toWorldDirection(elbowPoleP, elbowP!!.parent!!.worldRotation, tempPoleWorld)
         bakeIkLimb(scratchShoulderP, targetP, def.upperArmLength, def.forearmLength, armPPoleWorld, def.armIKConstraint, shoulderP!!.worldRotation, elbowP!!, handP!!, armPBuffer)
 
-        // W1: the intentional grip is authored without the old inherited-tilt cancellation; the
+        // The intentional grip is authored without the old inherited-tilt cancellation; the
         // engine removes torso/chest tilt relative to the forearm, so pass 0 and keep only the grip
         // style component (see applyGrip).
         applyGrip(0f)
-        // W1: engine now derives palm/knuckles/fingertips from the forearm + this wrist articulation.
+        // The engine now derives palm/knuckles/fingertips from the forearm + this wrist articulation.
 
-        // --- 3. Legs: hanging pendulum with their own subtle life ----------
         val ankleX = comX - 18f - breath * 4f + rep * 8f
         val ankleY = pelvisY - 200f + breath * 3f - rep * 10f
         targetF.set(ankleX, ankleY, -def.hipWidth * 0.9f)
-        // R4 (leg reach authoring): as the body rises the hanging-leg target drifts past the
-        // leg's reachable radius (maxReach = (thigh+shin)*0.98 = 205.8), so the solver clamped
-        // and honestly reported it (maxIkClampAmount up to ~4.45). Project the authored target
-        // onto the reachable band — same reachable-by-construction fix as R2 — so the pendulum
-        // legs hang at full-but-valid extension without muting the clamp signal.
+        // Leg reach authoring: as the body rises the hanging-leg target drifts past the leg's
+        // reachable radius (`(thigh+shin)*0.98 = 205.8`), so the solver clamped and honestly reported it
+        // (`maxIkClampAmount` up to ~4.45). Project onto the reachable band — reachable-by-construction —
+        // so the pendulum legs hang at full-but-valid extension without muting the clamp signal.
         SkeletonMath.clampTargetToReach(hipF!!.worldPosition, targetF, def.thighLength, def.shinLength, def.legIKConstraint, targetF)
         poleF.set(0.15f, 1f, 0f)
         val legFPoleWorld = SkeletonMath.toWorldDirection(poleF, kneeF!!.parent!!.worldRotation, tempPoleWorld)
@@ -248,10 +220,10 @@ abstract class BaseVerticalPullPose : BasePose() {
         val legBPoleWorld = SkeletonMath.toWorldDirection(poleB, kneeB!!.parent!!.worldRotation, tempPoleWorld)
         bakeIkLimb(hipB!!.worldPosition, targetB, def.thighLength, def.shinLength, legBPoleWorld, def.legIKConstraint, pelvis!!.worldRotation, kneeB!!, ankleB!!, legBBuffer)
 
-        // Branch C: ankle plantar-flexion routes through the §1.3 intent carrier.
+        // ankle plantar-flexion routes through the §1.3 intent carrier.
         buildAnkleArticulation(Extremity.FOOT_F, -plantarFlexion, 0f, ankleF!!)
         buildAnkleArticulation(Extremity.FOOT_B, -plantarFlexion, 0f, ankleB!!)
-        // W1: engine now derives heel/toe (removed tilt counter-rotation; plantar flexion retained).
+        // The engine now derives heel/toe (removed tilt counter-rotation; plantar flexion retained).
 
         return finalizeVerticalPullPose()
     }
@@ -260,17 +232,15 @@ abstract class BaseVerticalPullPose : BasePose() {
         val angle = chestTilt - HALF_PI
         when (gripStyle) {
             GripStyle.OVERHAND -> {
-                // Branch C: overhand wrist articulation routes through the §1.3 intent carrier.
                 buildWristArticulation(Extremity.HAND_A, angle, 0f, handA!!)
                 buildWristArticulation(Extremity.HAND_P, angle, 0f, handP!!)
             }
             GripStyle.UNDERHAND -> {
-                // Branch C: underhand wrist articulation routes through the §1.3 intent carrier.
                 buildWristArticulation(Extremity.HAND_A, chestTilt + HALF_PI, 0f, handA!!)
                 buildWristArticulation(Extremity.HAND_P, chestTilt + HALF_PI, 0f, handP!!)
             }
             GripStyle.NEUTRAL -> {
-                // Branch C: neutral wrist articulation (a pure deviation about the Y axis) routes
+                // neutral wrist articulation (a pure deviation about the Y axis) routes
                 // through the §1.3 intent carrier. neutralAxis* is ±Y, so flexion=0 and deviation
                 // carries the signed angle (Ry(-angle) for the active hand, Ry(+angle) for passive).
                 buildWristArticulation(Extremity.HAND_A, 0f, -angle, handA!!)

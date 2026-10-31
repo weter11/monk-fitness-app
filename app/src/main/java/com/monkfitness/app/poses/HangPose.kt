@@ -4,14 +4,10 @@ import com.monkfitness.app.animation.*
 import kotlin.math.*
 
 /**
- * Dead hang — biomechanics-first rewrite.
- *
- * A static, bar-supported hold (no pull). The arms are fully extended
- * to the FIXED bar and the body hangs with a gentle breathing sway
- * and a slight forward leg pendulum — alive, not frozen. Because the
- * hand targets are constant, the hands stay glued to the bar while the
- * trunk and legs breathe. No elbow flexion is modeled: this is the
- * bottom-of-the-pull reference position.
+ * Dead hang — a static, bar-supported hold (no pull). The arms are fully extended to the FIXED bar and the
+ * body hangs with a gentle breathing sway and a slight forward leg pendulum — alive, not frozen. Because the
+ * hand targets are constant, the hands stay glued to the bar while the trunk and legs breathe. No elbow
+ * flexion is modeled: this is the bottom-of-the-pull reference position.
  */
 class HangPose : BaseVerticalPullPose() {
 

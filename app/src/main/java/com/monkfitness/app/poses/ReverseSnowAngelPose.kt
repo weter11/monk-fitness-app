@@ -5,36 +5,11 @@ import com.monkfitness.app.animation.SkeletonMath.lerp
 import kotlin.math.*
 
 /**
- * Reverse Snow Angel (prone) — `docs/Biomechanical Pose Specification (BPS)/Reverse Snow Angel (Prone).md`.
+ * Reverse Snow Angel (prone) — BPS `Reverse Snow Angel (Prone)`: the pelvis and legs stay grounded, the
+ * thoracic spine holds a gentle maintained extension, and the arms sweep the "angel" arc along the mat.
  *
- * Prone scapular/thoracic exercise: the pelvis and legs stay grounded, the thoracic spine is held in
- * a gentle maintained extension, and the arms sweep through the "angel" arc along the floor.
- *
- * ## The authored hierarchy (M5 — corrected here)
- *
- * The pose previously built its own hand-rolled node tree (`pelvis → chest → shoulders/hips…`) and
- * so published a trunk chain with **no lower-spine segment**: `Joint.LUMBAR` (the engine's
- * two-segment `PELVIS → LUMBAR → CHEST` model) was absent from the tree and therefore published at
- * the **world origin** `(0, 0, 0)` — 18.03 units from the pelvis it belongs to — together with
- * `CLAVICLE_A/P`, `SCAPULA_A/P` and `WRIST_A/P`. The pose's own KDoc already claimed the §12.6
- * conversion "converted it to the authored-hierarchy idiom (SkeletonFactory tree …)"; the tree was
- * never migrated. It now uses the canonical factory tree like every other production pose, which
- * restores the trunk's lower-spine junction (and the clavicle/scapula girdle nodes) at their real
- * published positions. The migration is geometry-neutral for everything the pose authors: the
- * factory's added nodes are pass-throughs (coincident, identity rotation) between the chest and the
- * shoulder, so the limb targets, the arm sweep and the legs realize exactly as before.
- *
- * ## The maintained extension is a SPINE posture (M5)
- *
- * BPS §5/§9: "Thoracic spine maintained in gentle extension: the chest is long and open, the upper
- * back does not round"; "Thoracic extension: a maintained posture (small ROM), held isometrically";
- * "Lumbar spine neutral (natural lordosis), pelvis neutral and grounded — no arching or tucking".
- * The pose's authored maintained tilt (its own `leanAngle = 1.50` against the family's prone layout
- * of `−π/2`, i.e. `0.0708 rad` ≈ `4.1°`) was carried entirely by the ROOT, which tilted the pelvis
- * out of the prone layout and left the chest node with `localRotation.angle == 0.0000` at every
- * sampled frame — one rigid segment. It is now held on the two-segment spine (the same shape the
- * dynamic prone members use), so the pelvis stays neutral and the "chest long and open" is a real
- * thoracic posture. The amount is unchanged.
+ * That extension is held on the two-segment spine, not on the root: carried by the root it tilted the
+ * pelvis out of the prone layout and left the chest node rigid (`localRotation.angle == 0.0000`).
  */
 class ReverseSnowAngelPose : PoseBuilder {
     override val metadata = PoseMetadata(
@@ -43,7 +18,7 @@ class ReverseSnowAngelPose : PoseBuilder {
         loopMode = LoopMode.LOOP,
         motionCurve = MotionCurve.LINEAR,
         environment = EnvironmentDefinition(ground = GroundDefinition(visible = true, level = 0f)),
-        // M9 — the prone body's floor line: the sweeping hands (they stay on the mat through the
+        // The prone body's floor line: the sweeping hands (they stay on the mat through the
         // whole arc) and the legs. One canonical channel, `metadata.support`. Declaring the hands
         // is what resolves their contact at all (measured pre-fix the un-declared fingertips sat
         // 1.3–6.4 units off the plane at the sweep's extremes).
@@ -90,11 +65,10 @@ class ReverseSnowAngelPose : PoseBuilder {
     }
 
     override fun build(context: PoseContext): SkeletonPose {
-        // Per-frame hygiene: clear last build's §1.1 carriers from this reused singleton buffer.
         SkeletonPose.IntentBuilder(jointsBuffer).reset()
         val def = context.definition
         ensureHierarchy(def)
-        // B3 — every production pose declares its posture intent. This pose authors a
+        // Every production pose declares its posture intent. This pose authors a
         // shape-driven root, so it opts into CUSTOM (the solver leaves the authored root untouched).
         SkeletonPose.IntentBuilder(jointsBuffer).posture(PostureIntent.Kind.CUSTOM)
 
@@ -132,12 +106,11 @@ class ReverseSnowAngelPose : PoseBuilder {
         // Flush Spine FK to get precise Hip and Shoulder origins
         roots!!.forEach { it.updateWorldTransforms(Vector3(0f, 0f, 0f), JointRotation()) }
 
-        // 2. LEG TARGETS (Completely planted on the floor)
         val totalLegLen = def.thighLength + def.shinLength
         val targetAnkleF = Vector3(pelvis!!.worldPosition.x - totalLegLen * 0.94f, 10f, -def.hipWidth)
         val targetAnkleB = Vector3(pelvis!!.worldPosition.x - totalLegLen * 0.94f, 10f, def.hipWidth)
 
-        // P12 (§12.6): legs declared through the registered authoring bake (was direct
+        // Legs declared through the registered authoring bake (was direct
         // solveIK + raw-offset writes — the bypass family).
         bakeIkLimb(hipF!!.worldPosition, targetAnkleF, def.thighLength, def.shinLength, Vector3(0f, 1f, 0f), def.legIKConstraint, pelvis!!.worldRotation, kneeF!!, ankleF!!, legFBuffer, jointsBuffer)
         bakeIkLimb(hipB!!.worldPosition, targetAnkleB, def.thighLength, def.shinLength, Vector3(0f, 1f, 0f), def.legIKConstraint, pelvis!!.worldRotation, kneeB!!, ankleB!!, legBBuffer, jointsBuffer)
@@ -146,7 +119,6 @@ class ReverseSnowAngelPose : PoseBuilder {
         // foot on the forward-leaning shank is intentionally NOT hand-authored here; if the engine
         // derivation lands the foot imperfectly that is an engine limitation left exposed.
 
-        // 3. ARM TARGETS (Wide sweeping arc from sides to above the head)
         // Smooth C2 cosine wave mapping progress 0.0 -> 0.5 (overhead hands) -> 1.0 (arms back)
         val u = (1f - cos(context.progress * 2f * PI.toFloat())) * 0.5f
         val maxSweep = 170f * PI.toFloat() / 180f
@@ -164,11 +136,11 @@ class ReverseSnowAngelPose : PoseBuilder {
             shoulderP!!.worldPosition.z + totalArmLen * sin(alpha)
         )
 
-        // P12 (§12.6): arms declared through the registered authoring bake.
+        // Arms declared through the registered authoring bake.
         bakeIkLimb(shoulderA!!.worldPosition, targetHandA, def.upperArmLength, def.forearmLength, Vector3(0f, 1f, -1f), def.armIKConstraint, chest!!.worldRotation, elbowA!!, handA!!, armABuffer, jointsBuffer)
         bakeIkLimb(shoulderP!!.worldPosition, targetHandP, def.upperArmLength, def.forearmLength, Vector3(0f, 1f, 1f), def.armIKConstraint, chest!!.worldRotation, elbowP!!, handP!!, armPBuffer, jointsBuffer)
 
-        // W1: engine now derives foot/hand orientation (removed manual endpoints + tilt counter-rotation).
+        // The engine now derives foot/hand orientation (removed manual endpoints + tilt counter-rotation).
 
         SkeletonPose.fromHierarchy(roots!!, jointsBuffer)
         jointsBuffer.getJoint(Joint.WRIST_A).set(jointsBuffer.getJoint(Joint.HAND_A))

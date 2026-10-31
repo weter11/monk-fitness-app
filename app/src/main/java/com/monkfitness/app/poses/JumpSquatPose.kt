@@ -43,20 +43,12 @@ class JumpSquatPose : BaseSquatPose() {
     }
 
     /**
-     * R2/R4 — reach-band authoring (second reach-band cleanup batch).
-     *
      * The ballistic cycle authors the root at `standH + rawSin · 40` while the feet trail it at
-     * `25 + max(0, rawSin) · 25`: the pair demands a `210.288`-u hip→ankle chord at the seam frames from
-     * a `112 + 98 = 210`-u limb (LONGER than the limb itself) and `225.269` u at the apex — `107 %` of
-     * the limb's length, i.e. impossible for any chain geometry. Measured on the published frame at
-     * `origin/main` @ `ef9400f`: the solver relocated both ankles by `4.488 … 19.469` u (the reachability
-     * stamp read `19.468715`, the realized knee angle at the apex `156.99°`). Same class for the arms —
-     * see [fillArmTargets]. Unintended authoring error in both hooks, of the first batch's class — an
-     * unrealizable request, not a deliberate ROM limit.
-     *
-     * `projectLegTargetsToReach` is the first batch's family helper (`REACH_MARGIN = 1e-4` of the
-     * chain's span): the declaration becomes the reachable point ON the authored ray and the published
-     * ballistics are preserved (the solver's own relocation WAS that boundary projection).
+     * `25 + max(0, rawSin) · 25`, which demands a `210.288`-u hip→ankle chord at the seam frames and
+     * `225.269` u at the apex from a `112 + 98 = 210`-u limb — `107 %` of its length, impossible for any
+     * chain geometry (measured relocation `4.488 … 19.469` u). Unintended authoring error, not a deliberate
+     * ROM limit: `projectLegTargetsToReach` makes the declaration the reachable point ON the authored ray,
+     * and the published ballistics are preserved (the solver's relocation WAS that boundary projection).
      */
     override fun fillLegTargets(
         def: SkeletonDefinition, pelvisY: Float, pelvisX: Float, leanAngle: Float, progress: Float,
@@ -72,12 +64,9 @@ class JumpSquatPose : BaseSquatPose() {
     }
 
     /**
-     * R2/R4 — reach-band authoring (second reach-band cleanup batch).
-     *
-     * The inverse-wave swing keeps the hands at `23.396 … 45.321` u from their own shoulder: the tightest
-     * frames ask for an interior elbow angle of `15.36°` against the `IKConstraint`'s own `30°` stop, so
-     * the request is past the pose's model (measured relocation `0.605 … 16.739` u on the published frame
-     * at `origin/main` @ `ef9400f`). `projectArmTargetsToReach` is the first batch's family helper; the
+     * The inverse-wave swing keeps the hands at `23.396 … 45.321` u from their own shoulder; the
+     * tightest frames ask for a `15.36°` interior elbow against the `30°` stop (measured relocation
+     * `0.605 … 16.739` u). `projectArmTargetsToReach` moves only the radius onto the annulus, so the
      * published swing is preserved.
      */
     override fun fillArmTargets(

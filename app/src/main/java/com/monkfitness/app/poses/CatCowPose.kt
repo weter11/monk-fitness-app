@@ -8,67 +8,35 @@ import kotlin.math.cos
 import kotlin.math.sin
 
 /**
- * P12 (§12.6): converted from the legacy world-position-built representation
- * (`solveIK -> setJoint(result) -> fromJointPositions`) to the authored-hierarchy idiom
- * (SkeletonFactory tree + declared pelvis tilt + registered package bake limbs +
- * `fromHierarchy`). The quadruped base is declared as a spine TILT toward the same
- * world direction the legacy chest offset encoded, which additionally restores the exact
- * `torsoLength` bone (the legacy raw offset (−torsoLength, dy) silently stretched the
- * trunk by sqrt(L² + dy²) — a representation correction §12.9 quantifies). Knee/ankle
- * targets, poles, and the alternating cat/cow choreography are unchanged; the solved leg
- * targets ride the canonical bake, the solved world positions of the legacy path are
- * reproduced exactly through the same parent-frame inverse (the reconstruction helper's
- * `rotAround(−parentRot)` == the bake's `toLocalDirection`). Legacy raw toe/head world
- * writes are superseded by the W1 engine derivation and the declared Head Target
- * (canonical Phase-7 path).
+ * Cat-Cow on the authored-hierarchy idiom (SkeletonFactory tree + declared pelvis tilt + registered
+ * package bake limbs + `fromHierarchy`), converted from the legacy world-position-built representation.
+ * The quadruped base is declared as a spine TILT toward the same world direction the legacy chest offset
+ * encoded, which restores the exact `torsoLength` bone (the legacy raw offset `(−torsoLength, dy)`
+ * silently stretched the trunk by `sqrt(L² + dy²)`).
  *
- * **Animation-logic correction — the spinal wave is carried by the SPINE (BPS §5/§9).**
+ * **The spinal wave is carried by the SPINE (BPS §5/§9).** The published motion this class used to
+ * author was a rigid trunk/root bob: the two spine articulations published IDENTITY at every sampled
+ * phase, and the trunk's chord swept only `2.386°` while the body translated `5` u at the pelvis and
+ * `10` u at the chest — which cannot represent Cat-Cow's spinal flexion/extension at all. The rep is now
+ * authored as the exercise's own sagittal wave over the canonical two-segment spine
+ * (`PELVIS -> LUMBAR -> CHEST`, Issue E):
  *
- * The published motion this class used to author was a rigid trunk/root bob: the whole
- * trunk was a single rigid rotation about the PELVIS (`spineTilt` derived from the authored
- * pelvis/chest heights), the two spine articulations published IDENTITY at every sampled
- * phase (`LUMBAR`'s world rotation was bit-identical to the `PELVIS`'s, `CHEST`'s
- * `localRotation` was `≡ 0` — measured through `SkeletonPipeline.produceFrame`), and the
- * trunk's own chord swept only `2.386°` across the whole rep while the body translated
- * `5` u at the pelvis and `10` u at the chest. Cat-Cow's identity is spinal
- * flexion/extension (BPS §1: "it mobilizes the entire vertebral column, particularly the
- * thoracic and lumbar regions"; §5: "the motion is a sequential wave from the pelvis/coccyx
- * through the lumbar, thoracic, and cervical segments"), so a rigid trunk cannot represent
- * the exercise at all.
+ *  * `flexion` is the wave in world space — the pelvis→chest chord's flexion, `+` at Cat (the shoulder
+ *    end rises `torsoLength·sin(A) = 5.00` u) and `−` at Cow (it sinks `5.00` u);
+ *  * the PELVIS carries its own **pelvic tilt**, which REVERSES with the wave (BPS §3/§7/§9: posterior
+ *    "tail tuck" in Cat, anterior "tail lift" in Cow);
+ *  * the LUMBAR carries the remainder of the chord's motion (`−flexion − pelvicTilt`), so the visible
+ *    flexion propagates through the lower spine instead of the root;
+ *  * the CHEST carries the thoracic share, and the neck/head chain follows through FK.
  *
- * The rep is now authored as the exercise's own SAGITTAL WAVE, distributed over the
- * canonical two-segment spine (`PELVIS -> LUMBAR -> CHEST`, Issue E):
- *
- *  * `flexion` is the wave in world space — the pelvis→chest chord's flexion, `+` at Cat
- *    (the shoulder end of the chord rises `torsoLength·sin(A) = 5.00` u above the pelvis) and `−`
- *    at Cow (it sinks `torsoLength·sin(0.0417) = 5.00` u below it — the authored Cow end,
- *    preserved). `A = asin(5/120) ≈ 0.0417` rad is the **strict pre-fix motion envelope** (owner
- *    decision): the pre-correction rep's own largest trunk angle was that same `5` u sag at the
- *    Cow end (`2.3867°`), so the Cat end mirrors it rather than exceeding it, and the rep's total
- *    chord excursion is the pre-fix `10.00` u of chest travel re-expressed as curvature;
- *  * the PELVIS carries its own **pelvic tilt**, which REVERSES with the wave (BPS §3/§7/§9:
- *    "the pelvis posteriorly tilts (tail tuck)" in Cat, "anteriorly tilts (tail lifts)" in
- *    Cow) — the amount the exercise justifies for the pelvis, not the wave itself;
- *  * the LUMBAR carries the remainder of the chord's motion (`−flexion − pelvicTilt`), so
- *    the visible flexion/extension propagates through the lower spine instead of the root;
- *  * the CHEST carries the thoracic segment's share of the same wave, and the neck/head
- *    chain follows it through FK (the authored gaze intent is unchanged — see below).
- *
- * What is deliberately NOT changed: the pelvis's authored placement/height schedule (the
- * leg chain's planted targets, the pose's floor relationship and the four-point base all
- * resolve against it — the whole-corpus A/B measures the planted leg chain to within
- * `3.052e-05` u, the limb bake's float re-association, and the realized base is unchanged),
- * the leg targets and poles, the declared four-point support base, the gaze sweep and the
- * cycle/phase timing (the wave is linear in `progress`, exactly like the motion it
- * replaces). The hands stay planted flat on the floor directly under their shoulders
- * (BPS §6/§8/§11: "the shoulders stay over the wrists in both end ranges"); their target's
- * X/Z ride the shoulder's own FK position, and its height is the pose's mat level — the
- * previous form (`shoulder.y − chestPos`) was only equal to the floor in the rigid-trunk
- * layout it was written for, and would have lifted the hands off the mat as soon as the
- * spine actually articulated. (The authored CHEST rotation also means the Finalizer's
- * Issue F chest-frame reconstruction is skipped for this pose, exactly as it is for every
- * pose that authors its thorax: the authored frame stands instead of the shoulder-line
- * fallback.)
+ * Deliberately NOT changed: the pelvis's placement/height schedule (the planted leg targets, the floor
+ * relationship and the four-point base all resolve against it — the whole-corpus A/B measures the
+ * planted leg chain to within `3.052e-05` u), the leg targets and poles, the support base, the gaze
+ * sweep, and the cycle timing. The hands stay planted flat under their shoulders (BPS §6/§8/§11): the
+ * target's X/Z ride the shoulder's FK position and its height is the pose's mat level — the previous
+ * form (`shoulder.y − chestPos`) was only equal to the floor in the rigid-trunk layout it was written
+ * for and would have lifted the hands off the mat once the spine articulated. The authored CHEST
+ * rotation also means the Finalizer's Issue F chest-frame reconstruction is skipped for this pose.
  */
 class CatCowPose : PoseBuilder {
     private var roots: List<SkeletonNode>? = null
@@ -93,12 +61,10 @@ class CatCowPose : PoseBuilder {
         loopMode = LoopMode.LOOP,
         motionCurve = MotionCurve.SINE,
         environment = EnvironmentDefinition(ground = GroundDefinition(visible = true, level = 0f)),
-        // M12-b (P11 audit §3 row M12 / §4 "TODO — P1" item 2): the quadruped's four-point base,
-        // declared on the ONE canonical support channel (`metadata.support`). `Cat-Cow (Reps)` BPS §8
-        // — "both hands (palm/carpal arch) and both knees (patella/shin on a padded surface) remain in
-        // contact with the floor" — is exactly the `KneePushUpPose` base (hands + knees, pivot
-        // KNEES), and the pose declared none of it, so `SkeletonPose.supportedPoints` published EMPTY
-        // and the declaration-driven derivations were inert for a pose that rests on four points.
+        // The quadruped's four-point base, declared on the ONE canonical support channel. `Cat-Cow
+        // (Reps)` BPS §8 — hands and knees both in contact with the floor — is exactly the
+        // `KneePushUpPose` base (hands + knees, pivot KNEES), and the pose declared none of it, so
+        // `supportedPoints` published EMPTY and the declaration-driven derivations were inert.
         support = SupportDefinition(
             pivot = PivotType.KNEES,
             contacts = setOf(
@@ -122,22 +88,19 @@ class CatCowPose : PoseBuilder {
     }
 
     override fun build(context: PoseContext): SkeletonPose {
-        // Per-frame hygiene: clear last build's §1.1 carriers from this reused singleton buffer.
         SkeletonPose.IntentBuilder(jointsBuffer).reset()
-        // B3 — every production pose declares its posture intent. Shape-driven root, so CUSTOM.
+        // Every production pose declares its posture intent. Shape-driven root, so CUSTOM.
         SkeletonPose.IntentBuilder(jointsBuffer).posture(PostureIntent.Kind.CUSTOM)
         val progress = context.progress
         val definition = context.definition
         ensureHierarchy(definition)
 
-        // Quadruped placement: progress 0 (Cat) to 1 (Cow). The pelvis's own height schedule is the
-        // pose's authored PLACEMENT, not its motion: the planted leg targets, the pose's floor
-        // relationship and the four-point base all resolve against it, so the correction below
-        // leaves it (and therefore the whole leg chain) untouched.
+        // Quadruped placement: progress 0 (Cat) to 1 (Cow). The pelvis's height schedule is the pose's
+        // authored PLACEMENT, not its motion: the planted leg targets and the four-point base all resolve
+        // against it, so the correction below leaves it (and the whole leg chain) untouched.
         val ankleHeight = definition.foot.ankleHeight
         val pelvisPos = lerp(45f, 40f, progress) + ankleHeight
 
-        // ---- the sagittal spinal wave (BPS §5/§9) ----
         // `flexion` is the WAVE in world space: + = Cat (the pelvis->chest chord's shoulder end
         // rises), - = Cow (it sinks). The spine's articulations below carry it.
         val flexion = lerp(CAT_FLEXION, -COW_EXTENSION, progress)
@@ -148,10 +111,9 @@ class CatCowPose : PoseBuilder {
         // maximal at each end); the neck/head chain follows it through FK.
         val thoracic = THORACIC_SHARE * flexion
 
-        // The three articulations, all about the pose's own lateral axis Z (BPS §5/§11: "the spine
-        // moves purely in the sagittal plane — no rotation and no lateral flexion at any point").
-        // The chord's world angle is `pelvisRotation + lumbarRotation`; the CHEST's rotation is the
-        // thoracic segment's own and carries the rib cage, neck and head.
+        // The three articulations are all about the pose's own lateral axis Z (BPS §5/§11: the spine moves
+        // purely in the sagittal plane). The chord's world angle is `pelvisRotation + lumbarRotation`; the
+        // CHEST's rotation is the thoracic segment's own and carries the rib cage, neck and head.
         val pelvisRotation = QUADRUPED_PITCH + pelvicTilt
         val lumbarRotation = -flexion - pelvicTilt
         val chestRotation = -thoracic
@@ -162,10 +124,9 @@ class CatCowPose : PoseBuilder {
         chest!!.localPosition.set(0f, definition.torsoLength, 0f)
         lumbar!!.localRotation.set(AXIS_Z, lumbarRotation)
         chest!!.localRotation.set(AXIS_Z, chestRotation)
-        // B4a — carrier-backed spinal articulation: the same declaration the base poses make through
-        // `buildSpineCurve` (this pose predates the hierarchy and implements `PoseBuilder` directly),
-        // recorded on the ONE intent channel so the Finalizer's consumer re-derives exactly the nodes
-        // written here (mixed mode, byte-identical to the bare `localRotation.set`).
+        // Carrier-backed spinal articulation: the same declaration the base poses make through
+        // `buildSpineCurve`, recorded on the ONE intent channel so the Finalizer re-derives exactly the nodes
+        // written here (byte-identical to the bare `localRotation.set`).
         SkeletonPose.IntentBuilder(jointsBuffer).spine(lumbarRotation, chestRotation, AXIS_Z)
         SkeletonPose.IntentBuilder(jointsBuffer).joint(Joint.LUMBAR, JointRotation(AXIS_Z, lumbarRotation))
         SkeletonPose.IntentBuilder(jointsBuffer).joint(Joint.CHEST, JointRotation(AXIS_Z, chestRotation))
@@ -180,16 +141,12 @@ class CatCowPose : PoseBuilder {
         roots!!.forEach { it.updateWorldTransforms(Vector3(0f, 0f, 0f), JointRotation()) }
 
         // LEG TARGETS: ankles planted at the knee-base floor points (unchanged targets/poles).
-        // M12-a (P11 audit §3 row M12: "raw world positions"): the floor-frame literals below are
-        // inside the leg chain's own minimum reach at EVERY phase — measured `42.5 … 45.0` against
-        // `SkeletonMath.minReach(112, 98, 30°) = 56.0090` — so the engine relocated the realized foot
-        // instead of realizing the declared point (`maxIkClampAmount = 11.0090 … 16.0090`, the
-        // realized `ANKLE_F` 13.5090 units off the declaration at p = 0.5), the M8-second-clause /
-        // M13 defect class. The authored direction and stance are unchanged; each target is projected
-        // onto its chain's reachable band with the engine's own R2 helper
-        // (`SkeletonMath.clampTargetToReach` — the same reachable-by-construction fix the M8 pass
-        // applied to the five standing poses and M13 to the hamstring reach), which is a no-op for a
-        // target already inside the band and leaves the reachability signal live rather than muted.
+        // The floor-frame literals below
+        // are inside the leg chain's own minimum reach at EVERY phase — measured `42.5 … 45.0` against
+        // `minReach(112, 98, 30°) = 56.0090` — so the engine relocated the realized foot instead of realizing
+        // the declared point (`maxIkClampAmount` up to `16.0090`, realized `ANKLE_F` 13.5090 units off at
+        // p = 0.5). Each target is projected onto its chain's band with the engine's own reach-target helper, which is a
+        // no-op for a target already inside the band and leaves the reachability signal live.
         val kneeBaseR = Vector3(50f, ankleHeight, -definition.hipWidth)
         SkeletonMath.clampTargetToReach(hipF!!.worldPosition, kneeBaseR, definition.thighLength, definition.shinLength, IKConstraint.LegConstraint, kneeBaseR)
         bakeIkLimb(hipF!!.worldPosition, kneeBaseR, definition.thighLength, definition.shinLength, Vector3(-1f, 0f, -1f), IKConstraint.LegConstraint, pelvis!!.worldRotation, kneeF!!, ankleF!!, legFIK, jointsBuffer)
@@ -197,21 +154,17 @@ class CatCowPose : PoseBuilder {
         SkeletonMath.clampTargetToReach(hipB!!.worldPosition, kneeBaseL, definition.thighLength, definition.shinLength, IKConstraint.LegConstraint, kneeBaseL)
         bakeIkLimb(hipB!!.worldPosition, kneeBaseL, definition.thighLength, definition.shinLength, Vector3(-1f, 0f, 1f), IKConstraint.LegConstraint, pelvis!!.worldRotation, kneeB!!, ankleB!!, legBIK, jointsBuffer)
 
-        // ARM TARGETS: the hands stay planted flat on the floor directly under their shoulders
-        // (BPS §6/§8: "hands flat under shoulders … weight is even through both hands"; §11: "the
-        // shoulders stay over the wrists in both end ranges"). The target's X/Z ride the shoulder's
-        // own FK position, so the arms stay vertical as the wave moves the shoulder girdle; its
-        // height is the pose's own mat level.
+        // ARM TARGETS: the hands stay planted flat on the floor directly under their shoulders (BPS
+        // §6/§8/§11). The target's X/Z ride the shoulder's own FK position, so the arms stay vertical as the
+        // wave moves the girdle; its height is the pose's own mat level.
         val handBaseR = Vector3(shoulderA!!.worldPosition.x, MAT_LEVEL, shoulderA!!.worldPosition.z)
         val handBaseL = Vector3(shoulderP!!.worldPosition.x, MAT_LEVEL, shoulderP!!.worldPosition.z)
         bakeIkLimb(shoulderA!!.worldPosition, handBaseR, definition.upperArmLength, definition.forearmLength, Vector3(0f, 0f, -1f), IKConstraint.ArmConstraint, chest!!.worldRotation, elbowA!!, handA!!, armAIK, jointsBuffer)
         bakeIkLimb(shoulderP!!.worldPosition, handBaseL, definition.upperArmLength, definition.forearmLength, Vector3(0f, 0f, 1f), IKConstraint.ArmConstraint, chest!!.worldRotation, elbowP!!, handP!!, armPIK, jointsBuffer)
 
-        // Gaze: the legacy headPitch sweep (−0.5 → +0.5 rad, direction (−cos, sin, 0) from
-        // the chest) becomes the declared Head Target (Finalizer-owned head, Phase 7). The head
-        // therefore leads each end range exactly as BPS §4/§11 ask (chin tuck in Cat, gaze
-        // forward/up in Cow) and follows the spine's own wave through the chest frame it is
-        // resolved in.
+        // Gaze: the legacy headPitch sweep becomes the declared Head Target (Finalizer-owned head),
+        // so the head leads each end range as BPS §4/§11 ask (chin tuck in Cat, gaze up in Cow) and follows
+        // the spine's wave through the chest frame it is resolved in.
         val headPitch = lerp(-0.5f, 0.5f, progress)
         val gazeDir = tempV1.set(-cos(headPitch), sin(headPitch), 0f).normalize()
         val nw = neck!!.worldPosition
@@ -233,16 +186,15 @@ class CatCowPose : PoseBuilder {
         val QUADRUPED_PITCH = (PI / 2.0).toFloat()
 
         /**
-         * The rep's chord amplitude at each end range: `asin(CHORD_RISE / TRUNK_LENGTH) = asin(5/120)
-         * ≈ 0.0417` rad — the trunk bone's ends `5.00` u apart vertically (`torsoLength · sin(A) = 5`).
+         * The rep's chord amplitude at each end range: `asin(CHORD_RISE / TRUNK_LENGTH) = asin(5/120)`
+         * ≈ 0.0417 rad.
          *
-         * This is the **strict pre-fix motion envelope**, by owner decision: the pre-correction rep's
-         * own largest trunk angle was the Cow end's `5` u sag (`2.3867°`), and the Cat end now mirrors
-         * that same `5` u as a rise instead of exceeding it. The first cut of this correction authored
-         * `0.12` rad (`14.36` u / `6.875°`) and was rejected as ROM growth — this batch corrects the
-         * anatomical ownership of the existing motion, it does not increase the exercise's range. Both
-         * ends are the same amplitude, so the chord's total excursion is `2 · 5.00 = 10.00` u: exactly
-         * the pre-fix rep's own chest excursion, re-expressed as curvature.
+         * This is the **strict pre-fix motion envelope**, by owner decision: the pre-correction rep's own
+         * largest trunk angle was the Cow end's `5` u sag (`2.3867°`), and the Cat end mirrors that same
+         * `5` u as a rise instead of exceeding it. The first cut authored `0.12` rad (`14.36` u) and was
+         * rejected as ROM growth — the correction re-owns the existing motion rather than growing it.
+         * Both ends are the same amplitude, so the chord's total excursion is `10.00` u: exactly the pre-fix
+         * rep's own chest excursion, re-expressed as curvature.
          */
         val CAT_FLEXION = asin(CHORD_RISE / TRUNK_LENGTH)
 
@@ -253,28 +205,24 @@ class CatCowPose : PoseBuilder {
         private const val TRUNK_LENGTH = 120f
 
         /**
-         * The Cow end range's world-space chord extension: `torsoLength · sin(0.0417) = 5.00` u of
-         * drop at the shoulder end — the pose's authored Cow extreme (BPS §5: "the entire spine
-         * arches — thoracic and lumbar extension maximal; the abdomen drops"), preserved exactly
-         * from the pre-correction authoring so the exercise's other end range does not move. The
-         * literal is the pre-fix authored value; it equals `CAT_FLEXION` to `1.3e-5` rad
-         * (`2.0e-4` u), so the two ends are the same `5` u (see `CAT_FLEXION`).
+         * The Cow end range's world-space chord extension: `5.00` u of drop at the shoulder end — the pose's
+         * authored Cow extreme (BPS §5), preserved exactly from the pre-correction authoring. The literal is
+         * the pre-fix authored value; it equals `CAT_FLEXION` to `1.3e-5` rad, so both ends are the same `5` u.
          */
         const val COW_EXTENSION = 0.0417f
 
         /**
-         * The PELVIS's own pelvic tilt at each end range (radians): posterior ("tail tuck") at Cat,
-         * anterior ("tail lift") at Cow (BPS §3/§7/§9/§11). This is the pelvis's justified share of
-         * the rep — the wave itself is carried by the spine segments below, so the drill stays a
-         * spinal flow and not a pelvis-driven movement.
+         * The PELVIS's own pelvic tilt at each end range: posterior ("tail tuck") at Cat, anterior ("tail
+         * lift") at Cow (BPS §3/§7/§9). This is the pelvis's justified share — the wave itself is carried by
+         * the spine segments, so the drill stays a spinal flow and not a pelvis-driven movement.
          */
         const val CAT_PELVIC_TILT = 0.045f
         const val COW_PELVIC_TILT = 0.045f
 
         /**
-         * The thoracic segment's share of the wave (the CHEST articulation, which carries the rib
-         * cage, and through FK the neck and head). A share, not the whole: the remainder is the
-         * LUMBAR's (`−flexion − pelvicTilt`), so both spine segments articulate (BPS §5).
+         * The thoracic segment's share of the wave (the CHEST articulation, which carries the rib cage and
+         * through FK the neck and head). A share, not the whole: the remainder is the LUMBAR's, so both spine
+         * segments articulate (BPS §5).
          */
         const val THORACIC_SHARE = 0.25f
 

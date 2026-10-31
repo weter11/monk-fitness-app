@@ -4,59 +4,20 @@ import com.monkfitness.app.animation.*
 import kotlin.math.*
 
 /**
- * Band Pull-Aparts (`band_pull_aparts_standard`) — the standing banded HORIZONTAL PULL, the
- * `posture` family's third member. It is the standing sibling of the two bar-supported members of
- * this batch: the same pull (scapular retraction driving an elbow-extended arm), authored on the
- * standing channel instead of a bar.
+ * Band Pull-Aparts (`band_pull_aparts_standard`) — the standing banded horizontal pull: the same
+ * scapular-retraction drive as the bar-supported members, authored on the standing channel.
  *
- * ## What the exercise is (the catalog's own statement, `strings.xml`)
+ * The hands ride an arc of constant radius [ARM_RADIUS] (`0.96 ×` the arm chain's `maxReach`) about
+ * each shoulder, sweeping from [START_SWEEP] to [END_SWEEP] in the plane through the shoulders —
+ * that is "straight arms" and "out to the sides" in this rig's terms. At the end of the sweep the
+ * hands stand just in front of the shoulder line, so the band spans the chest's face.
  *
- *  * `ex_band_pull_aparts_desc` — *"reinforces scapular retraction and shoulder alignment"*: the
- *    exercise's stated PURPOSE is the girdle, so the pose drives the scapulae rather than the arms.
- *  * `steps` — *"Hold a light resistance band at shoulder height with straight arms"* (§1), *"Pull the
- *    band apart by moving the hands out to the sides"* (§2), *"Finish when the band reaches the chest
- *    and the shoulder blades squeeze together"* (§3), *"Return to the start under control"* (§4).
- *    So: the hands travel OUTWARD on straight arms at shoulder height, the end of the rep has the
- *    band at the chest and the blades retracted, and the rep returns.
- *  * `tech` — *"Keep the ribs stacked over the pelvis and avoid arching the back… Think about moving
- *    from the upper back, not the wrists."*
- *  * `mistakes` — *"Bent wrists, shrugged shoulders, and letting the lower back overextend to finish
- *    the rep."*
+ * The girdle drive is depression-only (never elevation): `mistakes`' "shrugged shoulders" is an
+ * elevation this pose may never author. No wrist articulation is authored, so "bent wrists" cannot
+ * exist — the hand follows the forearm.
  *
- * ## The authored movement, one statement per copy line
- *
- *  * **"straight arms" (§1)**: the hands ride an arc of constant radius [ARM_RADIUS] about each
- *    shoulder — `0.96 ×` the arm chain's own `maxReach` — so the elbow stays at the chain's
- *    near-full extension for the WHOLE sweep. The sweep is a pure shoulder-rotation of an extended
- *    arm, which is what a pull-apart is.
- *  * **"moving the hands out to the sides" (§2)**: the sweep runs from [START_SWEEP] off the forward
- *    direction to [END_SWEEP] (a quarter turn of a straight arm), in the horizontal plane through the
- *    shoulders, so the lateral travel and the fore/aft travel are both large and opposite.
- *  * **"the band reaches the chest … blades squeeze together" (§3)**: at the end of the sweep the
- *    hands stand just in front of the shoulder line (so the band spans across the chest's face) and
- *    the scapulae are retracted by [TOP_RETRACTION] activation units — a real
- *    [SkeletonMath.buildScapularRotation], measured as the shoulder joints moving posteriorly.
- *  * **"ribs stacked over the pelvis … avoid arching" (tech)**: the trunk is authored straight —
- *    pelvis tilt `0`, thoracic `0` — and the test asserts the chest stays stacked over the pelvis.
- *  * **"shrugged shoulders" (a mistake)**: the girdle drive is depression-only (never elevation), and
- *    the hands are placed at the shoulder's own height, so the test can assert the shoulders never
- *    rise and the hands never float above them.
- *  * **"Bent wrists" (a mistake)**: the wrists are left to the engine's own derivation (no wrist
- *    articulation is authored), so the hand follows the forearm — no authored bend can exist.
- *
- * ## Gaps recorded (not invented)
- *
- *  * **The band itself is not modeled.** The rig's environment vocabulary has no band primitive
- *    (`EnvironmentProp` = box/step/bench/wall; `EnvironmentAnchorType` = floor/bar/wall/bench/
- *    parallel bars/rings), and the family's existing member declares none either
- *    (`FacePullPose`: ground only). The band is therefore implied by the exercise's name and by the
- *    hand travel, not authored as a prop — the same state `face_pull_banded` ships in. Recorded
- *    rather than invented (a `BandProp` is an engine/vocabulary change, outside this phase).
- *  * **The band's tension/stiffness** is not modeled anywhere in the rig; the rep's resistance is
- *    implied by the sweep, not simulated.
- *  * **The hand width at the start** is not stated by the copy (§1 says "straight arms", not how wide
- *    they start); [START_SWEEP] is authored at the narrowest sweep the straight-arm arc admits, and
- *    the exact start angle is recorded as an authored constant rather than presented as specification.
+ * The band itself is NOT modeled: the rig's environment vocabulary has no band primitive, so the
+ * resistance is implied by the sweep rather than authored as a prop (recorded, not invented).
  */
 class BandPullApartPose : BasePose() {
 
@@ -71,13 +32,11 @@ class BandPullApartPose : BasePose() {
     private val armABuffer = SkeletonMath.IKResult(); private val armPBuffer = SkeletonMath.IKResult()
 
     override val metadata = PoseMetadata(
-        // The standing family's own frame (`FacePullPose`: the pull-apart's standing sibling).
         camera = CameraDefinition(defaultYaw = 1.19f, defaultPitch = 0.22f, defaultZoom = 1.3f),
         durationSeconds = 2.5f,
         loopMode = LoopMode.LOOP,
         motionCurve = MotionCurve.EASE_IN_OUT,
         environment = EnvironmentDefinition(ground = GroundDefinition(visible = true, level = 0f)),
-        // M8 — the planted feet, on the ONE canonical support channel (`metadata.support`).
         support = SupportDefinition(
             pivot = PivotType.FEET,
             contacts = setOf(SupportContact.LEFT_FOOT, SupportContact.RIGHT_FOOT)
@@ -102,8 +61,8 @@ class BandPullApartPose : BasePose() {
         val def = context.definition
         ensureHierarchy()
 
-        // B3 — STANDING posture: the solver owns the coarse pelvis height (seed == standH), so the
-        // pose authors everything relative to the chain roots it owns (M8).
+        // STANDING posture: the solver owns the coarse pelvis height (seed == standH), so the
+        // pose authors everything relative to the chain roots it owns.
         declarePosture(jointsBuffer, PostureIntent.Kind.STANDING)
         pelvis!!.localPosition.set(0f, 0f, 0f)
         // tech: "Keep the ribs stacked over the pelvis and avoid arching the back" — a straight trunk:
@@ -124,14 +83,12 @@ class BandPullApartPose : BasePose() {
         hipB!!.localPosition.set(0f, 0f, def.hipWidth)
         for (root in roots!!) root.updateWorldTransforms(zeroVector, identityRotation)
 
-        // --- 1. Planted feet (M8's frame rule: targets authored around the chain root the pose owns).
         val legSpan = SkeletonMath.maxReach(def.thighLength, def.shinLength, def.legIKConstraint)
         val legTargetF = Vector3(0f, hipF!!.worldPosition.y - legSpan, -def.hipWidth * STANDING_STANCE)
         val legTargetB = Vector3(0f, hipB!!.worldPosition.y - legSpan, def.hipWidth * STANDING_STANCE)
         bakeIkLimb(hipF!!.worldPosition, legTargetF, def.thighLength, def.shinLength, Vector3(1f, 0f, -0.2f), def.legIKConstraint, JointRotation(), kneeF!!, ankleF!!, legFBuffer)
         bakeIkLimb(hipB!!.worldPosition, legTargetB, def.thighLength, def.shinLength, Vector3(1f, 0f, 0.2f), def.legIKConstraint, JointRotation(), kneeB!!, ankleB!!, legBBuffer)
 
-        // --- 2. The sweep: straight arms carrying the hands out to the sides --------------------
         val sweep = SkeletonMath.lerp(START_SWEEP, END_SWEEP, progress)
         val forward = cos(sweep) * ARM_RADIUS
         val lateral = sin(sweep) * ARM_RADIUS
@@ -141,7 +98,7 @@ class BandPullApartPose : BasePose() {
         val targetP = Vector3(shoulderPWorld.x + forward, shoulderPWorld.y, shoulderPWorld.z + lateral)
         // Reachable by construction (the targets sit at [ARM_RADIUS] from the very root they are
         // solved from); projected anyway, so a future edit of the radius is projected rather than
-        // silently solver-clamped (the M8 rule).
+        // silently solver-clamped (the frame rule).
         SkeletonMath.clampTargetToReach(shoulderAWorld, targetA, def.upperArmLength, def.forearmLength, def.armIKConstraint, targetA)
         SkeletonMath.clampTargetToReach(shoulderPWorld, targetP, def.upperArmLength, def.forearmLength, def.armIKConstraint, targetP)
         // The elbows hang below the extended arm, opening a touch outboard (no authored wrist, so
@@ -173,7 +130,7 @@ class BandPullApartPose : BasePose() {
         const val TOP_RETRACTION = 4f
         const val TOP_DEPRESSION = 1f
 
-        /** The standing stance the M8 correction established for this family (`1.2 × hipWidth`). */
+        /** The standing stance this family uses (`1.2 × hipWidth`). */
         const val STANDING_STANCE = 1.2f
     }
 }

@@ -4,23 +4,12 @@ import com.monkfitness.app.animation.*
 import kotlin.math.*
 
 /**
- * BaseBirdDogPose is the single owner of all Bird Dog biomechanical scaffolding.
- *
- * It consolidates the duplicated engine knowledge that previously lived in each
- * variant (manual SkeletonNode construction, manual solveIK + rotAround, and the
- * duplicated camera / environment metadata). Variants only declare their metadata
- * and the diagonal-extension choreography.
- *
- * Shared responsibilities:
- *  - Skeleton hierarchy via SkeletonFactory.createStandardSkeleton()
- *  - Quadruped tabletop anchoring (pelvis height, torso pitch, head gaze)
- *  - Constant extremity geometry (hands forward, feet dorsiflexed)
- *  - IK baking via BasePose.bakeIkLimb() (replaces manual solveIK + rotAround)
- *  - Shared camera + environment metadata
+ * BaseBirdDogPose owns the Bird Dog scaffolding: the hierarchy, the quadruped tabletop anchoring, the
+ * constant extremity geometry, IK baking and the shared camera/environment. Variants declare only
+ * their metadata and diagonal-extension choreography.
  */
 abstract class BaseBirdDogPose : BasePose() {
 
-    // --- Quadruped tabletop anchoring (identical for every Bird Dog variant) ---
     protected val basePelvisX = -30f
     protected val basePelvisY = 127f // thigh (112) + knee floor resting height (15)
     protected val torsoPitch = -PI.toFloat() / 2f // spine rotated flat to the floor
@@ -29,7 +18,6 @@ abstract class BaseBirdDogPose : BasePose() {
     // Gaze forward (+X) and slightly up, matching the prone quadruped posture.
     protected val birdDogHeadDirection = Vector3(0.3f, 1f, 0f).normalize()
 
-    // --- Shared metadata (removed duplicated literals across variants) ---
     protected val birdDogCamera = CameraDefinition(
         defaultYaw = 1.19f,
         defaultPitch = 0.22f,
@@ -89,10 +77,6 @@ abstract class BaseBirdDogPose : BasePose() {
         toeB = nodes.toeB
     }
 
-    /**
-     * Anchors the quadruped tabletop: pelvis height + torso pitch, spine, head gaze,
-     * hips and shoulders. Refreshes world transforms so limb IK roots are current.
-     */
     protected fun anchorTabletop(def: SkeletonDefinition) {
         pelvis!!.localPosition.set(basePelvisX, basePelvisY, 0f)
         declarePelvisTilt(pelvis!!, jointsBuffer, axisZ, torsoPitch)
@@ -107,13 +91,8 @@ abstract class BaseBirdDogPose : BasePose() {
         roots!!.forEach { it.updateWorldTransforms(zeroVector, identityRotation) }
     }
 
-    /**
-     * Applies the constant Bird Dog extremity geometry. Hands point forward (global +X)
-     * and feet are dorsiflexed so the tops rest on the ground. Uses the engine's standard
-     * open-hand offsets (palm/knuckles 6, fingertips 10) and the foot heel/toe ratios.
-     */
     protected fun applyBirdDogExtremities(def: SkeletonDefinition) {
-        // W1: engine now derives foot/hand orientation (removed manual endpoints + tilt counter-rotation).
+        // The engine now derives foot/hand orientation (removed manual endpoints + tilt counter-rotation).
     }
 
     protected fun finalizeBirdDogPose(): SkeletonPose {

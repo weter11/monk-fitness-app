@@ -4,72 +4,31 @@ import com.monkfitness.app.animation.*
 import kotlin.math.sqrt
 
 /**
- * BaseCervicalPose — the single owner of the **cervical-mobility chassis** the animation-coverage
- * phase's neck pair is authored on (`ChinTuckPose`, `NeckCirclesPose`).
- *
- * ## Why a family base exists at all
- *
- * The two exercises are the catalog's whole `neck_mobility` family and they share one property no
- * earlier coverage batch met: **the movement lives entirely in the neck/head chain while the rest of
- * the body is a fixed, planted standing frame.** Everything below the head is therefore identical
- * between them — an upright trunk, both feet planted on the family's floor frame, the arms hanging
- * relaxed at the sides — and only the cervical driver differs (a retraction ramp, a cone). Authoring
- * that frame once, here, is what makes each member's own file read as its driver alone; it is the same
- * split `BaseThoracicPose` draws for the thoracic family (`Base*` files are excluded from the
- * repository's pose corpora, so this base adds no corpus membership).
- *
- * ## The rig's cervical chain, and the honest limit it imposes
+ * BaseCervicalPose owns the **cervical-mobility chassis** the neck pair is authored on
+ * (`ChinTuckPose`, `NeckCirclesPose`): the movement lives entirely in the neck/head chain while
+ * everything below the head is a fixed, planted standing frame (upright trunk, feet planted on the
+ * family's floor frame, arms hanging at the sides). Authoring that frame once is what makes each
+ * member's file read as its driver alone.
  *
  * `SkeletonFactory.createStandardSkeleton()` builds `CHEST → NECK_END → HEAD_POS` as two rigid bones
- * (`definition.neckLength` = `18 u`, then a fixed `18 u` head), both of them children of the chest. So:
+ * (`definition.neckLength` = `18 u`, then a fixed `18 u` head), so cervical motion is authored as the
+ * chain's two BONE DIRECTIONS in the chain's own frame ([authorCervicalChain]) — the same arithmetic
+ * `SkeletonPoseFinalizer.resolveHeadTarget` writes for a declared gaze, so an authored cervical
+ * position is observable in the published frame rather than hidden in a rotation. The chain is
+ * rigid: a "retraction" is the neck's tilt carrying the head's base backwards, a "neck circle" is the
+ * head/tail axis describing a cone, and the rig has no cervical translation DOF.
  *
- *  * **Cervical motion is authored as the chain's two BONE DIRECTIONS in the chain's own frame** — the
- *    neck's and the head's local offsets at their authored bone lengths ([authorCervicalChain]), which
- *    is the very arithmetic `SkeletonPoseFinalizer.resolveHeadTarget` writes for a declared gaze. Both
- *    bones therefore publish their direction, so an authored cervical position is observable in the
- *    published frame rather than hidden in a rotation. `resolveHeadTarget` is the *sole* writer of these
- *    offsets and it only runs for a pose that declared a world `headTarget`, so a pose that authors its
- *    own cervical geometry keeps it verbatim (a no-op resolver — stated at the resolver itself), which
- *    is also why neither member declares one.
- *  * **The chain is rigid, so a "retraction" is the neck's tilt carrying the head's base backwards**
- *    (see [ChinTuckPose]) and a "neck circle" is the head/tail axis describing a cone (see
- *    [NeckCirclesPose]). Neither is expressible as a translation channel: the rig has no cervical
- *    translation DOF, and the bone-length rule (`CHEST→NECK_END` = `neckLength`, `NECK_END→HEAD_POS` = `18`)
- *    is what keeps the authored motion anatomically bounded.
- *  * **A world-space `headTarget` is NOT usable here by construction** — for an upright chest the neck's
- *    local frame coincides with the world, and `resolveHeadTarget` writes `dir · 18` into the neck's
- *    *local* offset from a *world* delta. Declaring one would hand the head's placement to the resolver
- *    instead of to the exercise, so both members author their own chain (and the neck pair's tests
- *    measure the published chain against the authored angles).
+ * A world-space `headTarget` is NOT usable here: for an upright chest the neck's local frame coincides
+ * with the world, and `resolveHeadTarget` writes `dir · 18` from a world delta into a local offset —
+ * declaring one would hand the head's placement to the resolver instead of to the exercise. Both
+ * members therefore author their own chain and declare no `headTarget` (the resolver only runs for a
+ * pose that declared one, so an authored chain is kept verbatim).
  *
- * ## The shared standing chassis (authored, and why)
- *
- * * **Both feet planted, `1.2 × hipWidth` apart, on the family's floor frame** (`y = 25`, the standing
- *    corpus's ankle line — `HipCirclesPose`'s stance), declared on the one canonical support channel
- *    (`metadata.support`, `PivotType.FEET`), with each foot's heading authored forward so the
- *    declaration-driven derivation lays them flat and pointing the way the athlete stands.
- * * **An upright, still trunk**: the pelvis is authored at the standing height and tilted to vertical
- *    (no lean, no twist) and never moves — "Keep the torso quiet" / "Shrugging the shoulders" are both
- *    mistakes in the exercised copy, and a still frame is the only representation of the cue that this
- *    rig can publish.
- * * **The arms hang relaxed at the sides** ([armRestDirection], [ARM_REST_RADIUS]). The neck pair's copy
- *    says nothing about the arms (one member has no copy at all), so this is an authored convention —
- *    stated as such — chosen because a neck drill's arms are inert and must not shadow the cervical
- *    motion in the hero; it is also the standing rest the corpus already publishes
- *    (`ArmCirclesPose`'s hanging frame).
- *
- * ## Recorded gaps (no invented specification)
- *
- *  * The rig carries **no jaw, no gaze-target and no cervical-translation channel**: "Keep the jaw
- *    relaxed" (chin tucks' `tech`) and the neck pair's "feel long at the top" have no representation and
- *    are not faked.
- *  * The exercise copy's *"Stand tall **or lie on your back**"* (chin tucks §1) is a choice of two
- *    positions; the standing one is authored (the drill's catalog entry places it in a standing warm-up
- *    flow and the timer variant is performed standing), and the supine option is recorded here rather
- *    than duplicated into a second pose.
- *  * The stance width/depth, the arms' rest radius and each member's cervical amplitude are authored
- *    constants (the copy states none of them); every one is declared at its own constant with its
- *    reach/anatomy bound measured in the member's KDoc.
+ * Chassis: both feet planted `1.2 × hipWidth` apart at `y = 25` (the corpus's standing ankle line) on
+ * the canonical support channel; a still, vertical trunk (the copy's "keep the torso quiet" — a still
+ * frame is the only representation of that cue the rig can publish); and arms hanging relaxed
+ * ([armRestDirection], [ARM_REST_RADIUS]), an authored convention because the copy says nothing about
+ * them and inert arms must not shadow the cervical motion.
  */
 abstract class BaseCervicalPose : BasePose() {
 
@@ -135,7 +94,7 @@ abstract class BaseCervicalPose : BasePose() {
         // "Keep the torso quiet": the root is vertical and, like the hips, never travels.
         declarePelvisTilt(pelvis!!, jointsBuffer, axisZ, 0f)
         chest!!.localPosition.set(0f, def.torsoLength, 0f)
-        // The neutral cervical chain, authored in the chain's own frame (see the class KDoc).
+        // The neutral cervical chain, authored in the chain's own frame (the chain is two rigid bones).
         neck!!.localPosition.set(0f, def.neckLength, 0f)
         head!!.localPosition.set(0f, HEAD_BONE_LENGTH, 0f)
         buildPelvis(pelvis!!, hipF!!, hipB!!, def.hipWidth)
@@ -157,7 +116,6 @@ abstract class BaseCervicalPose : BasePose() {
         setHeading(Extremity.FOOT_F, Vector3(1f, 0f, 0f))
         setHeading(Extremity.FOOT_B, Vector3(1f, 0f, 0f))
 
-        // The resting arms: hanging at the sides, riding the still shoulders they hang from.
         val dirA = armRestDirection(-1f, tempV1)
         bakeIkLimb(
             shoulderA!!.worldPosition,

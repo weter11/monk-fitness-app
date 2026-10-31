@@ -10,17 +10,12 @@ class SquatPose : BaseSquatPose() {
     override val armLeanEnd = 1.0f
 
     /**
-     * R2/R4 — reach-band authoring (first reach-band cleanup batch).
-     *
-     * The family's default geometry authors both limb targets in the FLOOR frame, and two of them fall
-     * OUTSIDE their own chain's reachable annulus at this variant's own parameters: the standing-phase
-     * ankle is a locked-out leg (`210.288` against the engine's `0.98` extension cap → `205.800`) and
-     * the counterbalance reach never leaves a `9.2 … 11.4` unit radius (the arm chain's
+     * Two family-default targets fall outside their own chain's annulus at this variant's
+     * parameters: the standing-phase ankle is a locked-out leg (`210.288` against the `0.98` cap →
+     * `205.800`) and the counterbalance reach never leaves a `9.2 … 11.4` u radius (the arm chain's
      * `minReach = 40.134`). The solver relocated the realized end-effector along the authored ray
-     * (`4.488` … `30.934`, and up to `24.056` at this variant's bottom of rep, measured on the
-     * published frame at `origin/main` @ `d6f4f7f`), so the published geometry was the projection, not
-     * the authoring. Project each authored target onto its chain's own annulus — the family's
-     * reachable-by-construction convention.
+     * (`4.488 … 30.934`, up to `24.056` at this variant's bottom of rep), so the published geometry was
+     * the projection, not the authoring. Project each target onto its own annulus (family convention).
      */
     override fun fillLegTargets(
         def: SkeletonDefinition, pelvisY: Float, pelvisX: Float, leanAngle: Float, progress: Float,

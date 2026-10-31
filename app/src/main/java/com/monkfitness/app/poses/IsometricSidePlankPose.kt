@@ -4,33 +4,8 @@ import com.monkfitness.app.animation.*
 import kotlin.math.*
 
 /**
- * Side Plank — biomechanics-first rewrite.
- *
- * Physio description (progress 0 -> 1 = "from lying on the side, lift the hips into
- * the braced side-plank line, then settle"; PING_PONG makes it a controlled,
- * continuously-stabilizing cycle):
- *
- *  - SUPPORT: the bottom (down-side) forearm and the lateral edge of the bottom
- *    foot. Both are planted as fixed world anchors so the trunk loads them.
- *  - STABLE joints: bottom elbow/wrist and the bottom foot. The spine is held in
- *    one long line.
- *  - MOVING joints: the hips (the prime mover — they lift the body off the mat),
- *    the down-side shoulder girdle (must stay *depressed + protracted*, not shrug
- *    to the ear), the rib cage (breathing), and the top arm.
- *  - CENTRE OF MASS: rises over the bottom forearm/foot base as the hips lift, and
- *    settles — the obliques do the work, not a rigid roll.
- *  - SCAPULA (down side): actively stabilized — the shoulder is pushed away from
- *    the ear (never collapsed into the joint). Authored on the canonical girdle
- *    channel ([driveScapula] -> `SkeletonMath.buildScapularRotation`): the support
- *    blade protracts toward its own planted elbow (the direction the propped plant
- *    itself names) on the hold's own zero-at-the-endpoints stabilization cycle, at
- *    the family's [GIRDLE_PROTRACTION] — the glenoid travel this pose's planted
- *    forearm can absorb, not the pull family's free-hands amplitude.
- *  - RIB CAGE / PELVIS: pelvis is the driver here (it lifts the line); the rib
- *    cage follows with a gentle breathing swell.
- *  - TOP ARM: rests along the top hip and floats up slightly with the breath
- *    (a stable, believable side-plank hand-on-hip, not a rigid strut).
- *  - HEAD: neutral, in line with the spine; follows the thorax by FK.
+ * Side Plank — a braced side-plank hold on the canonical tree: the down-side forearm and foot are
+ * the plant, and the hips are the prime mover that lifts the trunk into one long line.
  */
 class IsometricSidePlankPose : BasePlankPose() {
 
@@ -42,7 +17,7 @@ class IsometricSidePlankPose : BasePlankPose() {
         loopMode = LoopMode.PING_PONG,
         motionCurve = MotionCurve.EASE_IN_OUT,
         environment = plankEnvironment,
-        // B-2 — the plant is declared on the ONE support channel (`SupportDefinition`), the channel
+        // The plant is declared on the ONE support channel (`SupportDefinition`), the channel
         // the pipeline derives `SkeletonPose.supportedPoints` from and the Finalizer's support-plane
         // derivation consumes. The former duplicate `supportContacts`/`pivotType` channels had no
         // production reader, so this pose's whole support model (down-side forearm + down-side foot)
@@ -62,18 +37,16 @@ class IsometricSidePlankPose : BasePlankPose() {
     override fun onBuild(context: PoseContext): SkeletonPose {
         val def = context.definition
         ensureHierarchy(def)
-        // B3 — every production pose declares its posture intent. This pose authors a
+        // Every production pose declares its posture intent. This pose authors a
         // shape-driven root, so it opts into CUSTOM (the solver leaves the authored root untouched).
         declarePosture(jointsBuffer, PostureIntent.Kind.CUSTOM)
 
         val lift = context.progress
         val breath = breathingSwell(lift)
 
-        // --- 1. The planted support foot (the down-side rear support) ----------------------------
         val ankleX = -def.thighLength - def.shinLength + 20f
 
-        // --- 2. The planted support forearm: the down-side chain shoulder -> elbow -> hand ------
-        // The declared `RIGHT_FOREARM` contact is the DOWN-side arm (B-4's canonical mapping:
+        // The declared `RIGHT_FOREARM` contact is the DOWN-side arm (the canonical mapping:
         // `RIGHT_*` = the P/B family, which this pose rolls to the floor). Its forearm lies flat on
         // the mat: the elbow under the supporting shoulder, the hand one forearm length ahead of it
         // — and the shoulder is the top of that pillar. The settled frame leans the pillar back over
@@ -90,7 +63,6 @@ class IsometricSidePlankPose : BasePlankPose() {
         targetP.set(plantHand)
         poleP.set(plantPole)
 
-        // --- 3. Trunk: the rolled torso, hung off the propped support shoulder -------------------
         // The braced frame's hip height is the one the straight shoulder→hip→ankle line of the
         // supporting side fixes (BPS §3/§5: the body one line, the hips lifted and level, no drop of
         // the lower hip); the settled frame drops the hips as far as the planted support leg still
@@ -111,7 +83,6 @@ class IsometricSidePlankPose : BasePlankPose() {
         // Head continues the spine line (neutral); the thorax carries the rest.
         buildGaze(neck!!, head!!, def.neckLength, tempV3.set(0f, 1f, 0f))
 
-        // --- 4. Roll the body onto its side ------------------------------------------------------
         // Build the neutral lateral offsets, then roll them 90° about the local
         // spine (Y) axis. This drops SHOULDER_P / HIP_B to the down side (support)
         // and lifts SHOULDER_A / HIP_F to the top (stacked).
@@ -124,36 +95,28 @@ class IsometricSidePlankPose : BasePlankPose() {
         SkeletonMath.rotAround(shoulderA!!.localPosition, spineAxis, spineRoll, shoulderA!!.localPosition)
         SkeletonMath.rotAround(shoulderP!!.localPosition, spineAxis, spineRoll, shoulderP!!.localPosition)
 
-        // B-8 — the girdle roll above is a statement about the pose's TRUNK frame as well: rolling
+        // The girdle roll above is a statement about the pose's TRUNK frame as well: rolling
         // the shoulder offsets 90° about the local spine axis moves the shoulder line onto the
         // chest's local X, and the chest's local -Z is that shoulder line, so the chest frame must
-        // roll with it. The trunk frame is pose-owned Phase-0 intent (ARCHITECTURE_V2 §4.1), and
+        // roll with it. The trunk frame is pose-owned intent (ARCHITECTURE_V2 §4.1), and
         // declaring it here (node write + the paired §1.1 chest carrier, the form every other
         // authored articulation uses) makes it authoritative BEFORE the Phase-1 limb realization.
         // Left unauthored, the frame was established only by the Finalizer's Phase-3 fallback
         // `reconstructChestFrame` — which derives exactly this roll from this layout — i.e. AFTER
         // the arms had been realized, and its re-FK then dragged the realized arm chain with the
         // reconstructed thorax: on a builder's first build the planted forearm landed 28 units off
-        // target (B-8).
+        // target.
         chest!!.localRotation.set(axisY, spineRoll)
         declareJointIntent(Joint.CHEST, JointRotation(axisY, spineRoll))
 
-        // --- 4b. The down-side scapula: the support girdle's protraction --------------------------
-        // BPS `Plank (Side)` §"Scapular strategy"/§5/§8/§11 — *"On the supporting side, the scapula is
-        // protracted and depressed, flat against the rib cage; the shoulder is set and stable"*, *"no
-        // winging, no shrug"* — and this pose's own copy (§SCAPULA above: *"actively stabilized — the
-        // shoulder is pushed away from the ear (never collapsed into the joint)"*). Before this
-        // correction both SCAPULA joints published `0.0000` rad at every phase: the stated
-        // stabilization was carried by the propped plant's geometry alone.
-        //
         // ONLY the support (P) blade is driven: the copy's subject is the down-side girdle ("the
         // down-side shoulder girdle (must stay depressed + protracted…)"), the top arm's shoulder is
         // not part of this exercise's girdle statement, and — unlike the family's other member — this
-        // pose authors its own thorax frame outright (the B-8 roll above), so the Finalizer's
+        // pose authors its own thorax frame outright (the trunk roll above), so the Finalizer's
         // fallback never runs and a single-sided drive cannot leak into the chest frame.
         //
         // The sign is this layout's protraction direction, measured rather than assumed: this pose's
-        // own B-8 roll puts the shoulder offsets on the chest's local `X`, so a `+Y` rotation carries
+        // own trunk roll puts the shoulder offsets on the chest's local `X`, so a `+Y` rotation carries
         // the support glenoid along local `Z` (world `(0.577, -0.817, 0)`) — the direction toward its
         // planted elbow. `-` is therefore protraction here (measured: the support shoulder travels
         // `6.21` u toward the mat at `4` units), while the forearm plank's P blade needs `+`.
@@ -166,12 +129,11 @@ class IsometricSidePlankPose : BasePlankPose() {
 
         roots!!.forEach { it.updateWorldTransforms(zeroVector, identityRotation) }
 
-        // --- 5. Legs: stacked, bottom foot planted ----------------------------------------------
         // Bottom leg (HIP_B) is the support leg: its foot is planted at the family's floor-contact
         // height and its down-side hip rests on the mat in the settled frame; the top leg (HIP_F)
         // stacks just above it.
         //
-        // B3 — the support leg's residual knee bend is authored to leave the mat, never sag through
+        // The support leg's residual knee bend is authored to leave the mat, never sag through
         // it. The stance (`ankleX`, `contactY`) spends most of the `112 / 98` chain's reach
         // (`197.6289 … 201.3616` of the constraint's own `maxReach = 205.8000`), so the chain can
         // never be drawn perfectly straight and its IK locus — a circle of radius `h = 29.7335 …
@@ -204,7 +166,6 @@ class IsometricSidePlankPose : BasePlankPose() {
         // The engine derives palm/knuckles/fingertips from the forearm + the neutral wrist
         // articulation; the support forearm is intentionally NOT hand-authored here.
 
-        // --- 6. Top arm (SHOULDER_A): hand resting on the top hip ------------------------------
         scratchShoulderA.set(shoulderA!!.worldPosition)
         // Hand settles onto the raised top hip and floats up a touch with the breath.
         targetA.set(hipF!!.worldPosition.x, hipF!!.worldPosition.y + 6f + breath * 8f, 0f)
@@ -220,11 +181,8 @@ class IsometricSidePlankPose : BasePlankPose() {
     companion object {
         /**
          * The settled frame's authored pillar lean in degrees (~20°): the deepest hip settle this
-         * pose's plant can reach. The side-rolled down-side hip sits `hipWidth` off the pelvis's
-         * centre line, so the settle spends most of the support leg's slack before the hips have
-         * dropped far. Measured at the settled frame with this lean: the down-side hip→ankle span is
-         * `197.6` of the leg's `210`-unit length (`0.98` band ⇒ `205.8`) — 8.2 units of slack, no
-         * clamp — while the hips travel `44.0` units into the braced line.
+         * pose's plant can reach — the down-side hip→ankle span stays at `197.6` of the leg's `205.8`
+         * cap (no clamp) while the hips travel `44.0` units into the braced line.
          */
         const val SETTLED_PILLAR_LEAN_DEGREES = 20f
 

@@ -4,29 +4,15 @@ import com.monkfitness.app.animation.*
 import kotlin.math.*
 
 /**
- * BaseLungePose owns ONLY the genuine shared Lunges & Step-Ups plumbing.
+ * BaseLungePose owns ONLY the genuine shared Lunges & Step-Ups plumbing and encodes NO choreography.
  *
- * It deliberately encodes NO choreography. The chain of command for every family
- * member is the inverse of the legacy rigid-translation model:
+ * The chain of command is the inverse of the legacy rigid-translation model: support foot (fixed) →
+ * swing foot → COM → hip → pelvis → chest → head. The pelvis is therefore a *consequence* of where
+ * the feet are, never the driver.
  *
- *   support foot (fixed) -> swing foot (trajectory) -> COM moves naturally ->
- *   hip follows support -> pelvis follows hip -> chest follows pelvis -> head follows chest
- *
- * The pelvis is therefore a *consequence* of where the feet are, never the driver.
- *
- * What is genuinely shared and therefore lives here:
- *  - Standard skeleton via [SkeletonFactory.createStandardSkeleton]
- *  - Allocation-free IK buffers + scratch targets/poles
- *  - [bakeLeg] / [bakeArm] helpers wrapping [BasePose.bakeIkLimb] with frame-relative
- *    poles (stable in the pelvis / chest frame) plus foot + hand finalization
- *  - A shared breathing / stabilisation micro-driver that is ZERO at the rep endpoints
- *  - A shared COM helper that distributes the pelvis over the support base
- *  - Shared ground camera + environment
- *  - Shared finalization (FK flatten, wrist mirror, IK clamp reporting)
- *
- * Everything else — leg sequencing, weight transfer, stance, stride, arm swing,
- * step mechanics and hip mechanics — is supplied by the concrete variant, because
- * it is Lunges/Step-Ups *biomechanics*, not engine knowledge.
+ * Shared here: hierarchy, allocation-free buffers and scratch, [bakeLeg]/[bakeArm] with frame-relative
+ * poles, an endpoint-zero breathing driver, [comX], and the ground camera/environment. Leg sequencing,
+ * weight transfer, stance, stride, arm swing and step mechanics are variant biomechanics.
  */
 abstract class BaseLungePose : BasePose() {
 
@@ -61,15 +47,14 @@ abstract class BaseLungePose : BasePose() {
     }
 
     /**
-     * Endpoint-zero breathing / stabilisation wave. Zero at progress 0 and 1 so a
-     * PING_PONG or LOOP turnaround produces no snap.
+     * Endpoint-zero breathing wave: zero at progress 0 and 1, so a PING_PONG or LOOP turnaround never
+     * snaps.
      */
     protected fun breathWave(p: Float): Float = 0.5f - 0.5f * cos(p * 2f * PI.toFloat())
 
     /**
-     * Centre-of-mass X given the two foot X positions and the load fraction.
-     * The pelvis sits midway between the feet (balanced base) biased toward the
-     * loaded foot as the rep deepens.
+     * Centre-of-mass X from the two foot X positions: midway between the feet, biased toward the loaded
+     * foot as the rep deepens.
      */
     protected fun comX(plantX: Float, swingX: Float, load: Float): Float =
         (plantX + swingX) * 0.5f + (swingX - plantX) * 0.12f * load
@@ -80,10 +65,8 @@ abstract class BaseLungePose : BasePose() {
     }
 
     /**
-     * Bakes one leg from its hip to a world-space ankle target using a frame-relative
-     * pole (stable in the pelvis frame) and writes the heel/toe + ankle orientation.
-     * The knee/ankle are counter-rotated by the pelvis lean so the planted foot stays
-     * level with the ground while the torso pitches.
+     * Bakes one leg from its hip to a world-space ankle target using a pole authored in the pelvis frame
+     * (stable while the torso pitches).
      */
     protected fun bakeLeg(
         def: SkeletonDefinition,
@@ -97,7 +80,7 @@ abstract class BaseLungePose : BasePose() {
         toe: SkeletonNode,
         buffer: SkeletonMath.IKResult
     ) {
-        // W1: engine now derives foot orientation (removed ankle tilt counter-rotation + manual heel/toe).
+        // The engine now derives foot orientation (removed ankle tilt counter-rotation + manual heel/toe).
         val worldPole = SkeletonMath.toWorldDirection(poleLocal, knee.parent!!.worldRotation, tempPoleWorld)
         bakeIkLimb(hipWorld, targetAnkle, def.thighLength, def.shinLength, worldPole, def.legIKConstraint, parentRotation, knee, ankle, buffer)
     }
@@ -119,7 +102,7 @@ abstract class BaseLungePose : BasePose() {
         fingertips: SkeletonNode,
         buffer: SkeletonMath.IKResult
     ) {
-        // W1: engine now derives hand orientation (removed wrist tilt counter-rotation + 6/6/10 offsets).
+        // The engine now derives hand orientation (removed wrist tilt counter-rotation + 6/6/10 offsets).
         val worldPole = SkeletonMath.toWorldDirection(poleLocal, elbow.parent!!.worldRotation, tempPoleWorld)
         bakeIkLimb(shoulderWorld, targetHand, def.upperArmLength, def.forearmLength, worldPole, def.armIKConstraint, parentRotation, elbow, hand, buffer)
     }
@@ -132,10 +115,8 @@ abstract class BaseLungePose : BasePose() {
     }
 
     /**
-     * Assembles the full skeleton from already-computed, per-frame, per-exercise
-     * targets. This is plumbing only — the *values* come from the concrete
-     * choreography. The support leg is the fixed/loaded leg; the swing leg follows
-     * its own trajectory.
+     * Assembles the skeleton from per-frame values the concrete choreography computed: plumbing only.
+     * The support leg is the fixed/loaded leg, the swing leg follows its own trajectory.
      */
     protected fun assemble(
         def: SkeletonDefinition,
@@ -157,12 +138,12 @@ abstract class BaseLungePose : BasePose() {
         pelvis!!.localPosition.set(pelvisX, pelvisY, pelvisZ)
 
         chest!!.localPosition.set(0f, def.torsoLength, 0f)
-        // Phase 5 (W13/G4, W14/G5): single spine-intent call. Lower segment is the
+        // Single spine-intent call. Lower segment is the
         // PELVIS (hips attach here, so they inherit the lean); chest adds the upper bend.
         buildSpineCurve(pelvis!!, chest!!, pelvisAngle, chestPitch)
 
         // Head follows the thorax: counter-rotate the gaze so the head stays upright
-        // (eyes forward) while the torso leans. Declared as a gaze target (Phase 7 Gap 7); the
+        // (eyes forward) while the torso leans. Declared as a gaze target; the
         // Finalizer's headTarget resolver is the sole head writer.
         val headTilt = pelvisAngle + chestPitch
         val gaze = SkeletonMath.rotAround(Vector3(0f, 1f, 0f), axisZ, -headTilt, tempV3)
@@ -174,12 +155,10 @@ abstract class BaseLungePose : BasePose() {
 
         roots!!.forEach { it.updateWorldTransforms(zeroVector, identityRotation) }
 
-        // --- Legs: front hip uses the front pole, back hip uses the back pole ---
         val parentRot = pelvis!!.worldRotation
         bakeLeg(def, hipF!!.worldPosition, if (plantUsesFrontHip) plantAnkle else swingAnkle, poleFrontLocal, parentRot, kneeF!!, ankleF!!, heelF!!, toeF!!, legFBuffer)
         bakeLeg(def, hipB!!.worldPosition, if (plantUsesFrontHip) swingAnkle else plantAnkle, poleBackLocal, parentRot, kneeB!!, ankleB!!, heelB!!, toeB!!, legBBuffer)
 
-        // --- Arms: counterbalance swing, solved after FK so shoulders are known ---
         val shA = shoulderA!!.worldPosition
         val shP = shoulderP!!.worldPosition
         val baseHandY = minOf(shA.y, shP.y) - 95f

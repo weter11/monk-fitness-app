@@ -18,14 +18,8 @@ import com.monkfitness.app.R
 import com.monkfitness.app.animation.*
 
 /**
- * The launch path for a validation pose.
- *
- * This reuses ONLY the shared rendering pipeline:
- * ValidationPoseRegistry -> PoseBuilder -> SkeletonFactory -> build() -> SkeletonPoseFinalizer
- * (inside [SkeletonRenderer]) -> renderer.
- *
- * It does NOT involve workouts, exercise execution, timers, statistics or any training logic.
- * The pose is a frozen snapshot: no animation loop, no interpolation, no MotionDriver.
+ * The launch path for a validation pose: only the shared rendering pipeline, no workouts, execution,
+ * timers or statistics. The pose is a frozen snapshot — no animation loop, no interpolation.
  */
 @Composable
 fun ValidationPoseViewer(
@@ -35,7 +29,6 @@ fun ValidationPoseViewer(
     val metadata = pose.builder.metadata
     val definition = SkeletonDefinition.DEFAULT_ADULT
 
-    // Static snapshot: a single frozen frame, no progress animation.
     val poseContext = PoseContext(
         progress = 0.5f,
         side = Side.LEFT,
@@ -57,10 +50,8 @@ fun ValidationPoseViewer(
         camera = camera,
         engine = engine,
         environment = metadata.environment,
-        // B-5 — the pose's declared support model was silently dropped here (the environment was
-        // forwarded, the Support Declaration was not), so this viewer finalized against a
-        // declaration-free context and disagreed with the playback path. Both halves now resolve
-        // through the single R8 source.
+        // The pose's declared support model used to be dropped here (environment forwarded, support not),
+        // so this viewer disagreed with the playback path; both halves now resolve through one source.
         supportedPoints = metadata.support.supportPoints,
         showGround = showGround,
         modifier = modifier
@@ -70,7 +61,6 @@ fun ValidationPoseViewer(
                     change.consume()
                     val sensitivity = 3.14159f / 600f
                     yaw = (yaw + dragAmount.x * sensitivity).let { a ->
-                        // keep yaw in a reasonable band
                         if (a > 6.28f) a - 6.28f else if (a < -6.28f) a + 6.28f else a
                     }
                 }
@@ -79,11 +69,8 @@ fun ValidationPoseViewer(
 }
 
 /**
- * Full-screen viewer shown when a validation pose is opened from the Exercise library.
- *
- * It is a developer tool: it exposes the pose, its purpose bullets and a draggable 3D view.
- * It intentionally avoids the [com.monkfitness.app.ui.screens.ExerciseScreen] (timer,
- * difficulty, progression, etc.).
+ * Developer tool: the pose, its purpose bullets and a draggable 3D view. It intentionally avoids the
+ * exercise screen's timer, difficulty and progression.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable

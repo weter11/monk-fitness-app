@@ -4,74 +4,11 @@ import com.monkfitness.app.animation.*
 import kotlin.math.*
 
 /**
- * Y-T Raises (`yt_raises_standard`) — the prone scapular-raise drill, the `posture` family's prone
- * member and the floor sibling of this batch's band/bar pulls.
+ * Y-T Raises (`yt_raises_standard`) — prone scapular raises: two raises per cycle, alternating an
+ * overhead Y target and a lateral T one.
  *
- * ## What the exercise is (the catalog's own statement, `strings.xml`)
- *
- *  * `steps` §1 *"Lie face down with the forehead lightly supported"* — a PRONE body on the mat.
- *  * §2 *"Raise the arms overhead into a Y shape"*, §3 *"Lower with control, then move the arms out
- *    into a T shape"*, §4 *"Lift again while keeping the shoulders down"*, §5 *"Alternate the two
- *    positions for the set"* — the rep is **two raises with two different arm targets**: one overhead
- *    (Y), one out to the sides (T), with a controlled lowering between them.
- *  * `desc` *"Reach long and lift from the mid-back, not the neck"*; `tech` *"Keep the thumbs
- *    pointing up. Lift only as high as you can without shrugging."*; `mistakes` *"Cranking the neck
- *    up. Bending the elbows too much. Swinging the arms instead of lifting with control."*
- *
- * ## The authored movement, one statement per copy line
- *
- *  * **Prone layout.** The whole-body prone pitch (`−π/2`, the family's own layout —
- *    `ReverseSnowAngelPose`) lays the spine's `+Y` along the world `+X` and the ventral `+X` face
- *    down the mat, so the neck/head continue the body's line and the head can never "crank up": the
- *    test measures the head staying in the body's plane.
- *  * **"Raise … / Lower … / Lift again" (§2–§4)** is authored as the arm's LIFT phase
- *    (`sin(π·fraction)` of each half of the cycle): the hands leave the mat and come back twice per
- *    cycle — the "lift with control" rhythm, zero at the cycle's own seams so the loop is continuous.
- *  * **"Alternate the two positions" (§5)** is authored as the two targets: the first half raises to
- *    [Y_RAISE], the second to [T_RAISE], with the hands' own measured positions telling them apart
- *    (the Y takes the hands overhead, past the head's X; the T takes them out to the widest lateral
- *    span) — the test asserts both.
- *  * **"Reach long … Bending the elbows too much" (desc/mistakes)** — the hands ride a constant
- *    [ARM_RADIUS] arc (`0.96 ×` the arm chain's own `maxReach`), so the elbow stays at the chain's
- *    near-full extension through the whole drill.
- *  * **"lift from the mid-back" / "keeping the shoulders down" (§4)** — the scapular drive rises with
- *    the lift (retraction, and depression rather than elevation: "without shrugging"), so the
- *    shoulders travel posteriorly at each raise and never rise above their resting height.
- *  * **"Swinging the arms instead of lifting with control" (mistakes)** — the arms' targets are
- *    authored positions on the arc, not an authored velocity, and the engine realizes them; the
- *    distinct-frame count in the test proves the sweep is realized, not repeated.
- *
- * ## Contacts, and what is deliberately NOT declared
- *
- * The prone body rests on the mat along its whole length, and the pose declares the floor line it
- * can state: the two `*_FOOT` contacts (the feet lie flat on the mat through the whole drill, and the
- * declaration is what makes the engine derive their plane and heading) and `HIPS` — the canonical
- * core support point, whose joint family is `{PELVIS, HIP_F, HIP_B}` (`SupportMath`), i.e. the pelvis
- * region that is grounded throughout. The HANDS are deliberately **not** declared: the drill lifts
- * them off the mat twice per cycle, and the declaration channel is per-pose, not per-frame, so a
- * hand contact would be a false statement for most of the rep. (The corpus's `SupermanPose` declares
- * lifted hands; this pose does not copy that.)
- *
- * ## Reach, and the straight limbs
- *
- * The arm targets sit at [ARM_RADIUS] from the very shoulder they are solved from, inside the arm
- * chain's `[40.134, 143.080]` band. The PRONE LEGS are authored straight through the node chain's own
- * local offsets — the corpus's straight-limb idiom (`PikePushUpPose`'s front leg) — because the leg
- * chain's `0.98` extension cap (`205.800` of `210`) would otherwise fold a `~25 u` knee bend into a
- * leg that is physically straight on the mat.
- *
- * ## Gaps recorded (not invented)
- *
- *  * **"the forehead lightly supported"** — the rig has no head/forehead support point
- *    (`SupportPoint` carries no head entry), so the head's floor relationship is authored geometry
- *    (it lies along the body's line at the body's own height) and is not declared as a contact.
- *  * **The thumbs' orientation ("Keep the thumbs pointing up")** is not expressible: the rig's hand is
- *    a single long axis from the wrist (`HandDefinition`: palm → knuckles → fingertips) with no
- *    thumb or roll DOF, and no wrist articulation is authored here (the engine derives the hand from
- *    the forearm). Recorded, not invented.
- *  * **The height of the lift** is not stated by the copy ("Lift only as high as you can without
- *    shrugging" is self-referential). [RAISE_LIFT] is an authored fraction of the arm length, recorded
- *    as an authored constant rather than presented as specification.
+ * The HANDS are deliberately not declared as contacts — the drill lifts them off the mat twice per
+ * cycle, and the contact channel is per-pose, not per-frame.
  */
 class YTRaisesPose : BasePose() {
 
@@ -93,7 +30,8 @@ class YTRaisesPose : BasePose() {
         motionCurve = MotionCurve.LINEAR,
         environment = EnvironmentDefinition(ground = GroundDefinition(visible = true, level = 0f)),
         // The floor line the pose can state: the feet lie flat through the drill and the pelvis region
-        // is grounded (the canonical core point). The lifted hands are NOT declared — see the KDoc.
+        // is grounded (the canonical core point). The lifted hands are NOT declared — the contact
+        // channel is per-pose, not per-frame.
         support = SupportDefinition(
             pivot = PivotType.HIPS,
             contacts = setOf(
@@ -118,7 +56,6 @@ class YTRaisesPose : BasePose() {
         hipB = nodes.hipB; kneeB = nodes.kneeB; ankleB = nodes.ankleB; heelB = nodes.heelB; toeB = nodes.toeB
     }
 
-    /** One half of the rep: the two positions §5 says to alternate. */
     private enum class Raise { Y, T }
 
     override fun onBuild(context: PoseContext): SkeletonPose {
@@ -127,7 +64,6 @@ class YTRaisesPose : BasePose() {
         // Shape-driven root (the prone layout), so the solver leaves the authored root untouched.
         declarePosture(jointsBuffer, PostureIntent.Kind.CUSTOM)
 
-        // --- 1. The prone layout: the spine's +Y along the world +X, the ventral face down -----
         pelvis!!.localPosition.set(0f, PRONE_MAT_Y, 0f)
         // The prone layout, carried by the pelvis: the spine's local +Y → the world +X and the ventral
         // face down (`ReverseSnowAngelPose`'s own layout pitch). The chest authors no thoracic value:
@@ -142,7 +78,6 @@ class YTRaisesPose : BasePose() {
         buildShoulders(shoulderA!!, shoulderP!!, def.shoulderWidth)
         buildPelvis(pelvis!!, hipF!!, hipB!!, def.hipWidth)
 
-        // --- 2. The legs: straight on the mat (the chain's own local offsets, see the KDoc) ----
         kneeF!!.localPosition.set(0f, -def.thighLength, 0f)
         ankleF!!.localPosition.set(0f, -def.shinLength, 0f)
         kneeB!!.localPosition.set(0f, -def.thighLength, 0f)
@@ -153,7 +88,6 @@ class YTRaisesPose : BasePose() {
         setHeading(Extremity.FOOT_F, Vector3(0f, -1f, 0f))
         setHeading(Extremity.FOOT_B, Vector3(0f, -1f, 0f))
 
-        // --- 3. The lift: two raises per cycle, alternating the two positions ------------------
         val cycle = context.progress * 2f
         val half = floor(cycle)
         val fraction = cycle - half
@@ -169,7 +103,6 @@ class YTRaisesPose : BasePose() {
         // the passive shoulder below the mat). Recorded as a residual, not authored.
         for (root in roots!!) root.updateWorldTransforms(zeroVector, identityRotation)
 
-        // --- 4. The arms: a constant-radius arc between the resting position and the raise -----
         // The directions are authored for the ACTIVE (A, −Z = the model's left) side; the passive side
         // mirrors the lateral component, so `spread` is negative for A and positive for P.
         val restDir = Vector3(-1f, 0f, 0f).normalize()

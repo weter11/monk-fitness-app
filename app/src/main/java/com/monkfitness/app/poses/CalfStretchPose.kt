@@ -3,39 +3,25 @@ package com.monkfitness.app.poses
 import com.monkfitness.app.animation.*
 
 /**
- * Calf Stretch (`calf_stretch_hold`) — the standing wall calf stretch, authored on the canonical
- * `BaseSquatPose` pipeline (SkeletonFactory tree + declared pelvis tilt + registered package bake
- * limbs). The unilateral stretch's one side, like the other unilateral registry poses: the F leg is
- * the front (bent) leg, the B leg the back (straight) one.
+ * Calf Stretch (`calf_stretch_hold`) — the standing wall calf stretch on the canonical `BaseSquatPose`
+ * pipeline. Unilateral: the F leg is the front (bent) leg, the B leg the back (straight) one.
  *
- *  - **"Face a wall and place both hands on it"** — a real [WallProp] ahead of the athlete; both hands
- *    are authored ON its contact plane and stay there for the whole stretch (the arms re-solve as the
- *    body travels, i.e. the elbows bend, which is what leaning into a wall does).
- *  - **"Step one leg back with the heel flat … keep the back leg straight and the foot pointed ahead"**
- *    — the back ankle is authored `130` u behind the front one, its foot declared (`RIGHT_FOOT`) and
- *    planted for the whole cycle, with the toes pointed ahead; the back leg's extension is pinned
- *    ≥ `140°` interior at every phase, and the back knee is never allowed to bend into the stretch
- *    (`mistakes`: "Letting the back heel lift. Turning the back foot out.").
- *  - **"Bend the front knee and shift forward until the back calf stretches"** — the body travels
- *    forward `20` u while both feet stay planted; the front knee's interior angle closes by ~`14°`
- *    and the back leg's stays open. The hold's cycle is the shift-and-return of the LOOP convention.
- *  - **"Square the hips toward the wall"** — the stride is a pure fore/aft split, so the two hip
- *    joints stay level (no pelvic roll is authored) and the stance is front/back rather than lateral.
+ * Both hands are authored ON a real [WallProp]'s contact plane and stay there for the whole stretch, so
+ * the arms re-solve as the body travels — the elbows bend, which is what leaning into a wall does. The
+ * back ankle is authored `130` u behind the front one, its foot declared (`RIGHT_FOOT`) and planted,
+ * toes pointed ahead, with the back leg's extension pinned ≥ `140°` interior at every phase (the
+ * `mistakes` "letting the back heel lift / turning the back foot out"). The body travels forward `20` u
+ * while both feet stay planted; the hold's cycle is the shift-and-return of the LOOP convention.
  *
- * ## Reach (`everyAuthoredTargetIsInsideItsChainsReach` pins this)
+ * Reach: the forward travel is bounded by the BACK leg's band — at the end of the shift the back
+ * hip→ankle chord is `202.66` u against the `205.80` u cap (`0.98 · 210`). The arm targets stay inside
+ * the arm chain's `[40.13, 143.00]` band at both ends (chords `121.53` and `101.37`), so the stamp reads
+ * `0` with no projection helper.
  *
- * The forward travel is bounded by the BACK leg's own band: at the end of the shift the back
- * hip→ankle chord measures `202.66` u against the leg's `205.80` u cap (`0.98 · 210`). The two arm
- * targets stay inside the arm chain's `[40.13, 143.00]` band at both ends of the shift (measured
- * chords `121.53` and `101.37`), so the reach stamp reads `0` with no projection helper.
- *
- * ## The wall's contact plane
- *
- * In front of the athlete, so the plane facing the body is the slab's `-X` face ([wallFaceX]); the
- * hands are authored on it. The hands are deliberately NOT declared as support contacts: a declared
- * contact whose centroid falls in a wall's footprint is re-oriented onto the wall (the M15 residual),
- * and this stretch's wall relationship is authored geometry — the same treatment `LatStretchPose` and
- * `WallSlidesPose` ship.
+ * The wall is in FRONT, so the plane facing the body is the slab's `-X` face ([wallFaceX]). The hands are
+ * deliberately NOT declared as support contacts: a declared contact whose centroid falls in a wall's
+ * footprint is re-oriented onto the wall (the wall-plane residual), and this wall relationship is authored
+ * geometry — the same treatment `LatStretchPose` and `WallSlidesPose` ship.
  */
 class CalfStretchPose : BaseSquatPose() {
 
@@ -82,7 +68,6 @@ class CalfStretchPose : BaseSquatPose() {
         def: SkeletonDefinition, pelvisY: Float, pelvisX: Float, leanAngle: Float, progress: Float,
         outF: Vector3, outB: Vector3
     ) {
-        // Front foot under the body, back foot a stride behind — both planted for the whole hold.
         outF.set(FRONT_FOOT_X, FLOOR_ANKLE_Y, -def.hipWidth * 1.5f)
         outB.set(BACK_FOOT_X, FLOOR_ANKLE_Y, def.hipWidth * 1.5f)
     }
@@ -104,10 +89,6 @@ class CalfStretchPose : BaseSquatPose() {
     }
 
     companion object {
-        /**
-         * The wall's contact plane: the face TOWARD the athlete (the slab's `-X` face — this wall is
-         * in front of the body, mirroring M15's behind-the-back `+X` convention).
-         */
         fun wallFaceX(prop: WallProp): Float = prop.center.x - prop.width / 2f
 
         private const val WALL_FACE_X = 62f

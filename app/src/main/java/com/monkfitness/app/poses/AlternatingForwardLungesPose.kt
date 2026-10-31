@@ -4,14 +4,9 @@ import com.monkfitness.app.animation.*
 import kotlin.math.*
 
 /**
- * Alternating Forward Lunge.
- *
- * Biomechanics (driver = support leg, never the pelvis):
- *  - One foot is the FIXED support anchor for the whole rep; it never slides.
- *  - The swing foot lifts, travels forward along its own arc and lands in front.
- *  - The pelvis drops between the two feet as the rep deepens (COM transfer),
- *    the torso hinges forward over the front foot, and the contralateral arm swings.
- *  - Left and right alternate every half-cycle (two reps per loop).
+ * Alternating Forward Lunge. One foot is the FIXED support anchor for the whole rep; the swing foot
+ * arcs forward and lands in front while the pelvis drops between the feet and the torso hinges over
+ * the front one. Left and right alternate every half cycle.
  */
 class AlternatingForwardLungesPose : BaseLungePose() {
 
@@ -32,7 +27,7 @@ class AlternatingForwardLungesPose : BaseLungePose() {
     override fun onBuild(context: PoseContext): SkeletonPose {
         val def = context.definition
         ensureHierarchy(def)
-        // B3 — every production pose declares its posture intent. This pose authors a
+        // Every production pose declares its posture intent. This pose authors a
         // shape-driven root, so it opts into CUSTOM (the solver leaves the authored root untouched).
         declarePosture(jointsBuffer, PostureIntent.Kind.CUSTOM)
 
@@ -52,13 +47,11 @@ class AlternatingForwardLungesPose : BaseLungePose() {
         val plantZ = if (plantUsesFrontHip) -footSepZ else footSepZ
         val swingZ = if (swingIsFront) -footSepZ else footSepZ
 
-        // R3 (lunge support anchoring): author the plant and swing targets DIRECTLY (not the
-        // named targetF/targetB), because which physical foot is the anchor swaps every half
-        // cycle. The plant foot is fixed at the origin on its own side of the track; the swing
-        // foot travels forward along its arc. targetF/targetB previously hard-coded plantZ/swingZ
-        // regardless of role, so in the second half the "plant" ankle inherited the swing foot's
-        // Z (sign flip) and the test saw the anchor slide ~88 units. `assemble` routes plantAnkle
-        // to the correct hip via plantUsesFrontHip, so the Z here must match the anchor's side.
+        // R3 (lunge support anchoring): author plant/swing DIRECTLY (not targetF/targetB), because
+        // which foot is the anchor swaps every half cycle. targetF/targetB previously hard-coded
+        // plantZ/swingZ regardless of role, so in the second half the "plant" ankle inherited the
+        // swing foot's Z and the anchor slid ~88 units. `assemble` routes plantAnkle via
+        // plantUsesFrontHip, so the Z here must match the anchor's side.
         val plantAnkle = targetF.set(0f, footRestY, plantZ)
         val swingAnkle = targetB.set(stride * s, footRestY + liftHeight * 4f * s * (1f - s), swingZ)
 

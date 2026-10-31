@@ -11,10 +11,9 @@ class HipCarsPose : PoseBuilder {
         loopMode = LoopMode.LOOP,
         motionCurve = MotionCurve.LINEAR,
         environment = EnvironmentDefinition(ground = GroundDefinition(visible = true, level = 0f)),
-        // M8 — the STANCE foot (B/right: the pose's own comment names F "the active working leg"
-        // and B "the support leg") rests on the declared ground for the whole rep. The circling
-        // foot is deliberately NOT declared: the foot derivation has no "planted" gate, so
-        // declaring a foot the exercise lifts would drive it against a surface it has left.
+        // The STANCE foot (B/right: F is "the active working leg", B "the support leg") on the declared
+        // ground for the whole rep. The circling foot is deliberately NOT declared: the foot derivation has no
+        // "planted" gate, so declaring a foot the exercise lifts would drive it against a surface it has left.
         support = SupportDefinition(
             pivot = PivotType.FEET,
             contacts = setOf(SupportContact.RIGHT_FOOT)
@@ -36,12 +35,9 @@ class HipCarsPose : PoseBuilder {
 
     private fun ensureHierarchy(def: SkeletonDefinition) {
         if (roots != null) return
-        // Canonical hierarchy (`SkeletonFactory.createStandardSkeleton()` — the M11 shape the migrated
-        // families publish). The factory's added nodes are pass-throughs between the links this pose
-        // already authored: LUMBAR is coincident with the PELVIS (identity rotation) and
-        // CLAVICLE_*/SCAPULA_* are coincident with the CHEST, so every transform authored below
-        // resolves exactly as before. What changes is that the five canonical joints carry their
-        // authored transforms instead of publishing at the world origin.
+        // Canonical hierarchy: the factory's added nodes are pass-throughs — LUMBAR is coincident with
+        // the PELVIS and CLAVICLE_*/SCAPULA_* with the CHEST (identity) — so every transform authored
+        // below resolves exactly as before.
         val nodes = SkeletonFactory.createStandardSkeleton()
         roots = nodes.roots
         pelvis = nodes.pelvis; chest = nodes.chest; neck = nodes.neck; head = nodes.head
@@ -54,17 +50,15 @@ class HipCarsPose : PoseBuilder {
     }
 
     override fun build(context: PoseContext): SkeletonPose {
-        // Per-frame hygiene: clear last build's §1.1 carriers from this reused singleton buffer.
         SkeletonPose.IntentBuilder(jointsBuffer).reset()
         val def = context.definition
         ensureHierarchy(def)
 
-        // Hip Controlled Articular Rotations (CARs)
-        // B3 — STANDING posture: the solver owns the coarse pelvis height (seed == standH).
+        // STANDING posture: the solver owns the coarse pelvis height (seed == standH).
         SkeletonPose.IntentBuilder(jointsBuffer).posture(PostureIntent.Kind.STANDING)
 
-        // standH is no longer read: every target below is authored in the chain root's own frame
-        // (M8), so the pose does not need to name the solver-owned root height.
+        // Every target below is authored in the chain root's own frame, so the pose does not need to
+        // name the solver-owned root height.
         pelvis!!.localPosition = Vector3(0f, 0f, 0f)
         declarePelvisTilt(pelvis!!, jointsBuffer, Vector3(0f, 0f, 1f), 0f)
 
@@ -77,15 +71,14 @@ class HipCarsPose : PoseBuilder {
         shoulderA!!.localPosition = Vector3(0f, 0f, -def.shoulderWidth)
         shoulderP!!.localPosition = Vector3(0f, 0f, def.shoulderWidth)
 
-        // Compute Spine transforms
         roots!!.forEach { it.updateWorldTransforms(Vector3(0f, 0f, 0f), JointRotation()) }
 
-        // M8 — the working leg keeps the author's own circle, expressed against the standing foot
-        // line this pose now authors (the chain root's frame), so the lift is realizable as written
-        // instead of being clamped to the chain's minimum reach. The STANCE leg's ankle sits one
-        // reachable leg-span below the hip: the root height is solver-owned (B3: the STANDING intent
-        // pins the pelvis after this build), so a floor-anchored Y would sit a whole standing root
-        // height above the hip and the solver would relocate the effector along that up direction.
+        // The working leg keeps the author's own circle, expressed against the standing foot line
+        // this pose authors, so the lift is realizable as written instead of being clamped. The STANCE
+        // ankle sits one reachable leg-span below the hip: the root height is solver-owned (the
+        // STANDING intent pins the pelvis after this build), so a floor-anchored Y would sit a whole
+        // standing root height above the hip and the solver would relocate the effector along that up
+        // direction.
         val legSpan = SkeletonMath.maxReach(def.thighLength, def.shinLength, def.legIKConstraint)
         val stanceAnkleB = Vector3(0f, hipB!!.worldPosition.y - legSpan, def.hipWidth * 1.2f)
         bakeIkLimb(hipB!!.worldPosition, stanceAnkleB, def.thighLength, def.shinLength, Vector3(1f, 0f, 0.2f), def.legIKConstraint, JointRotation(), kneeB!!, ankleB!!, legBBuffer, jointsBuffer)
@@ -101,9 +94,9 @@ class HipCarsPose : PoseBuilder {
 
         bakeIkLimb(hipF!!.worldPosition, targetAnkleF, def.thighLength, def.shinLength, Vector3(1f, 0f, -0.2f), def.legIKConstraint, JointRotation(), kneeF!!, ankleF!!, legFBuffer, jointsBuffer)
 
-        // W1: engine now derives foot/hand orientation (removed manual endpoints + tilt counter-rotation).
+        // The engine now derives foot/hand orientation (removed manual endpoints + tilt counter-rotation).
 
-        // 2. Arms stay static on hips (M8 — measured from the shoulder the pose owns at build time;
+        // 2. Arms stay static on hips (measured from the shoulder the pose owns at build time;
         // `standH − 20` was the floor-anchored form of the same point).
         val targetHandA = Vector3(0f, shoulderA!!.worldPosition.y - def.torsoLength - 20f, -def.shoulderWidth - 5f)
         val targetHandP = Vector3(0f, shoulderP!!.worldPosition.y - def.torsoLength - 20f, def.shoulderWidth + 5f)
@@ -111,7 +104,7 @@ class HipCarsPose : PoseBuilder {
         bakeIkLimb(shoulderA!!.worldPosition, targetHandA, def.upperArmLength, def.forearmLength, Vector3(0f, -1f, -1f), def.armIKConstraint, JointRotation(), elbowA!!, handA!!, armABuffer, jointsBuffer)
         bakeIkLimb(shoulderP!!.worldPosition, targetHandP, def.upperArmLength, def.forearmLength, Vector3(0f, -1f, 1f), def.armIKConstraint, JointRotation(), elbowP!!, handP!!, armPBuffer, jointsBuffer)
 
-        // W1: engine now derives foot/hand orientation (removed manual endpoints + tilt counter-rotation).
+        // The engine now derives foot/hand orientation (removed manual endpoints + tilt counter-rotation).
 
         SkeletonPose.fromHierarchy(roots!!, jointsBuffer)
         jointsBuffer.getJoint(Joint.WRIST_A).set(jointsBuffer.getJoint(Joint.HAND_A))

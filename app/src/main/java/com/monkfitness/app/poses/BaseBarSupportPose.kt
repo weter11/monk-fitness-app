@@ -4,36 +4,14 @@ import com.monkfitness.app.animation.*
 import kotlin.math.*
 
 /**
- * BaseBarSupportPose is the single owner of the BAR-SUPPORT family's shared machinery.
+ * BaseBarSupportPose owns the BAR-SUPPORT family's shared machinery.
  *
- * The family is the bodyweight movements in which **the hands are FIXED on a bar and the body is
- * what moves**, with the body's placement DERIVED from an authored *shoulder→bar reach* — the same
- * driving variable the Vertical-Pull family authors (`BaseVerticalPullPose`: "the only free variable
- * is how far the shoulder sits below the bar. That distance IS the pull"). What the two families
- * share is that mechanic plus the engine plumbing it needs; what they do NOT share is where the body
- * hangs from. A vertical pull hangs its whole mass off the bar; the bar-support members stand on a
- * second contact (the inverted row's planted heels) or hang below a bar that is *below* the shoulders
- * (the parallel-bar dip), so each member owns its own body placement and its own bar layout.
- *
- * Shared, and therefore here (engine knowledge, not exercise knowledge):
- *
- *  - Skeleton hierarchy via [SkeletonFactory.createStandardSkeleton]
- *  - A FIXED bar grip: the two hand world targets never move during a rep, so the arms are IK'd to
- *    constants and the body is realized *relative to* the contact — the grip reads as attached
- *  - The **flat-in-the-bar's-plane grip**: the wrist articulation that lays the hand's long axis IN
- *    the bar's plane is DERIVED each frame from the realized forearm direction (see
- *    [applyFlatBarGrip]). The Vertical-Pull family authors this as the constant `chestTilt − π/2`,
- *    which is exact while the forearm is vertical (the dead hang) and drifts once the forearm swings
- *    — the bar-support members' forearms swing through the whole rep, so the flat condition must be
- *    derived rather than assumed.
- *  - The scapular girdle drive ([driveScapula]) on the one canonical channel
- *    ([SkeletonMath.buildScapularRotation])
- *  - IK baking via [BasePose.bakeIkLimb] (registration + realization in one sanctioned path)
- *  - Finalization (FK flatten + wrist mirroring), the shape every authored-tree family uses
- *
- * Everything that differs — the bar's height/layout, the reach schedule, where the body is placed
- * from that reach, and which second contact the body rests on — lives in the concrete member,
- * because it is exercise biomechanics, not engine knowledge. No speculative helpers are added here.
+ * The family is the movements in which the hands are FIXED on a bar and the body moves, with the
+ * body's placement DERIVED from an authored shoulder→bar reach. Shared here because it is engine
+ * knowledge, not exercise knowledge: the skeleton hierarchy, the fixed hand world targets, the
+ * flat-in-the-bar's-plane grip ([authorFlatBarGrip]), the scapular drive on the one canonical
+ * channel, IK baking via [BasePose.bakeIkLimb], and finalization. The bar's layout, the reach
+ * schedule and the second contact stay in the concrete member.
  */
 abstract class BaseBarSupportPose : BasePose() {
 
@@ -65,14 +43,9 @@ abstract class BaseBarSupportPose : BasePose() {
         hipB = nodes.hipB; kneeB = nodes.kneeB; ankleB = nodes.ankleB; heelB = nodes.heelB; toeB = nodes.toeB
     }
 
-    // ------------------------------------------------------------------------------------------
-    // The bar contract (shared): a fixed grip the body is realized against
-    // ------------------------------------------------------------------------------------------
-
     /** The Y of the bar's top face — where the hands grip and the declared hand contacts rest. */
     protected abstract val barGripY: Float
 
-    /** The X at which the hands grip the bar. */
     protected open val barGripX: Float = 0f
 
     /** Grip width as a multiple of the shoulder width (the family's own grip unit). */
@@ -86,10 +59,9 @@ abstract class BaseBarSupportPose : BasePose() {
     protected fun gripZ(def: SkeletonDefinition): Float = gripWidthFactor * def.shoulderWidth
 
     /**
-     * The part of the shoulder→grip distance that is spent LATERALLY: the shoulder joint sits
-     * `shoulderWidth` off the mid-line and the grip `gripZ`, so the sagittal component of the reach is
-     * `sqrt(reach² − lateral²)` — the Vertical-Pull family's own derivation
-     * (`vertReach = sqrt(reach² − horiz²)`), reused so both families author the same reach quantity.
+     * The part of the shoulder→grip distance spent LATERALLY: the shoulder sits `shoulderWidth` off
+     * the mid-line and the grip `gripZ`, so the sagittal component is `sqrt(reach² − lateral²)` — the
+     * Vertical-Pull family's own derivation, reused so both author the same reach quantity.
      */
     protected fun sagittalSpan(def: SkeletonDefinition, reach: Float): Float {
         val lateral = gripZ(def) - def.shoulderWidth
@@ -110,40 +82,32 @@ abstract class BaseBarSupportPose : BasePose() {
 
     /**
      * The thorax's own authored rotation on top of the trunk's pitch: a small MAINTAINED extension
-     * of the body's line (the chest stays proud), at the corpus's braced-upper-back scale
-     * (`StaticForearmPlankPose` authors `0.09 rad`). Default `0` — a member that authors no thoracic
-     * posture leaves the trunk exactly on its line.
+     * (the chest stays proud), at the corpus's braced-upper-back scale (`StaticForearmPlankPose`
+     * authors `0.09 rad`).
      *
-     * Why it matters mechanically: a node's `localPosition` is expressed in its PARENT's frame, so the
-     * chest's own offset from the pelvis is rotated by the PELVIS's rotation. The body's pitch must
-     * therefore live on the pelvis (the M8 rule: "the hips attach to the PELVIS, so the lower trunk
-     * tilt MUST live on pelvis … otherwise planted feet drift"), and the chest's `localRotation` is an
-     * ADDITIONAL thoracic value — never a share of the pitch, which would move the chest off the line
-     * (measured: a `0.75/0.25` split put the published chest `18 u` off its colinear position).
+     * The body's pitch must live on the PELVIS: a node's `localPosition` is expressed in its parent's
+     * frame, so the chest's offset from the pelvis is rotated by the pelvis — putting any share of the
+     * pitch on the chest moves it off the body's line (measured: a `0.75/0.25` split put the published
+     * chest `18 u` off its colinear position). The chest's `localRotation` is an ADDITIONAL value.
      *
-     * A member that drives the girdle (the scapular retraction) authors a non-zero brace, because
-     * `SkeletonPoseFinalizer.reconstructChestFrame` is a fallback for an UNAUTHORED thorax: it infers
-     * the chest's frame from the shoulder line, which the girdle's rotation tilts, and the published
-     * shoulders then carry the girdle twice (measured `12.709 u` of retraction travel against the
-     * girdle's own `6.4 u`). With the pose's thorax authored, the pose's frame is the single source of
-     * truth (Issue F) and the grip stays exactly on its target (the corpus's own bar family escapes the
-     * same fallback the same way: `BaseVerticalPullPose` authors `0..0.12 rad` of thoracic flexion).
+     * A member that drives the girdle must author a non-zero brace: `reconstructChestFrame` is a
+     * fallback for an UNAUTHORED thorax and infers the chest frame from the shoulder line, which the
+     * girdle's rotation tilts — the published shoulders then carry the girdle twice (measured
+     * `12.709 u` of retraction travel against the girdle's own `6.4 u`).
      */
     protected open val trunkThoracicBrace: Float = 0f
 
     /**
-     * Authors the trunk: the pelvis carries the body's pitch (so the hips/legs inherit the whole bend
-     * and the ankle→hip→shoulder chord stays colinear), the chest carries [trunkThoracicBrace].
+     * Authors the trunk: the pelvis carries the pitch (so the hips/legs inherit the whole bend and the
+     * ankle→hip→shoulder chord stays colinear), the chest carries [trunkThoracicBrace].
      */
     protected fun buildBarTrunk(pitch: Float) {
         buildSpineCurve(pelvis!!, chest!!, pitch, trunkThoracicBrace)
     }
 
     /**
-     * The scapular girdle drive, on the ONE canonical channel: retraction (squeeze toward the spine)
-     * and depression (the shoulder drops relative to the rib cage) are real scapula rotations, so the
-     * glenoid's position is DERIVED from the girdle rather than translated by hand
-     * (`BIOMECHANICS.md` §4/§10; the same call `BaseVerticalPullPose` makes).
+     * The scapular girdle drive on the ONE canonical channel: retraction and depression are real
+     * scapula rotations, so the glenoid's position is DERIVED from the girdle, not translated by hand.
      */
     protected fun driveScapula(retraction: Float, depression: Float) {
         SkeletonMath.buildScapularRotation(retraction, depression, -1f, scapulaA!!.localRotation)
@@ -174,21 +138,16 @@ abstract class BaseBarSupportPose : BasePose() {
     /**
      * The **flat-in-the-bar's-plane grip**, authored through the one channel that can state it.
      *
-     * A bar-supported hand grips with its long axis IN the bar's own plane (the plane its declared
-     * contact rests on) — a hand that slopes out of that plane drives the palm/knuckles/fingertips
-     * through the bar's face. The engine's default hand completion derives the hand from the FOREARM
-     * direction composed with an authored wrist articulation, and the forearm a bar-support member
-     * sweeps through swings across a right angle (measured: `72.6°` above the plane at the inverted
-     * row's bottom, `5.2°` below it at the top), so no single authored wrist angle can lay the hand
-     * flat through the rep — and under the activated limb stage (`IK_STAGE_ACTIVE`, the engine-owned
-     * realization, R5) the pose cannot READ the realized forearm inside `build()` either: the limbs
-     * are realized after it returns. This helper therefore authors the hand's own endpoint
-     * orientations outright — W1's `MANUAL_OVERRIDE` channel, "use when the default derivation cannot
-     * express the stylized extremity", the same channel `PikePushUpPose` uses for its grip — with the
-     * segment lengths the definition itself declares ([HandDefinition]: palm `6`, knuckles `12`,
-     * fingertips `22` from the wrist).
+     * A bar-supported hand grips with its long axis IN the bar's own plane; a hand sloping out of it
+     * drives the palm/knuckles/fingertips through the bar's face. The default completion derives the
+     * hand from the forearm plus an authored wrist angle, and the forearm sweeps across a right angle
+     * through the rep (measured `72.6°` above the plane at the inverted row's bottom, `5.2°` below it
+     * at the top), so no constant wrist angle lays the hand flat — and under `IK_STAGE_ACTIVE` the
+     * pose cannot read the realized forearm inside `build()` anyway. So the endpoint orientations are
+     * authored outright (`MANUAL_OVERRIDE` channel, as `PikePushUpPose` does for its grip) with
+     * the definition's own hand segments.
      *
-     * The offsets are authored in each node's own parent frame from the desired WORLD segment deltas
+     * The offsets are authored in each node's parent frame from the WORLD segment deltas
      * (`toLocalDirection` against the parent's rotation, which the limb solve never touches — an IK
      * bake writes positions only), so the published hand lies along [worldDirection] exactly.
      */

@@ -3,15 +3,9 @@ package com.monkfitness.app.poses
 import com.monkfitness.app.animation.*
 
 /**
- * Chin-up (underhand / supinated, narrow grip) — biomechanics-first rewrite.
- *
- * The supinated grip lets the biceps dominate and the elbows track close
- * to the ribs and forward, so the sternum drives up to the bar. The
- * body arcs: the pelvis sits slightly behind the fixed hands while the chest
- * reaches forward to the bar at the top (extra forward lean + thoracic
- * extension). The pull still begins from the scapulae — the bottom is
- * the extended hang; elbows only bend once the reach shortens. Hands are
- * FIXED on the bar.
+ * Chin-up (underhand / supinated, narrow grip) — the supinated grip lets the biceps dominate and the
+ * elbows track close to the ribs, so the sternum drives up to the bar while the pelvis sits slightly
+ * behind the fixed hands. The pull still begins from the scapulae.
  */
 class UnderhandChinUpPose : BaseVerticalPullPose() {
 

@@ -11,22 +11,14 @@ class BurpeePose : PoseBuilder {
         loopMode = LoopMode.LOOP,
         motionCurve = MotionCurve.LINEAR,
         environment = EnvironmentDefinition(ground = GroundDefinition(visible = true, level = 0f)),
-        // M8 — the rep's plant, on the ONE canonical support channel (`metadata.support`): the
-        // hands, which plant where the trunk reaches (the plank/push-up plant). The hand derivation
-        // is self-gating — it only orients a hand that is BELOW its elbow
-        // (`SkeletonPoseFinalizer` `planted`) — so the stand/jump phases, where the hands are free,
-        // are untouched by this declaration.
+        // The rep's plant, on the ONE canonical support channel: the hands, which plant where the
+        // trunk reaches. The hand derivation is self-gating — it only orients a hand that is BELOW its
+        // elbow — so the stand/jump phases, where the hands are free, are untouched.
         //
-        // Measured on the merged base (the M7 plant correction landed as PR #240 / `eea705c`):
-        // this declaration FIXES the plant's derivative chain — pre-declaration the planted hand's
-        // fingertips hung 21.01 units BELOW the floor (`FINGERTIPS_A/P −21.010` at p=0.25/0.75,
-        // `KNUCKLES −11.46`, `PALM −5.73`); with it the whole chain is realized in the declared
-        // plane (~3.8e-06) while the stand/jump phases stay untouched (the self-gating above).
-        //
-        // The FEET are deliberately NOT declared: the foot's plant is the remaining one-line
-        // follow-up of this finding (its chain is clean on the merged base — measured `ANKLE_F`
-        // 15.00–19.10, `HEEL_F` 11.92–15.00, `TOE_F` 15.00–36.67, nothing below the surface — so
-        // declaring it is unblocked, but it is a further production change this pass does not make).
+        // Measured: pre-declaration the planted hand's fingertips hung 21.01 units BELOW the floor at
+        // p=0.25/0.75; with it the whole chain is realized in the declared plane (~3.8e-06). The FEET are
+        // deliberately NOT declared: their chain is clean on this base (nothing below the surface), so
+        // declaring them is a further production change this pass does not make.
         support = SupportDefinition(
             pivot = PivotType.FEET,
             contacts = setOf(SupportContact.LEFT_HAND, SupportContact.RIGHT_HAND)
@@ -48,12 +40,9 @@ class BurpeePose : PoseBuilder {
 
     private fun ensureHierarchy(def: SkeletonDefinition) {
         if (roots != null) return
-        // Canonical hierarchy (`SkeletonFactory.createStandardSkeleton()` — the M11 shape the migrated
-        // families publish). The factory's added nodes are pass-throughs between the links this pose
-        // already authored: LUMBAR is coincident with the PELVIS (identity rotation) and
-        // CLAVICLE_*/SCAPULA_* are coincident with the CHEST, so every transform authored below
-        // resolves exactly as before. What changes is that the five canonical joints carry their
-        // authored transforms instead of publishing at the world origin.
+        // Canonical hierarchy: the factory's added nodes are pass-throughs — LUMBAR is coincident with
+        // the PELVIS and CLAVICLE_*/SCAPULA_* with the CHEST (identity) — so every transform authored
+        // below resolves exactly as before.
         val nodes = SkeletonFactory.createStandardSkeleton()
         roots = nodes.roots
         pelvis = nodes.pelvis; chest = nodes.chest; neck = nodes.neck; head = nodes.head
@@ -66,16 +55,15 @@ class BurpeePose : PoseBuilder {
     }
 
     /**
-     * One phase of the rep. All positions are world-space targets for the chains; the limb
-     * *lengths* are never authored (the solver owns them) — M7's correction is that every target
-     * below is derived from the rig's own reachable span, so no chain has to be clamped to a
-     * length it cannot make (the previous table authored the ankles inside the knee's minimum
-     * reach, which pushed the feet through the floor, and the plank's feet only 65 units behind
-     * the hips, which collapsed a plank into a crouch).
+     * One phase of the rep. All positions are world-space targets for the chains; the limb *lengths* are
+     * never authored (the solver owns them) — every target below is derived from the rig's own reachable
+     * span, so no chain has to be clamped to a length it cannot make. The previous table authored the
+     * ankles inside the knee's minimum reach (feet through the floor) and the plank's feet only 65 units
+     * behind the hips (plank collapsed into a crouch).
      *
      * @param handsPlanted true while the hands rest on their floor plant (they must not slide).
-     * @param armAngle the arm pendulum's angle from the downward vertical, radians, + forward
-     *   (only read while the hands are free — the planted hand IS the plant point).
+     * @param armAngle the arm pendulum's angle from the downward vertical, radians, + forward (only read
+     *   while the hands are free — the planted hand IS the plant point).
      */
     private data class PhaseInfo(
         val pelvisX: Float,
@@ -205,11 +193,10 @@ class BurpeePose : PoseBuilder {
     }
 
     override fun build(context: PoseContext): SkeletonPose {
-        // Per-frame hygiene: clear last build's §1.1 carriers from this reused singleton buffer.
         SkeletonPose.IntentBuilder(jointsBuffer).reset()
         val def = context.definition
         ensureHierarchy(def)
-        // B3 — every production pose declares its posture intent. This pose authors a
+        // Every production pose declares its posture intent. This pose authors a
         // shape-driven root, so it opts into CUSTOM (the solver leaves the authored root untouched).
         SkeletonPose.IntentBuilder(jointsBuffer).posture(PostureIntent.Kind.CUSTOM)
 
@@ -227,14 +214,12 @@ class BurpeePose : PoseBuilder {
         shoulderA!!.localPosition = Vector3(0f, 0f, -def.shoulderWidth)
         shoulderP!!.localPosition = Vector3(0f, 0f, def.shoulderWidth)
 
-        // Compute transforms
         roots!!.forEach { it.updateWorldTransforms(Vector3(0f, 0f, 0f), JointRotation()) }
 
-        // Solve IK for legs
         bakeIkLimb(hipF!!.worldPosition, info.ankleF, def.thighLength, def.shinLength, Vector3(0.5f, 1f, 0f), def.legIKConstraint, JointRotation(), kneeF!!, ankleF!!, legFBuffer, jointsBuffer)
         bakeIkLimb(hipB!!.worldPosition, info.ankleB, def.thighLength, def.shinLength, Vector3(0.5f, 1f, 0f), def.legIKConstraint, JointRotation(), kneeB!!, ankleB!!, legBBuffer, jointsBuffer)
 
-        // W1: engine now derives foot/hand orientation (removed manual endpoints + tilt counter-rotation).
+        // The engine now derives foot/hand orientation (removed manual endpoints + tilt counter-rotation).
 
         // Solve IK for arms — the hand is either the floor plant (planted phases: a fixed contact
         // that must not slide) or a point on the arm's own reachable circle about the shoulder,
@@ -247,7 +232,7 @@ class BurpeePose : PoseBuilder {
         bakeIkLimb(shoulderA!!.worldPosition, handTarget(info, -1, armPlane, plantX, def), def.upperArmLength, def.forearmLength, poleFor(info.armPole, -1), def.armIKConstraint, JointRotation(), elbowA!!, handA!!, armABuffer, jointsBuffer)
         bakeIkLimb(shoulderP!!.worldPosition, handTarget(info, 1, armPlane, plantX, def), def.upperArmLength, def.forearmLength, poleFor(info.armPole, 1), def.armIKConstraint, JointRotation(), elbowP!!, handP!!, armPBuffer, jointsBuffer)
 
-        // W1: engine now derives foot/hand orientation (removed manual endpoints + tilt counter-rotation).
+        // The engine now derives foot/hand orientation (removed manual endpoints + tilt counter-rotation).
 
         SkeletonPose.fromHierarchy(roots!!, jointsBuffer)
         jointsBuffer.getJoint(Joint.WRIST_A).set(jointsBuffer.getJoint(Joint.HAND_A))

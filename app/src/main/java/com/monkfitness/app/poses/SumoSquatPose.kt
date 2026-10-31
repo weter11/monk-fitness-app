@@ -32,7 +32,7 @@ class SumoSquatPose : BaseSquatPose() {
     )
 
     // Wide sumo foot track: marginally beyond leg reach when standing tall -> project onto the
-    // reachable band (R2) so the wide stance is honoured without solver clamping.
+    // reachable band so the wide stance is honoured without solver clamping.
     override fun fillLegTargets(
         def: SkeletonDefinition, pelvisY: Float, pelvisX: Float, leanAngle: Float, progress: Float,
         outF: Vector3, outB: Vector3
@@ -43,7 +43,7 @@ class SumoSquatPose : BaseSquatPose() {
         SkeletonMath.clampTargetToReach(hipB!!.worldPosition, outB, def.thighLength, def.shinLength, def.legIKConstraint, outB)
     }
 
-    // Hands drop vertically toward the crotch (R2: kept inside reachable band).
+    // Hands drop vertically toward the crotch (kept inside the reachable band).
     override fun fillArmTargets(
         def: SkeletonDefinition, pelvisY: Float, pelvisX: Float, leanAngle: Float, progress: Float,
         outA: Vector3, outP: Vector3

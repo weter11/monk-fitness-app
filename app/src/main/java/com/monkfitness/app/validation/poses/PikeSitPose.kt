@@ -11,12 +11,7 @@ import com.monkfitness.app.animation.SupportDefinition
 import com.monkfitness.app.animation.SupportPoint
 import com.monkfitness.app.animation.Vector3
 
-/**
- * Engineering Validation — Pike Sit.
- *
- * Static, frozen snapshot. Validates: seated pelvis, hamstring geometry, spine alignment,
- * shoulder flexion, arm reach, wrist orientation.
- */
+/** Engineering Validation — Pike Sit: seated pelvis, hamstring geometry, spine alignment, shoulder flexion, arm reach, wrist orientation. */
 class PikeSitPose : BaseValidationPose() {
 
     override val metadata = staticMetadata(
@@ -39,18 +34,15 @@ class PikeSitPose : BaseValidationPose() {
         pelvis!!.localPosition.set(0f, pelvisY, 0f)
 
         chest!!.localPosition.set(0f, def.torsoLength, 0f)
-        // B2: route the pike fold through the declarative spine curve so carriers populate.
         buildSpineCurve(pelvis!!, chest!!, -fold, -fold * 0.6f, axisZ)
 
-        // Head follows the folded thorax, gaze forward/down.
         val gaze = tempV3.set(1f, 0.2f, 0f).normalize()
         buildGaze(neck!!, head!!, def.neckLength, gaze)
         buildPelvis(pelvis!!, hipF!!, hipB!!, def.hipWidth)
         buildShoulders(shoulderA!!, shoulderP!!, def.shoulderWidth)
 
-        // Shoulder girdle: as the chest folds forward, the clavicles/scapulae protract so the
-        // shoulders travel forward over the knees (audit §2.3 — the validation base previously
-        // left the girdle a rigid pass-through).
+        // As the chest folds forward the clavicles protract, so the shoulders travel forward over the
+        // knees instead of the girdle passing through rigidly.
         buildClavicularRotation(clavicleA!!, elevation = 0f, protraction = 0.6f, axialRotation = 0f, sideSign = -1f)
         buildClavicularRotation(clavicleP!!, elevation = 0f, protraction = 0.6f, axialRotation = 0f, sideSign = 1f)
         buildScapularRotation(scapulaA!!, retraction = 0f, depression = 0f, sideSign = -1f)
@@ -69,15 +61,12 @@ class PikeSitPose : BaseValidationPose() {
         bakeIkLimb(hipF!!.worldPosition, targetF, def.thighLength, def.shinLength, legPoleF, legStraightConstraint(def), pelvis!!.worldRotation, kneeF!!, ankleF!!, legFBuffer, straight = true, contact = groundContact)
         bakeIkLimb(hipB!!.worldPosition, targetB, def.thighLength, def.shinLength, legPoleB, legStraightConstraint(def), pelvis!!.worldRotation, kneeB!!, ankleB!!, legBBuffer, straight = true, contact = groundContact)
 
-        // Flat foot: the engine derives heel/toe from the shank (knee→ankle) + the neutral ankle
-        // articulation, cancelling the inherited fold automatically and laying the foot flat on the
-        // ground (heel ≈ toe ≈ 0). No manual endpoint authoring, no +fold tilt counter-rotation.
+        // Flat foot: heel/toe are derived from the shank and the neutral ankle articulation, which cancels
+        // the inherited fold — no manual endpoints and no +fold tilt counter-rotation.
 
-        // Arms reach forward to grasp the toes. The target is measured from the *actual folded
-        // shoulder* (audit §2.1: the previous target was ~252u from the shoulder — unreachable
-        // for a 146u arm — so the solver clamped it and broke bone lengths). We aim the hand at
-        // the toes but never farther than the reachable band, so the arm stays a valid (slightly
-        // bent) reach instead of an over-clamped limb.
+        // The target is measured from the *actual folded shoulder*: the previous one sat ~252u from a
+        // 146u arm, so the solver clamped it and broke bone lengths. Aim at the toes but never past the
+        // reachable band, so the arm stays a valid (slightly bent) reach rather than an over-clamped limb.
         val footTargetF = Vector3(footX, 8f, -def.hipWidth * 0.9f)
         val footTargetB = Vector3(footX, 8f, def.hipWidth * 0.9f)
         val armReachF = tempV1.set(footTargetF).subtract(shoulderA!!.worldPosition)
@@ -92,9 +81,8 @@ class PikeSitPose : BaseValidationPose() {
         bakeIkLimb(shoulderA!!.worldPosition, armTargetA, def.upperArmLength, def.forearmLength, armPoleA, def.armIKConstraint, chest!!.worldRotation, elbowA!!, handA!!, armABuffer)
         bakeIkLimb(shoulderP!!.worldPosition, armTargetP, def.upperArmLength, def.forearmLength, armPoleP, def.armIKConstraint, chest!!.worldRotation, elbowP!!, handP!!, armPBuffer)
 
-        // The engine derives palm/knuckles/fingertips from the forearm + the neutral wrist
-        // articulation, cancelling the inherited chest tilt automatically — no manual hand
-        // endpoint authoring, no -fold*0.6f tilt counter-rotation.
+        // Palm/knuckles/fingertips are derived from the forearm and the neutral wrist, cancelling the
+        // inherited chest tilt — no hand endpoints, no -fold*0.6f counter-rotation.
 
         return finalizePose()
     }

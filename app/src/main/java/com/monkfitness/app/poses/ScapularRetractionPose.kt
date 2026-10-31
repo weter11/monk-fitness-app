@@ -11,7 +11,7 @@ class ScapularRetractionPose : PoseBuilder {
         loopMode = LoopMode.LOOP,
         motionCurve = MotionCurve.EASE_IN_OUT,
         environment = EnvironmentDefinition(ground = GroundDefinition(visible = true, level = 0f)),
-        // M8 — the planted feet, on the ONE canonical support channel (`metadata.support`).
+        // The planted feet, on the ONE canonical support channel (`metadata.support`).
         support = SupportDefinition(
             pivot = PivotType.FEET,
             contacts = setOf(SupportContact.LEFT_FOOT, SupportContact.RIGHT_FOOT)
@@ -33,12 +33,8 @@ class ScapularRetractionPose : PoseBuilder {
 
     private fun ensureHierarchy(def: SkeletonDefinition) {
         if (roots != null) return
-        // Canonical hierarchy (`SkeletonFactory.createStandardSkeleton()` — the M11 shape the migrated
-        // families publish). The factory's added nodes are pass-throughs between the links this pose
-        // already authored: LUMBAR is coincident with the PELVIS (identity rotation) and
-        // CLAVICLE_*/SCAPULA_* are coincident with the CHEST, so every transform authored below
-        // resolves exactly as before. What changes is that the five canonical joints carry their
-        // authored transforms instead of publishing at the world origin.
+        // Canonical hierarchy (`SkeletonFactory.createStandardSkeleton()`): LUMBAR is coincident with
+        // PELVIS and CLAVICLE_*/SCAPULA_* with CHEST, so every transform authored below resolves as before.
         val nodes = SkeletonFactory.createStandardSkeleton()
         roots = nodes.roots
         pelvis = nodes.pelvis; chest = nodes.chest; neck = nodes.neck; head = nodes.head
@@ -51,17 +47,15 @@ class ScapularRetractionPose : PoseBuilder {
     }
 
     override fun build(context: PoseContext): SkeletonPose {
-        // Per-frame hygiene: clear last build's §1.1 carriers from this reused singleton buffer.
         SkeletonPose.IntentBuilder(jointsBuffer).reset()
         val def = context.definition
         ensureHierarchy(def)
 
-        // Scapular Retraction Hold: Standing upright
-        // B3 — STANDING posture: the solver owns the coarse pelvis height (seed == standH).
+        // STANDING posture: the solver owns the coarse pelvis height (seed == standH).
         SkeletonPose.IntentBuilder(jointsBuffer).posture(PostureIntent.Kind.STANDING)
 
         // standH is no longer read: every target below is authored in the chain root's own frame
-        // (M8), so the pose does not need to name the solver-owned root height.
+        // , so the pose does not need to name the solver-owned root height.
         pelvis!!.localPosition = Vector3(0f, 0f, 0f)
         declarePelvisTilt(pelvis!!, jointsBuffer, Vector3(0f, 0f, 1f), 0f)
 
@@ -74,12 +68,10 @@ class ScapularRetractionPose : PoseBuilder {
         shoulderA!!.localPosition = Vector3(0f, 0f, -def.shoulderWidth)
         shoulderP!!.localPosition = Vector3(0f, 0f, def.shoulderWidth)
 
-        // Compute Spine transforms
         roots!!.forEach { it.updateWorldTransforms(Vector3(0f, 0f, 0f), JointRotation()) }
 
-        // 1. Static Standing Feet (no foot sliding or penetration)
-        // M8 — targets are authored in the frame this pose OWNS (the chain root's own world
-        // position). The root height is solver-owned (B3: the STANDING intent pins the pelvis after
+        // Targets are authored in the frame this pose OWNS (the chain root's own world
+        // position). The root height is solver-owned (the STANDING intent pins the pelvis after
         // this build), so a floor-anchored Y sits a whole standing root height above the hip and
         // the solver relocates the effector along that upward direction. `SkeletonMath.maxReach` is
         // the chain's own reachable length, so the authored target is realizable as declared.
@@ -90,12 +82,10 @@ class ScapularRetractionPose : PoseBuilder {
         bakeIkLimb(hipF!!.worldPosition, targetAnkleF, def.thighLength, def.shinLength, Vector3(1f, 0f, -0.2f), def.legIKConstraint, JointRotation(), kneeF!!, ankleF!!, legFBuffer, jointsBuffer)
         bakeIkLimb(hipB!!.worldPosition, targetAnkleB, def.thighLength, def.shinLength, Vector3(1f, 0f, 0.2f), def.legIKConstraint, JointRotation(), kneeB!!, ankleB!!, legBBuffer, jointsBuffer)
 
-        // W1: engine now derives foot/hand orientation (removed manual endpoints + tilt counter-rotation).
+        // The engine now derives foot/hand orientation (removed manual endpoints + tilt counter-rotation).
 
-        // 2. Arms (Scapular squeeze kinematics)
-        // Elbows/Hands are held at chest level and pulled backwards to squeeze the shoulder blades.
         val handX = lerp(25f, 5f, context.progress)
-        // M8 — same frame rule as the feet: chest level is measured from the shoulder the pose owns
+        // Same frame rule as the feet: chest level is measured from the shoulder the pose owns
         // at build time, not from the floor-anchored root height the solver pins later.
         val handY = shoulderA!!.worldPosition.y - 20f
 
@@ -105,9 +95,9 @@ class ScapularRetractionPose : PoseBuilder {
         val targetHandA = Vector3(handX, handY, handZ_A)
         val targetHandP = Vector3(handX, handY, handZ_P)
 
-        // M8 — the squeezed hold puts the hands closer to the shoulder than the arm chain's
+        // The squeezed hold puts the hands closer to the shoulder than the arm chain's
         // minimum reach (`SkeletonMath.minReach` at the 30° minimum-flexion stop): the declared
-        // target is projected onto the reachable band first (the R2 reach-target helper), so the
+        // target is projected onto the reachable band first (the reach-target helper), so the
         // realized arm is what the pose declared and the reachability reading stays 0.
         SkeletonMath.clampTargetToReach(shoulderA!!.worldPosition, targetHandA, def.upperArmLength, def.forearmLength, def.armIKConstraint, targetHandA)
         SkeletonMath.clampTargetToReach(shoulderP!!.worldPosition, targetHandP, def.upperArmLength, def.forearmLength, def.armIKConstraint, targetHandP)
@@ -116,7 +106,7 @@ class ScapularRetractionPose : PoseBuilder {
         bakeIkLimb(shoulderA!!.worldPosition, targetHandA, def.upperArmLength, def.forearmLength, Vector3(-1f, 0f, -1f), def.armIKConstraint, JointRotation(), elbowA!!, handA!!, armABuffer, jointsBuffer)
         bakeIkLimb(shoulderP!!.worldPosition, targetHandP, def.upperArmLength, def.forearmLength, Vector3(-1f, 0f, 1f), def.armIKConstraint, JointRotation(), elbowP!!, handP!!, armPBuffer, jointsBuffer)
 
-        // W1: engine now derives foot/hand orientation (removed manual endpoints + tilt counter-rotation).
+        // The engine now derives foot/hand orientation (removed manual endpoints + tilt counter-rotation).
 
         SkeletonPose.fromHierarchy(roots!!, jointsBuffer)
         jointsBuffer.getJoint(Joint.WRIST_A).set(jointsBuffer.getJoint(Joint.HAND_A))

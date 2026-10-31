@@ -4,72 +4,13 @@ import com.monkfitness.app.animation.*
 import kotlin.math.*
 
 /**
- * Piriformis Stretch (`piriformis_stretch_hold`) — the supine figure-4, authored on the canonical
- * `SkeletonFactory` tree through [BasePose].
+ * Piriformis Stretch (`piriformis_stretch_hold`) — the supine figure-4. No BPS exists: the exercise's
+ * own copy is the only specification in the repository.
  *
- * ## The exercise (its own copy — the only specification in the repository; no BPS exists)
- *
- * `ex_piriformis_stretch_steps`: *"1. Lie on your back with both knees bent. 2. Cross one ankle over
- * the opposite thigh. 3. Pull the uncrossed leg toward your chest. 4. Keep the tailbone heavy as the
- * outer hip opens up. 5. Hold, then change sides."* `desc` *"A glute-focused stretch that targets the
- * back and outside of the hip. Ease into it and keep the low back quiet."* `tech` *"Flex the crossed
- * foot to protect the knee. Pull the legs in only until the hip stretches. Exhale slowly to release
- * tension."* `mistakes` *"Yanking the knee toward the chest. Letting the crossed foot go limp.
- * Twisting the pelvis off the floor."*
- *
- * ## The authored movement, one statement per copy line
- *
- *  * **§1 "Lie on your back with both knees bent"** — the supine layout the corpus's supine family
- *    authors (`DeadBugPose`/`LegRaisePose`): the trunk lies along the world `−X` with its ventral face
- *    up, carried by a declared pelvis tilt of `+90°` about `Z`.
- *  * **§2 "Cross one ankle over the opposite thigh"** — the F (near) leg's ankle target IS the pulled
- *    thigh's own line at [CONTACT_T], derived from the pulled leg's authored geometry (not read from
- *    any engine-written node), and the F leg's pole states that its knee goes up and outboard: the
- *    drill's crossed configuration, whose shin crosses the body's midline to lie across the opposite
- *    thigh. Its hip is *externally rotated* in the only way this rig realises hip rotation — the
- *    geometry itself: the thigh's horizontal projection points outboard (`−Z`) while its shin's points
- *    inboard (`+Z`), so the femur's twist is visible in the published chain.
- *  * **§3 "Pull the uncrossed leg toward your chest"** — the pull is the B leg's authored hip flexion
- *    ([PULL_ENTRY_DEG] → [PULL_HOLD_DEG], `tech`: *"only until the hip stretches"* — a measured `22°`),
- *    and the hands are target-authored **onto that same thigh's line** ([GRIP_T]), so they travel with
- *    the leg they are pulling rather than gesturing at it.
- *  * **§4/§5 "Hold, then change sides"** — the cycle is an entry, a **hold plateau**
- *    ([PULL_RAMP]/[PULL_FALL] bracket a `45 %` plateau in which the pull is constant) and a release,
- *    which is what a `30–60 s` timer stretch actually does. The pose is one side of the drill (the
- *    corpus's unilateral convention): the other side is the same pose mirrored, which the exercise's
- *    own catalog entry schedules as the second set.
- *  * **`tech` "Flex the crossed foot to protect the knee"** — authored through the sanctioned Branch-C
- *    ankle articulation on the crossed foot ([CROSSED_ANKLE_DORSIFLEXION]) and witnessed on the
- *    published frame by a `0`-articulation twin of this pose (the test measures the difference).
- *  * **`mistakes` "Twisting the pelvis off the floor" / "keep the tailbone heavy" / `desc` "keep the
- *    low back quiet"** — the pelvis is authored at one height, with **no roll and no twist** about the
- *    body's long axis, and the trunk stays in the mat's plane for the whole cycle: the test measures
- *    the hips' lateral line (`2 × hipWidth`), the absence of any hip-height asymmetry, and the trunk's
- *    own flatness.
- *
- * ## Reach — the honest limit this pose is authored against (measured)
- *
- * The arms are the binding constraint, and it is worth stating exactly: the shoulders sit at the
- * trunk's far end (`≈ torsoLength` = `120 u` from the pelvis in `X`), the pulled leg's hip is a further
- * `hipWidth` = `22` out laterally, and this rig's whole arm is `146` (`40.13 … 143.08` reachable). So
- * the near-side hand can clasp the pulled thigh **only near the hip**: at the authored grip
- * ([GRIP_T] = `0.2` of the thigh) the hand's chord to its own shoulder measures `131 … 140 u` across
- * the cycle (inside the band, so the reach stamp reads `0`), while a grip at the thigh's middle would
- * demand `~147 u` and be relocated by the solver. That is why the hands clasp low and the pull is the
- * `22°` the copy's own *"only until the hip stretches"* asks for — a bigger pull is not what the copy
- * wants, and a higher grip is not something this rig can place.
- *
- * ## Recorded gaps (no invented specification)
- *
- *  * The supine layer (`PELVIS_Y`), the crossed leg's angles, the pull depths and the grip fraction are
- *    **authored constants**: the copy states none of them. The supine layer is the corpus's own
- *    (`DeadBugPose`/`LegRaisePose` publish at `12`).
- *  * **The clasp itself is not expressed.** The hands hold the thigh by being *placed* on its line; the
- *    rig has no grip/hand-closure DOF (`HandDefinition` is a single long axis), so "grip" is geometry,
- *    not a channel. Recorded, not invented.
- *  * The foot's own **flexion** is authored (Branch C); its *yaw* ("protect the knee" also implies the
- *    ankle tracks) has no representation on this rig (the ankle vocabulary is dorsiflexion + inversion
- *    only), which the batch record already documents for the whole phase.
+ * The arms are the binding constraint: the near hand can clasp the pulled thigh only near the hip, so
+ * the grip is at [GRIP_T] = `0.2` of the thigh (`131 … 140 u` chord, inside the band) — a grip at the
+ * thigh's middle would demand `~147 u` and be relocated by the solver. The hands hold the thigh by
+ * being PLACED on its line: the rig has no grip/hand-closure DOF.
  */
 class PiriformisStretchPose : BasePose() {
 
@@ -120,7 +61,6 @@ class PiriformisStretchPose : BasePose() {
         // Shape-driven root (the supine layout is authored arithmetic), so the solver leaves it alone.
         declarePosture(jointsBuffer, PostureIntent.Kind.CUSTOM)
 
-        // --- 1. The supine layout (§1): trunk along -X, ventral face up, mat layer ---------------
         pelvis!!.localPosition.set(PELVIS_X, PELVIS_Y, 0f)
         declarePelvisTilt(pelvis!!, jointsBuffer, axisZ, SUPINE_ROLL)
         chest!!.localPosition.set(0f, def.torsoLength, 0f)
@@ -133,7 +73,6 @@ class PiriformisStretchPose : BasePose() {
 
         for (root in roots!!) root.updateWorldTransforms(zeroVector, identityRotation)
 
-        // --- 2. The pulled (uncrossed) leg B: both knees bent, the pull cycle ---------------------
         val pull = pullAmount(context.progress)
         val flexionB = Math.toRadians(
             (PULL_ENTRY_DEG + (PULL_HOLD_DEG - PULL_ENTRY_DEG) * pull).toDouble()
@@ -156,7 +95,6 @@ class PiriformisStretchPose : BasePose() {
         )
         bakeIkLimb(hipBWorld, ankleBTarget, def.thighLength, def.shinLength, poleFor(hipBWorld, kneeBWorld, ankleBTarget, def), def.legIKConstraint, pelvis!!.worldRotation, kneeB!!, ankleB!!, legBBuffer)
 
-        // --- 3. The crossed leg F: its ankle lands on the pulled thigh's own line (§2) -----------
         val contact = thighLinePoint(hipBWorld, thighB, def.thighLength, CONTACT_T)
         val ankleFTarget = Vector3(
             contact.x + CONTACT_STANDOFF_X,
@@ -165,12 +103,10 @@ class PiriformisStretchPose : BasePose() {
         )
         bakeIkLimb(hipF!!.worldPosition, ankleFTarget, def.thighLength, def.shinLength, crossPole, def.legIKConstraint, pelvis!!.worldRotation, kneeF!!, ankleF!!, legFBuffer)
 
-        // --- 4. "Flex the crossed foot to protect the knee" (Branch-C ankle articulation) --------
         // The CROSSED leg (F) is the one whose foot the copy asks about; the pulled foot (B) carries
         // no instruction and is left to the engine's neutral derivation.
         buildAnkleArticulation(Extremity.FOOT_F, CROSSED_ANKLE_DORSIFLEXION, 0f, ankleF!!)
 
-        // --- 5. The hands: they hold the thigh they are pulling (§3) ------------------------------
         val grip = thighLinePoint(hipBWorld, thighB, def.thighLength, GRIP_T)
         bakeIkLimb(shoulderA!!.worldPosition, Vector3(grip.x, grip.y + GRIP_LIFT, grip.z - GRIP_SPREAD), def.upperArmLength, def.forearmLength, armPoleA, def.armIKConstraint, shoulderA!!.worldRotation, elbowA!!, handA!!, armABuffer)
         bakeIkLimb(shoulderP!!.worldPosition, Vector3(grip.x, grip.y + GRIP_LIFT, grip.z + GRIP_SPREAD), def.upperArmLength, def.forearmLength, armPoleP, def.armIKConstraint, shoulderP!!.worldRotation, elbowP!!, handP!!, armPBuffer)
@@ -183,8 +119,7 @@ class PiriformisStretchPose : BasePose() {
 
     /**
      * The pole that states where the 2-bone chain bends, derived from the authored knee's own offset
-     * off the hip→ankle chord (the B1/B7 convention: the pose owns the root, the target AND the bend
-     * side; the solver's perpendicular is this vector's component off the chord).
+     * off the hip→ankle chord (the convention: the pose owns the root, the target AND the bend side).
      */
     private fun poleFor(hip: Vector3, knee: Vector3, ankle: Vector3, def: SkeletonDefinition): Vector3 {
         val ux = ankle.x - hip.x; val uy = ankle.y - hip.y; val uz = ankle.z - hip.z
@@ -229,7 +164,7 @@ class PiriformisStretchPose : BasePose() {
         private const val CONTACT_STANDOFF_X = -14f
         private const val CONTACT_OUT = 8f
 
-        /** Where the hands hold the pulled thigh (`§3`) — see the reach record in the KDoc. */
+        /** Where the hands hold the pulled thigh (`§3`). */
         const val GRIP_T = 0.2f
         private const val GRIP_LIFT = 4f
         private const val GRIP_SPREAD = 11f
@@ -237,20 +172,15 @@ class PiriformisStretchPose : BasePose() {
         /**
          * The crossed foot's dorsiflexion — `tech`: *"Flex the crossed foot to protect the knee"* —
          * authored through Branch C (`buildAnkleArticulation`), the only channel this rig has for it.
-         *
-         * **Measured realization (recorded, not assumed):** the engine's extremity derivation builds
-         * the foot's direction from the shank + the authored hint and composes this articulation after
-         * it, so only part of the authored `20°` reaches the published foot, and the fraction depends
-         * on the phase: the crossed foot's own shank→foot angle measures `87.00°` at the cycle's entry
-         * and `90.04°` at the hold with this value, against `90.00°` at every phase with the
-         * articulation removed. The authoring is live (it is the difference the test pins); the
-         * unrealized remainder is an engine-side residual, recorded here rather than tuned away.
+         * The engine composes this articulation AFTER it derives the foot from the shank, so only part
+         * of the authored `20°` reaches the published foot; the authoring is live (the test pins the
+         * difference) and the unrealized remainder is an engine residual, recorded not tuned away.
          */
         const val CROSSED_ANKLE_DORSIFLEXION = 0.35f
 
         private val crossPole = Vector3(-0.35f, 0.55f, -0.75f)
         /**
-         * The supine arm poles: the elbows bow UP and outboard. The standing family's `(0, -1, ...)`
+         * The supine arm poles: the elbows bow UP and outboard. The standing family's `(0, -1,...)`
          * convention would aim the perpendicular into the mat here — this layout is rolled to lie on
          * it, so the "away from the body" direction is `+Y` (the ceiling), which is also the side the
          * hands reach toward.

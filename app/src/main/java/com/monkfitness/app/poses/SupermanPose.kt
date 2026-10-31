@@ -5,45 +5,13 @@ import com.monkfitness.app.animation.SkeletonMath.lerp
 import kotlin.math.*
 
 /**
- * P12 (§12.6): converted from the legacy world-position-built representation
- * (`solveIK -> setJoint(result) -> fromJointPositions`) to the authored-hierarchy idiom
- * (SkeletonFactory tree + declared root/lean + registered package bake limbs +
- * `fromHierarchy`). The limb realization runs through the registered authoring bake; no
- * direct `solveIK` bypass and no legacy reconstruction remains.
+ * Superman — the prone floor extension: the pelvis and thighs are the fulcrum, the chest/head/arms/
+ * legs lift off the mat.
  *
- * ## The body basis (M4 — corrected here)
- *
- * The P12 WP-D conversion reproduced the legacy world-position layout as "trunk toward −X with a
- * +90° root tilt", which is the **supine** basis this engine uses for DeadBug/LegRaise
- * (`declarePelvisTilt(..., +π/2)`). Measured on the published frame: the body's ventral axis pointed
- * **+Y (face up)** — Superman rendered lying on its back — while
- * `docs/Biomechanical Pose Specification (BPS)/Superman (Prone).md` §1/§3/§8 specify a **prone
- * (face-down)** exercise whose floor fulcrum is the **anterior** body ("The contact surface is the
- * front of the body (anterior), unlike supine exercises"). The symptoms were measurable and
- * CI-invisible: at the rest phase the head sat **24.5 units below the declared ground (level 0)**
- * with 12 joints (head/neck/hands/wrists/palms/knuckles/fingertips) under it and the hands 4.3
- * units under it, because the legacy gaze direction `(−1, +0.3, 0)` is expressed along the
- * head-end axis — un-mirrored it points INTO the floor once the body lies down.
- *
- * The corrected layout uses the **prone** basis of the sibling prone poses
- * (`ReverseSnowAngelPose`/`ProneCobraStretchPose`): `rotZ(−π/2)` maps the spine's local `+Y` to
- * world `+X` (head end) and the body's ventral `+X` to world `−Y` (face down). The head-end axis is
- * therefore `+X`: the head/gaze continue along `+X`, the legs extend `−X` away from the head, and
- * the arms reach `+X` overhead.
- *
- * ## The extension is articulated on the spine (M4's second half)
- *
- * The previous form carried the whole rep's extension on the ROOT (`±π/2 + chestLean`), i.e. it
- * rotated the pelvis→chest vector rigidly — the pelvis, which BPS §5/§7 name as the floor fulcrum,
- * was the hinge — and the chest node carried `localRotation.angle == 0.0000` at every frame. The
- * root now carries the prone LAYOUT only and is CONSTANT across the rep (BPS §5: "The pelvis
- * remains neutral (not posteriorly tilted/tucked) and stays on the floor; the extension originates
- * from the paraspinals, not from tilting the pelvis"); the tempo-dependent arch is authored on the
- * two-segment spine below, with the chest node carrying the thoracic share above the trunk line.
- *
- * BPS-driven layout: pelvis + thighs on the floor (the fulcrum), chest/head/arms/legs lifted, arms
- * level with the body's own floor line at rest and rising with the arch — asserted numerically by
- * `M3M5ProneTrunkGeometryTest`.
+ * The root carries the prone LAYOUT only and is CONSTANT across the rep: the arch is articulated on the
+ * two-segment spine (BPS §5 — the pelvis stays neutral on the floor and the extension originates from
+ * the paraspinals, not from tilting the pelvis). The body basis is prone: an earlier conversion had
+ * left it supine — face up, head `24.5` u below the declared ground.
  */
 class SupermanPose : PoseBuilder {
     override val metadata = PoseMetadata(
@@ -52,7 +20,7 @@ class SupermanPose : PoseBuilder {
         loopMode = LoopMode.LOOP,
         motionCurve = MotionCurve.LINEAR,
         environment = EnvironmentDefinition(ground = GroundDefinition(visible = true, level = 0f)),
-        // M9 — the hands' floor line at the prone seam (the bow lifts the arms off the mat and the
+        // The hands' floor line at the prone seam (the bow lifts the arms off the mat and the
         // hand derivation is self-gating: it only orients a hand that is BELOW its elbow, so the
         // lifted phase is untouched). One canonical channel, `metadata.support`. The FEET are
         // deliberately NOT declared: the bow lifts the legs as one rigid line well clear of the
@@ -93,9 +61,8 @@ class SupermanPose : PoseBuilder {
     }
 
     override fun build(context: PoseContext): SkeletonPose {
-        // Per-frame hygiene: clear last build's §1.1 carriers from this reused singleton buffer.
         SkeletonPose.IntentBuilder(jointsBuffer).reset()
-        // B3 — every production pose declares its posture intent. Shape-driven root, so CUSTOM.
+        // Every production pose declares its posture intent. Shape-driven root, so CUSTOM.
         SkeletonPose.IntentBuilder(jointsBuffer).posture(PostureIntent.Kind.CUSTOM)
         val progress = context.progress
         val definition = context.definition
@@ -157,7 +124,7 @@ class SupermanPose : PoseBuilder {
             hipB!!.worldPosition.z
         )
 
-        // P12 (§12.6): legs declared through the registered authoring bake (the legacy
+        // Legs declared through the registered authoring bake (the legacy
         // IKConstraint.LegConstraint constant is preserved verbatim).
         bakeIkLimb(hipF!!.worldPosition, toeF, definition.thighLength, definition.shinLength, Vector3(0f, 1f, 0f), IKConstraint.LegConstraint, pelvis!!.worldRotation, kneeF!!, ankleF!!, legFIK, jointsBuffer)
         bakeIkLimb(hipB!!.worldPosition, toeB, definition.thighLength, definition.shinLength, Vector3(0f, 1f, 0f), IKConstraint.LegConstraint, pelvis!!.worldRotation, kneeB!!, ankleB!!, legBIK, jointsBuffer)
@@ -183,7 +150,7 @@ class SupermanPose : PoseBuilder {
             shoulderP!!.worldPosition.z
         )
 
-        // P12 (§12.6): arms declared through the registered authoring bake.
+        // Arms declared through the registered authoring bake.
         bakeIkLimb(shoulderA!!.worldPosition, targetHandA, definition.upperArmLength, definition.forearmLength, Vector3(0f, 1f, -1f), IKConstraint.ArmConstraint, chest!!.worldRotation, elbowA!!, handA!!, armAIK, jointsBuffer)
         bakeIkLimb(shoulderP!!.worldPosition, targetHandP, definition.upperArmLength, definition.forearmLength, Vector3(0f, 1f, 1f), IKConstraint.ArmConstraint, chest!!.worldRotation, elbowP!!, handP!!, armPIK, jointsBuffer)
 

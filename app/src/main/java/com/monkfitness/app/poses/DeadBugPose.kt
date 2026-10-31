@@ -5,13 +5,11 @@ import com.monkfitness.app.animation.SkeletonMath.lerp
 import kotlin.math.*
 
 /**
- * P12 (§12.6): converted from the legacy world-position-built representation
- * (`solveIK -> setJoint(result) -> fromJointPositions`) to the authored-hierarchy idiom shared
- * by every compliant pose: SkeletonFactory tree, node-local authoring, the registered package
- * bake for limbs, `fromHierarchy` as the final conversion. The supine trunk is now DECLARED
- * (pelvis tilt = the spine's authored world direction) instead of reconstructed from solved
- * joint positions; limbs reach the same world targets through the canonical bake, which also
- * registers the Limb Targets / stamps the bypass left absent.
+ * Converted from the legacy world-position-built representation to the authored-hierarchy idiom
+ * (SkeletonFactory tree, node-local authoring, the registered package bake, `fromHierarchy` as the final
+ * conversion). The supine trunk is now DECLARED — pelvis tilt = the spine's authored world direction —
+ * instead of reconstructed from solved joint positions, and the canonical bake registers the Limb Targets
+ * / stamps the bypass left absent.
  */
 class DeadBugPose : PoseBuilder {
     override val metadata = PoseMetadata(
@@ -52,17 +50,16 @@ class DeadBugPose : PoseBuilder {
     }
 
     override fun build(context: PoseContext): SkeletonPose {
-        // Per-frame hygiene: clear last build's §1.1 carriers from this reused singleton buffer.
         SkeletonPose.IntentBuilder(jointsBuffer).reset()
-        // B3 — every production pose declares its posture intent. Shape-driven root, so CUSTOM.
+        // Every production pose declares its posture intent. Shape-driven root, so CUSTOM.
         SkeletonPose.IntentBuilder(jointsBuffer).posture(PostureIntent.Kind.CUSTOM)
         val def = context.definition
         ensureHierarchy(def)
 
-        // 1. Supine Core Positioning — authored as hierarchy state. The spine local offsets are
-        // the standard +Y convention; the supine orientation is a declared pelvis tilt of +90°
-        // about Z (rotZ(+90°) maps +Y -> -X, placing the chest at x = pelvisX - torsoLength
-        // exactly where the legacy world layout put it).
+        // 1. Supine Core Positioning, authored as hierarchy state: the spine local offsets are the
+        // standard +Y convention and the supine orientation is a declared pelvis tilt of +90° about Z
+        // (rotZ(+90°) maps +Y -> -X, placing the chest at x = pelvisX - torsoLength, exactly where the
+        // legacy world layout put it).
         val pelvisX = 15f
         val pelvisY = 12f
         pelvis!!.localPosition.set(pelvisX, pelvisY, 0f)
@@ -77,13 +74,11 @@ class DeadBugPose : PoseBuilder {
 
         roots!!.forEach { it.updateWorldTransforms(Vector3(0f, 0f, 0f), JointRotation()) }
 
-        // 2. Continuous Contrallateral Sine Wave Modulation
         val cycle = context.progress * 2f * PI.toFloat()
         val rawSin = sin(cycle)
         val actA = if (rawSin > 0f) smootherStep(0f, 1f, rawSin) else 0f
         val actP = if (rawSin < 0f) smootherStep(0f, 1f, -rawSin) else 0f
 
-        // 3. ARM TARGETS
         val totalArmLen = def.upperArmLength + def.forearmLength
         // Neutral arm: extended straight up (along positive Y-axis)
         val neutralHandA = Vector3(shoulderA!!.worldPosition.x, shoulderA!!.worldPosition.y + totalArmLen, shoulderA!!.worldPosition.z)
@@ -93,15 +88,13 @@ class DeadBugPose : PoseBuilder {
         val extendedHandA = Vector3(shoulderA!!.worldPosition.x - totalArmLen * 0.94f, 15f, shoulderA!!.worldPosition.z)
         val extendedHandP = Vector3(shoulderP!!.worldPosition.x - totalArmLen * 0.94f, 15f, shoulderP!!.worldPosition.z)
 
-        // Interpolate target positions
         val targetHandA = lerp(neutralHandA, extendedHandA, actA)
         val targetHandP = lerp(neutralHandP, extendedHandP, actP)
 
-        // P12 (§12.6): arms declared through the registered authoring bake.
+        // Arms declared through the registered authoring bake.
         bakeIkLimb(shoulderA!!.worldPosition, targetHandA, def.upperArmLength, def.forearmLength, Vector3(1f, 1f, 0f), def.armIKConstraint, chest!!.worldRotation, elbowA!!, handA!!, armABuffer, jointsBuffer)
         bakeIkLimb(shoulderP!!.worldPosition, targetHandP, def.upperArmLength, def.forearmLength, Vector3(1f, 1f, 0f), def.armIKConstraint, chest!!.worldRotation, elbowP!!, handP!!, armPBuffer, jointsBuffer)
 
-        // 4. LEG TARGETS
         val totalLegLen = def.thighLength + def.shinLength
         // Neutral leg: tabletop position (thigh vertical, knee bent, shin horizontal pointing positive X)
         val neutralAnkleF = Vector3(hipF!!.worldPosition.x + def.shinLength * 0.8f, hipF!!.worldPosition.y + def.thighLength * 0.9f, hipF!!.worldPosition.z)
@@ -115,13 +108,12 @@ class DeadBugPose : PoseBuilder {
         val targetAnkleF = lerp(neutralAnkleF, extendedAnkleF, actP)
         val targetAnkleB = lerp(neutralAnkleB, extendedAnkleB, actA)
 
-        // P12 (§12.6): legs declared through the registered authoring bake.
+        // Legs declared through the registered authoring bake.
         bakeIkLimb(hipF!!.worldPosition, targetAnkleF, def.thighLength, def.shinLength, Vector3(-1f, 1f, 0f), def.legIKConstraint, pelvis!!.worldRotation, kneeF!!, ankleF!!, legFBuffer, jointsBuffer)
         bakeIkLimb(hipB!!.worldPosition, targetAnkleB, def.thighLength, def.shinLength, Vector3(-1f, 1f, 0f), def.legIKConstraint, pelvis!!.worldRotation, kneeB!!, ankleB!!, legBBuffer, jointsBuffer)
 
-        // W1: engine derives heel/toe + palm/hand orientation from the shank/forearm + neutral
-        // articulation (the legacy hand-placed toe offsets along +X are superseded by the
-        // declared-intent derivation, same as every migrated family — §12.9 quantifies).
+        // The engine derives heel/toe and palm/hand orientation from the shank/forearm + neutral
+        // articulation, superseding the legacy hand-placed toe offsets.
 
         SkeletonPose.fromHierarchy(roots!!, jointsBuffer)
         jointsBuffer.getJoint(Joint.WRIST_A).set(jointsBuffer.getJoint(Joint.HAND_A))

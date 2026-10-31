@@ -5,16 +5,12 @@ import com.monkfitness.app.animation.SkeletonMath.lerp
 import kotlin.math.*
 
 /**
- * Dynamic World's Greatest Stretch — rewritten thoracic rotation (lunge foundation reused).
- *
- * The runner's-lunge base (front foot flat, back leg extended, toe on floor, torso leaning
- * forward) is retained. The thoracic rotation is now real: the chest node rotates about the
- * spine's long axis so the rib cage, neck, head and shoulders all turn together, and the
- * reaching arm lives in the chest's rotating frame so the hand sweeps from the low instep to
- * the sky BECAUSE the thorax rotates — not because the shoulder is animated on its own. The
- * support hand is pinned to the floor as a stable pillar. (The dead WorldGreatestStretchPose's
- * correct "rotate about the spine axis, head follows" concept is realized here via the chest
- * node and then the dead class is removed.)
+ * Dynamic World's Greatest Stretch on the runner's-lunge base (front foot flat, back leg extended, toe on
+ * the floor, torso leaning forward). The thoracic rotation is real: the chest node rotates about the
+ * spine's long axis so the rib cage, neck, head and shoulders all turn together, and the reaching arm
+ * lives in the chest's rotating frame so the hand sweeps from the low instep to the sky BECAUSE the thorax
+ * rotates — not because the shoulder is animated on its own. The support hand is pinned to the floor as a
+ * stable pillar.
  */
 class DynamicWorldsGreatestStretchPose : BaseThoracicPose() {
 
@@ -27,9 +23,8 @@ class DynamicWorldsGreatestStretchPose : BaseThoracicPose() {
         loopMode = LoopMode.PING_PONG,
         motionCurve = MotionCurve.EASE_IN_OUT,
         environment = thoracicGround,
-        // M9 — the two planted feet and the SUPPORT hand (P/right: the pose's own KDoc names the
-        // "support hand pinned to the floor as a stable pillar"; the A/left hand reaches overhead
-        // and is deliberately not declared). One canonical channel, `metadata.support`.
+        // The two planted feet and the SUPPORT hand (P) on the ONE canonical support channel; the
+        // A/left hand reaches overhead and is deliberately not declared.
         support = SupportDefinition(
             pivot = PivotType.FEET,
             contacts = setOf(
@@ -43,7 +38,7 @@ class DynamicWorldsGreatestStretchPose : BaseThoracicPose() {
     override fun onBuild(context: PoseContext): SkeletonPose {
         val def = context.definition
         ensureHierarchy(def)
-        // B3 — every production pose declares its posture intent. This pose authors a
+        // Every production pose declares its posture intent. This pose authors a
         // shape-driven root, so it opts into CUSTOM (the solver leaves the authored root untouched).
         declarePosture(jointsBuffer, PostureIntent.Kind.CUSTOM)
 
@@ -72,39 +67,35 @@ class DynamicWorldsGreatestStretchPose : BaseThoracicPose() {
 
         // Legs: front foot flat forward, back leg EXTENDED behind with the toe on the floor.
         //
-        // B2 — the back leg's stance is the extension this pose declares, derived from the chain's
-        // own reach instead of authored as a stub the leg has to fold through. The former literal
-        // (`pelvisX - 120`) left the ankle 126.4945 from the hip for a 112/98 chain, so the knee's
-        // IK locus — a circle of radius h = 83.2989 around the hip→ankle chord — had only two
-        // in-plane branches: the one the authored pole selected realized KNEE_B 46.1056 BELOW the
-        // mat this pose declares, its mirror put the knee 55.4 above the hip, and every branch that
-        // kept the knee near the mat splayed it ~78 u out of the leg's own plane. Authored one full
-        // reach behind the hip, at the definition's own floor-contact height (so the toe stays on
-        // the floor), the leg realizes the near-straight chain the runner's lunge means and the knee
-        // hangs just above the mat (the target sits at `maxReach`, i.e. inside the solver's own
-        // reach band by construction — no clamp, no relocation: measured |published ANKLE_B −
-        // declared target| <= 3e-5).
+        // The back leg's stance is the extension this pose declares, derived from the chain's own
+        // reach instead of authored as a stub the leg has to fold through. The former literal
+        // (`pelvisX - 120`) left the ankle 126.4945 from the hip for a 112/98 chain, so the knee's IK locus
+        // (radius h = 83.2989 about the hip→ankle chord) had only two in-plane branches: the one the
+        // authored pole selected realized KNEE_B 46.1056 BELOW the declared mat, its mirror put the knee 55.4
+        // above the hip, and every branch keeping the knee near the mat splayed it ~78 u out of the leg's
+        // plane. Authored one full reach behind the hip, at the definition's own floor-contact height, the
+        // leg realizes the near-straight chain the runner's lunge means with the knee just above the mat
+        // (the target sits at `maxReach`, inside the solver's band by construction — no clamp, no
+        // relocation: measured |published ANKLE_B − declared target| <= 3e-5).
         val ankleHeight = def.foot.ankleHeight
         targetF.set(pelvisX + 95f, ankleHeight, -def.hipWidth)
         val backReach = SkeletonMath.maxReach(def.thighLength, def.shinLength, def.legIKConstraint)
         val backDrop = hipB!!.worldPosition.y - ankleHeight
         targetB.set(pelvisX - sqrt(backReach * backReach - backDrop * backDrop), ankleHeight, def.hipWidth)
-        // The knee's bend side is the leg's own sagittal plane: the pole is derived as the chord's
-        // in-plane perpendicular pointing DOWN (the lunge's back knee hangs toward the mat), so no
-        // lateral component throws the realized knee out of the leg plane — the former
-        // `(0.1, -1, 0.2)` measured `KNEE_B.z = +38.6517` against the leg's own `z = +22`.
+        // The knee's bend side is the leg's own sagittal plane: the pole is derived as the chord's in-plane
+        // perpendicular pointing DOWN (the lunge's back knee hangs toward the mat), so no lateral component
+        // throws the realized knee out of plane — the former `(0.1, -1, 0.2)` measured `KNEE_B.z = +38.6517`
+        // against the leg's own `z = +22`.
         poleF.set(1f, 0.2f, -0.2f)
         poleB.set(-(targetB.y - hipB!!.worldPosition.y), targetB.x - hipB!!.worldPosition.x, 0f).normalize()
         bakeIkLimb(hipF!!.worldPosition, targetF, def.thighLength, def.shinLength, poleF, def.legIKConstraint, pelvis!!.worldRotation, kneeF!!, ankleF!!, legFBuffer)
         bakeIkLimb(hipB!!.worldPosition, targetB, def.thighLength, def.shinLength, poleB, def.legIKConstraint, pelvis!!.worldRotation, kneeB!!, ankleB!!, legBBuffer)
 
-        // Feet: front foot flat (toe forward), back foot plantar-flexed (toe down).
-        // W1: the inherited torso/spine tilt is now removed by the engine, so only the intentional
-        // back-foot plantar flexion remains (front foot lays flat via engine derivation).
+        // Feet: front foot flat (toe forward), back foot plantar-flexed (toe down). The engine now
+        // removes the inherited torso/spine tilt, so only the intentional back-foot plantar flexion remains.
         val footPitchB = 0.6f
-        // Branch C: back-foot plantar flexion routes through the §1.3 intent carrier.
         buildAnkleArticulation(Extremity.FOOT_B, -footPitchB, 0f, ankleB!!)
-        // W1: engine now derives heel/toe from the shank + these ankle articulations.
+        // The engine now derives heel/toe from the shank + these ankle articulations.
 
         // Support arm (P): planted on the floor beside the front foot -> stable pillar.
         targetP.set(targetF.x * 0.5f, 0f, def.shoulderWidth)

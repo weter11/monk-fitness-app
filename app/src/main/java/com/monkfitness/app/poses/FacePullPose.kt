@@ -11,7 +11,7 @@ class FacePullPose : PoseBuilder {
         loopMode = LoopMode.LOOP,
         motionCurve = MotionCurve.EASE_IN_OUT,
         environment = EnvironmentDefinition(ground = GroundDefinition(visible = true, level = 0f)),
-        // M8 — the planted feet, on the ONE canonical support channel (`metadata.support`).
+        // The planted feet, on the ONE canonical support channel (`metadata.support`).
         support = SupportDefinition(
             pivot = PivotType.FEET,
             contacts = setOf(SupportContact.LEFT_FOOT, SupportContact.RIGHT_FOOT)
@@ -33,12 +33,9 @@ class FacePullPose : PoseBuilder {
 
     private fun ensureHierarchy(def: SkeletonDefinition) {
         if (roots != null) return
-        // Canonical hierarchy (`SkeletonFactory.createStandardSkeleton()` — the M11 shape the migrated
-        // families publish). The factory's added nodes are pass-throughs between the links this pose
-        // already authored: LUMBAR is coincident with the PELVIS (identity rotation) and
-        // CLAVICLE_*/SCAPULA_* are coincident with the CHEST, so every transform authored below
-        // resolves exactly as before. What changes is that the five canonical joints carry their
-        // authored transforms instead of publishing at the world origin.
+        // Canonical hierarchy: the factory's added nodes are pass-throughs — LUMBAR is coincident with
+        // the PELVIS and CLAVICLE_*/SCAPULA_* with the CHEST (identity) — so every transform authored
+        // below resolves exactly as before.
         val nodes = SkeletonFactory.createStandardSkeleton()
         roots = nodes.roots
         pelvis = nodes.pelvis; chest = nodes.chest; neck = nodes.neck; head = nodes.head
@@ -51,15 +48,12 @@ class FacePullPose : PoseBuilder {
     }
 
     override fun build(context: PoseContext): SkeletonPose {
-        // Per-frame hygiene: clear last build's §1.1 carriers from this reused singleton buffer.
         SkeletonPose.IntentBuilder(jointsBuffer).reset()
         val def = context.definition
         ensureHierarchy(def)
 
-        // Face pull: Standing tall
-        // B3 — STANDING posture: the solver owns the coarse pelvis height (seed == standH); the
-        // pose no longer needs to name that height, because every target below is authored in the
-        // chain root's own frame (M8).
+        // STANDING posture: the solver owns the coarse pelvis height (seed == standH), and every
+        // target below is authored in the chain root's own frame.
         SkeletonPose.IntentBuilder(jointsBuffer).posture(PostureIntent.Kind.STANDING)
         pelvis!!.localPosition = Vector3(0f, 0f, 0f)
         declarePelvisTilt(pelvis!!, jointsBuffer, Vector3(0f, 0f, 1f), 0f)
@@ -73,15 +67,12 @@ class FacePullPose : PoseBuilder {
         shoulderA!!.localPosition = Vector3(0f, 0f, -def.shoulderWidth)
         shoulderP!!.localPosition = Vector3(0f, 0f, def.shoulderWidth)
 
-        // Compute Spine transforms
         roots!!.forEach { it.updateWorldTransforms(Vector3(0f, 0f, 0f), JointRotation()) }
 
-        // 1. Static Standing Feet (no foot sliding or penetration)
-        // M8 — targets are authored in the frame this pose OWNS (the chain root's own world
-        // position). The root height is solver-owned (B3: the STANDING intent pins the pelvis after
-        // this build), so a floor-anchored Y sits a whole standing root height above the hip and
-        // the solver relocates the effector along that upward direction. `SkeletonMath.maxReach` is
-        // the chain's own reachable length, so the authored target is realizable as declared.
+        // Targets are authored in the frame this pose OWNS (the chain root's world position). The root
+        // height is solver-owned, so a floor-anchored Y sits a whole standing root height above the hip and
+        // the solver relocates the effector along that upward direction. [legSpan] is the chain's own
+        // `maxReach`, so the target is realizable as declared.
         val legSpan = SkeletonMath.maxReach(def.thighLength, def.shinLength, def.legIKConstraint)
         val targetAnkleF = Vector3(0f, hipF!!.worldPosition.y - legSpan, -def.hipWidth * 1.2f)
         val targetAnkleB = Vector3(0f, hipB!!.worldPosition.y - legSpan, def.hipWidth * 1.2f)
@@ -89,15 +80,14 @@ class FacePullPose : PoseBuilder {
         bakeIkLimb(hipF!!.worldPosition, targetAnkleF, def.thighLength, def.shinLength, Vector3(1f, 0f, -0.2f), def.legIKConstraint, JointRotation(), kneeF!!, ankleF!!, legFBuffer, jointsBuffer)
         bakeIkLimb(hipB!!.worldPosition, targetAnkleB, def.thighLength, def.shinLength, Vector3(1f, 0f, 0.2f), def.legIKConstraint, JointRotation(), kneeB!!, ankleB!!, legBBuffer, jointsBuffer)
 
-        // W1: engine now derives foot/hand orientation (removed manual endpoints + tilt counter-rotation).
+        // The engine now derives foot/hand orientation (removed manual endpoints + tilt counter-rotation).
 
-        // 2. Banded Face Pull Arms kinematics
         // Hands move from fully extended forward (holding band) to high and wide back near ears.
         val startHandX = 40f
         val endHandX = -15f
         val handX = lerp(startHandX, endHandX, context.progress)
 
-        // M8 — same frame rule as the feet: the band's hand travel is authored around the shoulder
+        // Same frame rule as the feet: the band's hand travel is authored around the shoulder
         // the pose owns at build time (−10 → 0 from it), not around the floor-anchored root height.
         val startHandY = shoulderA!!.worldPosition.y - 10f
         val endHandY = shoulderA!!.worldPosition.y
@@ -114,11 +104,10 @@ class FacePullPose : PoseBuilder {
         val targetHandA = Vector3(handX, handY, handZ_A)
         val targetHandP = Vector3(handX, handY, handZ_P)
 
-        // M8 — the authored fold at the top of the pull is tighter than the arm chain's minimum
-        // reach (`SkeletonMath.minReach` at the 30° minimum-flexion stop), so the declared target
-        // is projected onto the reachable band before the bake (the R2 reach-target helper the rest
-        // of the corpus authors with): the realized arm is then exactly what the pose declared, and
-        // the reachability signal the validator reads stays 0 instead of an artifact of the fold.
+        // The authored fold at the top of the pull is tighter than the arm chain's minimum reach, so the
+        // declared target is projected onto the reachable band before the bake: the realized arm is exactly
+        // what the pose declared, and the reachability signal the validator reads stays 0 instead of an
+        // artifact of the fold.
         SkeletonMath.clampTargetToReach(shoulderA!!.worldPosition, targetHandA, def.upperArmLength, def.forearmLength, def.armIKConstraint, targetHandA)
         SkeletonMath.clampTargetToReach(shoulderP!!.worldPosition, targetHandP, def.upperArmLength, def.forearmLength, def.armIKConstraint, targetHandP)
 
@@ -126,7 +115,7 @@ class FacePullPose : PoseBuilder {
         bakeIkLimb(shoulderA!!.worldPosition, targetHandA, def.upperArmLength, def.forearmLength, Vector3(-1f, 1f, -1f), def.armIKConstraint, JointRotation(), elbowA!!, handA!!, armABuffer, jointsBuffer)
         bakeIkLimb(shoulderP!!.worldPosition, targetHandP, def.upperArmLength, def.forearmLength, Vector3(-1f, 1f, 1f), def.armIKConstraint, JointRotation(), elbowP!!, handP!!, armPBuffer, jointsBuffer)
 
-        // W1: engine now derives foot/hand orientation (removed manual endpoints + tilt counter-rotation).
+        // The engine now derives foot/hand orientation (removed manual endpoints + tilt counter-rotation).
 
         SkeletonPose.fromHierarchy(roots!!, jointsBuffer)
         jointsBuffer.getJoint(Joint.WRIST_A).set(jointsBuffer.getJoint(Joint.HAND_A))

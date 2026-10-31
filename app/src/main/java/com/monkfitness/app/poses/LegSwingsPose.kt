@@ -4,68 +4,13 @@ import com.monkfitness.app.animation.*
 import kotlin.math.*
 
 /**
- * Leg Swings (`leg_swings_hold`) — the standing single-leg pendulum swing, authored on the canonical
- * `BaseSquatPose` pipeline (the `SkeletonFactory` tree + declared pelvis tilt + registered package
- * bake limbs the standing family shares).
+ * Leg Swings (`leg_swings_hold`) — the standing single-leg pendulum swing. There is no BPS and no
+ * exercise copy either (`WorkoutGenerator` passes the title as every field), so the identity comes
+ * from the localized names ("dynamic leg swings") and from the sibling drills this is NOT
+ * (`hip_circles` owns the pelvic circle).
  *
- * ## What the exercise is, and where that comes from
- *
- * **There is no BPS for this exercise and no exercise copy either**: `WorkoutGenerator` passes
- * `R.string.ex_leg_swings` as *every* field, so the catalog entry is the title and nothing else. The
- * identity is derived from the two channels that do state it (the same pair `HipCirclesPose` records):
- *
- *  1. **The localized name states the movement**: `values-ru` `ex_leg_swings` =
- *     *"Динамические махи ногами"* ("dynamic leg swings"), `values-uk` = *"Махи ногами"* ("leg
- *     swings") — a **swing of the leg**, not a pelvic circle and not a knee lift.
- *  2. **The catalog's own sibling owns the circle**: `ex_hip_cars_desc` describes the leg-circle
- *     drill and *"not a swing"*; `hip_circles` is the pelvic circle. This exercise is the third,
- *     distinct movement: a **pendulum**.
- *
- * ## The motion
- *
- *  * The swinging leg's ankle rides a **pendulum of constant radius** ([SWING_RADIUS], `0.975 ×` the
- *    leg chain's own span) in the sagittal plane through its own hip: `hip + R·(sin θ, −cos θ, 0)`,
- *    `θ = A_MID + A_AMP·cos 2π·progress`. The constant radius is what makes it a swing rather than a
- *    knee lift — the knee angle stays at the chain's near-full extension for the whole arc — and the
- *    asymmetric amplitude crosses the vertical into both directions the name implies: **forward**
- *    ([SWING_FORWARD_DEG] `40°` of hip flexion) and **back** ([SWING_BACK_DEG] `25°` of hip
- *    extension). The swing's own cosinusoid is the pendulum's motion; no easing curve is layered on
- *    it (LINEAR).
- *  * **Stable supporting mechanics** — the drill's other half, and the reason its identity is not
- *    just "a leg moves":
- *    - the stance foot is **declared** (`RIGHT_FOOT`) and its ankle target is fixed for the whole
- *      cycle, so the engine derives its heading and flattening against the floor it stands on, and it
- *      cannot slide (`< 0.5 u` measured across the sweep);
- *    - the pelvis is authored **static** (constant height and X), so the swing happens under a still
- *      trunk rather than dragging the body with it;
- *    - the trunk stays upright, and the stance leg keeps its own near-locked knee angle instead of
- *      pumping with the swing;
- *    - the swinging foot never touches the floor at any phase.
- *  * Hands rest on the hips, travelling with the still pelvis.
- *
- * ## Physically coherent root (measured, not asserted by prose)
- *
- * At the deepest point of the front swing the swinging hip→ankle chord is `0.975 × 210` = **204.75 u**
- * against the chain's `205.80 u` extension cap, and the stance leg's chord is `201.05 u` — so the
- * reach stamp reads `0` at every phase (no solver relocation of either foot), and the swinging foot's
- * lowest point over the whole arc is `40.4 u` above the floor.
- *
- * ## Recorded gaps (no specification exists to satisfy)
- *
- *  * **The arms' support is not authored.** The drill's common freestanding variant braces a hand on a
- *    wall; the copy says nothing, and a wall relationship would have to be authored geometry with a
- *    measured standoff anyway (`WallSlidesPose`/`LatStretchPose` precedent — a declared contact inside
- *    a prop's footprint is re-oriented onto the wall's face). The pose is authored **freestanding with
- *    the hands on the hips**, which is the corpus's own single-leg standing convention (`HipCarsPose`).
- *  * **The lateral weight shift of a single-leg stance is not expressible.** A real one-leg stance
- *    carries the pelvis laterally over the supporting foot (≈ half a hip width here); the standing
- *    family's root authoring surface is `(x, y)` only — `BaseSquatPose` authors `pelvis.z = 0` for
- *    every member — so the pelvis stays on the rig's mid-line and the stance ankle is placed under its
- *    own hip (`1.2 × hipWidth` out) exactly as `HipCarsPose` places it. The drill is statically
- *    coherent as authored (the stance leg carries the body within its own line); the missing lateral
- *    shift is recorded here rather than faked with a root offset the family does not own.
- *  * The swing's amplitudes and the stance's depth/width are **authored constants** (no copy states
- *    them), stated as such at their declarations.
+ * The stance foot is declared and pinned for the cycle; the SWINGING foot is deliberately not — it is
+ * airborne the whole time and the contact channel is per-pose.
  */
 class LegSwingsPose : BaseSquatPose() {
 

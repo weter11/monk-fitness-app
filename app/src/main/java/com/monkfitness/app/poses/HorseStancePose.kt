@@ -3,46 +3,31 @@ package com.monkfitness.app.poses
 import com.monkfitness.app.animation.*
 
 /**
- * Horse Stance (`horse_stance_hold`) — the "ma bu" isometric hold, authored on the canonical
- * `BaseSquatPose` pipeline (SkeletonFactory tree + declared pelvis tilt + registered package bake
- * limbs). The stance is a squat hold, so the shared squat machinery is the correct family; what this
- * variant owns is its OWN stance geometry:
+ * Horse Stance (`horse_stance_hold`) — the "ma bu" isometric hold on the canonical `BaseSquatPose`
+ * pipeline; the shared squat machinery is the right family, and this variant owns its own stance geometry:
  *
- *  - **feet double shoulder-width apart** — `ex_horse_stance_steps` §1. The ankles are authored at
- *    `±shoulderWidth` (`46` each side of the mid-line ⇒ `92` between them = exactly `2 ×
- *    shoulderWidth`), not at the family default `±1.5 · hipWidth` (`33`).
- *  - **toes pointed slightly outward** — §1. Authored through the sanctioned exercise-intent channel
- *    ([setHeading] on each planted foot, resolved by the Finalizer's `adjustFootOrientation` against
- *    the declared `LEFT_FOOT`/`RIGHT_FOOT` support); `15°` is the conventional "slightly out" angle.
- *    The ankle's own articulation vocabulary (`buildAnkleArticulation`: dorsiflexion + inversion) has
- *    no yaw DOF, so the foot heading is the only sanctioned way to express toe-out — see the batch
- *    inventory's recorded gaps.
- *  - **sink the hips until the thighs are parallel to the floor, then hold** — §2/§4. The cycle
- *    rides the descent from a tall stance (`pelvisY 200`) to the hold (`150`, the depth at which the
- *    thigh measures ~15° below horizontal — "parallel" to within the rig's thigh:shin proportions)
- *    and back, which is the LOOP convention's ping-pong `progress 0 → 1 → 0`.
- *  - **back straight** — the trunk rides a `2.3° → 6.9°` lean (enough to keep the mass over the feet
- *    at the deep position); nothing hinges or rounds.
- *  - **hands in front or on your hips** — §3. Authored on the hips (the fists-at-the-waist stance),
- *    `6` forward / `12` above / `5` outboard of each hip joint.
+ *  - **feet double shoulder-width apart** (`±shoulderWidth`, `46` each side ⇒ `92` between them = exactly
+ *    `2 × shoulderWidth`), not the family default `±1.5 · hipWidth` (`33`).
+ *  - **toes pointed slightly outward**: authored through the sanctioned exercise-intent channel ([setHeading]
+ *    on each planted foot, resolved by the Finalizer's `adjustFootOrientation` against the declared
+ *    `LEFT_FOOT`/`RIGHT_FOOT` support), `15°` being the conventional "slightly out" angle. The ankle's own
+ *    articulation vocabulary (`buildAnkleArticulation`: dorsiflexion + inversion) has no yaw DOF, so the
+ *    heading is the only sanctioned way to express toe-out.
+ *  - **sink the hips, then hold**: the cycle rides the descent from a tall stance (`pelvisY 200`) to the hold
+ *    (`150`, where the thigh measures ~15° below horizontal — "parallel" to within the rig's thigh:shin
+ *    proportions) and back, which is the LOOP convention's ping-pong.
+ *  - **back straight**: the trunk rides a `2.3° → 6.9°` lean (enough to keep the mass over the feet at depth);
+ *    nothing hinges or rounds. Hands are on the hips (`6` forward / `12` above / `5` outboard of each hip).
  *
- * ## Reach (`everyAuthoredTargetIsInsideItsChainsReach` pins this)
+ * Reach: both ends of the cycle sit inside the leg chain's `[56.01, 205.80]` band by construction (measured
+ * chords `186.06` u tall, `155.70` u at the hold), so the stamp reads `0` with no projection helper and the
+ * published stance is the authored stance — the naive family-default stance the RED run measured
+ * instead relocated the ankle `10.85` u and clamped the standing leg `30.93` u.
  *
- * The depth is authored so BOTH ends of the cycle sit inside their chains' reachable annuli by
- * construction — measured chords: the tall stance `186.06` u against the leg's
- * `[56.01, 205.80]` band, the hold `155.70` u — so the reach stamp reads `0` with no projection
- * helper and the published stance is the authored stance (the naive family-default stance this
- * batch's RED run measured instead relocated the ankle `10.85` u and clamped the standing leg
- * `30.93` u).
- *
- * ## Recorded gaps (no BPS exists for this exercise — `docs/Biomechanical Pose Specification (BPS)/`
- * carries all 53 sibling exercises and none of the 17 this phase covers)
- *
- *  - "Tuck your pelvis slightly to avoid overarching the lower back" (`ex_horse_stance_tech`) is NOT
- *    authored: it is a cue against an anterior pelvic tilt, and the authored posture has no anterior
- *    tilt at all (the pelvis and the trunk are vertical); the rig expresses a pelvic tilt as the
- *    whole-body root rotation, so "tilt the pelvis without moving the trunk" is not a representation
- *    this authoring surface has, and inventing one would be a posture the cue does not ask for.
+ * Recorded gap: "tuck your pelvis slightly to avoid overarching the lower back" is NOT authored — it is a
+ * cue against an anterior pelvic tilt, and the authored posture has no anterior tilt at all (pelvis and
+ * trunk both vertical). The rig expresses a pelvic tilt as the whole-body root rotation, so "tilt the pelvis
+ * without moving the trunk" is not a representation this authoring surface has.
  */
 class HorseStancePose : BaseSquatPose() {
 
@@ -120,8 +105,8 @@ class HorseStancePose : BaseSquatPose() {
 
         /**
          * The hold (progress 1). `HOLD_PELVIS_Y = 150` is the depth at which the realized thigh sits
-         * ~15° below horizontal — the exercise's "thighs parallel to the floor" (see the class KDoc:
-         * the rig's thigh:shin ratio places exact parallelism at a slightly deeper/splayed stance,
+         * ~15° below horizontal — the exercise's "thighs parallel to the floor" (the
+         * rig's thigh:shin ratio places exact parallelism at a slightly deeper/splayed stance,
          * and 15° is inside the measurement the test pins).
          */
         private const val HOLD_PELVIS_Y = 150f

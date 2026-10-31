@@ -3,13 +3,9 @@ package com.monkfitness.app.poses
 import com.monkfitness.app.animation.*
 
 /**
- * Standard (overhand, shoulder-width-ish) pull-up — biomechanics-first rewrite.
- *
- * The pull is driven by a shrinking shoulder->bar reach: at the bottom the arms
- * are fully extended (dead/active hang) so the earliest motion can only be scapular
- * (shoulders depress + retract, body rises a few units, arms stay straight); only
- * as the reach shortens do the elbows bend and the chest leads up to the bar.
- * Hands are FIXED on the bar; the body is pulled up relative to them.
+ * Standard (overhand, shoulder-width) pull-up — driven by a shrinking shoulder→bar reach: at the bottom
+ * the arms are fully extended, so the earliest motion can only be scapular; the elbows bend only as the
+ * reach shortens. Hands are FIXED on the bar.
  */
 class StandardPullUpPose : BaseVerticalPullPose() {
 
