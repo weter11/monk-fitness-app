@@ -6,36 +6,21 @@ import com.monkfitness.app.domain.prescription.RepPrescription
 import com.monkfitness.app.domain.prescription.TimePrescription
 
 /**
- * The **Generated Planner** (§30 step 10) — a request in, a [GeneratedPlan] out.
+ * The Generated Planner: a request in, a [GeneratedPlan] out — the Focus Planner's assignments first,
+ * then one element per assigned focus, chosen for that focus.
  *
- * ### What it composes, and in which order
+ * The order is load-bearing: the plan's *emphasis* is decided before its *content*, so a slot's
+ * elements exist to serve focuses the plan has already committed to, rather than a workout's focuses
+ * being whatever its exercises happened to imply. Nothing here infers a focus from a
+ * [com.monkfitness.app.domain.program.ProgramDayType], a category or an exercise's presence in a list;
+ * the only source of a focus is the configuration the user stated and the membership the caller
+ * supplied.
  *
- * ```text
- * GenerationRequest
- *     ↓ the configuration's eligible focuses, minus the ones nothing usable can train
- * Focus Planner          (§8)      → 1 primary + 0–2 secondary focuses per slot
- *     ↓ one element per assigned focus, chosen for that focus
- * Exercise selection     (§9)      → the exercise that realizes it
- *     ↓
- * GeneratedPlan          a value, not a draft, with no identity and no persistence
- * ```
- *
- * The order is §8's pipeline (Focus Planner → Generator) and it is load-bearing: the plan's
- * *emphasis* is decided before its *content*, so a slot's elements exist to serve focuses the plan
- * has already committed to, rather than a workout's focuses being whatever its exercises happened to
- * imply. That is also what keeps §6 of the stage's brief satisfied — nothing here ever infers a focus
- * from a [com.monkfitness.app.domain.program.ProgramDayType], a category or an exercise's presence in
- * a list; the only source of a focus is the configuration the user stated and the membership the
- * caller supplied.
- *
- * ### What it cannot do, by construction
- *
- * It persists nothing: the whole file has no repository, no DAO, no session, no slot, no date, no
- * clock and no random source, so a generation pass has no way to write anywhere (§33) and no way to
- * be non-deterministic (§9). It invokes no scheduler: a date is not expressible here, so "turning the
- * plan into slots" cannot be moved into it (§20, §30 step 7). It computes no adaptive decision: the
- * only adaptive values it sees are the plain signals on [GenerationPreferences]. And it holds no
- * state: [plan] is a function of its request, so the same request produces the same plan, always.
+ * It persists nothing and invokes no scheduler: the whole file holds no repository, DAO, session, slot,
+ * date, clock or random source, so a generation pass cannot write anywhere, cannot be
+ * non-deterministic, and cannot turn the plan into dates. The only adaptive values it sees are the
+ * plain signals on [GenerationPreferences], and [plan] is a function of its request, so the same
+ * request produces the same plan, always.
  */
 object GeneratedPlanner {
 
@@ -126,31 +111,26 @@ object GeneratedPlanner {
         fun usesOfExercise(): Map<String, Int> =
             slots.flatMap { it.elements }.groupingBy { it.exerciseId }.eachCount()
 
-        /** How many times each family this plan has already drawn on — §12's family dimension. */
+        /** How many times each family this plan has already drawn on — family load is its own dimension. */
         fun usesOfFamily(): Map<String, Int> =
             slots.flatMap { it.elements }.groupingBy { it.familyId }.eachCount()
     }
 
     /**
-     * The prescription a generated element carries, in the exercise's own dimension (§10).
-     *
-     * ### A new exercise starts at the lower bound of its own range
+     * The prescription a generated element carries, in the exercise's own dimension.
      *
      * When the candidate's catalogue metadata states a progression range, the element prescribes the
      * catalogue's own set count, uniformly, at that range's **lower bound** — a push-up starts at
-     * `3 × 6`, a plank at `3 × 30 s`, an exercise the catalogue defines with two sets at two. The
-     * range is the exercise's full progression span (`baseMin..phase4Max`, see
-     * `Exercise.toConfigurationMetadata`), so its first value is where the exercise begins, not where
-     * a generator's own fixed shape happens to start: §10's `12 / 10 / 8 / 6` and `30s / 30s / 45s`
-     * describe a *set of targets for one plan*, and applying them to every exercise regardless of what
-     * that exercise's own definition says is exactly what this avoids.
+     * `3 × 6`, a plank at `3 × 30 s`, an exercise the catalogue defines with two sets at two. The range
+     * is the exercise's full progression span (`baseMin..phase4Max`, see
+     * `Exercise.toConfigurationMetadata`), so its first value is where the exercise begins rather than
+     * where a generator's fixed shape happens to start: the policy's `12 / 10 / 8 / 6` and
+     * `30s / 30s / 45s` describe targets for *one* plan, and applying them to every exercise regardless
+     * of that exercise's own definition is exactly what this avoids.
      *
-     * ### The policy's lists are the fallback, not the rule
-     *
-     * A candidate whose caller states no range (a hand-stated library view, a fixture) still has to be
-     * prescribed something, and [GenerationPolicy]'s two lists remain that answer — unchanged, and
-     * still the shapes §10 writes out. Nothing is deleted: a caller that wants §10's shapes verbatim
-     * states no range, and a caller that states one gets its own.
+     * [GenerationPolicy]'s two lists are the **fallback**, not the rule: a candidate whose caller states
+     * no range (a hand-stated library view, a fixture) still has to be prescribed something, and a
+     * caller that wants the canonical shapes verbatim states no range.
      *
      * The three named dimensions with no subtype are unreachable here — a candidate in one of them is
      * reported unusable rather than prescribed — so the fall-through names the invariant instead of

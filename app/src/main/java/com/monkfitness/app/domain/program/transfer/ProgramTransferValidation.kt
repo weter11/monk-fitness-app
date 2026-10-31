@@ -5,38 +5,25 @@ import com.monkfitness.app.domain.program.FocusPlan
 import com.monkfitness.app.domain.program.ProgramDayType
 
 /**
- * §6's **semantic validation**: a document the schema accepted, judged as a program.
+ * The semantic validation: a document the schema accepted, judged as a program.
  *
- * ```text
- * schema validation      "is this document the shape the format defines?"    the reader
- * semantic validation    "is what it says a program this app can hold?"      this file
- * ```
+ * It holds the rules the **domain's own value types would throw on** — a fixed duration of zero days, an
+ * empty weekday set, a focus allocation that does not sum to a hundred, a per-set target of zero, a blank
+ * exercise id, a prescription in a dimension the domain names but does not implement, a rest day carrying
+ * elements. Each of them is a `require` inside a domain type, so without this layer the *file* would reach
+ * those constructors and the failure would surface as a defect instead of as a finding about a file.
+ * Deciding them here is what makes the mapping step total: the values it builds cannot be refused.
  *
- * ### The line between the two, exactly
+ * The rules about a plan **as a whole** — the Program has a name, it has days, its days are numbered in
+ * order, a work day plans something — are deliberately not copied here: they belong to
+ * [com.monkfitness.app.domain.program.ProgramDraftValidation], the gate between a draft and a save, and
+ * their findings arrive as [ProgramTransferIssue.PlanNotSavable] with the domain's sentences. A second
+ * copy of them would be a second rule, and a second rule is one that can drift.
  *
- * This file holds the rules the **domain's own value types would throw on** — a fixed duration of zero
- * days, an empty weekday set, a focus allocation that does not sum to a hundred, a per-set target of
- * zero, a blank exercise id, a prescription in a dimension §10 names but does not implement, a rest day
- * carrying elements. Every one of them is a `require` inside `ProgramDuration`, `ProgramSchedule`,
- * `FocusPlan`, `ProgramDay`, `ProgramExercise` or `Prescription`, so without this layer the *file* would
- * reach those constructors and the failure would surface as a defect instead of as a finding about a
- * file. Deciding them here is what makes the mapping step total: the values it builds cannot be refused.
- *
- * The rules that are about a plan **as a whole** — the Program has a name, it has days, its days are
- * numbered in order, a work day plans something — are deliberately *not* copied here. They belong to
- * [com.monkfitness.app.domain.program.ProgramDraftValidation], which §7 already made the gate between a
- * draft and a save, and §6 asks for exactly that reuse: the draft is validated through the domain's own
- * validation, and its findings arrive as [ProgramTransferIssue.PlanNotSavable] with the domain's
- * sentences. A second copy of "a REST day prescribes nothing, and a TRAINING day must prescribe
- * something" would be a second rule, and a second rule is one that can drift.
- *
- * ### What it never does
- *
- * It does not repair, substitute, drop, reorder or clamp anything (§5, §33): a document with a finding
- * produces findings, and the caller decides what to tell the user. Where a domain value would be
- * *adjusted* to fit — a weekday list sorted into ISO order, a focus list put in canonical order, a
- * percentage rounded — the adjustment is refused instead, because a document that is quietly reordered
- * is a document that says something the user did not write.
+ * It does not repair, substitute, drop, reorder or clamp anything: where a domain value would be *adjusted*
+ * to fit — a weekday list sorted into ISO order, a focus list put in canonical order, a percentage rounded
+ * — the adjustment is refused instead, because a document that is quietly reordered is a document that
+ * says something the user did not write.
  */
 object ProgramTransferValidation {
 
@@ -44,7 +31,6 @@ object ProgramTransferValidation {
     private const val SCHEDULE: String = "revision.schedule"
     private const val FOCUS: String = "revision.focus"
 
-    /** The dimensions a plan element may prescribe in — §10's two implemented dimensions. */
     private val SUPPORTED_DIMENSIONS = listOf(
         PrescriptionDimension.REP_BASED,
         PrescriptionDimension.TIME_BASED
@@ -56,8 +42,6 @@ object ProgramTransferValidation {
             scheduleIssues(document.revision.schedule) +
             focusIssues(document.revision.focus) +
             document.revision.days.flatMapIndexed { index, day -> dayIssues(day, index) }
-
-    // ------------------------------------------------------------------ the revision's configuration
 
     private fun durationIssues(duration: DurationTransfer): List<ProgramTransferIssue> = when (duration) {
         is DurationTransfer.FixedDays -> if (duration.days >= 1) {
@@ -193,8 +177,6 @@ object ProgramTransferValidation {
             }
         }
     }
-
-    // ------------------------------------------------------------------ the plan
 
     private fun dayIssues(day: DayTransfer, index: Int): List<ProgramTransferIssue> {
         val path = "revision.days[$index]"

@@ -18,34 +18,20 @@ import java.time.LocalDate
 /**
  * The Home screen's Program state: **which Program is being worked on, and what is next in it.**
  *
- * ### Why it is its own state holder
+ * Home asks a different question from the Programs hub and the Detail screen: *"what, if anything, can I
+ * do right now?"* — one Program's next startable opportunity plus the calendar's own counts, read on every
+ * visit. It is its own holder so the hub's state does not carry a screen's worth of unrelated facts.
  *
- * Home asks a different question from the Programs hub and from the Detail screen: *"what, if anything,
- * can I do right now?"* That is one Program's next startable opportunity plus the calendar's own counts,
- * and it is read on every visit. Putting it in [ProgramsController] would make the hub's state — a list,
- * a draft, an import review, a detail — carry a screen's worth of unrelated facts.
- *
- * ### What it reads, and from whom
- *
- * ```text
- * the selected Program      ProgramLifecycleService.myPrograms()   (selection is not a Program property, §3)
- * the next opportunity      ProgramScheduler.nextOpportunity(id)   (the Scheduler owns opportunities, §20)
- * the calendar's counts     ProgramProgressService.calendarProgress / trainingProgress (§21, §30 step 9)
- * ```
- *
- * No repository, no DAO and no storage type appears here, and nothing is written: Home is a read of four
- * facts other layers own, and a start is a *navigation* to the session route with the opportunity's id.
- *
- * ### A failure is not an absence
+ * It reads the selected Program from [ProgramLifecycleService.myPrograms] (selection is not a Program
+ * property), the next opportunity from [ProgramScheduler.nextOpportunity] (the scheduler owns
+ * opportunities) and the counts from [ProgramProgressService]. No repository, no DAO and no storage type
+ * appears here, and nothing is written: a start is a *navigation* to the session route with the
+ * opportunity's id.
  *
  * `nextSlotId == null` means *"there is no opportunity to start"*, which is an ordinary answer: a Program
- * that has not been scheduled yet, or whose plan is over. A **failure to read** the schedule is a
- * different fact and is carried separately ([ProgramHomeUiState.scheduleUnreadable]), so the screen says
- * the schedule could not be read instead of showing "nothing planned" (§15, §28, §33).
- *
- * @param lifecycle the selection and the Program's own name and lifecycle (§3).
- * @param scheduler the next startable opportunity (§20). Asked for a read, never for a pass.
- * @param progress §21's counts and the Program's own streak.
+ * not yet scheduled, or whose plan is over. A **failure to read** the schedule is a different fact and is
+ * carried separately ([ProgramHomeUiState.scheduleUnreadable]), so the screen says the schedule could not
+ * be read instead of showing "nothing planned".
  */
 class ProgramHomeController(
     private val lifecycle: ProgramLifecycleService,
@@ -55,7 +41,6 @@ class ProgramHomeController(
 
     private val mutableState = MutableStateFlow(ProgramHomeUiState())
 
-    /** The screen's state. */
     val state: StateFlow<ProgramHomeUiState> = mutableState.asStateFlow()
 
     /**
@@ -135,7 +120,6 @@ class ProgramHomeController(
         mutableState.value = state
     }
 
-    /** Clears the sentence the screen is showing. */
     fun dismissNotice() {
         mutableState.update { state -> state.copy(notice = null) }
     }
@@ -157,14 +141,9 @@ class ProgramHomeController(
 /**
  * What Home shows about the Program being worked on.
  *
- * @property loading whether the read is still running.
- * @property hasProgram whether a Program is selected at all. §12 makes the Standard Program the
- *   technical fallback, so a `false` here is a read that found no selection rather than "no programs
- *   exist" — the screen offers the Programs hub in both cases.
- * @property nextSlotId the opportunity a workout can be started on, or `null` when there is none.
- * @property nextPlannedFor the date that opportunity is planned for.
- * @property scheduleUnreadable whether the schedule could not be read at all. Kept apart from
- *   *"there is no opportunity"*, which is [showsNoPlannedDate].
+ * [hasProgram] being `false` is a read that found no selection rather than "no programs exist", because
+ * the Standard Program is the technical fallback — the screen offers the Programs hub in both cases.
+ * [scheduleUnreadable] is kept apart from *"there is no opportunity"*, which is [showsNoPlannedDate].
  */
 data class ProgramHomeUiState(
     val loading: Boolean = true,
@@ -182,7 +161,6 @@ data class ProgramHomeUiState(
     val notice: ProgramNotice? = null
 ) {
 
-    /** Whether there is a workout to start right now. */
     val canStartWorkout: Boolean
         get() = nextSlotId != null
 
@@ -193,7 +171,6 @@ data class ProgramHomeUiState(
     val showsNoPlannedDate: Boolean
         get() = !scheduleUnreadable && nextSlotId == null
 
-    /** The calendar's own total, or `0` before anything was planned. */
     val opportunityCount: Int
         get() = completed + missed + upcoming
 

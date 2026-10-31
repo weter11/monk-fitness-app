@@ -5,8 +5,8 @@ import java.time.LocalDate
 import java.time.temporal.ChronoUnit
 
 /**
- * Stage 1's pure schedule vocabulary. It deliberately describes values, not persistence or runtime
- * state. A schedule rule owns WHEN; an occurrence owns the calendar fact; execution owns EXECUTION.
+ * The schedule vocabulary as values, not persistence or runtime state: a schedule rule owns WHEN, an
+ * occurrence owns the calendar fact, and execution owns EXECUTION.
  */
 sealed interface ScheduleCadence {
     data object Daily : ScheduleCadence
@@ -78,7 +78,7 @@ data class ScheduleRule(
     }
 }
 
-/** Stage 1's explicit grouping choice; the final selective policy is a later Stage 2/3 concern. */
+/** Which rules combine into one occurrence; the rest stay separate. */
 data class CompositionSelection(val combinedRuleIds: Set<String> = emptySet()) {
     init { require(combinedRuleIds.none { it.isBlank() }) { "composition rule ids cannot be blank" } }
 

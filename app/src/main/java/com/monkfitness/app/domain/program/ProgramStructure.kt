@@ -5,36 +5,25 @@ import com.monkfitness.app.domain.prescription.Prescription
 /**
  * A plan's **content**, with every identity stripped out.
  *
- * The question this value exists to answer is the one §6 makes load-bearing: *did the user's edit
- * change the structure?* Renaming, describing, selecting, starting, pausing, resuming, finishing,
- * archiving and planning a start date must create **no** revision, while mode, duration, frequency,
- * weekdays, schedule, exercise selection, the plan, ordering, prescriptions, rest and pinning must
- * create one. Those two sets are only distinguishable if "the structure" is a comparable value, so
- * this is that value — and identity is deliberately not part of it.
+ * The question this value exists to answer is whether the user's edit changed the *structure*:
+ * renaming, describing, selecting, starting, pausing, resuming, finishing, archiving and planning a
+ * start date must create **no** revision, while mode, duration, frequency, weekdays, schedule, exercise
+ * selection, the plan, ordering, prescriptions, rest and pinning must create one. Those two sets are
+ * only distinguishable if "the structure" is a comparable value, so this is that value — and identity
+ * is deliberately not part of it.
  *
- * Identity is excluded for a reason that is easy to get wrong. A *draft* addresses its days and its
- * plan elements by id (that is how an edit says which day to remove), so a draft opened from a
- * revision carries that revision's identities as its working handles — while a **saved** revision
- * never reuses them: a new revision's plan is new rows with new identities (§6, §23). A comparison
- * that included identity would therefore report a difference on every save that re-identifies an
- * unchanged plan, turning the one case that must create nothing into a revision.
+ * Identity is excluded for a reason that is easy to get wrong. A *draft* addresses its days and plan
+ * elements by id, so a draft opened from a revision carries that revision's identities as working
+ * handles — while a **saved** revision never reuses them: a new revision's plan is new rows with new
+ * identities. A comparison that included identity would report a difference on every save that
+ * re-identifies an unchanged plan, turning the one case that must create nothing into a revision.
  *
- * What is compared, then:
- *
- * ```text
- * mode, duration, schedule      the revision's own configuration
- * focus                         the Goals & Focus configuration the plan is built for
- * preferred exercises           the exercises generation is asked to reach for, in order
- * days, in order                each day's type and name
- * plan elements, in order       each element's exercise, per-set prescription, authorship, pin
- * ```
- *
- * [focus] is part of the configuration rather than of the plan's content on purpose: §6 lists
- * *"goals/focus"* beside *"mode"*, *"duration"* and *"schedule/distribution"* among the changes that
- * create a revision, and §7 edits *Goals & Focus* in the same configuration part of the editor as the
- * duration and the schedule. Changing what a plan is **for** is therefore structural even when not one
- * exercise moved, which is the honest reading: the same days built for a different goal are a
- * different plan.
+ * It compares mode, duration and schedule (the revision's own configuration), focus (the Goals & Focus
+ * configuration the plan is built for), the preferred exercises in order, the days in order with their
+ * type and name, and the plan elements in order with their exercise, per-set prescription, authorship
+ * and pin. [focus] belongs to the configuration rather than to the plan's content because changing what
+ * a plan is **for** is structural even when not one exercise moved: the same days built for a different
+ * goal are a different plan.
  *
  * Positions are not stored: the lists *are* the order, so a re-ordered plan differs while a
  * renumbered-but-otherwise-identical one does not.
@@ -48,11 +37,10 @@ data class ProgramStructure(
     val preferredExercises: ExercisePreference = ExercisePreference.NONE
 ) {
 
-    /** The names of this structure's days, in order. */
     val dayCount: Int
         get() = days.size
 
-    /** How many of this structure's plan elements prescribe work, counting repeats separately. */
+    /** How many plan elements prescribe work, counting repeats separately. */
     val exerciseCount: Int
         get() = days.sumOf { it.exercises.size }
 
@@ -62,7 +50,6 @@ data class ProgramStructure(
 
     companion object {
 
-        /** The structure of one plan, in day order, with the day and element identities dropped. */
         fun of(
             mode: ProgramMode,
             duration: ProgramDuration,
@@ -88,7 +75,7 @@ data class StructuredDay(
     val exercises: List<StructuredExercise>
 ) {
 
-    /** Whether this day prescribes work — a rest day is the one type that prescribes nothing (§20). */
+    /** Whether this day prescribes work — a rest day is the one type that prescribes nothing. */
     val isWorkDay: Boolean
         get() = type != ProgramDayType.REST
 
@@ -106,10 +93,10 @@ data class StructuredDay(
 /**
  * One plan element of a [ProgramStructure].
  *
- * [origin] is content, not bookkeeping: whether the generator or the user authored an element is what
- * a regenerate pass keeps or replaces (§7), so a change of authorship *is* a change of the plan. The
- * prescription is carried whole — per set, in its dimension — because a plan that says `12 / 10 / 8 /
- * 6` is not the plan that says `10 / 10 / 10 / 10` (§10).
+ * [origin] is content, not bookkeeping: whether the generator or the user authored an element is what a
+ * regenerate pass keeps or replaces, so a change of authorship *is* a change of the plan. The
+ * prescription is carried whole — per set, in its dimension — because a plan that says `12 / 10 / 8 / 6`
+ * is not the plan that says `10 / 10 / 10 / 10`.
  */
 data class StructuredExercise(
     val exerciseId: String,
@@ -134,66 +121,60 @@ data class StructuredExercise(
 val ProgramRevision.structure: ProgramStructure
     get() = ProgramStructure.of(mode, duration, schedule, days, focus, preferredExercises)
 
-/** The structure of the plan a draft is currently holding — what `Save` would persist (§7). */
+/** The structure of the plan a draft is currently holding — what `Save` would persist. */
 val ProgramEditorDraft.structure: ProgramStructure
     get() = ProgramStructure.of(mode, duration, schedule, days, focus, preferredExercises)
 
 /**
  * A dimension of the structure that can differ between two plans.
  *
- * The vocabulary is §6's list of what creates a revision, grouped the way a user would change it:
- * the three configuration facts have a value of their own, and the plan is read as days (what the
- * days *are*), exercises (which exercises, in which order, authored by whom), prescriptions (what
- * each element asks for per set) and pinning (which elements are exempt from automatic change).
+ * The vocabulary is the list of what creates a revision, grouped the way a user would change it: the
+ * configuration facts have a value of their own, and the plan is read as days (what the days *are*),
+ * exercises (which exercises, in which order, authored by whom), prescriptions (what each element asks
+ * for per set) and pinning (which elements are exempt from automatic change).
  *
- * It is deliberately *not* a diff: the aspects are ordered by this declaration and each appears at
- * most once, because "which dimensions changed" is what a Review screen shows and a user can act on.
+ * It is deliberately *not* a diff: the aspects are ordered by this declaration and each appears at most
+ * once, because "which dimensions changed" is what a Review screen shows and a user can act on.
  */
 enum class ProgramStructureAspect {
 
-    /** The mode: manual or generated (§2). Switching it is an explicit structural change. */
+    /** The mode: manual or generated. Switching it is an explicit structural change. */
     MODE,
 
-    /** How long the revision runs (§20). */
     DURATION,
 
-    /** The weekly rhythm: fixed weekdays or a deterministic frequency (§20). */
+    /** The weekly rhythm: fixed weekdays or a deterministic frequency. */
     SCHEDULE,
 
     /**
-     * The Goals & Focus configuration the plan is built for (§8, §7's *Goals & Focus* step).
+     * The Goals & Focus configuration the plan is built for.
      *
-     * It belongs here, among the configuration facts, because §6 lists *"goals/focus"* with
-     * *"mode"*, *"duration"* and *"schedule/distribution"* — and because it is what makes the same
-     * days a different plan: changing what a Program is built for creates a revision even when not one
-     * exercise moved.
+     * It belongs here among the configuration facts, and it is what makes the same days a different
+     * plan: changing what a Program is built for creates a revision even when not one exercise moved.
      */
     FOCUS,
 
     /**
-     * The exercises the user would rather the generator reach for, most preferred first (§9's
-     * *user choice*).
+     * The exercises the user would rather the generator reach for, most preferred first.
      *
      * It belongs here beside [FOCUS] rather than under [EXERCISES] because it is **configuration, not
-     * plan content**: the plan says which exercises this Program currently has, and this says which
-     * ones a future generation should reach for. Changing it changes what the Program is *built with*
-     * without changing what it currently plans — which is exactly the reason [FOCUS] is structural, and
-     * exactly why the two must not be folded together: a regenerated plan that honours a new
-     * preference produces different [EXERCISES] too, and a review that reported only one of them would
-     * under-report the change.
+     * plan content**: the plan says which exercises this Program currently has, this says which ones a
+     * future generation should reach for. A regenerated plan that honours a new preference produces
+     * different [EXERCISES] too, and a review that reported only one of them would under-report the
+     * change.
      */
     PREFERRED_EXERCISES,
 
     /** The days themselves — how many, in what order, of which type, under which names. */
     DAYS,
 
-    /** Exercise selection and ordering, including who authored each element (§7, §9). */
+    /** Exercise selection and ordering, including who authored each element. */
     EXERCISES,
 
-    /** What each element prescribes per set (§10). */
+    /** What each element prescribes per set. */
     PRESCRIPTIONS,
 
-    /** Which elements are exempt from automatic change (§7). */
+    /** Which elements are exempt from automatic change. */
     PINNING
 }
 
@@ -201,8 +182,8 @@ enum class ProgramStructureAspect {
  * The dimensions in which this structure differs from [base], in a fixed order.
  *
  * `isEmpty()` is the editor's "nothing structural changed" test, and it is what makes a no-op Save a
- * no-op (§6: *no-op Save creates none*). An empty result is not a failure: it is the answer that a
- * draft the user opened and closed without touching the plan produces.
+ * no-op. An empty result is not a failure: it is the answer that a draft the user opened and closed
+ * without touching the plan produces.
  */
 fun ProgramStructure.differencesFrom(base: ProgramStructure): List<ProgramStructureAspect> =
     ProgramStructureAspect.entries.filter { aspect -> differsFrom(base, aspect) }
@@ -225,22 +206,19 @@ private fun ProgramStructure.differsFrom(
 /**
  * Each day as (type, name), in order — the day list as a comparable value.
  *
- * The four readouts below are flattened over the whole plan, in plan order, rather than nested per
- * day: a day boundary is a *part* of the day list (which is [ProgramStructureAspect.DAYS]'s own
- * dimension), not a dimension of its own, so adding a rest day changes the day list and nothing else,
- * while re-ordering the elements of a day changes the exercise order as a user would expect.
+ * The readouts below are flattened over the whole plan, in plan order, rather than nested per day: a day
+ * boundary is a *part* of the day list (which is [ProgramStructureAspect.DAYS]'s own dimension), not a
+ * dimension of its own, so adding a rest day changes the day list and nothing else, while re-ordering
+ * the elements of a day changes the exercise order as a user would expect.
  */
 private val ProgramStructure.dayLabels: List<Pair<ProgramDayType, String?>>
     get() = days.map { it.type to it.name }
 
-/** The plan's elements as (exercise, author), in plan order — selection and ordering as a value. */
 private val ProgramStructure.selection: List<Pair<String, ProgramExerciseOrigin>>
     get() = days.flatMap { day -> day.exercises.map { it.exerciseId to it.origin } }
 
-/** The plan's per-set prescriptions, in plan order. */
 private val ProgramStructure.prescriptions: List<Prescription>
     get() = days.flatMap { day -> day.exercises.map { it.prescription } }
 
-/** The plan's pin flags, in plan order. */
 private val ProgramStructure.pinning: List<Boolean>
     get() = days.flatMap { day -> day.exercises.map { it.isPinned } }

@@ -12,7 +12,7 @@ data class TargetOccurrenceReconciliation(
 
 /**
  * Reconciles target-domain occurrence values without resolving dates or touching execution state.
- * Occurrence identity is supplied by Stage 3 and is the only membership key.
+ * Occurrence identity is supplied by the caller and is the only membership key.
  */
 object TargetOccurrenceReconciler {
     fun reconcile(

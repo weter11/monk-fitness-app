@@ -1,8 +1,6 @@
 package com.monkfitness.app.animation
 
-/**
- * Generic interface for skeleton body proportions and anatomical metadata.
- */
+/** Skeleton body proportions and anatomical metadata. */
 interface SkeletonDefinition {
     val torsoLength: Float
     val neckLength: Float
@@ -17,28 +15,24 @@ interface SkeletonDefinition {
     val hipWidth: Float
     val defaultCamera: CameraDefinition
 
-    // Biomechanical constraints
     val armIKConstraint: IKConstraint
     val legIKConstraint: IKConstraint
 
-    // Angular joint-limit vocabulary (shared, general — never per-exercise magic numbers).
-    // Carried by the definition so the solver and validator read a single source of truth.
+    // Angular joint-limit vocabulary: shared and general, never per-exercise magic numbers, and
+    // carried by the definition so the solver and validator read a single source of truth.
     val armAngularLimits: AngularJointLimits
         get() = armIKConstraint.angularLimits
     val legAngularLimits: AngularJointLimits
         get() = legIKConstraint.angularLimits
 
-    // Hip (acetabular ball-and-socket) range of motion. Named, shared human-range caps — the
-    // single source of truth for UNI-3's over-range-hip detection (validator + optional clamp).
+    // Hip (acetabular ball-and-socket) range of motion: named, shared human-range caps, the single
+    // source of truth for over-range-hip detection (validator + optional clamp).
     val hipRomLimits: HipRomLimits
         get() = HipRomLimits.DEFAULT
 
-    // Phase 10 (R13) — the definition's anatomical forward axis. RFC §5 R13: the default axis
-    // of Spine Intent is defined by the Skeleton Definition's anatomical axes, not by call-site
-    // defaults; call-site defaults derive from this property (the authoring base resolves its
-    // axis-less spine default through it). Deliberately abstract: every definition must state
-    // its own anatomical forward — there is no inherited fallback that would let the owner
-    // silently revert to a call-site constant.
+    // The definition's anatomical forward axis: the default axis of spine intent comes from the
+    // skeleton's own anatomical axes, never from a call-site constant. Deliberately abstract, with
+    // no inherited fallback, so every definition must state its own forward.
     val anatomicalForward: Vector3
 
     companion object {
@@ -46,9 +40,7 @@ interface SkeletonDefinition {
     }
 }
 
-/**
- * Default implementation for the Monk Fitness human model.
- */
+/** Default implementation for the Monk Fitness human model. */
 data class HumanSkeletonDefinition(
     override val torsoLength: Float = 120f,
     override val neckLength: Float = 18f,
@@ -67,9 +59,8 @@ data class HumanSkeletonDefinition(
     override val legIKConstraint: IKConstraint = IKConstraint.LegConstraint,
     override val hipRomLimits: HipRomLimits = HipRomLimits.DEFAULT
 ) : SkeletonDefinition {
-    // Phase 10 (R13): the human model's anatomical forward is the historical +Z call-site
-    // default (bit-exact), so standard-definition axis-less spine authoring stays unchanged.
-    // A class-body property (not a data-class constructor parameter): adding one to the
-    // primary constructor would silently widen equals/hashCode/copy — out of P10's scope.
+    // +Z keeps the historical call-site default, so axis-less spine authoring is bit-exact. A
+    // class-body property, not a constructor parameter: adding one would silently widen
+    // equals/hashCode/copy.
     override val anatomicalForward: Vector3 = Vector3(0f, 0f, 1f)
 }

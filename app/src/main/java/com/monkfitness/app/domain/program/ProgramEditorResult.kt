@@ -4,27 +4,21 @@ import com.monkfitness.app.domain.common.ProgramDayId
 import com.monkfitness.app.domain.common.RevisionId
 
 /**
- * The outcome of one editor operation, in §28's error contract.
+ * The outcome of one editor operation.
  *
- * §28 asks for three things of an operation's result — expected states are results rather than
- * exceptions, invalid data is a result too, and a failure is never swallowed into an empty success —
- * and this is the editor's reading of them:
+ * An operation answers in one of three ways: [Success] did what it said and carries what it produced;
+ * [Rejected] is an *expected* answer — the draft is not finished
+ * ([ProgramEditorRejection.InvalidDraft]), the Program's content is the app's, the revision a draft was
+ * opened from is gone, or a Program is missing — and a refused save has written nothing; [Failed] is
+ * something the storage layer threw, surfaced unchanged for the caller to decide about rather than
+ * turned into `null`, an empty list or a success.
  *
- *  * [Success] — the operation did what it said, and [Success.value] is what it produced.
- *  * [Rejected] — an *expected* answer: the draft is not finished ([ProgramEditorRejection.InvalidDraft]),
- *    the Program's content is the app's (§4), the revision a draft was opened from is gone, or a
- *    Program is missing (§28's `INVALID_DATA`). A refused save has written nothing.
- *  * [Failed] — the §28 `SYSTEM_FAILURE` class: something the storage layer threw, surfaced unchanged
- *    for the caller to decide about (§33 forbids turning it into `null`, an empty list or a success).
- *
- * ### Why this is not [ProgramOperationResult]
- *
- * The lifecycle's envelope keys its refusals on a `ProgramId` — every operation of §3, §4 and §29
- * happens *to a Program*. The editor's do not: `create` has no Program yet, and a copy has none
- * either, so a refusal would have to carry an id that does not exist. The two envelopes therefore
- * differ in exactly that one field, and they share everything else: the same §28 classes, and — for
- * the rules that are genuinely about Programs — the same [ProgramOperationRefusal] values, so §4's
- * sentence about the built-in Program is written once.
+ * This is not [ProgramOperationResult] because the lifecycle's envelope keys its refusals on a
+ * `ProgramId` — every lifecycle operation happens *to a Program*. The editor's do not: `create` has no
+ * Program yet and a copy has none either, so a refusal would have to carry an id that does not exist. The
+ * two envelopes differ in exactly that one field and share everything else, including the
+ * [ProgramOperationRefusal] values for the rules that are genuinely about Programs, so the sentence about
+ * the built-in Program is written once.
  */
 sealed interface ProgramEditorResult<out T> {
 
@@ -34,16 +28,15 @@ sealed interface ProgramEditorResult<out T> {
     /** The operation was refused, and nothing was written. */
     data class Rejected(val rejection: ProgramEditorRejection) : ProgramEditorResult<Nothing>
 
-    /** The operation failed for a reason that is not one of the editor's rules (§28 `SYSTEM_FAILURE`). */
+    /** The operation failed for a reason that is not one of the editor's rules. */
     data class Failed(val cause: Throwable) : ProgramEditorResult<Nothing>
 }
 
 /**
- * The rules and findings that can stop an editor operation, each carrying the sentence that explains
- * it.
+ * The rules and findings that can stop an editor operation, each carrying the sentence that explains it.
  *
- * Typed rather than a message alone, for the reason [ProgramOperationRefusal] is: the UI wants the
- * text, and a test wants to know which rule fired without matching strings.
+ * Typed rather than a message alone, for the reason [ProgramOperationRefusal] is: the UI wants the text,
+ * and a test wants to know which rule fired without matching strings.
  */
 sealed interface ProgramEditorRejection {
 
@@ -51,11 +44,11 @@ sealed interface ProgramEditorRejection {
     val message: String
 
     /**
-     * The draft is not finished, so nothing was saved (§7's validate step, §28 `INVALID_DATA`).
+     * The draft is not finished, so nothing was saved.
      *
-     * The [validation] carries every finding, which is what makes the rejection actionable rather
-     * than merely negative — and it is decided before any write, so an invalid draft cannot leave a
-     * partial Program behind.
+     * The [validation] carries every finding, which is what makes the rejection actionable rather than
+     * merely negative — and it is decided before any write, so an invalid draft cannot leave a partial
+     * Program behind.
      */
     data class InvalidDraft(val validation: ProgramDraftValidation) : ProgramEditorRejection {
         override val message: String =
@@ -71,10 +64,10 @@ sealed interface ProgramEditorRejection {
     }
 
     /**
-     * A rule about Programs refused the operation — §4's built-in Program, or §28's missing row.
+     * A rule about Programs refused the operation — the built-in Program, or a missing row.
      *
-     * The rule itself is [ProgramOperationRefusal], shared with the lifecycle layer, so the wording
-     * of §4's copy-before-edit sentence lives in one place and the editor cannot paraphrase it.
+     * The rule itself is [ProgramOperationRefusal], shared with the lifecycle layer, so the wording of the
+     * copy-before-edit sentence lives in one place and the editor cannot paraphrase it.
      */
     data class Refused(val rule: ProgramOperationRefusal) : ProgramEditorRejection {
         override val message: String = rule.message
@@ -82,18 +75,12 @@ sealed interface ProgramEditorRejection {
 }
 
 /**
- * What one `Save` produced (§6: *One Save creates at most one new Revision. No-op Save creates
- * none.*).
+ * What one `Save` produced: one Save creates at most one new Revision, and a no-op Save creates none.
  *
- * The three cases are the whole of §6's Save contract, and [revisionsCreated] states it as a number a
- * test can assert without knowing which case it got: a structural change and the creation of a
- * Program each create **exactly one** revision, and anything else creates **none**.
- *
- * @property program the Program as it now stands: the created one, or the edited one carrying the
- *   facts that were applied.
- * @property currentRevisionId the revision that describes the Program's plan after the save. For a
- *   no-op save this is the revision it already had — the save did not move it.
- * @property revisionsCreated how many revisions this save created: `1` or `0`, never more.
+ * The three cases are the whole of the Save contract, and [revisionsCreated] states it as a number a test
+ * can assert without knowing which case it got: a structural change and the creation of a Program each
+ * create **exactly one** revision, and anything else creates **none**. `currentRevisionId` is the
+ * revision describing the plan after the save; for a no-op save it is the one the Program already had.
  */
 sealed interface ProgramSaveOutcome {
 
@@ -106,15 +93,12 @@ sealed interface ProgramSaveOutcome {
     /**
      * A new revision was saved and is now the Program's current plan.
      *
-     * @property createdProgram whether the Program itself was created — the create and copy entry
-     *   points — as opposed to a new revision of an existing one.
-     * @property revision the revision that was saved. It is a new immutable value: the revision it
-     *   replaces keeps describing exactly what it described (§6).
-     * @property mintedProgramDays the editor's own draft-handle to saved-identity correspondence for
-     *   the days of [revision]. It exists so a caller can state a `workoutId -> ProgramDayId` binding
-     *   against a draft handle and have it re-pointed at the identity that handle actually became —
-     *   the editor is the single component that performs that re-identification, so it is the one that
-     *   reports it, and nothing downstream re-derives it.
+     * `createdProgram` distinguishes the create and copy entry points from a new revision of an existing
+     * one. `revision` is a new immutable value: the revision it replaces keeps describing exactly what it
+     * described. `mintedProgramDays` is the editor's draft-handle to saved-identity correspondence, so a
+     * caller can state a `workoutId -> ProgramDayId` binding against a draft handle and have it re-pointed
+     * at the identity that handle became — the editor performs that re-identification, so it is the one
+     * that reports it.
      */
     data class RevisionSaved(
         override val program: Program,
@@ -131,8 +115,7 @@ sealed interface ProgramSaveOutcome {
     }
 
     /**
-     * Only the Program's own facts changed — its name or its description — so no revision was created
-     * (§6).
+     * Only the Program's own facts changed — its name or its description — so no revision was created.
      */
     data class FactsSaved(
         override val program: Program,
@@ -144,8 +127,8 @@ sealed interface ProgramSaveOutcome {
     }
 
     /**
-     * The save changed nothing at all (§28's `NothingToChange`): the draft's structure matches the
-     * Program's current plan and its name and description are unchanged, so no row was written.
+     * The save changed nothing at all: the draft's structure matches the Program's current plan and its
+     * name and description are unchanged, so no row was written.
      */
     data class NothingToChange(
         override val program: Program,

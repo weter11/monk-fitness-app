@@ -11,16 +11,13 @@ import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.lerp
 
 /**
- * SkeletonRenderer is a passive rendering component in the animation engine v1.0 pipeline.
- * It applies pre-computed ScreenSpaceScale values (computed by ScreenSpaceCompensation)
- * to visual parameters without performing additional perspective math or geometry modification.
- * The one thing it does derive is the **viewport frame** — the scale and anchor a given surface is
- * drawn at ([CameraFraming]): the exercise's static frame when the caller supplies one (the default
- * presentation, C2), the drawn frame's own fit otherwise (the opt-in dynamic push-in, C1).
+ * Passive renderer: applies the pre-computed ScreenSpaceScale values from
+ * ScreenSpaceCompensation without extra perspective math or geometry modification. The one thing it
+ * derives is the viewport frame ([CameraFraming]) — the exercise's static frame when the caller
+ * supplies one, the drawn frame's own fit otherwise.
  *
- * Consistent with first-class joint rotations, SkeletonRenderer never infers rotations or orientations
- * from joint positions; all transformations are derived strictly via Forward Kinematics traversal.
- * ScreenSpaceCompensation is now the single source of truth for perspective zoom scaling.
+ * It never infers rotations or orientations from joint positions; all transformations come from FK
+ * traversal, and ScreenSpaceCompensation is the single source of truth for perspective zoom.
  */
 @Composable
 fun SkeletonRenderer(
@@ -28,31 +25,29 @@ fun SkeletonRenderer(
     camera: Camera,
     engine: SkeletonEngine,
     modifier: Modifier = Modifier,
-    // B-5 — the Frame Context defaults to what the supplied frame already carries, so a caller that
-    // omits it can no longer strip a pose's declared support model. A caller that holds the
-    // declaration supplies it explicitly: `metadata.environment` + `metadata.support.supportPoints`
-    // (the single R8 resolution). An explicit argument always wins.
+    // The Frame Context defaults to what the supplied frame already carries, so omitting it cannot
+    // strip a pose's declared support model. A caller holding the declaration supplies
+    // `metadata.environment` + `metadata.support.supportPoints`; an explicit argument always wins.
     environment: EnvironmentDefinition = pose.environment,
     supportedPoints: Set<SupportPoint> = pose.supportedPoints,
     showGround: Boolean = true,
     highlightedJoint: Joint? = null,
     screenSpaceSettings: ScreenSpaceSettings = ScreenSpaceSettings.DEFAULT,
-    // C2 — the exercise's static frame, derived once by [CameraFraming.exerciseFrame] for the whole
-    // motion and applied to every frame of the rep: the default presentation, and the reason the
-    // subject no longer pushes in and pulls out as it moves. The caller that holds the motion (the
-    // exercise hero) derives it and passes it; a caller that holds no exercise — a single off-screen
-    // frame — omits it and gets the frame derived from the frame itself ([CameraFraming.frameZoom]),
-    // which is also the opt-in dynamic "camera push-in" mode the hero's toggle selects.
+    // The exercise's static frame, derived once by [CameraFraming.exerciseFrame] for the whole motion
+    // and applied to every frame of the rep — the default presentation, and the reason the subject
+    // does not push in and out as it moves. A caller with no exercise (a single off-screen frame)
+    // omits it and gets the frame derived from the frame itself ([CameraFraming.frameZoom]), which is
+    // also the opt-in dynamic "camera push-in" mode.
     staticFrame: CameraFrame? = null
 ) {
     val style = engine.style
-    // M2 — route through the pipeline so the full ordered stage chain (Solver → Finalizer) runs.
-    // The pipeline owns the Finalizer; renderers no longer call it directly (RFC_ENGINE_PIPELINE §2).
+    // Route through the pipeline so the full ordered stage chain (Solver → Finalizer) runs; the
+    // pipeline owns the Finalizer and renderers never call it directly.
     val pipeline = remember(engine.definition) { SkeletonPipeline(engine.definition) }
     val projector = remember { SkeletonProjector() }
     val compensator = remember(screenSpaceSettings) { ScreenSpaceCompensation(screenSpaceSettings) }
-    // C1 — the viewport frame: the frame is derived from the bounds of the frame being drawn, so a
-    // pose cannot be drawn outside the surface it is drawn on. See [CameraFraming].
+    // The frame is derived from the bounds of the frame being drawn, so a pose cannot be drawn
+    // outside the surface it is drawn on. See [CameraFraming].
     val framing = remember(engine, screenSpaceSettings) { CameraFraming(engine, screenSpaceSettings) }
 
     val skeletonBuffer = remember { ProjectedSkeleton() }
@@ -66,10 +61,10 @@ fun SkeletonRenderer(
         val height = size.height
 
         val finalizedPose = pipeline.produceFrame(pose, environment, supportedPoints).pose
-        // C2 — the viewport frame. The default presentation draws every frame of the exercise at the
-        // one frame its motion was fitted to (`staticFrame`), so the subject's size cannot breathe.
-        // Without one, the C1 rule derives the frame from the bounds of the frame about to be drawn —
-        // the opt-in dynamic camera push-in (image-identical when the frame already fits).
+        // The default presentation draws every frame at the one frame its motion was fitted to
+        // (`staticFrame`), so the subject's size cannot breathe. Without one, the frame is derived
+        // from the bounds of the frame about to be drawn — the opt-in dynamic camera push-in
+        // (image-identical when the frame already fits).
         val frame = staticFrame
         if (frame != null) frame.applyTo(camera)
         else camera.zoom = framing.frameZoom(camera, finalizedPose, width, height)
@@ -83,19 +78,15 @@ fun SkeletonRenderer(
             groundLevel = environment.ground.level
         )
 
-        // Rendering Pipeline:
-        // 1. drawBackground()
         drawBackground()
 
-        // 2. drawGround()
+        // Ground and shadows
         if (showGround && environment.ground.visible) {
             drawGroundPassive(skeletonBuffer, style, compensator, camera.zoom, scaleBuffer)
         }
 
-        // 3. drawEnvironment()
         drawEnvironmentPassive(environment, camera, style, width, height, path)
 
-        // 4. drawSkeleton()
         var itemCount = 0
 
         for (i in 0 until skeletonBuffer.boneCount) {
@@ -116,10 +107,9 @@ fun SkeletonRenderer(
             renderItems[itemCount++].populateFace(skeletonBuffer.faces[i])
         }
 
-        // Initialize indices
         for (i in 0 until itemCount) indices[i] = i
 
-        // In-place Insertion Sort of indices based on renderItems[idx].depth
+        // Painter's algorithm: in-place insertion sort of indices by renderItems[idx].depth
         for (i in 1 until itemCount) {
             val idx = indices[i]
             val depth = renderItems[idx].depth
@@ -173,7 +163,6 @@ fun SkeletonRenderer(
             }
         }
 
-        // 5. drawForeground()
         drawForeground()
     }
 }
@@ -249,11 +238,11 @@ private fun androidx.compose.ui.graphics.drawscope.DrawScope.drawGroundPassive(
 }
 
 private fun androidx.compose.ui.graphics.drawscope.DrawScope.drawBackground() {
-    // Left empty for future compatibility, fulfilling the rendering pipeline order.
+    // Empty, but kept to hold the rendering pipeline order.
 }
 
 private fun androidx.compose.ui.graphics.drawscope.DrawScope.drawForeground() {
-    // Left empty for future compatibility, fulfilling the rendering pipeline order.
+    // Empty, but kept to hold the rendering pipeline order.
 }
 
 private fun androidx.compose.ui.graphics.drawscope.DrawScope.drawEnvironmentPassive(
@@ -268,15 +257,12 @@ private fun androidx.compose.ui.graphics.drawscope.DrawScope.drawEnvironmentPass
         when (prop) {
             is BoxProp -> drawBoxyProp(prop.center, prop.width, prop.height, prop.depth, camera, style, width, height, path) { it }
             is StepProp -> drawBoxyProp(prop.center, prop.width, prop.height, prop.depth, camera, style, width, height, path) {
-                // StepProp: slight green/teal tint
                 Color(it.red * 0.8f, it.green * 0.95f, it.blue * 0.9f, it.alpha)
             }
             is BenchProp -> drawBoxyProp(prop.center, prop.width, prop.height, prop.depth, camera, style, width, height, path) {
-                // BenchProp: slight reddish/wood/orange-brown tint
                 Color(it.red * 0.75f, it.green * 0.7f, it.blue * 0.65f, it.alpha)
             }
             is WallProp -> drawBoxyProp(prop.center, prop.width, prop.height, prop.depth, camera, style, width, height, path) {
-                // WallProp: concrete/light-gray and semi-transparent
                 it.copy(alpha = 0.5f)
             }
         }
@@ -309,7 +295,6 @@ private fun androidx.compose.ui.graphics.drawscope.DrawScope.drawBoxyProp(
     val c6 = Vector3(center.x + hw, center.y + hh, center.z + hd)
     val c7 = Vector3(center.x - hw, center.y + hh, center.z + hd)
 
-    // Project all 8 corners through Camera
     val p0 = ProjectedPoint(); camera.project(c0, width, height, p0)
     val p1 = ProjectedPoint(); camera.project(c1, width, height, p1)
     val p2 = ProjectedPoint(); camera.project(c2, width, height, p2)
@@ -323,7 +308,6 @@ private fun androidx.compose.ui.graphics.drawscope.DrawScope.drawBoxyProp(
         val avgDepth = (pts[0].depth + pts[1].depth + pts[2].depth + pts[3].depth) / 4f
     }
 
-    // 6 faces of the box
     val faces = listOf(
         PropFace(listOf(p0, p1, p2, p3)), // front (z = -hd)
         PropFace(listOf(p5, p4, p7, p6)), // back (z = +hd)

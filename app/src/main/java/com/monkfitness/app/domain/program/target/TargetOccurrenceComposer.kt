@@ -6,8 +6,8 @@ import com.monkfitness.app.domain.program.PlannedOccurrence
 import java.time.LocalDate
 
 /**
- * Groups occurrences that Stage 2 has already resolved. It never evaluates cadence, discovers dates,
- * or crosses date boundaries.
+ * Groups occurrences the caller has already resolved. It never evaluates cadence, discovers dates, or
+ * crosses date boundaries.
  */
 object TargetOccurrenceComposer {
     fun compose(

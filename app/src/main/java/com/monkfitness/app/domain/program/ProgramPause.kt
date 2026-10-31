@@ -5,20 +5,15 @@ import com.monkfitness.app.domain.common.ProgramId
 import java.time.Instant
 
 /**
- * One pause interval of a Program (§3).
+ * One pause interval of a Program.
  *
- * A pause is an interval, not a state replay: pausing freezes active program time and
- * missed-opportunity logic, and resuming closes the interval. Keeping the intervals — rather than
- * only the current status — is what makes "the program was paused" explainable afterwards without
- * rewriting the plan or the history, and it is why the intervals are owned by the Program (§1).
+ * A pause is an interval, not a state replay: pausing freezes active program time and missed-opportunity
+ * logic, and resuming closes the interval. Keeping the intervals — rather than only the current status — is
+ * what makes "the program was paused" explainable afterwards without rewriting the plan or the history, and
+ * it is why the intervals are owned by the Program.
  *
- * An open interval ([endedAt] `null`) is a pause that is currently in effect; the Program's own
- * `lifecycleStatus` says whether that is the state the program is in.
- *
- * @property pauseId identity of this interval.
- * @property programId the Program that was paused.
- * @property startedAt when the pause began.
- * @property endedAt when it ended, or `null` while it is still in effect.
+ * An open interval (`endedAt` `null`) is a pause currently in effect; the Program's own `lifecycleStatus`
+ * says whether that is the state the program is in.
  */
 data class ProgramPause(
     val pauseId: PauseId,

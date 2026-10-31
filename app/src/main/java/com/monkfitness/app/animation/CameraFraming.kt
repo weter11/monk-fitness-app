@@ -5,15 +5,12 @@ import kotlin.math.max
 import kotlin.math.min
 
 /**
- * The frame an exercise is drawn at: **one** zoom and **one** anchor, for every frame of its motion.
- *
- * C2 introduced this so that the presentation cannot breathe: [CameraFraming.exerciseFrame] derives
- * it once, from the exercise's whole drawn motion instead of from the frame being drawn, and every
- * frame of the rep is then projected through the same values. See [CameraFraming].
+ * The frame an exercise is drawn at: one zoom and one anchor for every frame of its motion, so the
+ * presentation cannot breathe as the rep folds and unfolds.
  */
 data class CameraFrame(val zoom: Float, val centerX: Float, val centerY: Float) {
 
-    /** Writes the frame onto [camera] — the zoom and the anchor, and nothing else. */
+    /** Writes only the zoom and the anchor onto [camera]. */
     fun applyTo(camera: Camera) {
         camera.zoom = zoom
         camera.centerX = centerX
@@ -27,94 +24,45 @@ data class CameraFrame(val zoom: Float, val centerX: Float, val centerY: Float) 
 }
 
 /**
- * The viewport frame of the exercise hero.
+ * The viewport frame of the exercise hero: one zoom and one anchor for the whole motion.
  *
- * A pose authors its **viewpoint** (`PoseMetadata.camera`: yaw, pitch, focal length, zoom, anchor, and
- * the yaw the rotation gesture may reach); the runtime draws it onto whatever surface the app hands
- * it. The surface is not the pose's business — and until C1 the frame was not derived from it either.
- * `Camera` mapped world units onto pixels one-for-one (times the pose's authored zoom) and anchored
- * the world origin at a hardcoded `centerY = 0.7`, so the drawn size of a pose was *independent of
- * the surface*: a standing pose, or any pose with the arms overhead, was taller than a phone-sized
- * canvas and lost its head (and hands) off the top edge, while the identical frame fit an oversized
- * one. Measured on the production path, the hero canvas at `861x531` clipped **771 of 1683** sampled
- * frames across **26 of the 51** production poses, and the same corpus clipped at `1280x720`
- * (516 frames / 22 poses), `1440x700` (531 / 22) and `1000x1000` (9 / 2) — the framing, never the
- * geometry.
+ * A pose authors its viewpoint (`PoseMetadata.camera`) but not the surface the runtime draws it
+ * onto, and a frame derived from each drawn frame's own bounds makes the subject's size breathe as
+ * the rep folds and unfolds. So [exerciseFrame] derives the frame once, from the exercise's whole
+ * drawn motion at every yaw the pose declares reachable, and every drawn frame uses it; [frameZoom]
+ * is the opt-in dynamic mode that re-derives it per drawn frame.
  *
- * C1 derived the frame from the frame being drawn. That closed the containment defect, and it made the
- * subject's size a function of the subject's *current* bounds: a rep that folds and unfolds was drawn
- * through a zoom that pushed in and pulled back out as it moved (the audit's recorded residual (b),
- * "the scale breathes with the frame"). This class owns the rule that removes that, in two scopes:
+ * Both obey the same ceiling: the frame never exceeds [Camera.authoredZoom], so a pose's composition
+ * intent is an upper bound the runtime only ever clips against the surface it is given — the frame
+ * may shrink the subject, never blow a small pose up to fill a large canvas.
  *
- *  * **[exerciseFrame] — the default presentation (C2).** One frame for the whole exercise: the
- *    largest zoom, not exceeding the pose's authored zoom, at which the athlete — together with the
- *    ground it contacts — stays inside the viewport for **every** frame of the motion, at **every**
- *    viewpoint the pose declares reachable. The frame is a function of the exercise and the surface
- *    alone, so it is derived once (before the first frame is drawn) and every frame of the rep is
- *    drawn through it: no breathing, and no per-pose zoom override anywhere.
- *  * **[frameZoom] — the opt-in dynamic mode (C1, kept bit-identical).** The frame is re-derived from
- *    each drawn frame's own bounds; the subject's size then changes with its pose. This is the
- *    "camera push-in" the UI exposes as a toggle, OFF by default.
+ * The subject is the athlete plus the floor it contacts: the drawn silhouette (joints, bones,
+ * indicator discs, torso faces, sized by the same [SkeletonStyle] and [ScreenSpaceCompensation] the
+ * renderers stroke them with) and the drawn contact shadows. Framing the contact marks is what puts
+ * the floor slightly below the figure without a hardcoded pixel or anchor: the content box's bottom
+ * edge is the deepest drawn ground point under the athlete, so centring that box leaves the feet
+ * just above the bottom edge. Grid lines and environment props are laid out to a horizon that leaves
+ * the frame by construction and are not framed.
  *
- * Both scopes obey the same ceiling: **the frame never exceeds the zoom the pose authored**, so a
- * pose's composition intent is an upper bound the runtime only ever clips against the surface it is
- * given. The frame may therefore only ever *shrink* the subject; it never blows a small pose up to
- * fill a large canvas.
+ * One measurement at zoom 1 anchored at the origin is enough because every drawn extent scales
+ * exactly linearly with the zoom — positions through [Camera.project], bone thickness through
+ * `thicknessScale`, disc radii through `radiusScale`, shadow radii through `shadowScale`, face
+ * geometry through `project` — while `sc` itself is independent of the zoom. The outline stroke the
+ * renderers add is the single exception: a fixed pixel width (`outlineScale` carries no zoom factor),
+ * so it comes off the budget as a constant instead of scaling with the box. Positions depend on
+ * neither the anchor (a pure translation) nor the surface, so the box is measured in anchor-free
+ * coordinates and the anchor derived from it; the surface enters only through the final division.
  *
- * ## What is framed, and why the ground is in it
+ * The box is a union over two continuous dimensions — rep progress and viewable yaw — measured on a
+ * finite grid. A peak that falls inside a sampling cell is invisible to that union, so each edge is
+ * grown by the largest second difference of that edge over the grid, divided by eight: between dense
+ * samples these extents are locally quadratic, and a quadratic edge exceeds its sampled endpoints at
+ * the cell middle by exactly `|e_prev - 2*e_k + e_next| / 8`. The margin is a function of the
+ * motion's own curvature, and it vanishes as the sampling is refined.
  *
- * The subject is the athlete **plus the floor it contacts**: the drawn silhouette (joints, bones,
- * indicator discs, torso faces — sized by the same [SkeletonStyle] and [ScreenSpaceCompensation] the
- * renderers stroke them with) and the drawn contact shadows, which are the athlete's own ground
- * points projected onto the floor plane. Framing the contact marks is what puts the floor "slightly
- * below the figure" without a hardcoded pixel or anchor: the content box's bottom edge *is* the
- * deepest drawn ground point under the athlete, so centring that box leaves the athlete's feet just
- * above the bottom edge with the ground directly beneath them, and the athlete using the whole
- * surface instead of the 70% a fixed `centerY = 0.7` left it. Nothing else about the ground moves:
- * the grid lines and the environment props (box, step, bench, wall) are laid out to a horizon that
- * leaves the frame by construction and are still not framed — the rule frames the athlete and its
- * footing.
- *
- * ## Why one measurement is enough
- *
- * Every drawn extent scales *exactly linearly* with the zoom: positions through [Camera.project]
- * (`x = width*centerX + xr*sc*zoom`), bone thickness through `ScreenSpaceScale.thicknessScale`, disc
- * radii through `radiusScale`, shadow radii through `shadowScale`, face geometry through `project` as
- * well — while `sc` itself is independent of the zoom. The outline stroke the renderers add on top is
- * the single exception: it is a fixed pixel width (`ScreenSpaceScale.outlineScale` carries no `zoom`
- * factor). So one measurement at zoom 1 anchored at the origin yields the frame's linear part plus
- * one constant, and the fit is a closed form: the box is scaled down until it fits, then centred.
- *
- * Positions do **not** depend on the anchor (`(width*centerX, height*centerY)` is a pure translation)
- * nor on the surface, so the exercise's box is measured once, in anchor-free coordinates, and the
- * anchor is then derived from it. That is also what makes the pre-pass cheap: the surface enters the
- * derivation only through the final division.
- *
- * ## The two continuous dimensions of the motion, and how their peaks are covered
- *
- * The exercise's box is a union over two **continuous** dimensions — the rep's progress, and the yaw
- * the viewer can rotate through — measured here on a finite grid ([PROGRESS_SAMPLES] x
- * [YAW_SAMPLES]). A drawn edge is not constant between two samples, so a peak that falls *inside* a
- * sampling cell is invisible to the union: measured before this correction, the burpee's standing
- * jump climbed `24.3` px above a frame fitted to the `1/16`-sampled union of its own motion, and the
- * same effect shows up wherever a rep moves quickly (a gait, a swing).
- *
- * The correction is derived from the samples, not from a pixel constant. Between two dense samples
- * every one of these extents is locally quadratic, and a quadratic edge exceeds its sampled endpoints
- * at the middle of the cell by exactly `|e_prev - 2*e_k + e_next| / 8`. Each edge of the measured box
- * is therefore grown by the largest second difference of that edge over the grid, divided by eight —
- * a margin that is a function of the motion's own curvature: a slow rep contributes a fraction of a
- * pixel, a jump contributes exactly as much as its peak overshoots the samples, and it vanishes as
- * the sampling is refined.
- *
- * ## The pitch, and the anchor the pose authored
- *
- * The only viewpoint axis the app can move is yaw: the drag gesture rotates the camera about the
- * athlete (`AnimationController.onRotate`) within the range the pose declares
- * (`CameraDefinition.minYaw`/`maxYaw` about `defaultYaw`), and pitch is authored and fixed. The sweep
- * is therefore over that declared yaw range at the pose's authored pitch, and the yaw/pitch/focal
- * length the author wrote are **part of the frame the pose is drawn with, not something this class
- * derives** — it derives the scale and the anchor alone.
+ * Only yaw is movable (the drag gesture, within the pose's declared range); pitch is authored and
+ * fixed. This class derives the scale and the anchor alone — yaw, pitch and focal length are part of
+ * the frame the pose is drawn with.
  */
 class CameraFraming(
     private val engine: SkeletonEngine,
@@ -128,43 +76,30 @@ class CameraFraming(
     private val style = engine.style
 
     /**
-     * A camera used only to measure: the caller's viewpoint, zoom 1, anchored at the origin, so every
-     * projected coordinate *is* the frame's offset from the anchor at unit zoom.
+     * Measures only: the caller's viewpoint, zoom 1, anchored at the origin, so every projected
+     * coordinate is the frame's offset from the anchor at unit zoom.
      */
     private val measure = Camera()
 
-    // The pre-pass reuses its boxes: one per sampled yaw of the frame being measured, one per sampled
-    // frame of the side being played, and the accumulating content box.
+    // Reused pre-pass boxes: one per sampled yaw, one per sampled progress, plus the content box.
     private val yawBoxes = Array(YAW_SAMPLES + 1) { Edges() }
     private val progressBoxes = Array(PROGRESS_SAMPLES + 1) { Edges() }
     private val contentBox = Edges()
     private val frameBox = Edges()
 
-    // ----------------------------------------------------------------------------------------------
-    // The default presentation — one frame for the whole exercise
-    // ----------------------------------------------------------------------------------------------
-
     /**
      * The static frame of [builder]'s exercise on a [width] x [height] surface: the largest zoom, not
      * exceeding [Camera.authoredZoom], at which the athlete and its ground contact stay inside the
      * viewport for every frame of the motion the exercise plays ([sides]), at every yaw its
-     * declaration allows; and the anchor that centres that content in the viewport.
+     * declaration allows; plus the anchor that centres that content.
      *
-     * The motion is read from [builder] itself — the same builder the renderer is handed each frame,
-     * played through its own [SkeletonPipeline] so the frames measured are the frames the pipeline
-     * publishes (the renderer's pipeline, and its Frame History, are never touched) — and the
-     * viewpoints are the pose's own declaration (`CameraDefinition.defaultYaw` +/- `minYaw`/`maxYaw`
-     * at the authored pitch). [sides] is the side sequence the play advances through, so the frame
-     * covers exactly the frames that will be drawn: an alternating exercise plays `RIGHT` then
-     * `LEFT` (`AnimationController`), a mirrored-off one only ever its right side. Nothing here is
-     * per-pose or per-viewport: the same rule covers a squat, a pull-up, a rotated profile view and a
-     * `512x512` snapshot.
-     *
-     * **Call once per (exercise, surface)** — the pre-pass plays the builder across the whole rep —
-     * and then apply the returned frame to the camera for every frame. The result is a pure function
-     * of (declaration, builder, sides, surface) and never of the camera's current zoom or anchor, so
-     * a camera that already carries a frame from a previous surface cannot ratchet it: two calls with
-     * the same arguments return the same frame, bit for bit.
+     * The motion is read from [builder] itself, played through its own [SkeletonPipeline], so the
+     * frames measured are the frames the pipeline publishes — the renderer's pipeline and its Frame
+     * History are never touched. [sides] is the side sequence the play advances through, so the frame
+     * covers exactly the frames that will be drawn. The result is a pure function of (declaration,
+     * builder, sides, surface), never of the camera's current zoom or anchor, so a camera carrying a
+     * frame from a previous surface cannot ratchet it: call once per (exercise, surface), then apply
+     * the frame to the camera for every frame.
      *
      * **The pre-pass plays [builder]**, which publishes into a reused carrier: it must run before the
      * caller builds the frame it is about to hand the renderer, or that frame's pose is the pre-pass's
@@ -183,9 +118,9 @@ class CameraFraming(
         val declaration = builder.metadata.camera
         exerciseBounds(camera, builder, sides, declaration, width, height)
 
-        // The drawn extent is the measured box scaled by the zoom **plus the outline stroke, which is
-        // a constant in pixels** (see the class KDoc) — so the stroke comes off the budget, it is not
-        // scaled with the box. The fit is then: scale the box until it fits, and centre it.
+        // The drawn extent is the box scaled by the zoom plus the outline stroke, which is a constant
+        // in pixels (see the class KDoc) — so it comes off the budget rather than scaling with the
+        // box. The fit is then: scale the box until it fits, and centre it.
         val zoom = min(
             authored,
             min(
@@ -204,9 +139,8 @@ class CameraFraming(
      * into [contentBox], in anchor-free unit-zoom coordinates, grown by the margin its own sampling
      * cannot see.
      *
-     * **The pipeline's output is a reused buffer**: each [SkeletonPipeline.produceFrame] publishes
-     * into the same carrier, so every frame is measured (and consumed) before the next one is built —
-     * never retained. The pipeline is this class's own, and it is reset before the pre-pass, so the
+     * **The pipeline's output is a reused buffer**: every frame is measured and consumed before the
+     * next one is built, never retained. The pipeline is this class's own and is reset first, so the
      * measurement cannot depend on how often the exercise has been framed.
      */
     private fun exerciseBounds(
@@ -231,7 +165,7 @@ class CameraFraming(
         val yawSpan = declaration.maxYaw - declaration.minYaw
         val yawCells = if (yawSpan == 0f) 0 else YAW_SAMPLES
         // One margin object for both dimensions: each contributes the largest second difference of
-        // that dimension's grid, and the box is grown by the larger of the two per edge.
+        // its own grid, and the box grows by the larger of the two per edge.
         val margins = Margins()
 
         for (side in sides) {
@@ -241,7 +175,7 @@ class CameraFraming(
                     side = side,
                     definition = engine.definition
                 )
-                // Measured (and consumed) before the next frame is published: the carrier is reused.
+                // Measured before the next frame is published: the carrier is reused.
                 val frame = pipeline.produceFrame(builder, context).pose
 
                 val sampled = progressBoxes[i]
@@ -253,8 +187,8 @@ class CameraFraming(
                     if (k >= 2) margins.include(yawBoxes[k - 2], yawBoxes[k - 1], yawBoxes[k])
                 }
             }
-            // The side is complete: fold its frames into the content and their second differences into
-            // the progress margin before the next side reuses the buffers.
+            // Fold the completed side into the content and its second differences into the progress
+            // margin before the next side reuses the buffers.
             for (i in 0..PROGRESS_SAMPLES) {
                 contentBox.include(progressBoxes[i])
                 if (i >= 2) {
@@ -266,19 +200,14 @@ class CameraFraming(
         contentBox.grow(margins)
     }
 
-    // ----------------------------------------------------------------------------------------------
-    // The opt-in dynamic mode — the frame of the frame being drawn (C1)
-    // ----------------------------------------------------------------------------------------------
-
     /**
      * The frame's zoom for [pose] on a [width] x [height] surface: the largest zoom not exceeding
      * [Camera.authoredZoom] at which the pose's whole drawn silhouette lies inside the viewport,
      * keeping the camera's own anchor.
      *
-     * Returns the camera's authored zoom when the frame already fits, so a caller that assigns this
-     * back onto [Camera.zoom] leaves every already-fitting frame bit-identical. The measured subject
-     * here is the athlete alone, exactly as C1 shipped it — the ground was added by
-     * [exerciseFrame]'s composition, not by this rule. The default presentation is [exerciseFrame].
+     * Returns the authored zoom when the frame already fits, so assigning this back onto
+     * [Camera.zoom] leaves already-fitting frames bit-identical. The measured subject is the athlete
+     * alone — the ground belongs to [exerciseFrame]'s composition, not to this rule.
      */
     fun frameZoom(camera: Camera, pose: SkeletonPose, width: Float, height: Float): Float {
         val authored = camera.authoredZoom
@@ -290,7 +219,7 @@ class CameraFraming(
         measure.zoom = 1f
         measure.centerX = 0f
         measure.centerY = 0f
-        // The anchor is the pose's own: the dynamic mode touches the zoom alone (see the class KDoc).
+        // The anchor is the pose's own: the dynamic mode touches the zoom alone.
         val content = frameBox
         measureInto(pose, width, height, withGround = false, into = content)
 
@@ -304,17 +233,12 @@ class CameraFraming(
         return zoom
     }
 
-    // ----------------------------------------------------------------------------------------------
-    // The measurement — the drawn silhouette, and the ground the athlete contacts
-    // ----------------------------------------------------------------------------------------------
-
     /**
-     * The drawn box of [pose] measured through [measure], written into [into]: everything the
-     * renderers actually stroke — bones (with their half thickness and the outline the renderers add),
-     * indicator discs (radius + outline), torso faces (a stroke centred on the path edge) — and, when
-     * [withGround] is set, the contact shadows: the athlete's own ground points, drawn on the floor
+     * The drawn box of [pose], written into [into]: everything the renderers actually stroke — bones
+     * (half thickness plus outline), indicator discs (radius + outline), torso faces (a stroke centred
+     * on the path edge) — and, when [withGround] is set, the contact shadows, drawn on the floor
      * plane as ellipses of `style.shadowRadiusX/Y` x `ScreenSpaceScale.shadowScale`. Shadow centres
-     * and radii are both linear in the zoom, so the floor enters the fit's closed form as well.
+     * and radii are both linear in the zoom, so the floor enters the closed form too.
      */
     private fun measureInto(
         pose: SkeletonPose,
@@ -336,9 +260,8 @@ class CameraFraming(
 
         // The zoom-independent outline the renderers stroke around every primitive: a bone adds
         // `outlineWidth * outlineScale` to its half thickness, an indicator disc adds `2f *
-        // outlineScale` to its radius, and a face's `outlineWidth` stroke straddles its edge.
-        // `outlineScale` is the one ScreenSpaceScale factor the renderers do NOT multiply by the
-        // zoom, which is why the stroke is handled as a constant off the available budget.
+        // outlineScale` to its radius, and a face's stroke straddles its edge. `outlineScale` is the
+        // one factor NOT multiplied by the zoom, hence the constant off the available budget.
         var stroke = 0f
 
         for (i in 0 until projected.boneCount) {
@@ -448,10 +371,10 @@ class CameraFraming(
     }
 
     /**
-     * The second-difference margin of one sampled dimension: walking the sampled boxes in order, the
-     * largest `|e_prev - 2*e_k + e_next| / 8` per edge over every interior sample — the exact
-     * overshoot of a locally quadratic edge at the middle of a sampling cell, which is what a peak
-     * falling inside a cell adds that the sampled union cannot see.
+     * The second-difference margin of one sampled dimension: the largest
+     * `|e_prev - 2*e_k + e_next| / 8` per edge over every interior sample — the exact overshoot of a
+     * locally quadratic edge at the middle of a cell, which a peak falling inside a cell adds and the
+     * sampled union cannot see.
      */
     private class Margins {
         var minX = 0f
@@ -476,19 +399,17 @@ class CameraFraming(
         const val OUTLINE_STRENGTH = 0.05f
 
         /**
-         * Contains a frame even when the viewport is degenerate (narrower than the outline stroke
-         * around the anchor). Containment is then unattainable at any zoom, and collapsing onto the
-         * anchor is the only honest answer left.
+         * Bounds a degenerate viewport (narrower than the outline stroke around the anchor), where
+         * containment is unattainable at any zoom and collapsing onto the anchor is all that is left.
          */
         const val MINIMUM_ZOOM = 1e-3f
 
         /**
-         * How finely the two continuous dimensions of the exercise's motion are sampled: the rep's
-         * progress (`1/32` of the play, for each side the play advances through) and the reachable yaw
-         * range (`5` degrees over the `180` degrees the rotation gesture can cross). Both dimensions
-         * are covered by the second-difference margin above, which is what makes this resolution
-         * sufficient rather than merely plausible: a `1/256` x `0.5`-degree reference sweep of the
-         * whole corpus measures `0.0` px of residual overshoot against the frame derived here.
+         * Sampling of the two continuous dimensions: the rep's progress (`1/32` of the play, per side)
+         * and the reachable yaw range (`5` degrees over the `180` the rotation gesture can cross).
+         * The second-difference margin above is what makes this resolution sufficient rather than
+         * merely plausible — a `1/256` x `0.5`-degree reference sweep of the corpus measures `0.0` px
+         * of residual overshoot.
          */
         const val PROGRESS_SAMPLES = 32
         const val YAW_SAMPLES = 36

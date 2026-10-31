@@ -11,33 +11,23 @@ import com.monkfitness.app.domain.program.ProgramSchedule
 /**
  * One exercise the planner **may** choose, as the caller states it.
  *
- * The planner does not own an exercise catalogue and must not grow one (§10, §25), so the caller
- * supplies a view of the library it already has. The view is deliberately **composition, not a
- * second catalogue**: [metadata] is the app's own [ExerciseMetadata] value — canonical id, family,
- * training domain, body region and required equipment, with the equipment type left generic so the
- * domain never re-declares that vocabulary — and this type adds only the two facts a *planner* needs
- * and that value does not carry:
+ * The planner does not own an exercise catalogue and must not grow one, so the caller supplies a view
+ * of the library it already has: [metadata] is the app's own [ExerciseMetadata] value, and this type
+ * adds only the two facts a *planner* needs that value does not carry.
  *
- *  * [focuses] — the focuses the exercise trains, stated by the caller. §8's Focus Planner has to
- *    allocate exposure over the focus vocabulary and §9's selection has to respect *focus/family
- *    membership*, and the library's own classification is not expressible here. It is passed in
- *    explicitly rather than inferred: §6 of the stage's brief is explicit that where metadata is
- *    insufficient to support a focus decision honestly, the answer is an explicit input boundary,
- *    never a hidden classification rule. **An empty set is refused**: an exercise whose focuses are
- *    unknown is not "maybe everything", it is an exercise this request did not classify.
- *  * [dimension] — the primary progression dimension a generated prescription is written in (§10).
- *    The planner prescribes in the exercise's own dimension, so it is told which one that is; it
- *    never guesses from a name or a category. The three dimensions §10 names and does not implement
- *    are representable here and make the exercise *unusable for generation* — reported, never
- *    prescribed as something they are not.
+ * [focuses] is stated by the caller rather than inferred, because the library's own classification is
+ * not expressible here and where metadata cannot support a focus decision honestly the answer is an
+ * explicit input boundary, never a hidden classification rule. **An empty set is refused**: an exercise
+ * whose focuses are unknown is not "maybe everything", it is an exercise this request did not classify.
  *
- * Nothing here is mutated by planning: the value is read-only input, and no library definition is
- * touched by generating a plan (§10).
+ * [dimension] is the primary progression dimension a generated prescription is written in. The planner
+ * prescribes in the exercise's own dimension, so it is told which one that is and never guesses from a
+ * name or a category; the three dimensions the blueprint names and does not implement are representable
+ * here and make the exercise *unusable for generation* — reported, never prescribed as something they
+ * are not.
  *
- * @property metadata the app's own metadata for this exercise.
- * @property focuses the focuses this exercise trains, at least one.
- * @property dimension the dimension a generated prescription for this exercise is written in.
- * @param E the caller's equipment vocabulary — the domain never names an equipment value.
+ * Planning never mutates it: the value is read-only input, and no library definition is touched by
+ * generating a plan.
  */
 data class GenerationCandidate<E>(
     val metadata: ExerciseMetadata<E>,
@@ -52,15 +42,15 @@ data class GenerationCandidate<E>(
         }
     }
 
-    /** The library key of this exercise, opaque to the planner (§10). */
+    /** The library key of this exercise, opaque to the planner. */
     val exerciseId: String
         get() = metadata.id
 
-    /** The family this exercise belongs to — §9's family membership axis. */
+    /** The family this exercise belongs to — selection's family membership axis. */
     val familyId: String
         get() = metadata.familyId
 
-    /** The equipment this exercise cannot be performed without (§9's hard execution constraint). */
+    /** The equipment this exercise cannot be performed without — a hard execution constraint. */
     val requiredEquipment: Set<E>
         get() = metadata.requiredEquipment
 
@@ -73,43 +63,33 @@ data class GenerationCandidate<E>(
 }
 
 /**
- * The **plain signals** generation may take as input — and the boundary §30 step 10 stops at.
+ * The **plain signals** generation may take as input, and the boundary it stops at.
  *
- * Everything here is something the caller already knows; nothing here is computed by the planner.
- * That is the whole point of the type: §8 lets the Focus Planner *consider* recent exposure, recent
- * load, adaptive signals and recovery, and §30 step 10 is **before** the Adaptive Engine exists, so
- * the planner may consume these values and may not derive them. No evidence calculation, no
- * progression policy, no recovery policy, no adaptive decision and no adjustment appears anywhere in
- * this stage (§30 steps 11–12), and this boundary is what makes that mechanical: the planner's only
- * access to anything adaptive is the fields below.
+ * Everything here is something the caller already knows; nothing here is computed by the planner. The
+ * planner may consume these values and may not derive them — no evidence calculation, no progression
+ * policy, no recovery policy and no adaptive adjustment appears in this stage, and the fields below are
+ * its only access to anything adaptive.
  *
- * Four of the five lists and maps are ordered or keyed by the *vocabulary*, never by insertion:
- * [recentExposureByFocus] and [recentLoadByFocus] are read as counts per focus (a map lookup, never
- * an iteration whose order could rank anything), and the "most recent first" lists are read by index
- * — so a caller that builds them in a different order gets a different plan only when it states a
+ * The maps are read as lookups per focus and the "most recent first" lists by index, never by iteration
+ * order, so a caller that builds them in a different order gets a different plan only when it states a
  * different fact.
  *
- * @property userPreferredExerciseIds the exercises **the user** asked for, most preferred first.
- *   §9's first level: user choice outranks everything below it, including an adaptive preference
- *   (the request states both, so their order is a fact of the request rather than an assumption).
- * @property adaptivePreferredExerciseIds the exercises the adaptive layer would prefer, most
- *   preferred first — §9's *"adaptive preference"* level. A plain input: this stage neither
- *   calculates nor interprets it.
- * @property recentExerciseIds the exercises used most recently, most recent first — §9's
- *   *"recency"* axis. An exercise absent from the list has not been used recently, which is a fact
- *   about the list and not a missing value.
- * @property recentExposureByFocus how much exposure each focus has recently had, in **assignments**
- *   — the unit the planner itself allocates. §8's *"weighted exposure, not simple workout counts"*:
- *   a focus's entry is the weight that focus already carried, not a count of workouts, so one
- *   workout that trained two focuses contributes to two entries. The planner adds its own
- *   assignments to this figure; it never derives the figure.
- * @property recentLoadByFocus how many sets of each focus were recently performed — §8's *"recent
- *   load"*, and §17's prohibition honoured: this is a **count of sets the caller supplied**, not a
- *   scalar load score, and nothing in the domain converts it into one or compares two focuses'
- *   values with each other. Used only as the soft penalty described on
+ * @property userPreferredExerciseIds the exercises **the user** asked for, most preferred first. User
+ *   choice outranks everything below it, including an adaptive preference — the request states both, so
+ *   their order is a fact of the request rather than an assumption about who is right.
+ * @property adaptivePreferredExerciseIds the exercises the adaptive layer would prefer, most preferred
+ *   first. A plain input: this stage neither calculates nor interprets it.
+ * @property recentExerciseIds the exercises used most recently, most recent first. An exercise absent
+ *   from the list has not been used recently, which is a fact about the list and not a missing value.
+ * @property recentExposureByFocus how much exposure each focus has recently had, in **assignments** —
+ *   the unit the planner itself allocates. A focus's entry is the weight it already carried, not a
+ *   count of workouts, so one workout that trained two focuses contributes to two entries. The planner
+ *   adds its own assignments to this figure; it never derives the figure.
+ * @property recentLoadByFocus how many sets of each focus were recently performed — a **count of sets
+ *   the caller supplied**, not a scalar load score, and nothing in the domain converts it into one or
+ *   compares two focuses' values with each other. Used only as the soft penalty described on
  *   [GenerationPolicy.recentLoadThreshold].
- * @property recovery the recovery context generation is planned in (§14's own vocabulary, reused
- *   rather than restated).
+ * @property recovery the recovery context generation is planned in, reused rather than restated.
  */
 data class GenerationPreferences(
     val userPreferredExerciseIds: List<String> = emptyList(),
@@ -147,38 +127,24 @@ data class GenerationPreferences(
 }
 
 /**
- * Everything the Generated Planner is given: §30 step 10's **pure input**.
+ * Everything the Generated Planner is given: the whole **pure input**.
  *
- * The list of what is *not* here is the contract:
+ * The list of what is *not* here is the contract: no Room, DAO, repository or ViewModel; no Android,
+ * Context, resources or library port; no Clock, Random, mutable state or legacy generator. The domain
+ * keeps Android and persistence out, identity and time are injectable so a pure engine can stay pure,
+ * and generation forbids an uncontrolled random source — and none of those could be expressed by this
+ * type even if a later edit wanted it to: the request holds values, and the only port the generator
+ * needs — a draft identity source — is held by the editor that builds the draft.
  *
- * ```text
- * no Room        no DAO          no repository      no ViewModel
- * no Android     no Context      no resources       no library port
- * no Clock       no Random       no mutable state   no legacy WorkoutGenerator
- * ```
+ * It states **what** to plan ([focus], [schedule], [duration]) and **from what** — the candidates the
+ * caller allows, the equipment the user has, and the plain signals above. It carries no date: the plan
+ * is a plan, not a calendar, and which dates it lands on stays the Scheduler's decision.
  *
- * §25 keeps Android and persistence out of the domain, §26 makes identity and time injectable so a
- * pure engine can stay pure, and §9 forbids an uncontrolled random source in generation. Not one of
- * those things could be expressed by this type even if a later edit wanted it to: the request holds
- * values, and the only ports the generator needs — a draft identity source — are held by the editor
- * that builds the draft, not by the plan.
- *
- * The request states **what** to plan ([focus], [schedule], [duration]) and **from what** — the
- * candidates the caller allows, the equipment the user has, and the plain signals above. It carries
- * no date: the plan is a plan, not a calendar, and which dates it lands on stays the Scheduler's
- * decision (§20, §30 step 7).
- *
- * @property focus the Goals & Focus configuration the plan is built for (§8).
- * @property schedule the weekly rhythm, which fixes how many slots a week holds (§20).
- * @property duration how long the Program runs, which fixes how many whole weeks the plan covers.
- * @property candidates the exercises the caller allows: the user's selection, with its metadata and
- *   focus membership. A candidate the equipment cannot support is still listed — the planner reports
- *   it instead of choosing it (§9's *"hard execution constraints must never be silently violated"*).
+ * @property candidates the exercises the caller allows. A candidate the equipment cannot support is
+ *   still listed — the planner reports it instead of choosing it, so a hard constraint is never
+ *   silently violated.
  * @property availableEquipment the equipment the user has. A candidate whose requirements are not a
  *   subset of this set is never selected, whatever else prefers it.
- * @property preferences the plain signals above; empty by default.
- * @property policy the explicit numbers generation uses ([GenerationPolicy]).
- * @param E the caller's equipment vocabulary.
  */
 data class GenerationRequest<E>(
     val focus: FocusPlan,
@@ -211,10 +177,10 @@ data class GenerationRequest<E>(
     /**
      * The focuses this request can actually plan, in the vocabulary's canonical order.
      *
-     * A focus is plannable when at least one candidate trains it *and* may be selected: an exercise
-     * the equipment forbids, or one prescribed in a dimension the domain does not implement, cannot
-     * put a focus on a plan. Allocation runs over this set, so a hard constraint is honoured by the
-     * plan's own shape rather than by a filter applied after it.
+     * A focus is plannable when at least one candidate trains it *and* may be selected: an exercise the
+     * equipment forbids, or one prescribed in a dimension the domain does not implement, cannot put a
+     * focus on a plan. Allocation runs over this set, so a hard constraint is honoured by the plan's own
+     * shape rather than by a filter applied after it.
      */
     val plannableFocuses: List<Focus>
         get() = FocusPlan.canonical(
@@ -234,19 +200,19 @@ data class GenerationRequest<E>(
     }
 
     /**
-     * The number of slots the plan covers: the weekly rhythm's slots, times the whole weeks the
-     * duration covers.
+     * The number of slots the plan covers: the weekly rhythm's slots, times the whole weeks the duration
+     * covers.
      *
-     * A fixed Program uses its own length in whole weeks (at least [GenerationPolicy.minimumCycleWeeks]
-     * — §9 of the stage's brief: *"for fixed Programs, do not invent a second calendar-duration
-     * interpretation"*), and an indefinite one uses the §20 planning horizon's whole weeks. The
-     * result is a count of **plan days**, not of dates: which dates those days land on remains the
-     * Scheduler's decision, and nothing here reads a calendar, a clock or a weekday.
+     * A fixed Program uses its own length in whole weeks (at least [GenerationPolicy.minimumCycleWeeks],
+     * so no second calendar-duration interpretation is invented), and an indefinite one uses the
+     * planning horizon's whole weeks. The result is a count of **plan days**, not of dates: which dates
+     * those days land on remains the Scheduler's decision, and nothing here reads a calendar, a clock or
+     * a weekday.
      */
     val slotCount: Int
         get() = sessionsPerWeek * cycleWeeks
 
-    /** How many training opportunities one week of this schedule holds (§20). */
+    /** How many training opportunities one week of this schedule holds. */
     val sessionsPerWeek: Int
         get() = when (schedule) {
             is ProgramSchedule.FixedWeekdays -> schedule.weekdays.size
@@ -265,10 +231,10 @@ data class GenerationRequest<E>(
         /**
          * Whether a generated element may be prescribed in [dimension].
          *
-         * Only the two dimensions §10 gives a subtype are prescribable. The other three are
-         * *representable and unimplemented* — a hand-authored plan may state them, and a generator
-         * may not invent an algorithm for them — so a candidate in one of them is reported as
-         * unusable rather than prescribed as something the domain cannot mean.
+         * Only the two dimensions with a prescription subtype are prescribable. The other three are
+         * *representable and unimplemented* — a hand-authored plan may state them, and a generator may
+         * not invent an algorithm for them — so a candidate in one of them is reported as unusable
+         * rather than prescribed as something the domain cannot mean.
          */
         fun prescribes(dimension: PrescriptionDimension): Boolean = when (dimension) {
             PrescriptionDimension.REP_BASED, PrescriptionDimension.TIME_BASED -> true

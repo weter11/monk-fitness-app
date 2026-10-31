@@ -3,62 +3,43 @@ package com.monkfitness.app.domain.program.generated
 import com.monkfitness.app.domain.program.PLANNING_HORIZON_DAYS
 
 /**
- * The Generated Planner's **explicit** numbers — every figure the blueprint leaves open, in one
- * value, each one an owner decision rather than a fact.
+ * The Generated Planner's **explicit** numbers — every figure the blueprint leaves open, in one value,
+ * each one an owner decision rather than a fact.
  *
- * §8 says it twice: *"soft recovery penalties"*, *"exact coefficients are not yet fixed"*. §9 says the
- * same thing about selection. A generator still has to produce *something* for those open numbers,
- * and there are only two honest ways to do it: leave the plan ungenerated, or state the numbers
- * plainly, in one place, as decisions. This type is the second.
+ * A generator still has to produce *something* for numbers the spec leaves unfixed, and there are only
+ * two honest ways to do it: leave the plan ungenerated, or state the numbers plainly in one place. This
+ * type is the second. Three rules hold for everything here: a number the planner uses is a property with
+ * a default and a sentence saying what it decides, never a private constant inside the arithmetic; no
+ * field is presented as physiological truth — no load score, no readiness percentage, no per-exercise
+ * difficulty, but a *count of assignments* or a *count of sets the caller supplied*; and no field is a
+ * hard rule the blueprint forbids — the recovery fields are soft preferences with a documented fallback
+ * and cannot move a workout, change a frequency or duration, replace a focus or cancel a plan.
  *
- * Three rules hold for everything here, and they are the reason this is a value rather than a
- * scattering of literals:
+ * The two prescription shapes are the ones the blueprint itself writes out (`12 / 10 / 8 / 6` and
+ * `30s / 30s / 45s`), used verbatim — but as the **fallback**, not the rule: an exercise whose catalogue
+ * metadata states a progression range is prescribed at that range's lower bound for the catalogue's own
+ * set count, and these lists answer only for a candidate that states no range. They are kept so that
+ * "the canonical shapes, verbatim" stays expressible by a caller that wants it.
  *
- *  * **nothing is hidden.** A number the planner uses is a property of this type with a default in
- *    [Companion] and a sentence explaining what it decides. There is no private constant inside the
- *    allocation arithmetic, no implicit fallback and no tuned value smuggled into a comparison.
- *  * **nothing is presented as physiological truth.** No field here is a load score, a readiness
- *    percentage or a per-exercise difficulty. Where §17 forbids a universal scalar, this type offers
- *    a *count of assignments* or a *count of confirmed sets supplied by the caller* — and says so.
- *  * **nothing is a hard rule the blueprint forbids.** The recovery fields are soft preferences with
- *    a documented fallback; no field here can move a workout, change the frequency or the duration,
- *    replace a focus or cancel a plan (§14).
- *
- * Two defaults are not invented at all: the two prescription shapes are the ones §10 itself writes
- * out (`12 / 10 / 8 / 6` and `30s / 30s / 45s`), used verbatim. They are the **fallback** now, not
- * the rule: an exercise whose catalogue metadata states a progression range is prescribed at that
- * range's lower bound for the catalogue's own set count, and these two lists answer only for a
- * candidate that states no range. They are kept rather than removed so that "§10's shapes, verbatim"
- * stays expressible by a caller that wants it.
- *
- * @property secondaryFocusLimit how many secondary focuses a slot may take (§8 allows `0–2`; the
- *   default is the maximum §8 permits).
  * @property cautiousSecondaryFocusLimit how many secondary focuses a slot may take when the recovery
- *   context is [com.monkfitness.app.domain.adaptive.RecoveryContext.CAUTIOUS] — §14's *"recovery can
- *   make progression more conservative"*. It never affects the primary focus, the number of slots,
- *   the schedule or the duration: a cautious context narrows what a workout stacks, and nothing else.
- * @property indefiniteCycleWeeks how many whole weeks an indefinite Program's generated plan covers.
- *   It is [PLANNING_HORIZON_DAYS] `/ 7` — the horizon §20 and §30 step 7 established for an indefinite
- *   Program, expressed in the whole weeks a plan is made of. A fixed Program uses its own duration
- *   instead ([minimumCycleWeeks]); no second calendar interpretation is introduced.
- * @property minimumCycleWeeks the shortest cycle the planner will build, whatever the duration says.
+ *   context is [com.monkfitness.app.domain.adaptive.RecoveryContext.CAUTIOUS]. It never affects the
+ *   primary focus, the number of slots, the schedule or the duration: a cautious context narrows what a
+ *   workout stacks, and nothing else.
+ * @property indefiniteCycleWeeks how many whole weeks an indefinite Program's generated plan covers —
+ *   [PLANNING_HORIZON_DAYS] `/ 7`. A fixed Program uses its own duration instead
+ *   ([minimumCycleWeeks]); no second calendar interpretation is introduced.
  * @property recoveryWindowSlots how many slots back a primary focus is remembered for the **soft**
- *   recovery penalty. A focus inside this window is only passed over when another eligible focus
- *   still needs exposure; when none does, the same focus may lead two workouts in a row. That is what
- *   makes it a preference and not §14's forbidden universal hard 48-hour rule — a rule with no
- *   fallback would be exactly a two-day rule expressed in slots.
- * @property recentLoadThreshold how many sets of a focus, recently performed, make that focus
- *   *loaded* for the soft load penalty. The value is a **count of sets the caller supplied**, never a
- *   scalar load score (§17) and never a conversion between focuses; nothing here compares a
- *   conditioning set with a pressing set. Like the recovery penalty it is soft: a loaded focus is
+ *   recovery penalty. A focus inside this window is only passed over when another eligible focus still
+ *   needs exposure; when none does, the same focus may lead two workouts in a row — which is what makes
+ *   it a preference and not a forbidden universal 48-hour rule.
+ * @property recentLoadThreshold how many recently performed sets of a focus make it *loaded* for the
+ *   soft load penalty. The value is a **count of sets the caller supplied**, never a scalar load score
+ *   and never a conversion between focuses. Like the recovery penalty it is soft: a loaded focus is
  *   passed over only while another eligible focus still needs exposure.
- * @property repPrescriptionTargets the repetition prescription a generated `REP_BASED` element
- *   carries, per set — §10's own example shape, used unchanged. Read only for a candidate whose
- *   metadata states no repetition range; a candidate that states one is prescribed at its lower
- *   bound instead ([com.monkfitness.app.domain.program.generated.GeneratedPlanner]).
- * @property timePrescriptionTargets the duration prescription a generated `TIME_BASED` element
- *   carries, in seconds per set — §10's other example shape, used unchanged. The same fallback
- *   rule as [repPrescriptionTargets], for a candidate with no duration range.
+ * @property repPrescriptionTargets the repetition prescription a generated `REP_BASED` element carries,
+ *   per set — read only for a candidate whose metadata states no repetition range.
+ * @property timePrescriptionTargets the duration prescription a generated `TIME_BASED` element carries,
+ *   in seconds per set — the same fallback rule, for a candidate with no duration range.
  */
 data class GenerationPolicy(
     val secondaryFocusLimit: Int = DEFAULT_SECONDARY_FOCUS_LIMIT,
@@ -102,21 +83,21 @@ data class GenerationPolicy(
 
     companion object {
 
-        /** §8's ceiling on secondary focuses: *"1 primary focus and 0–2 secondary focuses per slot"*. */
+        /** The ceiling on secondary focuses: 1 primary and 0–2 secondary focuses per slot. */
         const val MAX_SECONDARY_FOCUSES: Int = 2
 
-        /** §8's ceiling, used as the default. */
+        /** The ceiling, used as the default. */
         const val DEFAULT_SECONDARY_FOCUS_LIMIT: Int = MAX_SECONDARY_FOCUSES
 
         /**
-         * One secondary focus while the recovery context is cautious — §14's *"make progression more
-         * conservative"*, read as "stack less", which is the only reading that touches no focus,
-         * no day and no schedule.
+         * One secondary focus while the recovery context is cautious — "make progression more
+         * conservative" read as "stack less", the only reading that touches no focus, no day and no
+         * schedule.
          */
         const val DEFAULT_CAUTIOUS_SECONDARY_FOCUS_LIMIT: Int = 1
 
         /**
-         * An indefinite Program's plan covers the §20 horizon in whole weeks — 30 days is 4 whole
+         * An indefinite Program's plan covers the planning horizon in whole weeks — 30 days is 4 whole
          * weeks, and the days beyond the horizon are planned when the horizon rolls forward.
          */
         const val DEFAULT_INDEFINITE_CYCLE_WEEKS: Int = PLANNING_HORIZON_DAYS / 7
@@ -130,10 +111,10 @@ data class GenerationPolicy(
         /** Six sets of one focus, recently performed, is the soft load penalty's threshold. */
         const val DEFAULT_RECENT_LOAD_THRESHOLD: Int = 6
 
-        /** §10's repetition example, used unchanged — the fallback for a candidate with no range. */
+        /** The repetition example shape, used unchanged — the fallback for a candidate with no range. */
         val DEFAULT_REP_PRESCRIPTION_TARGETS: List<Int> = listOf(12, 10, 8, 6)
 
-        /** §10's duration example, used unchanged — the same fallback, in seconds. */
+        /** The duration example shape, used unchanged — the same fallback, in seconds. */
         val DEFAULT_TIME_PRESCRIPTION_TARGETS: List<Int> = listOf(30, 30, 45)
 
         /** The policy the composition root uses until an owner decision says otherwise. */

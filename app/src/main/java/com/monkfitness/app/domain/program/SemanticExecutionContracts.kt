@@ -1,6 +1,6 @@
 package com.monkfitness.app.domain.program
 
-/** Pure execution contracts for Stage 1; no Room, clock, repository, or adaptive state machine. */
+/** Pure execution contracts: no Room, clock, repository, or adaptive state machine. */
 enum class WorkRequirement { REQUIRED, OPTIONAL }
 
 data class PlannedWork(

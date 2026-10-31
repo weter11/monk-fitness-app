@@ -5,47 +5,32 @@ import com.monkfitness.app.domain.common.RevisionId
 import java.time.Instant
 
 /**
- * One immutable revision of a Program's structure (§6).
+ * One immutable revision of a Program's structure.
  *
  * The Program's identity is stable for its whole life; every *structural* change — mode, duration,
  * frequency, schedule, exercise selection, generated plan, ordering, prescriptions, pinning, a manual
- * workout change — produces a new revision instead of editing this one. Renaming, describing,
- * selecting, starting, pausing, finishing, archiving and setting a planned start date do **not**
- * create one, which is why none of those facts live here: they belong to [Program].
+ * workout change — produces a new revision instead of editing this one. Renaming, describing, selecting,
+ * starting, pausing, finishing, archiving and setting a planned start date do **not** create one, which is
+ * why none of those facts live here: they belong to [Program].
  *
- * Immutability is the contract, so this type is a value: every property is a `val` of an immutable
- * type, there is no setter, and there is no operation that mutates an existing revision. A "change"
- * is a new `ProgramRevision` with a new [revisionId] — the previous one keeps describing exactly
- * what it described before, which is what lets a session started under it stay explained.
+ * Immutability is the contract: every property is a `val` of an immutable type, there is no setter, and
+ * nothing mutates an existing revision. A "change" is a new `ProgramRevision` with a new [revisionId] — the
+ * previous one keeps describing exactly what it described before, which is what lets a session started
+ * under it stay explained.
  *
  * Three facts are held consistent at construction:
  *
  *  * a saved revision carries a **plan** ([days] is never empty). An editor's work in progress is a
- *    `ProgramEditorDraft`, and that is the only place an incomplete plan is representable;
+ *    `ProgramEditorDraft`, the only place an incomplete plan is representable;
  *  * the plan days are numbered `1..n` in order, so a day's position is a usable index and never a
  *    silently duplicated or skipped coordinate;
- *  * [revisionNumber] counts from 1 for the user's benefit only — it is human-readable, and identity
- *    is [revisionId] (§23 "Revision has real revisionId").
+ *  * [revisionNumber] counts from 1 for the user's benefit only — it is human-readable, and identity is
+ *    [revisionId].
  *
- * @property revisionId identity of this revision, minted when it is saved.
- * @property programId the Program this revision belongs to.
- * @property revisionNumber the human-readable ordinal, 1-based; never an identity.
- * @property mode manual or generated. Mode is revision content: switching it is a structural change.
- * @property duration how long this revision runs.
- * @property schedule when its slots fall.
- * @property days the revision's plan, ordered by position.
- * @property createdAt when this revision was saved.
- * @property focus the Goals & Focus configuration the plan is built for (§8): the goal, and the
- *   focuses it states — the whole vocabulary for `BALANCED`, the named focuses for `FOCUSED`, the
- *   user's percentages for `CUSTOM`. It defaults to `BALANCED`, which is the configuration that
- *   states nothing: a plan built before Goals & Focus existed was built for every focus with no share
- *   stated, and reading it as anything else would put words in the user's mouth.
- * @property preferredExercises the exercises the user would rather the generator reach for, most
- *   preferred first (§9's *user choice*). Revision content for the same reason [focus] is: §6's rule is
- *   that *structural/program-behavior* changes create a new revision, and a stated generation input is
- *   program behaviour even when not one exercise moved. It defaults to `ExercisePreference.NONE`,
- *   which is what a revision written before this field existed must mean — the user named nothing —
- *   rather than an ordering of the catalogue, which no user ever stated.
+ * [focus] defaults to `BALANCED`, which states nothing: a plan built before Goals & Focus existed was
+ * built for every focus with no share stated, and reading it as anything else would put words in the user's
+ * mouth. [preferredExercises] defaults to `ExercisePreference.NONE` for the same reason — the user named
+ * nothing, rather than an ordering of the catalogue no user ever stated.
  */
 data class ProgramRevision(
     val revisionId: RevisionId,
@@ -81,7 +66,7 @@ data class ProgramRevision(
 
     companion object {
 
-        /** The first revision of a Program — every Program is created with one (§27). */
+        /** The first revision of a Program — every Program is created with one. */
         const val FIRST_REVISION_NUMBER = 1
     }
 }

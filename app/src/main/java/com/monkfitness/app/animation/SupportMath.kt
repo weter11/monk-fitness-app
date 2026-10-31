@@ -3,38 +3,31 @@ package com.monkfitness.app.animation
 import kotlin.math.*
 
 /**
- * SupportMath is a generic biomechanical support computation engine.
- * Exposes methods to calculate effective support centroid, body lever length,
- * and the LeverModel without exercise-specific branching.
+ * Biomechanical support computation: support centroid, body lever length and the LeverModel, with
+ * no exercise-specific branching.
  */
 object SupportMath {
 
     /**
-     * B-4 — **THE canonical `SupportPoint` ↔ `Joint` mapping**: the single production definition of
-     * what each support point means. Every consumer resolves the side from here; no second map of
-     * this relation exists anywhere in `src/main` (guarded by `SupportPointMappingAuthorityTest`).
+     * The canonical `SupportPoint` -> `Joint` mapping: the single production definition of what each
+     * support point means. Every consumer resolves the side from here; no second map of this
+     * relation exists (guarded by `SupportPointMappingAuthorityTest`).
      *
-     * The convention is `docs/ENGINE.md` §4 ("Joint naming: A/P and F/B", an ACTIVE architecture
-     * document): **A = the active/foreground limb = the model's LEFT arm · P = the passive/
-     * background limb = the model's RIGHT arm · F = foreground = the model's LEFT leg · B =
-     * background = the model's RIGHT leg.** `A` and `F` are one physical side of the authored body
-     * (both authored at −Z by `BasePose.buildShoulders` / `buildPelvis` — the near limb of the
-     * single-plane silhouette) and `P`/`B` are the other (+Z, the far limb), so **`LEFT_*` is the
-     * A/F limb family and `RIGHT_*` is the P/B family** — never a cross-family pair. (Corroborated
-     * by `BirdDogPose` ("right arm (P) + left leg (F)" ↔ "left arm (A) + right leg (B)"),
-     * `PikePushUpPose` ("Right-Side (Side B)"), `WidePushUpPose` ("LEFT_HAND (HAND_A)"),
-     * `ARCHITECTURAL_AUDIT_SKELETON_MODEL.md` and the joint→chain map in `ConstraintSolver`.)
+     * A = the active/foreground limb = the model's LEFT arm; P = passive/background = its RIGHT arm;
+     * F = foreground = LEFT leg; B = background = RIGHT leg. A and F are one physical side of the
+     * authored body (both at -Z, the near limb of the single-plane silhouette), P and B the other
+     * (+Z, the far limb), so `LEFT_*` is the A/F family and `RIGHT_*` the P/B family — never a
+     * cross-family pair.
      *
-     * The **first** entry of each list is the support's *anchor joint* — the single representative
-     * used by the centroid/lever math ([anchorJointFor]) — and the remaining entries are the derived
-     * contact-layer joints that touch the surface (heel/toe of an ankle, the palm chain of a hand).
-     * `*_FOOT` anchors the ankle (whole foot planted) while `*_TOES` anchors the toe end (how the
-     * plank/push-up families declare their planted foot): the two name the SAME `{ankle, heel, toe}`
-     * support, exactly as `*_HAND` and `*_FOREARM` name the same forearm support for the arm.
+     * The **first** entry of each list is the anchor joint, the single representative the
+     * centroid/lever math uses ([anchorJointFor]); the rest are the derived contact-layer joints that
+     * touch the surface (heel/toe of an ankle, the palm chain of a hand). `*_FOOT` anchors the ankle
+     * (whole foot planted) while `*_TOES` anchors the toe end, but the two name the SAME
+     * `{ankle, heel, toe}` support, exactly as `*_HAND` and `*_FOREARM` name the same forearm support.
      *
-     * The CORE points (`HIPS`/`BACK`/`PELVIS`) are the only side-independent entries — the pelvis
-     * region is not a paired limb. `CUSTOM` maps to no joint at all: an opaque point the caller
-     * owns, so the engine never invents a joint for it.
+     * `HIPS`/`BACK`/`PELVIS` are the only side-independent entries — the pelvis region is not a
+     * paired limb. `CUSTOM` maps to no joint at all: an opaque point the caller owns, so the engine
+     * never invents a joint for it.
      */
     private val jointsBySupportPoint: Map<SupportPoint, List<Joint>> = mapOf(
         SupportPoint.LEFT_FOOT to listOf(Joint.ANKLE_F, Joint.HEEL_F, Joint.TOE_F),
@@ -56,14 +49,11 @@ object SupportMath {
     )
 
     /**
-     * B-4 — the canonical **inverse index**: every support point whose canonical joint family
-     * contains [joint], ordered by the declaration-family precedence the extremity derivation uses
-     * (the `SupportPoint` enumeration order: `*_FOOT` before `*_TOES`, `*_HAND` before `*_FOREARM`).
-     *
-     * This is what makes the "declaration family" resolution (B-3) a *consequence* of the canonical
-     * map instead of a second, hand-written joint→side pair: a foot's family can no longer disagree
-     * with the joints the same map names for those support points. Precomputed once, so lookups in
-     * the per-frame derivation paths allocate nothing.
+     * The inverse index: every support point whose canonical family contains [joint], ordered by
+     * declaration-family precedence (`*_FOOT` before `*_TOES`, `*_HAND` before `*_FOREARM`). This
+     * makes family resolution a consequence of the canonical map instead of a second hand-written
+     * joint->side pair that could disagree with it. Precomputed, so per-frame lookups allocate
+     * nothing.
      */
     private val supportPointsByJoint: Map<Joint, List<SupportPoint>> =
         Joint.entries.associateWith { joint ->
@@ -74,26 +64,22 @@ object SupportMath {
     fun jointsFor(point: SupportPoint): List<Joint> = jointsBySupportPoint[point] ?: emptyList()
 
     /**
-     * The anchor joint of [point] — the single joint that represents the support in centroid/lever
-     * math (the ankle of a whole-foot support, the toe of a `*_TOES` support, the elbow of a
-     * forearm support, the pelvis of a core support) — or `null` when the point has no canonical
-     * joint (`CUSTOM`).
+     * The joint representing [point] in centroid/lever math — the ankle of a whole-foot support, the
+     * toe of a `*_TOES` support, the elbow of a forearm support, the pelvis of a core support — or
+     * `null` when the point has no canonical joint (`CUSTOM`).
      */
     fun anchorJointFor(point: SupportPoint): Joint? = jointsFor(point).firstOrNull()
 
     /**
-     * The support points whose canonical family contains [joint], in declaration-family precedence
-     * — e.g. `ANKLE_F → [LEFT_FOOT, LEFT_TOES]` (the whole-foot kind first), `HAND_A →
-     * [LEFT_HAND, LEFT_FOREARM]`. Empty when no support point is defined over [joint].
+     * The support points whose canonical family contains [joint], in declaration-family precedence —
+     * e.g. `ANKLE_F -> [LEFT_FOOT, LEFT_TOES]`, `HAND_A -> [LEFT_HAND, LEFT_FOREARM]`. Empty when no
+     * support point is defined over [joint].
      */
     fun supportPointsFor(joint: Joint): List<SupportPoint> = supportPointsByJoint[joint] ?: emptyList()
 
     /**
-     * Determines the automatic/effective body lever length based on the PivotType.
-     * - FEET: shin + thigh + torso
-     * - KNEES: thigh + torso
-     * - HANDS: torso
-     * - Others / CUSTOM: custom or fallback (e.g., 0f or user-defined)
+     * The effective body lever length for a pivot: FEET = shin + thigh + torso, KNEES = thigh +
+     * torso, HANDS = torso, CUSTOM = [customLength], anything else 0.
      */
     fun computeLeverLength(pivot: PivotType, definition: SkeletonDefinition, customLength: Float = 0f): Float {
         return when (pivot) {
@@ -106,15 +92,11 @@ object SupportMath {
     }
 
     /**
-     * Computes the support centroid (the average position of all active support contacts).
+     * The support centroid: the average position of the active contacts' anchor joints. Resolving
+     * each through the canonical map means the centroid can never be built from the opposite side's
+     * joints; a contact with no canonical joint (`CUSTOM`) contributes nothing.
      *
-     * B-4 — each contact contributes its canonical ANCHOR joint ([anchorJointFor]), resolved from
-     * the single canonical map, so the centroid can never be built from the opposite side's joints
-     * (a whole foot is represented by its ankle, a `*_TOES` support by its toe, a forearm support by
-     * its elbow). A contact with no canonical joint (`CUSTOM`) contributes nothing.
-     *
-     * If the set of contacts is empty (or contributes no joint), falls back to the pivot position or
-     * zero.
+     * Falls back to [fallback] when there are no contacts or none of them yields a joint.
      */
     fun computeSupportCentroid(
         pose: SkeletonPose,
@@ -140,11 +122,10 @@ object SupportMath {
     }
 
     /**
-     * Determines the pivot position in world coordinates from the pose based on PivotType.
+     * The pivot position in world coordinates: the two limbs' midpoint for the paired pivots.
      *
-     * The local names are the CANONICAL joint names on purpose: the pivot is the two limbs'
-     * midpoint, and naming a `*_B`/`*_P` joint "left" (or a `*_F`/`*_A` one "right") is the exact
-     * inversion B-4 removed (a symmetric average hid it, but the name taught it).
+     * The local names are the canonical joint names on purpose — naming a `*_B`/`*_P` joint "left"
+     * (or a `*_F`/`*_A` one "right") is an inversion the symmetric average hides but the name teaches.
      */
     fun getPivotPosition(pose: SkeletonPose, pivot: PivotType): Vector3 {
         return when (pivot) {
@@ -177,9 +158,6 @@ object SupportMath {
         }
     }
 
-    /**
-     * Computes the full LeverModel.
-     */
     fun computeLeverModel(
         pose: SkeletonPose,
         definition: SkeletonDefinition,
@@ -192,9 +170,6 @@ object SupportMath {
         return LeverModel(len, pivotPos)
     }
 
-    /**
-     * Resolves an anchor by its ID from the environment definition.
-     */
     fun resolveAnchor(environment: EnvironmentDefinition, anchorId: String): EnvironmentAnchor? {
         val anchors = environment.anchors
         for (i in 0 until anchors.size) {
@@ -206,17 +181,11 @@ object SupportMath {
         return null
     }
 
-    /**
-     * Resolves the world position of an anchor by its ID, with a fallback Vector3.
-     */
     fun resolveAnchorPosition(environment: EnvironmentDefinition, anchorId: String, fallback: Vector3): Vector3 {
         val anchor = resolveAnchor(environment, anchorId)
         return anchor?.worldPosition ?: fallback
     }
 
-    /**
-     * Resolves an anchor by its type from the environment definition.
-     */
     fun resolveAnchorByType(environment: EnvironmentDefinition, type: EnvironmentAnchorType): EnvironmentAnchor? {
         val anchors = environment.anchors
         for (i in 0 until anchors.size) {

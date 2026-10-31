@@ -4,16 +4,16 @@ import com.monkfitness.app.domain.common.ProgramExerciseId
 import com.monkfitness.app.domain.prescription.Prescription
 
 /**
- * Who authored one plan element (§7).
+ * Who authored one plan element.
  *
- * Regeneration is reconciliation, not replacement, and the precedence is what makes that possible:
- * a pinned element outranks everything, an explicit user change outranks compatible ones, and pure
- * generated content is the only thing a regenerate pass may freely replace.
+ * Regeneration is reconciliation, not replacement, and the precedence is what makes that possible: a
+ * pinned element outranks everything, an explicit user change outranks compatible ones, and pure generated
+ * content is the only thing a regenerate pass may freely replace.
  *
  * Only two facts are stored, because the four levels of that precedence are derivable from them plus
  * [ProgramExercise.isPinned]: a generated element the user then edited is [USER_AUTHORED], and
- * "compatible" versus "conflicting" is a comparison the editor makes when it reconciles, not a
- * property to be frozen here.
+ * "compatible" versus "conflicting" is a comparison the editor makes when it reconciles, not a property
+ * frozen here.
  */
 enum class ProgramExerciseOrigin {
 
@@ -27,43 +27,23 @@ enum class ProgramExerciseOrigin {
 /**
  * One occurrence of one exercise in a day's plan.
  *
- * The identity is the occurrence, not the exercise: the same exercise used twice in a day is two
- * elements with two [ProgramExerciseId]s, so pinning, overriding or adapting one of them cannot
- * silently change the other (§9). [exerciseId] is the Exercise Library key and stays opaque here —
- * the domain never resolves it, so no exercise catalogue, no equipment rule and no Android type
- * reaches this model.
+ * The identity is the occurrence, not the exercise: the same exercise used twice in a day is two elements
+ * with two [ProgramExerciseId]s, so pinning, overriding or adapting one cannot silently change the other.
+ * [exerciseId] is the Exercise Library key and stays opaque here — the domain never resolves it, so no
+ * exercise catalogue, no equipment rule and no Android type reaches this model.
  *
- * [prescription] is owned by the plan, never by the library: editing what a program prescribes must
- * not touch exercise metadata (§10), and a manual program's prescription is free of generator
- * ranges.
+ * [prescription] is owned by the plan, never by the library: editing what a program prescribes must not
+ * touch exercise metadata, and a manual program's prescription is free of generator ranges.
  *
- * ### The focus this element was generated for
+ * [focus] is the focus assignment this occurrence **represents** in the generated plan it came from: the
+ * planner plans one element per assigned focus, in the assignment's own order, so the focus is a fact the
+ * plan already holds rather than a classification this model infers.
  *
- * [focus] is the `FocusAssignment` element this occurrence **represents** in the generated plan it came
- * from (§8): the planner plans one element per assigned focus, in the assignment's own order, so the
- * focus is a fact the plan already holds about the element rather than a classification this model
- * infers. It is stored because reconciliation used to drop it, which left no honest way to say later
- * which focus a *performed* exercise had been presented for.
- *
- * It is **nullable**, and that is the honest reading rather than a convenience default:
- *
- *  * a **generated** element states one — the planner assigned it;
- *  * a **user-authored** or **pinned** element states `null`, because the generator never said;
- *  * a row written before the field existed states `null`, and so does any manual program.
- *
- * No `DEFAULT` focus exists anywhere in this model. A default would invent a claim — that the element
- * trains something — that no assignment ever made, and §33's *no silent substitution* applies to stored
- * history exactly as it applies to a plan. `null` means *no focus was recorded*, which is a different
- * statement from *this element trains PUSH*.
- *
- * @property programExerciseId identity of this occurrence.
- * @property exerciseId the library key of the exercise performed here.
- * @property prescription what the element asks for, per set.
- * @property origin whether the generator or the user produced it.
- * @property isPinned whether the element is exempt from automatic change. Unpinning does not change
- *   the value — it only makes the element eligible for a future regenerate pass (§7).
- * @property focus the focus of the slot assignment this element serves when the generator produced it,
- *   and `null` when no assignment was ever recorded for it.
+ * It is **nullable**, and that is the honest reading rather than a convenience default: a generated
+ * element states one, while a user-authored or pinned element, a manual program and a row written before
+ * the field existed all state `null` because the generator never said. No `DEFAULT` focus exists anywhere
+ * in this model — a default would invent a claim that the element trains something, which no assignment
+ * ever made. `null` means *no focus was recorded*, a different statement from *this element trains PUSH*.
  */
 data class ProgramExercise(
     val programExerciseId: ProgramExerciseId,

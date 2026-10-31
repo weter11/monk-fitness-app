@@ -7,10 +7,9 @@ import android.graphics.Path
 import android.graphics.RectF
 
 /**
- * SkeletonSnapshotRenderer is a non-Compose, off-screen renderer for SkeletonPose.
- * It renders high-quality snapshots, sprite sheets, and contact sheets of arbitrary resolutions,
- * while matching the painter's algorithm sorting, ground/shadow projection, and styling of
- * the real-time Compose-based SkeletonRenderer.
+ * Non-Compose, off-screen renderer for SkeletonPose: snapshots, sprite sheets and contact sheets
+ * at arbitrary resolution, matching the painter's-algorithm sorting, ground/shadow projection and
+ * styling of the real-time Compose-based SkeletonRenderer.
  */
 class SkeletonSnapshotRenderer(
     private val engine: SkeletonEngine
@@ -18,13 +17,13 @@ class SkeletonSnapshotRenderer(
     private val pipeline = SkeletonPipeline(engine.definition)
     private val projector = SkeletonProjector()
     private val compensator = ScreenSpaceCompensation(ScreenSpaceSettings.DEFAULT)
-    // C1 — the viewport frame, the same rule the on-screen renderer uses: the snapshot surface is
+    // The viewport frame, the same rule the on-screen renderer uses: the snapshot surface is
     // whatever the caller asked for, so the athlete is framed from the pose's own drawn bounds.
     private val framing = CameraFraming(engine)
     private val skeletonBuffer = ProjectedSkeleton()
     private val scaleBuffer = ScreenSpaceScale()
 
-    // Pre-allocated RenderItems and index buffers to achieve zero allocation in the rendering loop
+    // Pre-allocated RenderItems and index buffers to achieve zero allocation in the render loop
     private val renderItems = Array(100) { RenderItem() }
     private val indices = IntArray(100)
 
@@ -56,19 +55,16 @@ class SkeletonSnapshotRenderer(
     }
 
     /**
-     * Renders a single frame of a SkeletonPose into a Bitmap.
+     * Renders a single frame into a Bitmap.
      *
-     * B-5 — the Frame Context used to DRAW is the Frame Context the frame is FINALIZED against.
-     * This method previously drew the real [environment] while finalizing through
-     * `produceFrame(pose)`, i.e. against the default flat ground and an empty support model; the
-     * declaration-derived Support Declaration is not recoverable from a bare pose (R8/R11 keep
-     * Production Metadata out of the carrier), so it is an explicit parameter here, exactly as on
-     * [SkeletonRenderer]. Both default to what the supplied frame already carries.
+     * The Frame Context used to DRAW must be the one the frame is FINALIZED against: the support
+     * declaration is not recoverable from a bare pose (Production Metadata stays out of the
+     * carrier), so it is an explicit parameter here as on [SkeletonRenderer]. Both default to what
+     * the supplied frame already carries.
      *
-     * C2 — [staticFrame] is the exercise's frame when the caller has one (a snapshot *sequence*
-     * derives it once and draws every frame of the motion through it, so the sheet shows one
-     * constant framing); a bare frame with no motion behind it is framed from its own drawn bounds
-     * (C1), which is the only rule available without the motion.
+     * [staticFrame] is the exercise's frame when the caller has one — a sequence derives it once
+     * and draws every frame through it, so the sheet shows one constant framing. A bare frame is
+     * framed from its own drawn bounds, the only rule available without the motion.
      */
     fun renderPose(
         pose: SkeletonPose,
@@ -90,9 +86,9 @@ class SkeletonSnapshotRenderer(
         }
 
         val finalizedPose = pipeline.produceFrame(pose, environment, supportedPoints).pose
-        // C2 — the viewport frame: the exercise's own frame when the caller holds one (the same frame
-        // for every frame of the sequence), otherwise the drawn frame's own bounds (C1), so the
-        // athlete is drawn whole on the surface the caller asked for either way.
+        // The exercise's own frame when the caller holds one (the same frame for every frame of the
+        // sequence), otherwise the drawn frame's own bounds, so the athlete is drawn whole on the
+        // surface the caller asked for either way.
         val frame = staticFrame
         if (frame != null) frame.applyTo(camera)
         else camera.zoom = framing.frameZoom(camera, finalizedPose, width.toFloat(), height.toFloat())
@@ -106,30 +102,24 @@ class SkeletonSnapshotRenderer(
             groundLevel = environment.ground.level
         )
 
-        // 1. Draw Background (None)
-
-        // 2. Draw Ground Grid and Shadows
+        // Ground grid and shadows
         if (showGround && environment.ground.visible) {
             drawGround(canvas, camera)
         }
 
-        // 3. Draw Environment Props (Boxes, Steps, Benches, Walls)
+        // Environment props (boxes, steps, benches, walls)
         drawEnvironment(canvas, environment, camera, width.toFloat(), height.toFloat())
 
-        // 4. Draw Skeleton (Bones, Joints, Torso Faces in correct depth order)
+        // Skeleton (bones, joints, torso faces in depth order)
         drawSkeleton(canvas, camera)
-
-        // 5. Draw Foreground (None)
 
         return bitmap
     }
 
     /**
-     * Renders multiple frames across a PoseBuilder's lifecycle into an ExerciseSnapshotSequence.
-     *
-     * C2 — the whole sequence is drawn at the exercise's own frame, derived from the builder's motion
-     * before the first frame is rendered, so the sheet shows the rep at one constant scale instead of
-     * re-framing every cell.
+     * Renders frames across a PoseBuilder's lifecycle into an ExerciseSnapshotSequence, all at the
+     * exercise's own frame — derived from the builder's motion before the first frame — so the sheet
+     * shows the rep at one constant scale instead of re-framing every cell.
      */
     fun renderSequence(
         poseBuilder: PoseBuilder,
@@ -143,10 +133,9 @@ class SkeletonSnapshotRenderer(
         transparentBackground: Boolean = true,
         backgroundColor: Int = android.graphics.Color.WHITE
     ): ExerciseSnapshotSequence {
-        // C2 — one frame for the whole sequence, from the builder's motion (the camera it is measured
-        // against is the authored viewpoint, not whatever frame the previous sequence left behind).
-        // The sequence draws one side (`Side.LEFT` below), and that is the side the frame is measured
-        // over.
+        // One frame for the whole sequence, from the builder's motion, measured against the authored
+        // viewpoint rather than whatever frame the previous sequence left behind. The sequence draws
+        // one side (`Side.LEFT` below), so that is the side the frame is measured over.
         val authoredCamera = Camera(poseBuilder.metadata.camera)
         val staticFrame = framing.exerciseFrame(
             camera = authoredCamera,
@@ -165,9 +154,9 @@ class SkeletonSnapshotRenderer(
                 pose = pose,
                 camera = camera,
                 environment = environment,
-                // B-5 — the Support Declaration of the pose being rendered must reach the pipeline:
-                // without it this off-screen path finalized every snapshot against an empty support
-                // model while drawing the real environment (the exact defect the audit found here).
+                // The pose's Support Declaration must reach the pipeline: without it this path
+                // finalizes every snapshot against an empty support model while drawing the real
+                // environment.
                 supportedPoints = poseBuilder.metadata.support.supportPoints,
                 width = width,
                 height = height,
@@ -247,7 +236,6 @@ class SkeletonSnapshotRenderer(
         val hh = pHeight / 2f
         val hd = pDepth / 2f
 
-        // Set corner positions
         propCorners[0].set(center.x - hw, center.y - hh, center.z - hd)
         propCorners[1].set(center.x + hw, center.y - hh, center.z - hd)
         propCorners[2].set(center.x + hw, center.y + hh, center.z - hd)
@@ -261,7 +249,6 @@ class SkeletonSnapshotRenderer(
             camera.project(propCorners[i], width, height, propProjected[i])
         }
 
-        // Calculate average depths
         for (i in 0 until 6) {
             val corners = FACE_INDICES[i]
             val d0 = propProjected[corners[0]].depth
@@ -272,7 +259,7 @@ class SkeletonSnapshotRenderer(
             propFaceSortItems[i].avgDepth = (d0 + d1 + d2 + d3) / 4f
         }
 
-        // Sorting faces from far to near (descending average depth)
+        // Painter's algorithm: sort faces far to near (descending average depth)
         for (i in 1 until 6) {
             val item = propFaceSortItems[i]
             val depth = item.avgDepth
@@ -284,7 +271,6 @@ class SkeletonSnapshotRenderer(
             propFaceSortItems[j + 1] = item
         }
 
-        // Draw sorted faces
         for (idx in 0 until 6) {
             val item = propFaceSortItems[idx]
             val fIdx = item.faceIndex
@@ -318,7 +304,6 @@ class SkeletonSnapshotRenderer(
         val style = engine.style
         var itemCount = 0
 
-        // Populate bones
         for (i in 0 until skeletonBuffer.boneCount) {
             val b = skeletonBuffer.bones[i]
             compensator.computeScale(b.p1, camera.zoom, scaleBuffer)
@@ -326,7 +311,6 @@ class SkeletonSnapshotRenderer(
             renderItems[itemCount++].populateBone(b, thickness, scaleBuffer.outlineScale)
         }
 
-        // Populate joints
         for (j in skeletonBuffer.indicators) {
             compensator.computeScale(j.point, camera.zoom, scaleBuffer)
             val radius = (if (j.id == Joint.HEAD_POS) style.headRadius else style.jointRadius) *
@@ -334,15 +318,13 @@ class SkeletonSnapshotRenderer(
             renderItems[itemCount++].populateJoint(j, radius, scaleBuffer.outlineScale)
         }
 
-        // Populate faces
         for (i in 0 until skeletonBuffer.faceCount) {
             renderItems[itemCount++].populateFace(skeletonBuffer.faces[i])
         }
 
-        // Initialize indices
         for (i in 0 until itemCount) indices[i] = i
 
-        // Insertion sort descending by depth
+        // Painter's algorithm: insertion sort descending by depth
         for (i in 1 until itemCount) {
             val idx = indices[i]
             val depth = renderItems[idx].depth
@@ -354,7 +336,6 @@ class SkeletonSnapshotRenderer(
             indices[j + 1] = idx
         }
 
-        // Draw sorted items
         for (i in 0 until itemCount) {
             val item = renderItems[indices[i]]
             when (item.type) {
@@ -363,7 +344,6 @@ class SkeletonSnapshotRenderer(
                     val color = convertColor(getZColor(item.depth, b.isForeground, style))
                     val outlineWidth = style.outlineWidth * item.outlineScale
 
-                    // Draw outline bone
                     val outlineColor = convertColor(androidx.compose.ui.graphics.Color(0xFF0A0F14))
                     paintStroke.color = outlineColor
                     paintStroke.strokeWidth = item.thickness + (outlineWidth * 2f)
@@ -371,7 +351,6 @@ class SkeletonSnapshotRenderer(
                     paintStroke.style = Paint.Style.STROKE
                     canvas.drawLine(b.p1.x, b.p1.y, b.p2.x, b.p2.y, paintStroke)
 
-                    // Draw inner bone
                     paintStroke.color = color
                     paintStroke.strokeWidth = item.thickness
                     canvas.drawLine(b.p1.x, b.p1.y, b.p2.x, b.p2.y, paintStroke)
@@ -381,13 +360,11 @@ class SkeletonSnapshotRenderer(
                     val color = convertColor(getZColor(item.depth, j.isIndicator, style))
                     val outline = 2f * item.outlineScale
 
-                    // Draw outline circle
                     val outlineColor = convertColor(androidx.compose.ui.graphics.Color(0xFF0A0F14))
                     paintFill.color = outlineColor
                     paintFill.style = Paint.Style.FILL
                     canvas.drawCircle(j.point.x, j.point.y, item.radius + outline, paintFill)
 
-                    // Draw inner circle
                     paintFill.color = color
                     canvas.drawCircle(j.point.x, j.point.y, item.radius, paintFill)
                 }

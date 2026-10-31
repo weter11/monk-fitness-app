@@ -4,14 +4,11 @@ import com.monkfitness.app.BuildConfig
 import kotlin.math.*
 
 /**
- * SkeletonPoseFinalizer is responsible for completing the 3D pose before it is projected to screen space.
- * It adds biomechanical details like Heel/Toe and Hand segments that are not part of the core PoseBuilder logic.
- * This stage ensures the 3D skeleton is anatomically complete and that all world positions and rotations are derived by FK traversal.
+ * Completes the 3D pose before projection: adds the heel/toe and hand segments that PoseBuilder does
+ * not build, and derives all world positions and rotations by FK traversal.
  *
- * The finalizer operates exclusively over a populated `pose.roots` hierarchy (the rotation-driven model).
- * A `SkeletonPose` reaching `finalize` must always supply `roots`; the legacy position-to-rotation
- * reconstruction bridge was removed in Phase E (RFC_ENGINE_CLEANUP_PLAN), so empty-`roots` input is
- * a programming error caught by a `check` at the top of [finalize].
+ * It operates exclusively over a populated `pose.roots` hierarchy; empty roots is a programming
+ * error caught by a `check` at the top of [finalize].
  */
 class SkeletonPoseFinalizer(
     private val definition: SkeletonDefinition
@@ -19,14 +16,10 @@ class SkeletonPoseFinalizer(
     private val outputPose = SkeletonPose()
     private val tempDir = Vector3()
 
-    // P8 (§6 Phase 4 / §3.3) — publication marker (DEBUG-only enforcement state for §3.3's
-    // immutability onset; the single-shot semantics are a plan §P8 IMPLEMENTATION DECISION, not
-    // new RFC rules, and the marker is runtime state on THIS finalizer instance — it never
-    // enters the published carrier contents, which must carry exactly Published Pose State per
-    // §3.3/§4.3). Set at the tail of [publish]; cleared only by the documented re-arm evidences
-    // (new pipeline window / new authoring cycle / different carrier). Release builds never
-    // read or write these fields' enforcement role ([published] stays false — no runtime
-    // verification path is added to release; the marker assignment itself is compiled out).
+    // Publication marker (DEBUG-only) for the immutability onset: runtime state on THIS finalizer
+    // instance, never carrier content. Set at the tail of [publish], cleared only by the
+    // documented re-arm evidence (new pipeline window / new authoring cycle / different carrier).
+    // Release builds never read it (the assignment is compiled out).
     private var published = false
     private var publishingPose: SkeletonPose? = null
     private var publishingBuildToken = 0L
@@ -54,34 +47,24 @@ class SkeletonPoseFinalizer(
     }
 
     /**
-     * Fallback chest-frame reconstruction for the modern rotation-driven path.
+     * Fallback chest-frame reconstruction, used only when the author left the chest rotation
+     * unauthored (identity).
      *
-     * When the pose author has NOT explicitly authored a chest rotation (the chest's `localRotation`
-     * is identity), the chest world orientation cannot be trusted from FK alone for a non-upright
-     * trunk (e.g. a push-up plank oriented by the pelvis/legs), so the chest is re-derived as a full
-     * 3-D orientation from the spine (`pelvis -> chest`, chest-local +Y) and the shoulder line
-     * (`shoulderA -> shoulderP`, chest-local -Z): `colX = lean × colZ`, giving an orthonormal basis
-     * `(colX, lean, -shoulderLine)`. For a symmetric thorax this equals the FK-derived frame, so a
-     * sagittal/neutral trunk is unchanged. A degenerate spine or shoulder line is skipped.
+     * FK alone cannot be trusted for a non-upright trunk (e.g. a push-up plank oriented by the
+     * pelvis/legs), so the chest is re-derived from the spine (`pelvis -> chest`, chest-local +Y)
+     * and the shoulder line (`shoulderA -> shoulderP`, chest-local -Z), `colX = lean × colZ`. For a
+     * symmetric thorax this equals the FK-derived frame, so a neutral trunk is unchanged; a
+     * degenerate spine or shoulder line is skipped.
      *
-     * Issue F: an *authored* chest rotation is never overwritten. The rotation-driven path already
-     * propagates the author's thoracic twist / side-bend / flex (and any asymmetry) to the
-     * shoulders, arms, neck and head via FK, so deriving the frame from a symmetric shoulder line
-     * would discard that intent and force a symmetric-thorax assumption. When `chest.localRotation`
-     * is non-identity the function returns early, leaving the authored frame (and the already-
-     * flattened world transforms) intact.
+     * An *authored* chest rotation is never overwritten: FK already propagates the author's
+     * thoracic twist / side-bend / flex to the shoulders, arms, neck and head, and deriving from a
+     * symmetric shoulder line would discard that intent.
      *
-     * Phase 3 (F1) — read-only chest-frame guarantee. The finalizer owns conversion,
-     * is enabled AND the pose carries fixed contacts, the reconstruction is a *no-move* operation:
-     * the world positions of every Solver-settled contact end-effector are snapshotted before the
-     * reconstruction and asserted unchanged afterwards (B5). If applying the reconstructed frame
-     * would displace a contact, the chest frame is rolled back to the Solver-settled value
-     * (contacts left exactly where the solver pinned them) and `rootTranslationDelta` is flagged so
-     * the validator can surface the residual. The authored-chest early-return above takes precedence
-     * — an authored chest never reaches the guard.
+     * With contacts the reconstruction must be a no-move operation: solver-settled contact
+     * end-effectors are snapshotted first and asserted unchanged, otherwise the chest frame is
+     * rolled back to the solver-settled value and `rootTranslationDelta` is flagged.
      *
-     * Allocation-free: reuses the shared column scratch buffers and re-runs FK for the chest subtree
-     * only.
+     * Allocation-free: reuses the shared column scratch and re-runs FK for the chest subtree only.
      */
     private fun reconstructChestFrame(roots: List<SkeletonNode>, pose: SkeletonPose) {
         if (roots.isEmpty()) return
@@ -90,34 +73,20 @@ class SkeletonPoseFinalizer(
         val shoulderA = findJointNode(roots[0], Joint.SHOULDER_A) ?: return
         val shoulderP = findJointNode(roots[0], Joint.SHOULDER_P) ?: return
         // The chest's parent is the segment the reconstructed absolute frame is expressed
-        // relative to. For the two-segment spine this is the LUMBAR (PELVIS -> LUMBAR -> CHEST);
-        // for an inline single-segment hierarchy it is the PELVIS itself. Composing against the
-        // actual parent means an authored lower-spine (lumbar/pelvis-tilt) rotation is combined
-        // with the thoracic frame instead of being discarded (Issue E). When the lumbar is a
-        // pass-through (identity, coincident with the pelvis) this is identical to the old
-        // PELVIS-relative reconstruction, so single-bend poses are unchanged.
+        // relative to: the LUMBAR for the two-segment spine, the PELVIS for an inline
+        // single-segment hierarchy. Composing against the actual parent keeps an authored
+        // lower-spine rotation instead of discarding it, and is identical to a pelvis-relative
+        // reconstruction when the lumbar is a pass-through (single-bend poses unchanged).
         val chestParent = chest.parent ?: return
 
-        // Issue F: do NOT overwrite an explicitly authored chest rotation. The modern
-        // rotation-driven path already computes the chest's world orientation from its
-        // `localRotation` via FK and propagates it to the shoulders, arms, neck and head. The
-        // geometric reconstruction below is only a fallback for chests whose rotation was NOT
-        // authored (identity) — e.g. a trunk oriented purely by the pelvis/legs (push-up plank).
-        //
-        // Overwriting an authored rotation would (a) discard the thoracic twist / side-bend /
-        // flex the pose author built (`buildChestTwist`, `buildChestOrientation`, the explicit
-        // `chest.localRotation.set(...)` calls), and (b) force a symmetric-thorax assumption onto
-        // the pose by re-deriving the forward axis from the shoulder line. When the author has
-        // expressed intent, that intent is the single source of truth, so leave `chest.localRotation`
-        // (and the already-flattened world transforms) untouched.
+        // Never overwrite an authored chest rotation: it is the single source of truth and FK
+        // already propagated it to the whole upper chain.
         if (chest.localRotation.angle > 1e-4f || chest.localRotation.angle < -1e-4f) {
             return
         }
 
-        // Phase 3 (F1/B5) — snapshot Solver-settled contact end-effectors BEFORE mutating the
-        // chest frame, so we can assert the reconstruction is read-only on them. Only meaningful
-        // when the pose actually registered contacts. (Phase B collapsed FINALIZER_OWNS_CONVERSION
-        // to its true branch.)
+        // Snapshot solver-settled contact end-effectors BEFORE mutating the chest frame, so the
+        // reconstruction can be asserted read-only on them. Only meaningful with registered contacts.
         val guardActive = pose.contacts.isNotEmpty()
         if (guardActive) buildContactSnapshot(pose)
 
@@ -134,24 +103,20 @@ class SkeletonPoseFinalizer(
         val shVec = tempColZ.set(sAW).subtract(sPW)
         if (shVec.mag() < 1e-4f) return
         shVec.normalize()
-        // Build a proper RIGHT-HANDED orthonormal chest frame:
-        //   colY = lean (spine / up)
-        //   colZ = -(shoulderA - shoulderP)  (chest-forward, toward the passive shoulder)
-        //   colX = lean x colZ (lateral). This matches the FK-derived frame for the standard
-        //   hierarchy, so a neutral/sagittal trunk is unchanged.
-        // NOTE: use the two-argument `cross(dst)` overload so the result is written into the
-        // scratch buffer. The single-argument overload (`Vector3.cross(v)`) allocates a NEW
-        // vector and leaves `tempColX` untouched, which previously produced a degenerate
-        // matrix (colX == colY) and a wrong chest world rotation (Issue F).
+        // RIGHT-HANDED orthonormal chest frame: colY = lean (spine/up), colZ = -(shoulderA -
+        // shoulderP) (chest-forward, toward the passive shoulder), colX = lean x colZ (lateral).
+        // Matches the FK-derived frame for the standard hierarchy, so a neutral trunk is unchanged.
+        // NOTE: use the two-argument `cross(dst)` overload so the result lands in the scratch
+        // buffer; the single-argument overload allocates a new vector and leaves `tempColX`
+        // untouched, producing a degenerate matrix (colX == colY) and a wrong chest rotation.
         shVec.multiply(-1f)
         if (lean.cross(shVec, tempColX).mag() < 1e-4f) return
         tempColX.normalize()
 
         SkeletonMath.getRotationFromMatrix(tempColX, tempColY, tempColZ, reconRot)
 
-        // chest.localRotation = parentWorldRotation^-1 * reconRot, where parentWorldRotation is
-        // the chest's PARENT (lumbar in the standard spine, pelvis inline). A rotation matrix's
-        // inverse is its transpose.
+        // chest.localRotation = parentWorldRotation^-1 * reconRot (the parent's world rotation,
+        // not the chest's); a rotation matrix's inverse is its transpose.
         SkeletonMath.rotationToMatrix(chestParent.worldRotation, parentMatX, parentMatY, parentMatZ)
         SkeletonMath.rotationToMatrix(reconRot, worldMatX, worldMatY, worldMatZ)
         SkeletonMath.transposeMultiply(
@@ -161,37 +126,27 @@ class SkeletonPoseFinalizer(
         )
         SkeletonMath.getRotationFromMatrix(localMatX, localMatY, localMatZ, chest.localRotation)
 
-        // Re-run FK for the chest subtree with the corrected local rotation so the shoulders,
-        // arms, neck and head are propagated in the reconstructed frame. Anchored at the chest's
-        // parent so the lower-spine segment stays the driver. For the standard hierarchy with a
-        // pass-through lumbar this re-flattens to identical world positions (no behavioural change).
+        // Re-run FK for the chest subtree in the reconstructed frame, anchored at the chest's
+        // parent so the lower-spine segment stays the driver (identical world positions when the
+        // lumbar is a pass-through).
         chest.updateWorldTransforms(chestParent.worldPosition, chestParent.worldRotation)
         chest.flatten(outputPose)
 
-        // Phase 3 (F1/B5) — assert the reconstruction did not move any Solver-settled contact
-        // end-effector. If it did, roll the chest frame back to the Solver-settled value (leaving
-        // contacts exactly where the solver pinned them) and flag the residual. The fallback frame
-        // is only ever re-applied to the thorax when it is provably read-only on contacts.
+        // Assert the reconstruction moved no solver-settled contact; otherwise roll the chest frame
+        // back so contacts stay exactly where the solver pinned them, and flag the residual.
         if (guardActive) enforceContactNoMove(chest, chestParent, pose)
     }
 
     /**
-     * Phase 7 (Gap 7 / F8 / W17) — resolves the gaze from the pose-declared `headTarget` intent.
-     * This resolver is the **single writer** of the neck/head local offsets. The legacy
-     * direction-based `buildHead` fallback that previously ran in `buildGaze` was removed once
-     * this path was proven byte-identical (`HeadTargetBaselineTest`, maxDeviation ~6e-5).
+     * Resolves the gaze from the pose-declared `headTarget`; the single writer of the neck/head
+     * local offsets. No target ⇒ no-op.
      *
-     * If the pose declared no `headTarget` (a non-gaze pose), this is a no-op. Otherwise the gaze
-     * direction is derived from the neck's current world position toward `headTarget.world`, biased
-     * upright by `headTarget.upBias`, and written at the authored bone lengths
-     * (`neck.localPosition = dir * neckLength`, `head.localPosition = dir * 18f`). Because the pose
-     * records the synthetic target as `neckWorldPos + gazeDir * 100`, resolving here reproduces the
-     * identical direction the pose authored — the geometry equals the pre-Phase-7 baseline while the
-     * intent layer (a named world target the engine owns) is what is newly present.
+     * The direction runs from the neck's current world position toward `headTarget.world`, biased
+     * upright by `upBias`, written at the authored bone lengths (`neckLength`, `18f` for the head).
+     * Because the pose records the target as `neckWorldPos + gazeDir * 100`, this reproduces the
+     * identical direction the pose authored.
      *
-     * The neck/head nodes are located in the already-FK-flattened `pose.roots` tree (updated just
-     * before this call in [finalize]); only their *local* positions are rewritten, never the world
-     * tree upstream of them.
+     * Only local positions are rewritten, never the world tree upstream of them.
      */
     private fun resolveHeadTarget(pose: SkeletonPose) {
         val target = pose.headTarget ?: return
@@ -202,61 +157,44 @@ class SkeletonPoseFinalizer(
         // Direction from the (FK-current) neck world position toward the gaze target.
         tempV1.set(target.world).subtract(neck.worldPosition)
         if (tempV1.mag() < 1e-4f) tempV1.set(target.upBias) else tempV1.normalize()
-        // Single source of truth for head orientation: place neck/head along the gaze direction
-        // at their authored bone lengths, matching the historical buildHead math now inlined here.
+        // Place neck/head along the gaze direction at their authored bone lengths.
         neck.localPosition.set(tempV1.x * definition.neckLength, tempV1.y * definition.neckLength, tempV1.z * definition.neckLength)
         head.localPosition.set(tempV1.x * 18f, tempV1.y * 18f, tempV1.z * 18f)
 
-        // The neck/head local offsets are written AFTER the initial FK flatten (above), so they
-        // have not yet propagated into the output pose. Re-propagate the neck->head subtree so
-        // HEAD_POS carries the extended neck length instead of collapsing onto the neck (which
-        // otherwise fails the validator's BONE_LENGTH rule on NECK_END->HEAD_POS). The neck's
-        // parent (chest) world transform is already current from the flatten above.
+        // The offsets were written AFTER the initial FK flatten, so re-propagate the neck->head
+        // subtree: otherwise HEAD_POS collapses onto the neck and fails the validator's BONE_LENGTH
+        // rule on NECK_END->HEAD_POS. The chest world transform is already current.
         val neckParent = neck.parent ?: return
         neck.updateWorldTransforms(neckParent.worldPosition, neckParent.worldRotation)
         neck.flatten(outputPose)
     }
 
     /**
-     * B2 (RFC_BRANCH_B_IMPLEMENTATION §2) — consumes the §1.1 `spineIntent` and `jointIntents`
-     * carriers. Every trunk/hip/girdle/extremity authoring helper now forwards its intent through the
-     * sole-mutator `IntentBuilder`, so these carriers are populated after a build. The Finalizer is
-     * now the documented consumer: it re-derives each declared node rotation from the carrier and
-     * re-propagates the full FK tree.
+     * Consumes `spineIntent` / `jointIntents`: re-derives each declared node rotation from the
+     * carrier and re-propagates FK.
      *
-     * The helpers ALSO write the node during `build()` (so build-time logic that reads a node's world
-     * transform — e.g. arm IK under a rotating chest — keeps working), so the carrier re-application
-     * here is **idempotent**: the applied rotation equals the authored node rotation and the re-FK'd
-     * world state equals the pre-B2 baseline exactly (proven by `FinalizerIntentConsumersTest`,
-     * maxDeviation 0.0). The carrier therefore genuinely drives the final geometry while remaining a
-     * pure no-op on output until the node-write is deleted in B4.
-     *
-     * Always consumes the carriers (Phase B collapsed FINALIZER_CONSUMES_INTENT to its true branch); flip the carrier population off to skip
-     * and restore the pre-B2 finalize. No-op when [SkeletonPose.jointIntents] is empty.
+     * The authoring helpers also write the node during `build()` (so build-time logic reading a
+     * node's world transform — e.g. arm IK under a rotating chest — keeps working), so this
+     * re-application is idempotent. No-op when [SkeletonPose.jointIntents] is empty.
      */
     private fun applyIntentCarriers(roots: List<SkeletonNode>, pose: SkeletonPose) {
-        // (Phase B collapsed FINALIZER_CONSUMES_INTENT to its true branch — consumption is always on.)
         if (pose.jointIntents.isEmpty()) return
-        // Contact poses are solver-settled: the ConstraintSolver has already honoured the declared
-        // trunk/hip intents when it repositions the root to hold every contact. Re-applying the
-        // carriers here would re-FK the whole tree and can displace the solver-settled contacts, so
-        // the consumer is a no-op for contact poses (the carriers are still populated = live; the
-        // full intent-only migration of contact instruments lands in B4).
+        // Contact poses are solver-settled: re-applying the carriers would re-FK the whole tree and
+        // can displace the contacts the solver just pinned, so this is a no-op for them.
         if (pose.hasContacts()) return
         for (a in pose.jointIntents) {
             val n = findJointNode(roots[0], a.joint) ?: continue
             n.localRotation.copyFrom(a.rotation)
         }
         // Re-propagate the whole tree so every declared articulation reaches its descendants, then
-        // flatten into the output pose. The `spineIntent` carrier is already reflected via the
-        // per-joint `jointIntents` entries recorded by buildSpineCurve, so no separate spine pass is
-        // needed (and applying both would be idempotent anyway).
+        // flatten. `spineIntent` is already reflected via the per-joint entries recorded by
+        // buildSpineCurve, so no separate spine pass is needed.
         for (root in roots) root.updateWorldTransforms(ZERO_VECTOR, IDENTITY_ROTATION)
         for (root in roots) root.flatten(outputPose)
     }
 
-    // Phase 3 (F1/B5) — contact end-effector world-position snapshot, reused across the guard.
-    // Keyed by end-joint index; values are the world positions captured before reconstruction.
+    // Contact end-effector world-position snapshot, reused across the guard: keyed by end-joint
+    // index, holding the world positions captured before reconstruction.
     private val guardNodeMap = Array<SkeletonNode?>(Joint.entries.size) { null }
     private val guardSnapshotX = FloatArray(Joint.entries.size)
     private val guardSnapshotY = FloatArray(Joint.entries.size)
@@ -285,10 +223,9 @@ class SkeletonPoseFinalizer(
     }
 
     /**
-     * Phase 3 (F1/B5) — verifies every snapshotted contact end-effector is unchanged after the
-     * chest-frame reconstruction (within [EPS]). If any moved, the reconstructed chest local
-     * rotation is rolled back to its Solver-settled value (the chest subtree is re-flattened in
-     * the original frame, leaving every contact exactly where the solver pinned it) and
+     * Verifies every snapshotted contact end-effector is unchanged after the chest-frame
+     * reconstruction (within [EPS]). If any moved, the chest local rotation is rolled back to its
+     * solver-settled value — leaving every contact exactly where the solver pinned it — and
      * [SkeletonPose.rootTranslationDelta] is flagged so the validator can surface the residual.
      */
     private fun enforceContactNoMove(chest: SkeletonNode, chestParent: SkeletonNode, pose: SkeletonPose) {
@@ -304,10 +241,9 @@ class SkeletonPoseFinalizer(
         }
         if (maxMove <= EPS) return
 
-        // The reconstruction displaced a Solver-settled contact: roll the chest frame back so the
-        // contacts stay put (F1 guarantee). This path only runs for an identity (unauthored) chest,
-        // so the Solver-settled chest local rotation IS identity — restoring it re-flattens the
-        // subtree to the exact pose the solver settled, leaving every contact where it was pinned.
+        // The reconstruction displaced a solver-settled contact: roll the chest frame back. This
+        // path only runs for an identity (unauthored) chest, so the settled local rotation IS
+        // identity — restoring it re-flattens the subtree to the exact pose the solver settled.
         chest.localRotation.set(Vector3(0f, 1f, 0f), 0f)
         chest.updateWorldTransforms(chestParent.worldPosition, chestParent.worldRotation)
         chest.flatten(outputPose)
@@ -316,7 +252,7 @@ class SkeletonPoseFinalizer(
         pose.rootTranslationDelta = kotlin.math.max(pose.rootTranslationDelta, maxMove)
     }
 
-    // Phase 3 (F1/B5) — tolerance for the contact no-move assertion (1e-3f, per IMPLEMENTATION_BRIDGE B5).
+    // Tolerance for the contact no-move assertion.
     private val EPS = 1e-3f
 
     private val IDENTITY_ROTATION = JointRotation()
@@ -337,40 +273,28 @@ class SkeletonPoseFinalizer(
     private val localMatY = Vector3()
     private val localMatZ = Vector3()
 
-    /**
-     * Finalizes the 3D pose over a populated rotation-driven `pose.roots` hierarchy.
-     */
+    /** Finalizes the pose over a populated rotation-driven `pose.roots` hierarchy. */
     fun finalize(pose: SkeletonPose): SkeletonPose {
-        // M2 (RFC_ENGINE_PIPELINE §8.1): the ConstraintSolver pass that used to run here has been
-        // moved up into [SkeletonPipeline.runStages], which is now the **sole** caller of both the
+        // The ConstraintSolver runs in [SkeletonPipeline.runStages], the sole caller of both the
         // Solver and the Finalizer, in fixed order. The Finalizer therefore NEVER calls the Solver
-        // (no re-entrancy), and a contact pose reaches `finalize` already solver-settled. The
-        // rendering/test paths that call `finalizer.finalize(pose)` directly must route through the
-        // pipeline ([SkeletonPipeline.produceFrame]) so the Solver is not skipped for contact poses.
+        // (no re-entrancy) and a contact pose arrives already solver-settled — callers that invoke
+        // finalize directly must route through the pipeline or the Solver is skipped for contacts.
 
-        // Phase 3 (F1/F4): the finalizer is the *exclusive* writer of local transforms. This is
-        // the single conversion entry point — any world↔local frame work (pole→world, the
-        // `toLocalDirection` limb bakes already performed by the solver, extremity derivation)
-        // is concentrated here.
+        // The finalizer is the exclusive writer of local transforms: all world↔local frame work
+        // (pole→world, extremity derivation) is concentrated here.
 
-        // Phase E (L1 compatibility bridge removal): `pose.roots` is now a required invariant.
-        // Every production pose and the eval/test control paths populate `roots` via `build()` /
-        // `fromHierarchy`, so an empty-roots pose reaching `finalize` is a programming error, not a
-        // supported legacy path. Fail fast instead of silently taking the deleted bridge.
+        // `pose.roots` is a required invariant: every production pose and eval/test control path
+        // populates it via `build()` / `fromHierarchy`, so empty roots here is a programming error.
+        // Fail fast rather than silently degrading.
         check(pose.roots.isNotEmpty()) { "SkeletonPoseFinalizer.finalize requires a populated pose.roots (legacy bridge removed in Phase E)" }
 
-        // P8 (§6 Phase 4 / §3.3) — publish-order re-entry guard (DEBUG-only). The single-shot
-        // semantics are an IMPLEMENTATION DECISION of plan §P8, NOT §6 Phase 4's literal text:
-        // §6 fixes the internal write order and §3.3 the immutability onset; this guard is the
-        // enforcement mechanism FOR §3.3 — a second publication of the same carrier through this
-        // finalizer would silently republish the reused private `outputPose` buffer. Two
-        // legitimate boundary events re-arm the marker (neither is a violation):
-        //  (a) SkeletonPipeline opening a new execution window for this carrier
-        //      ([beginPublishWindow]) — RFC §6 Phase 0.5 / §4.5 R11 ownership transfer;
-        //  (b) a fresh authoring pass over the carrier — the per-build intent-carrier reset
-        //      bumps [SkeletonPose.buildCycleToken]; the jointsBuffer instance is reused across
-        //      builds (BasePose §build-template), so a new build cycle is a new publish cycle;
-        //  and a different carrier object always belongs to a different frame's publish unit.
+        // Publish-order re-entry guard (DEBUG-only): a second publication of the same carrier
+        // through this finalizer would silently republish the reused private `outputPose` buffer.
+        // Two legitimate boundary events re-arm the marker: (a) the pipeline opening a new
+        // execution window for this carrier ([beginPublishWindow]); (b) a fresh authoring pass —
+        // the per-build reset bumps [SkeletonPose.buildCycleToken] and the pose buffer is reused
+        // across builds, so a new build cycle is a new publish cycle. A different carrier object
+        // always belongs to a different frame's publish unit.
         if (BuildConfig.DEBUG) {
             val reArmed = published &&
                 (publishingPose !== pose || publishingBuildToken != pose.buildCycleToken)
@@ -387,7 +311,7 @@ class SkeletonPoseFinalizer(
 
         outputPose.copyFrom(pose)
 
-        // Modern rotation-driven path: Execute Forward Kinematics traversal directly using direct local joint rotations/offsets
+        // Run FK over the hierarchy from the authored local rotations/offsets.
         if (!pose.isTransformsUpdated) {
             val size = pose.roots.size
             for (i in 0 until size) {
@@ -397,49 +321,34 @@ class SkeletonPoseFinalizer(
                 pose.roots[i].flatten(outputPose)
             }
             pose.isTransformsUpdated = true
-            // P12 WP-I — the published carrier must report the SAME kinematic state as the
-            // skip branch does (where `copyFrom` above carries the input's `true`): `outputPose`
-            // was just refreshed from the hierarchy by the flatten above, so its flat joint array
-            // IS current. Without this write the published Pose State said "transforms not
-            // updated" for exactly the frames whose realization ran in the engine stage (the
-            // stage consumes the build-window marker), i.e. the flag-ON configuration published a
-            // different Kinematic State than flag-OFF for the same frame. Bookkeeping only: the
-            // FK/flatten decision above is already made, no geometry is affected, and no
-            // production reader consumes this field after publication.
+            // The published carrier must report the SAME kinematic state as the skip branch:
+            // `outputPose` was just refreshed from the hierarchy, so its flat joint array IS
+            // current. Without this the published state said "transforms not updated" for exactly
+            // the frames whose realization ran in the engine stage — a different state than the
+            // other configuration for the same frame. Bookkeeping only: no geometry is affected.
             outputPose.isTransformsUpdated = true
         }
         outputPose.roots = pose.roots
 
-        // B2 (RFC_BRANCH_B_IMPLEMENTATION §2) — consume the §1.1 `spineIntent` / `jointIntents`
-        // carriers: re-derive the declared node rotations and re-propagate FK. This is idempotent
-        // with the node write the authoring helpers also perform during build, so geometry is
-        // byte-identical to the pre-B2 baseline (proven by FinalizerIntentConsumersTest).
+        // Consume the intent carriers: re-derive the declared node rotations and re-propagate FK.
         applyIntentCarriers(pose.roots, pose)
 
-        // Issue F: derive the chest frame only when the author left it unauthored (identity);
-        // an authored chest rotation (thoracic twist / side-bend / flex, possibly asymmetric)
-        // is already propagated to the upper chain by FK and must not be overwritten.
+        // Derive the chest frame only when the author left it unauthored (identity); an authored
+        // rotation is already propagated to the upper chain by FK and must not be overwritten.
         reconstructChestFrame(pose.roots, pose)
 
-        // Phase 7 (Gap 7 / F8 / W17): resolve the gaze from the pose-declared `headTarget`
-        // intent. This resolver is the sole writer of the neck/head local offsets; poses only
-        // *declare* the gaze target (via `buildGaze`). A pose that declared no target (non-gaze
-        // pose) is a no-op and keeps its authored head.
+        // Resolve the gaze from the pose-declared `headTarget` — the sole writer of the neck/head
+        // local offsets. A pose that declared no target keeps its authored head.
         resolveHeadTarget(pose)
 
-        // W1 — Engine ownership of extremity orientation.
+        // Engine ownership of extremity orientation: heel/toe and palm/fingertip geometry is
+        // derived for every extremity by default, skipped ONLY when the pose explicitly opted into
+        // MANUAL_OVERRIDE (it authored the endpoints, e.g. a stylized toe or grip). Ownership is
+        // never inferred from whether the HEEL/TOE/PALM/FINGERTIPS nodes exist — the factory always
+        // creates them, which silently disabled derivation for every pose.
         //
-        // The engine derives heel/toe and palm/fingertip geometry for every extremity by
-        // default (ExtremityOrientationMode.AUTOMATIC). Derivation is skipped ONLY when the pose
-        // has *explicitly* opted that extremity into MANUAL_OVERRIDE — i.e. it deliberately
-        // authored the endpoint local positions (a stylized toe / grip) and wants them
-        // preserved. Ownership is read from the pose's explicit declaration, never inferred from
-        // whether the HEEL/TOE/PALM/FINGERTIPS nodes exist (the factory always creates them, so
-        // node-existence silently disabled this derivation for every pose — the W1 bug).
-        //
-        // The relative ankle/wrist rotation (articulation w.r.t. the parent segment) is passed
-        // in so inherited torso/limb tilt is removed automatically; identity articulation lays
-        // the foot/hand flat along the limb, equalling the FK frame for a neutral limb.
+        // The relative ankle/wrist articulation is passed in so inherited torso/limb tilt is
+        // removed; identity articulation lays the foot/hand along the limb, equalling the FK frame.
         if (pose.isExtremityAutomatic(Extremity.FOOT_F)) {
             adjustFootOrientation(
                 outputPose, Joint.KNEE_F, Joint.ANKLE_F, Joint.HEEL_F, Joint.TOE_F,
@@ -465,40 +374,29 @@ class SkeletonPoseFinalizer(
             )
         }
 
-        // P8 — explicit publish tail: final flatten-completion check → Validation Stamp
-        // writes → publication marker (RFC §6 Phase 4 fixed internal order). The tail is the
-        // ONLY return path of this function; no caller reaches the published buffer without it.
+        // Explicit publish tail: flatten-completion check → validation stamp writes → publication
+        // marker, in that fixed order. The tail is the ONLY return path of this function.
         return publish(outputPose)
     }
 
     /**
-     * P8 (§6 Phase 4 / §3.3) — the single explicit publish tail of [finalize].
+     * The single explicit publish tail of [finalize], in fixed internal order:
+     * `flatten-completion check → applyValidationStamps → published = true`.
      *
-     * Fixed internal order (RFC §6 Phase 4: publication completes ONLY after BOTH write sets —
-     * every published transform and every attributable Validation Stamp write — are finished):
-     *
-     * ```
-     * final flatten-completion check → applyValidationStamps → published = true → return
-     * ```
-     *
-     * The marker is set ONLY after the final validation-stamp writes complete; nothing after it
-     * performs a Published Pose State write (enforced debug-side at [applyValidationStamps] and
-     * at the [finalize] entry). The marker is DEBUG-only enforcement state on this instance (a
-     * plan §P8 IMPLEMENTATION DECISION for §3.3 enforcement — not a new RFC rule, not a state
-     * category, and never carrier content).
+     * Publication completes only after BOTH write sets — every published transform and every
+     * attributable validation stamp — are finished. Nothing after the marker may perform a
+     * published-state write (enforced debug-side at [applyValidationStamps] and [finalize]).
      */
     private fun publish(outputPose: SkeletonPose): SkeletonPose {
-        // §6 Phase 4 write set 1 completion: every published transform is in the carrier
-        // before the stamp phase begins (debug-only verification).
+        // Write set 1 completion: every published transform is in the carrier before the stamp
+        // phase begins (debug-only verification).
         if (BuildConfig.DEBUG) assertFinalFlattenComplete(outputPose)
 
-        // B5 — populate the §1.2 STATE stamps the validator consumes (no geometry inference
-        // left in the validator). Computed from the final solved `outputPose`, so the stamps
-        // reflect exactly the geometry the validator previously re-derived.
+        // Populate the state stamps the validator consumes, computed from the final solved
+        // `outputPose` so no geometry inference is left in the validator.
         applyValidationStamps(outputPose)
 
-        // §3.3 immutability onset: the publication marker, set ONLY after the last
-        // attributable stamp write above (§6 Phase 4 order). Debug-only.
+        // Immutability onset: the publication marker, set ONLY after the last stamp write. Debug-only.
         if (BuildConfig.DEBUG) {
             published = true
         }
@@ -506,26 +404,21 @@ class SkeletonPoseFinalizer(
     }
 
     /**
-     * P8 — re-arm evidence (a) for the [finalize] publish-order guard: SkeletonPipeline opens a
-     * NEW execution window over the carrier it is about to run (RFC §6 Phase 0.5 → stages;
-     * §4.5 R11 ownership transfer). The frame is a new publish unit, so the publication marker
-     * THIS finalizer instance holds from the previous frame is cleared. Called ONLY under
-     * `BuildConfig.DEBUG` (see [SkeletonPipeline.runStages]) — release builds never reach it,
-     * so no runtime verification path is added there.
+     * Re-arm evidence for the [finalize] publish-order guard: the pipeline opens a NEW execution
+     * window over the carrier it is about to run, so the frame is a new publish unit and the marker
+     * this instance holds from the previous frame is cleared. Called ONLY under `BuildConfig.DEBUG`.
      */
     internal fun beginPublishWindow() {
         published = false
     }
 
     /**
-     * P8 — final flatten-completion check (debug-only, called from [publish] before the
-     * stamp phase): every published transform must already bit-match the flattened hierarchy.
+     * Final flatten-completion check (debug-only, before the stamp phase): every published
+     * transform must already bit-match the flattened hierarchy.
      *
      * The extremity-derivation endpoints ([EXTREMITY_DERIVED_JOINTS]) are the sole authorized
-     * carrier-only writes at publish time: `adjustFootOrientation` / `adjustHandOrientation`
-     * compute them into the carrier (no upstream node carries the derived positions), so the
-     * node-vs-carrier comparison excludes exactly those joints — the set was probe-verified
-     * bit-exact on every other joint across all production pose families and progress sweeps.
+     * carrier-only writes at publish time — `adjustFootOrientation` / `adjustHandOrientation`
+     * compute them into the carrier and no node carries them — so they are excluded.
      */
     private fun assertFinalFlattenComplete(pose: SkeletonPose) {
         for (root in pose.roots) checkFlattened(root, pose)
@@ -545,20 +438,13 @@ class SkeletonPoseFinalizer(
     }
 
     companion object {
-        /**
-         * P8 — centralized prefix of every publish-order enforcement failure (entry re-entry,
-         * post-marker stamp write, pre-stamp flatten gap). Follows the same centralization
-         * idiom as the R2/R3/R5/R8 enforcement texts of this track; P8's guard is a plan §P8
-         * IMPLEMENTATION DECISION enforcing §3.3, so the message names the ORDER violation
-         * rather than an RFC rule number.
-         */
+        /** Centralized prefix of every publish-order enforcement failure. */
         internal const val PUBLISH_ORDER_VIOLATION = "Publish-order violation:"
 
         /**
-         * Joints whose published value is derived directly into the carrier by the Finalizer's
-         * W1 extremity derivation (no node-side world position corresponds to the derived
-         * value). Excluded from the final flatten-completion check — probe-verified as the
-         * EXACT mismatch set on every production pose family.
+         * Joints whose published value is derived directly into the carrier by the extremity
+         * derivation (no node-side world position corresponds). Excluded from the flatten-
+         * completion check — probe-verified as the exact mismatch set on every pose family.
          */
         private val EXTREMITY_DERIVED_JOINTS = setOf(
             Joint.HEEL_F, Joint.TOE_F, Joint.HEEL_B, Joint.TOE_B,
@@ -567,15 +453,14 @@ class SkeletonPoseFinalizer(
         )
     }
 
-    // B5 — §1.2 stamp production (engine-owned). Reuses the identical femur-direction math
-    // the validator's old `validateHipRom` used, so the rule's verdicts are byte-identical.
+    // Stamp production (engine-owned), reusing the identical femur-direction math the validator
+    // used, so the rule's verdicts are byte-identical.
     private val hipRomStampScratch = HipRomStamp(0f, 0f, 0f, 0f)
 
     private fun applyValidationStamps(pose: SkeletonPose) {
-        // P8 (§3.3) — the stamp phase is part of the publish tail: it may run ONLY before the
-        // publication marker. A write reaching here after `published=true` (a late re-entry on
-        // an already-published finalizer instance) mutates Published Pose State past immutability
-        // onset and throws in DEBUG. (During the normal single pass the marker is still unset.)
+        // The stamp phase is part of the publish tail: it may run ONLY before the publication
+        // marker. A write here after `published=true` (a late re-entry on an already-published
+        // instance) mutates published state past immutability onset and throws in DEBUG.
         if (BuildConfig.DEBUG) {
             check(!published) {
                 "$PUBLISH_ORDER_VIOLATION Validation Stamp write attempted after the §3.3 " +
@@ -601,9 +486,8 @@ class SkeletonPoseFinalizer(
             pose.hipRomStamps[hip] = stamp
         }
 
-        // B5 — bilateral symmetry stamp: the knee/elbow perpendicular-deviation magnitudes the
-        // old `validateBilateralSymmetry` computed (2-D, parent->foot vs knee). Captured here
-        // so the validator only reads the delta + opposite-bend flag.
+        // Bilateral symmetry stamp: the knee/elbow perpendicular-deviation magnitudes (2-D,
+        // parent->foot vs knee), captured here so the validator only reads the delta + flag.
         val kneeF = signedPerpDev(pose, Joint.HIP_F, Joint.ANKLE_F, Joint.KNEE_F)
         val kneeB = signedPerpDev(pose, Joint.HIP_B, Joint.ANKLE_B, Joint.KNEE_B)
         val elbowA = signedPerpDev(pose, Joint.SHOULDER_A, Joint.HAND_A, Joint.ELBOW_A)
@@ -634,23 +518,16 @@ class SkeletonPoseFinalizer(
 
 
     /**
-     * Branch C — resolves the wrist/ankle articulation rotation for [extremity] to feed the W1
-     * geometry derivation. The pose-authored value is the single source of truth: when the pose
-     * populated [SkeletonPose.extremityArticulations] for this extremity the carrier value is
-     * returned verbatim (it already carries the rotation *relative to the parent segment*, so no
-     * ancestor-chain removal is needed). When the carrier is empty (a pose that still authors the
-     * node directly, or a neutral limb) the value is read from the node's **local** rotation in the
-     * authored hierarchy — the exact rotation the legacy helpers wrote via `localRotation.set` /
-     * `buildWristArticulation` / `buildAnkleArticulation`. This is the rotation *relative to the
-     * joint's true parent segment* and is therefore identical to the carrier for every migrated and
-     * legacy pose, keeping the pre-Branch-C path byte-identical.
+     * Resolves the wrist/ankle articulation rotation for [extremity], feeding the geometry
+     * derivation. The pose-authored carrier value is the single source of truth — it is already
+     * relative to the parent segment, so no ancestor-chain removal is needed. When the carrier is
+     * empty (a pose that still authors the node directly, or a neutral limb) the node's **local**
+     * rotation is read instead: the exact rotation the legacy helpers wrote, likewise relative to
+     * the true parent segment, so both paths agree.
      *
-     * NB: the previous implementation derived the fallback via the world-relative
-     * `inverse(parentWorld) ∘ nodeWorld`. That collapses to the identity rotation for a *straight*
-     * limb (where the wrist/ankle world rotation equals its parent's, so the ancestor chain cancels
-     * and the authored local articulation is silently dropped). Reading the node's local rotation
-     * instead recovers the authored articulation even when the limb is straight, which is the
-     * correct, author-intent-preserving behavior — and is what the carrier already carries.
+     * NB: deriving the fallback as the world-relative `inverse(parentWorld) ∘ nodeWorld` collapses
+     * to identity for a *straight* limb (the wrist/ankle world rotation equals its parent's, so the
+     * chain cancels and the authored articulation is silently dropped).
      */
     private fun articulationFor(
         pose: SkeletonPose,
@@ -664,9 +541,8 @@ class SkeletonPoseFinalizer(
             out.copyFrom(carried)
             return out
         }
-        // Mixed-mode fallback: the authored local rotation of the wrist/ankle node, which is already
-        // expressed relative to the joint's parent segment (forearm / shank). `pose.roots` is always
-        // populated at `finalize` (Phase E invariant), so the node is always resolvable.
+        // Mixed-mode fallback: the node's authored local rotation, already relative to the parent
+        // segment (forearm / shank). `pose.roots` is always populated at `finalize`.
         val node = findJointNode(pose.roots[0], nodeId)
         if (node != null) {
             out.copyFrom(node.localRotation)
@@ -701,30 +577,21 @@ class SkeletonPoseFinalizer(
 
         tempDir.set(wrist).subtract(elbow).normalize()
 
-        // W1b (hand extremity derivation): a hand resting on a support plane (the floor for a
-        // push-up, a bar, a box) must lie *in* that plane, not slope into it. The neutral hand
+        // A hand resting on a support plane must lie *in* it, not slope into it: the neutral hand
         // direction is the forearm direction, which points down-and-forward to a planted hand, so
-        // the palm/knuckles/fingertips inherit that downward slope and dig through the floor. When
-        // the pose declares a support plane for this hand, project the forearm direction onto the
-        // plane so the completed hand lies flat on its support. Genuine wrist articulation is
-        // applied AFTER this (via [wristRotation]), so intent is never overridden; a hand with no
-        // declared support plane is untouched, preserving every non-support pose exactly.
-        // W1b (environment-driven): flatten the hand onto the surface its declared support
-        // contact rests on (ground by default; a box/wall if the pose declares one). Driven entirely
-        // by `pose.environment` + `metadata.support.contacts` — no per-pose hardcoded plane, so the
-        // same logic keeps palms flat in every pose that rests a hand on a surface. A hand that is
-        // not declared as a support contact is untouched (e.g. hanging/pull-up grips on a bar).
+        // the palm/knuckles/fingertips would dig through the floor. The forearm direction is
+        // therefore projected onto the plane its declared support contact rests on (ground by
+        // default, a box/wall if declared) — driven entirely by `pose.environment` +
+        // `metadata.support.contacts`, so the same logic keeps palms flat in every pose and a hand
+        // with no declared support (hanging/pull-up grips on a bar) is untouched. Genuine wrist
+        // articulation is applied AFTER this via [wristRotation], so intent is never overridden.
         val handExt = if (handId == Joint.HAND_A) Extremity.HAND_A else Extremity.HAND_P
-        // Only auto-flatten when the engine owns the hand. Skip when the pose has ALREADY authored a
-        // wrist articulation for this hand (recorded in `extremityArticulations`, e.g. PikePushUp's
-        // deliberate grip) — flattening would fight that intent. Also skip when the hand is not
-        // actually PLANTED: a supporting hand rests BELOW its elbow (palm on the floor); a gripping
-        // hand on an overhead bar sits ABOVE the elbow and must not be driven down to the ground.
-        // This geometric test distinguishes "hand on the floor" from "hand on a bar" without a magic
-        // distance threshold.
-        // B-3 — the hand's declared support is resolved over its DECLARATION FAMILY (HAND and
-        // FOREARM, same side): a pose that plants the forearm (a forearm plank) declares the
-        // support as `*_FOREARM`, and the hand at the end of that planted forearm is the extremity
+        // Skip flattening when the pose ALREADY authored a wrist articulation for this hand — it
+        // would fight that intent — and when the hand is not actually PLANTED: a supporting hand
+        // rests BELOW its elbow, while a gripping hand on an overhead bar sits ABOVE it and must not
+        // be driven down. This geometric test needs no magic distance threshold.
+        // The hand's declared support is resolved over its declaration family (HAND and FOREARM,
+        // same side): a forearm plank declares `*_FOREARM` and the hand at its end is the extremity
         // this derivation orients. See [declaredHandSupportPoint].
         val declaredHandSupport = declaredHandSupportPoint(pose, handId)
         val planted = pose.getJoint(handId).y <= pose.getJoint(elbowId).y + 1.0f
@@ -733,13 +600,11 @@ class SkeletonPoseFinalizer(
             supportPlaneNormalFor(pose, declaredHandSupport)
         } else null
 
-        // Heading (exercise intent): if the exercise declared a root-relative forward
-        // direction for this extremity, transform it to world space and project onto
-        // the support plane. This replaces the forearm-derived direction entirely —
-        // the hand faces the declared heading, not the current forearm angle.
+        // Heading (exercise intent): a declared root-relative forward direction replaces the
+        // forearm-derived direction entirely — the hand faces the declared heading.
         val declaredHeading = pose.getHeading(handExt)
         if (declaredHeading != null && handSupportNormal != null) {
-            // Transform root-relative heading to world space via pelvis rotation.
+            // Transform the root-relative heading to world space via the pelvis rotation.
             val pelvisRot = pose.getJointRotation(Joint.PELVIS)
             SkeletonMath.rotAround(declaredHeading, pelvisRot.axis, pelvisRot.angle, tempDir)
             tempDir.normalize()
@@ -761,9 +626,7 @@ class SkeletonPoseFinalizer(
             }
             tempDir.normalize()
         } else if (handSupportNormal != null) {
-            // Legacy fallback: project the forearm direction onto the support plane.
-            // Used when no heading is declared — preserves byte-identical behavior
-            // for all existing exercises.
+            // Fallback when no heading is declared: project the forearm direction onto the plane.
             val nd = handSupportNormal.dot(tempDir)
             tempDir.set(
                 tempDir.x - handSupportNormal.x * nd,
@@ -785,12 +648,10 @@ class SkeletonPoseFinalizer(
             tempDir.normalize()
         }
 
-        // Promote the wrist to a real joint: compose the authored wrist orientation with
-        // the forearm direction so grips (pronation / supination / wrist flexion) are
-        // honored by the completed hand. The passed [wristRotation] is the hand's rotation
-        // *relative to the forearm (elbow) frame* (not its world rotation), so applying it to
-        // the already-world forearm direction does not double-count the trunk/parent frame
-        // (Issue C). Identity rotation leaves the result unchanged.
+        // Compose the authored wrist orientation with the forearm direction so grips (pronation /
+        // supination / wrist flexion) reach the completed hand. [wristRotation] is relative to the
+        // forearm frame, not world, so applying it to the already-world direction does not
+        // double-count the trunk/parent frame. Identity leaves the result unchanged.
         val handDef = definition.hand
         handDef.computeHandJoints(wrist, tempDir, wristRotation, handJointsBuffer)
 
@@ -829,18 +690,16 @@ class SkeletonPoseFinalizer(
         }
         tempFootDir.normalize()
 
-        // R1 (foot extremity derivation): a *neutral* foot — one with no authored ankle
-        // articulation — must not point below the floor. The shank-perpendicular forward
-        // direction tilts downward whenever the shank leans forward (standing, plank, mid-swing),
-        // which drives the toe under the ground even for poses that declare no support contact
-        // (Burpee frame 0, KettlebellSwing mid-swing). This was the "near-horizontal-shank foot"
-        // sharp edge documented in ENGINE_AUTOMATIC_ORIENTATION_AUDIT §"residual engine limits".
+        // A *neutral* foot — one with no authored ankle articulation — must not point below the
+        // floor: the shank-perpendicular forward direction tilts downward whenever the shank leans
+        // forward (standing, plank, mid-swing), driving the toe under the ground even for poses
+        // that declare no support contact.
         //
-        // Clamp only the NEUTRAL direction's *downward* pitch to horizontal (a flat foot). Genuine
-        // plantar flexion / pointed toe is authored as the ankle articulation ([ankleRotation],
-        // applied by computeHeelToe AFTER this), so this never overrides intent — it only removes
-        // the accidental downward tilt that pure shank geometry leaks into an un-articulated foot.
-        // Upward pitch (dorsiflexion hint) is left untouched. Magnitude is preserved (unit).
+        // Clamp only the NEUTRAL direction's *downward* pitch to horizontal. Genuine plantar
+        // flexion / pointed toe is authored as the ankle articulation applied by computeHeelToe
+        // AFTER this, so this never overrides intent — it only removes the accidental tilt that
+        // pure shank geometry leaks into an un-articulated foot. Upward pitch (dorsiflexion hint)
+        // is left untouched. Magnitude is preserved (unit).
         if (tempFootDir.y < 0f) {
             val horiz = kotlin.math.sqrt(tempFootDir.x * tempFootDir.x + tempFootDir.z * tempFootDir.z)
             if (horiz > 1e-4f) {
@@ -852,24 +711,21 @@ class SkeletonPoseFinalizer(
         }
 
 
-        // contact, the foot's long axis must lie *in* the support plane, not poke through it.
-        // A steep shank (deep squat, wide split, wall-seat) makes the natural (shank-perpendicular)
-        // forward direction tilt downward, which drives the toe/heel below the ground and fails the
-        // no-penetration check. Projecting the direction onto the contact plane keeps the planted
-        // foot flat on its support (generic support-plane reasoning — no per-pose special casing).
-        // Free-hanging feet (no contact) are untouched, so non-support poses are unchanged.
-        // W1b (environment-driven): flatten the foot onto the surface its declared support
-        // contact rests on (ground, or a box/step top). Derived from pose.environment + declared
-        // support — no per-pose special casing; the same code plants feet in every pose.
-        // B-3 — the foot's declared support is resolved over its DECLARATION FAMILY (FOOT and TOES,
-        // same side): the plank/push-up families declare their planted foot as `*_TOES`. See
+        // A planted foot's long axis must lie *in* the support plane, not poke through it: a steep
+        // shank (deep squat, wide split, wall seat) tilts the shank-perpendicular direction down and
+        // drives the toe/heel below the ground, failing the no-penetration check. Projecting onto
+        // the contact plane keeps it flat on whatever surface its declared support rests on (ground
+        // or box/step top) — derived from pose.environment, no per-pose special casing.
+        // Free-hanging feet (no contact) are untouched.
+        // The support is resolved over the declaration family (FOOT and TOES, same side) because
+        // the plank/push-up families declare their planted foot as `*_TOES`. See
         // [declaredFootSupportPoint].
         val declaredFootSupport = declaredFootSupportPoint(pose, ankleId)
         val footExt = if (ankleId == Joint.ANKLE_F) Extremity.FOOT_F else Extremity.FOOT_B
         val supportNormal = if (declaredFootSupport != null) supportPlaneNormalFor(pose, declaredFootSupport) else null
 
-        // Heading (exercise intent): same pattern as hands. If the exercise declared a
-        // root-relative forward direction for this foot, use it instead of the toe hint.
+        // Heading (exercise intent): a declared root-relative forward direction is used instead
+        // of the toe hint.
         val declaredFootHeading = pose.getHeading(footExt)
         if (declaredFootHeading != null && supportNormal != null) {
             val pelvisRot = pose.getJointRotation(Joint.PELVIS)
@@ -892,7 +748,7 @@ class SkeletonPoseFinalizer(
             }
             tempFootDir.normalize()
         } else if (supportNormal != null) {
-            // Legacy fallback: project the toe-hint-derived direction onto the support plane.
+            // Fallback when no heading is declared: project the toe-hint direction onto the plane.
             val nd = supportNormal.dot(tempFootDir)
             tempFootDir.set(
                 tempFootDir.x - supportNormal.x * nd,
@@ -911,32 +767,25 @@ class SkeletonPoseFinalizer(
             tempFootDir.normalize()
         }
 
-        // Promote the ankle to a real joint: computeHeelToe composes the authored ankle
-        // orientation with this neutral (shank-perpendicular) foot direction and keeps the
-        // pitch clamp as a bound on the resulting direction. The passed [ankleRotation] is
-        // the ankle's rotation *relative to the shank (knee) frame* (not its world rotation),
-        // so applying it to the already-world foot direction does not double-count the
-        // trunk/parent frame (Issue C). Identity rotation leaves the neutral direction
-        // unchanged, so flat-foot rendering is preserved.
+        // computeHeelToe composes the authored ankle orientation with this neutral
+        // (shank-perpendicular) direction and keeps the pitch clamp as a bound on the result.
+        // [ankleRotation] is relative to the shank frame, not world, so applying it to the
+        // already-world direction does not double-count the trunk/parent frame. Identity leaves
+        // the neutral direction unchanged, so flat-foot rendering is preserved.
         val foot = definition.foot
         foot.computeHeelToe(ankle, tempFootDir, ankleRotation, pose.getJoint(heelId), pose.getJoint(toeId))
     }
 
     /**
-     * B-4 — resolves the support point the pose DECLARED for the foot whose ankle is [ankleId], over
-     * that ankle's canonical declaration family: the whole-foot kind (`*_FOOT`) and the toe-end kind
-     * (`*_TOES`) of THE SAME physical foot, in that precedence. The family is derived from the one
-     * canonical `SupportPoint ↔ Joint` map ([SupportMath.supportPointsFor], the exact inverse of
-     * [SupportMath.jointsFor]), so this resolver owns no side convention: a `*_TOES` declaration
-     * (how the whole plank/push-up family declares its planted foot) and a `*_FOOT` declaration both
-     * resolve to the foot they name, and `ANKLE_F` can only ever resolve to `LEFT_*`.
+     * Resolves the support point the pose DECLARED for the foot whose ankle is [ankleId], over that
+     * ankle's canonical declaration family: whole-foot (`*_FOOT`) then toe-end (`*_TOES`) of THE
+     * SAME physical foot. The family comes from the one canonical `SupportPoint ↔ Joint` map
+     * ([SupportMath.supportPointsFor], the exact inverse of [SupportMath.jointsFor]), so this
+     * resolver owns no side convention and `ANKLE_F` can only ever resolve to `LEFT_*`. The
+     * resolved value is handed verbatim to [supportPlaneNormalFor].
      *
-     * The resolved value is the pose's own [SupportPoint], handed verbatim to
-     * [supportPlaneNormalFor]: nothing is re-mapped, aliased or re-interpreted.
-     *
-     * Returns `null` when the pose declared no foot support for this ankle (a free-hanging foot), so
-     * every non-declaring pose keeps its previous geometry. Allocation-free (a precomputed lookup and
-     * an index loop — the finalizer's per-frame paths allocate nothing).
+     * Returns `null` when no foot support was declared (a free-hanging foot), so non-declaring
+     * poses keep their previous geometry. Allocation-free.
      */
     private fun declaredFootSupportPoint(pose: SkeletonPose, ankleId: Joint): SupportPoint? {
         val family = SupportMath.supportPointsFor(ankleId)
@@ -947,14 +796,11 @@ class SkeletonPoseFinalizer(
     }
 
     /**
-     * B-4 — the hand-side twin of [declaredFootSupportPoint]: resolves the hand's declared support
-     * over the canonical declaration family of [handId] — `*_HAND` (a pressing/gripping hand) before
-     * `*_FOREARM` (a forearm-planted pose such as a forearm plank, where the planted forearm's
-     * declaration governs the hand at its end) — from the same single canonical source, so
-     * `HAND_A`/`HAND_P` resolve to `LEFT_*`/`RIGHT_*` and never to the opposite arm.
+     * Hand-side twin of [declaredFootSupportPoint]: `*_HAND` (a pressing/gripping hand) before
+     * `*_FOREARM` (a forearm plank, where the planted forearm's declaration governs the hand at its
+     * end), from the same canonical source, so `HAND_A`/`HAND_P` never resolve to the opposite arm.
      *
-     * Returns `null` when neither family is declared, so an unsupported hand is untouched.
-     * Allocation-free.
+     * Returns `null` when neither is declared, so an unsupported hand is untouched. Allocation-free.
      */
     private fun declaredHandSupportPoint(pose: SkeletonPose, handId: Joint): SupportPoint? {
         val family = SupportMath.supportPointsFor(handId)
@@ -964,29 +810,24 @@ class SkeletonPoseFinalizer(
         return null
     }
 
-    // ---------------------------------------------------------------------------
-    // Environment-driven support-plane derivation (W1b, replaces per-pose hardcoded planes).
-    //
-    // The pose declares WHICH extremities rest on WHAT via `metadata.environment` (a ground plane
-    // plus optional box/step/wall props) and `metadata.support.contacts` (which support points).
-    // From those two declarative facts the engine derives, for every supported extremity, the
-    // surface normal it should rest on — so palms lie flat on the floor, feet plant on the floor
-    // or a box, and a wall-slide hand lies flat on a wall. This is the SAME logic for every pose;
-    // no pose re-declares "the floor is at y=0". A pose with no environment is byte-identical.
-    // ---------------------------------------------------------------------------
+    // Environment-driven support-plane derivation. The pose declares WHICH extremities rest on WHAT
+    // via `metadata.environment` (a ground plane plus optional box/step/wall props) and
+    // `metadata.support.contacts` (which support points); from those two facts the engine derives
+    // the surface normal each supported extremity rests on — palms flat on the floor, feet planted
+    // on the floor or a box, a wall-slide hand flat on a wall. Same logic for every pose: none
+    // re-declares "the floor is at y=0", and a pose with no environment is byte-identical.
 
-    /** For each supported extremity, the surface normal it should rest flat against. */
     private fun supportPlaneNormalFor(pose: SkeletonPose, point: SupportPoint): Vector3? {
         val env = pose.environment
-        // B-4 — the contact surface joints come from the ONE canonical `SupportPoint ↔ Joint` map
-        // (the same map the declaration gate above resolves the side from), so a plane can never be
-        // derived from the opposite side's joints.
+        // The contact surface joints come from the ONE canonical `SupportPoint ↔ Joint` map (the
+        // same map the declaration gate resolves the side from), so a plane can never be derived
+        // from the opposite side's joints.
         val joints = SupportMath.jointsFor(point).map { pose.getJoint(it) }
         if (joints.isEmpty()) return null
         val cx = joints.sumOf { it.x.toDouble() }.toFloat() / joints.size
         val cy = joints.sumOf { it.y.toDouble() }.toFloat() / joints.size
         val cz = joints.sumOf { it.z.toDouble() }.toFloat() / joints.size
-        // Default support = the ground plane (normal +Y). A prop overrides it when the contact lies
+        // Default support = the ground plane (normal +Y); a prop overrides it when the contact lies
         // within the prop's horizontal footprint (box/step/bench: on its top; wall: on its face).
         var bestNormal: Vector3? = groundNormal(tempFootNormal)
         var bestDist = kotlin.math.abs(cy - env.ground.level)

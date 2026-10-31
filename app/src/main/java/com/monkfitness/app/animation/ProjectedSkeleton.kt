@@ -70,8 +70,7 @@ class ProjectedGridLine {
 }
 
 /**
- * Encapsulates a skeleton after it has been projected into screen space.
- * Designed for buffer reuse to eliminate heap allocations in the hot path.
+ * A skeleton projected into screen space, built for buffer reuse so the hot path allocates nothing.
  */
 class ProjectedSkeleton(
     val joints: Array<ProjectedPoint> = Array(Joint.entries.size) { ProjectedPoint() },

@@ -4,12 +4,10 @@ class SkeletonEngine(
     val definition: SkeletonDefinition,
     val style: SkeletonStyle
 ) {
-    // Bone hierarchy for rendering
     val bones = listOf(
         // Background limbs (Right side)
         Bone(Joint.HIP_B, Joint.KNEE_B, style.thighThickness * 0.8f, 0.62f),
         Bone(Joint.KNEE_B, Joint.ANKLE_B, style.shinThickness * 0.8f, 0.62f),
-        // Triangulated foot background
         Bone(Joint.ANKLE_B, Joint.HEEL_B, style.shinThickness * 0.7f, 0.62f), // Calcaneus
         Bone(Joint.ANKLE_B, Joint.TOE_B, style.shinThickness * 0.7f, 0.62f),  // Instep
         Bone(Joint.HEEL_B, Joint.TOE_B, 10f, 0.62f),                          // Sole
@@ -22,7 +20,6 @@ class SkeletonEngine(
         // Foreground limbs (Left side)
         Bone(Joint.HIP_F, Joint.KNEE_F, style.thighThickness, 1.0f),
         Bone(Joint.KNEE_F, Joint.ANKLE_F, style.shinThickness, 1.0f),
-        // Triangulated foot foreground
         Bone(Joint.ANKLE_F, Joint.HEEL_F, style.shinThickness * 0.8f, 1.0f), // Calcaneus
         Bone(Joint.ANKLE_F, Joint.TOE_F, style.shinThickness * 0.8f, 1.0f),  // Instep
         Bone(Joint.HEEL_F, Joint.TOE_F, 12f, 1.0f),                          // Sole

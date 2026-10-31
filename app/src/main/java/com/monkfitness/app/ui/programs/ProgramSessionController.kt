@@ -23,29 +23,24 @@ import java.time.LocalDate
 /**
  * One occurrence as the session screen renders it: what to ask for, and what has been confirmed.
  *
- * It is built from the session's own stored rows — never from the plan — so the numbers a screen shows
- * are the numbers the snapshot captured and the sets that were actually confirmed (§19).
+ * Built from the session's own stored rows — never from the plan — so the numbers a screen shows are the
+ * numbers the snapshot captured and the sets that were actually confirmed.
  */
 data class SessionExerciseUi(
     /** The occurrence's identity within the session; the handle `confirmSet` takes. */
     val sessionExerciseId: String,
-    /** The library key, for the exercise-details link. */
     val exerciseId: String,
     /** The localized display name, or `0` when the catalogue does not know the id. */
     val nameRes: Int,
-    /** How many sets the prescription composes. */
     val setCount: Int,
-    /** How many were confirmed. */
     val completedSets: Int,
     /** Whether the occurrence is the one the screen is asking the user to perform. */
     val isCurrent: Boolean,
-    /** The unit of the next set's target. */
     val dimension: PrescriptionDimension,
     /** The prescribed target of the next set, or `0` when the occurrence is finished. */
     val nextTarget: Int
 ) {
 
-    /** Whether every set of this occurrence was confirmed. */
     val isFinished: Boolean
         get() = completedSets >= setCount
 }
@@ -59,13 +54,11 @@ enum class SessionStage {
     /** An `IN_PROGRESS` session is presented and can be worked on. */
     PRESENTING,
 
-    /** The attempt ended as completed. */
     COMPLETED,
 
-    /** The attempt ended as cancelled. */
     CANCELLED,
 
-    /** Nothing can be presented, and the reason is said out loud (§28: a refusal is not an absence). */
+    /** Nothing can be presented, and the reason is said out loud: a refusal is not an absence. */
     UNAVAILABLE
 }
 
@@ -84,38 +77,30 @@ data class SessionOccurrence(
 /** The whole state of one attempt's screen. */
 data class ProgramSessionUiState(
     val stage: SessionStage = SessionStage.LOADING,
-    /** The opportunity the attempt is on. */
     val slotId: String = "",
-    /** The attempt's identity, once one is stored. */
     val sessionId: String? = null,
-    /** The Program's name, as the lifecycle layer reports it. */
     val programName: String? = null,
     /** The date the opportunity was planned for — the snapshot's own fact, not a calendar. */
     val plannedFor: LocalDate? = null,
     val exercises: List<SessionExerciseUi> = emptyList(),
     /** What the user is asked to do next, or `null` when there is nothing left. */
     val currentExercise: SessionExerciseUi? = null,
-    /** The sentence explaining a refusal, a failure or a reported non-fatal problem (§15, §28). */
+    /** The sentence explaining a refusal, a failure or a reported non-fatal problem. */
     val notice: ProgramSessionNotice? = null
 ) {
 
-    /** Whether the attempt may be worked on. */
     val isPresenting: Boolean
         get() = stage == SessionStage.PRESENTING
 
-    /** Whether every set of every occurrence was confirmed. */
     val everythingConfirmed: Boolean
         get() = exercises.isNotEmpty() && exercises.all { exercise -> exercise.isFinished }
 
-    /** Whether the attempt ended, either way. */
     val isEnded: Boolean
         get() = stage == SessionStage.COMPLETED || stage == SessionStage.CANCELLED
 
-    /** How many sets the attempt confirmed in total. */
     val confirmedSetCount: Int
         get() = exercises.sumOf { exercise -> exercise.completedSets }
 
-    /** How many sets the attempt prescribed in total. */
     val prescribedSetCount: Int
         get() = exercises.sumOf { exercise -> exercise.setCount }
 }
@@ -123,20 +108,18 @@ data class ProgramSessionUiState(
 /**
  * A sentence the session screen shows about the attempt's own outcomes.
  *
- * Held apart from [ProgramNotice] on purpose: that vocabulary is the *Program* actions' (select, rename,
- * archive, import), and this one is about one attempt — a refusal to start, a failure to read, a
- * completion whose adaptive half could not be evaluated. Merging them would make one type carry two
- * unrelated sets of sentences.
+ * Held apart from [ProgramNotice] on purpose: that vocabulary is the *Program* actions', and this one is
+ * about one attempt — a refusal to start, a failure to read, a completion whose adaptive half could not be
+ * evaluated. Merging them would make one type carry two unrelated sets of sentences.
  */
 sealed interface ProgramSessionNotice {
 
-    /** The localized sentence. */
     val messageRes: Int
 
-    /** Something was refused by a rule of §19 or by the plan. Nothing was written. */
+    /** Something was refused by a rule or by the plan. Nothing was written. */
     data class Refused(override val messageRes: Int) : ProgramSessionNotice
 
-    /** A read or a write failed. Never rendered as "there is nothing here" (§28, §33). */
+    /** A read or a write failed. Never rendered as "there is nothing here". */
     data class Failed(override val messageRes: Int) : ProgramSessionNotice
 
     /** The attempt completed, and something about its adaptive half is worth saying. */
@@ -163,43 +146,26 @@ sealed interface ProgramSessionNotice {
 /**
  * The workout session screen's state holder — the target runtime's UI half.
  *
- * ### What it owns, and what it deliberately does not
+ * It owns **nothing** about starting, confirming, cancelling or finishing a workout: every one of those is
+ * [SessionRuntime]'s, and this object only calls it and renders what comes back. `open` restores when an
+ * attempt is already in progress, `confirmSet` takes the position from the stored rows, `finish` hands over
+ * the adaptive half from the integration, and `back` calls nothing at all, because leaving the screen is
+ * not a fact about the workout.
  *
- * It owns **nothing** about starting, confirming, cancelling or finishing a workout. Every one of those
- * is [SessionRuntime]'s, and this object only calls it and renders what comes back:
- *
- * ```text
- * open(slotId)   startSession(slotId) — or restoreSession(id) when one is already in progress
- * confirmSet()   confirmSet(sessionId, sessionExerciseId, …) — the position comes from the stored rows
- * cancel()       cancelSession(sessionId)
- * finish()       finishSession(sessionId, adaptive) — the adaptive half from the integration
- * back()         nothing at all: leaving the screen is not a fact about the workout (§19)
- * ```
- *
- * There is no session state machine here, no set counter of its own, no "is this exercise done yet"
- * rule and no completion rule: every one of those is read back from the session the runtime returns. A
+ * There is no session state machine here, no set counter of its own, no "is this exercise done yet" rule
+ * and no completion rule: every one of those is read back from the session the runtime returns, since a
  * second copy would be a second answer to *"what has this attempt confirmed?"*.
  *
- * ### Why the refusal path is written out rather than hidden
- *
  * `startSession` refuses with [SessionRefusal.SlotIsAlreadyBeingWorkedOut] when the opportunity already
- * holds an attempt — and that refusal **names** it. A screen reopened on a workout the user walked away
- * from therefore restores that attempt rather than refusing to show anything, which is §19's *"the
- * attempt is persisted runtime state"* read from the UI's side. Every other refusal and every failure is
- * surfaced as a [ProgramSessionNotice], never as an empty screen.
+ * holds an attempt, and that refusal **names** it — so a screen reopened on a workout the user walked away
+ * from restores that attempt rather than refusing to show anything. Every other refusal and every failure
+ * is surfaced as a [ProgramSessionNotice], never as an empty screen.
  *
- * ### The adaptive half of a completion
- *
- * `finish` asks [ProgramAdaptiveIntegration] what the completion implies and hands its
- * [AdaptiveCompletion] to the runtime, which stores it inside §27's one transaction. When that pass
- * cannot be read, the completion still happens — the workout is a fact the user performed — and the
- * adaptive half is reported as unavailable rather than silently recorded as "nothing was decided": the
- * two are different facts, and only one of them is true (§12, §15).
- *
- * @param runtime §30 step 8's runtime. The only thing that starts, confirms, cancels or finishes.
- * @param adaptive §30 step 12's integration, asked once per completion for the adaptive half.
- * @param lifecycle read for the Program's name, so the screen can say which program is being worked on.
- * @param catalogue the app's own exercise catalogue, read for display names only.
+ * `finish` asks [ProgramAdaptiveIntegration] what the completion implies and hands its [AdaptiveCompletion]
+ * to the runtime, which stores it in the same transaction. When that pass cannot be read the completion
+ * still happens — the workout is a fact the user performed — and the adaptive half is reported as
+ * unavailable rather than silently recorded as "nothing was decided": the two are different facts, and only
+ * one of them is true.
  */
 class ProgramSessionController(
     private val runtime: SessionRuntime,
@@ -210,7 +176,6 @@ class ProgramSessionController(
 
     private val mutableState = MutableStateFlow(ProgramSessionUiState())
 
-    /** The screen's state. */
     val state: StateFlow<ProgramSessionUiState> = mutableState.asStateFlow()
 
     /** The attempt being presented. Held because every operation after `open` is about *this* attempt. */
@@ -218,8 +183,6 @@ class ProgramSessionController(
 
     /** Names resolved once from the catalogue, because the catalogue is a compile-time list. */
     private var nameByExerciseId: Map<String, Int>? = null
-
-    // ---------------------------------------------------------------- opening
 
     /**
      * Opens the attempt for [slotId]: restores the one already in progress, or starts a new one.
@@ -259,14 +222,6 @@ class ProgramSessionController(
         }
     }
 
-    // ---------------------------------------------------------------- the operations
-
-    /**
-     * Confirms one set of the current occurrence.
-     *
-     * @param completedReps repetitions performed, for an occurrence prescribed in repetitions.
-     * @param durationSeconds seconds performed, for an occurrence prescribed in time.
-     */
     suspend fun confirmSet(completedReps: Int = 0, durationSeconds: Int = 0) {
         val stored = confirmSetInternal(completedReps, durationSeconds)
         if (!stored) return
@@ -318,7 +273,7 @@ class ProgramSessionController(
         }
     }
 
-    /** Ends the attempt as cancelled. The opportunity is left exactly as it was (§19). */
+    /** Ends the attempt as cancelled. The opportunity is left exactly as it was. */
     suspend fun cancel() {
         val current = currentAttempt() ?: return
         when (val cancelled = runtime.cancelSession(current.sessionId)) {
@@ -340,8 +295,8 @@ class ProgramSessionController(
      * Completes the attempt: the session, the opportunity and the adaptive half, in one transaction.
      *
      * The adaptive pass is asked **before** the completion and its answer is handed over, because the
-     * runtime stores it in the same unit of work (§27). A pass that cannot be read does not stop the
-     * completion; it is reported, and nothing adaptive is written.
+     * runtime stores it in the same unit of work. A pass that cannot be read does not stop the completion;
+     * it is reported, and nothing adaptive is written.
      */
     suspend fun finish() {
         val current = currentAttempt() ?: return
@@ -369,18 +324,15 @@ class ProgramSessionController(
         }
     }
 
-    /** Clears the sentence the screen is showing. */
     fun dismissNotice() {
         mutableState.update { state -> state.copy(notice = null) }
     }
 
     /**
-     * Leaving the screen. It is deliberately **not** an operation: no call is made, nothing is written,
-     * and the attempt stays `IN_PROGRESS`, so the next open restores it (§19).
+     * Leaving the screen. Deliberately **not** an operation: no call is made, nothing is written, and the
+     * attempt stays `IN_PROGRESS`, so the next open restores it.
      */
     fun back() = Unit
-
-    // ---------------------------------------------------------------- reading the attempt
 
     private fun currentAttempt(): WorkoutSession? = session
 
@@ -412,8 +364,6 @@ class ProgramSessionController(
         }
 
     private data class AdaptiveHalf(val completion: AdaptiveCompletion, val evaluated: Boolean)
-
-    // ---------------------------------------------------------------- presenting
 
     private suspend fun present(session: WorkoutSession) {
         this.session = session
@@ -476,8 +426,8 @@ class ProgramSessionController(
      * The catalogue's display names, read once.
      *
      * A failure to read the catalogue is **not** a failure to present the session: the ids are what the
-     * plan stores (§10), and a name this app cannot resolve is rendered from its id rather than turning
-     * the workout into an unavailable one.
+     * plan stores, and a name this app cannot resolve is rendered from its id rather than turning the
+     * workout into an unavailable one.
      */
     private suspend fun names(): Map<String, Int> {
         nameByExerciseId?.let { cached -> return cached }

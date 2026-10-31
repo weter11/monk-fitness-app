@@ -3,18 +3,15 @@ package com.monkfitness.app.animation
 import kotlin.math.*
 
 /**
- * Camera is a generic mathematical projection utility.
+ * Mathematical projection utility.
  *
- * The camera carries two independent things, and C1 keeps them apart:
- *  * the **viewpoint** — `yaw`/`pitch`/`focalLength` and the anchor `centerX`/`centerY` — authored by
- *    the pose's `PoseMetadata.camera` (`docs/ENGINE.md` §10: camera and environment are owned by the
- *    pose, not by the engine core and not by the rendering surface);
- *  * the **frame** — the zoom the projection lands at on a given surface. A pose cannot author that
- *    surface, so [CameraFraming] derives the frame from the bounds of the frame actually being drawn
- *    and writes the fitted [zoom] back here, never above [authoredZoom].
+ * The viewpoint (`yaw`/`pitch`/`focalLength`, anchor `centerX`/`centerY`) is authored by the pose
+ * through `PoseMetadata.camera`. The frame — the zoom the projection lands at — is not authorable:
+ * a pose cannot know the surface being drawn, so [CameraFraming] derives it from the bounds of the
+ * frame actually drawn and writes the fitted [zoom] back here, never above [authoredZoom].
  *
  * Coordinates are `x = width * centerX + xr * sc * zoom`, `y = height * centerY - y2 * sc * zoom`,
- * so every offset from the anchor `(width*centerX, height*centerY)` is exactly linear in [zoom].
+ * so every offset from the anchor is exactly linear in [zoom].
  */
 class Camera(
     var yaw: Float = 1.19f,
@@ -31,19 +28,13 @@ class Camera(
     )
 
     /**
-     * The zoom this camera was constructed with — the pose's authored `CameraDefinition.defaultZoom`
-     * for every production camera, because `Camera` is built from `PoseMetadata.camera`.
-     *
-     * This is the reference [CameraFraming] measures its viewport fit against, never the camera's
-     * current [zoom]: the fit is then a pure function of (viewpoint, pose, viewport) rather than a
-     * ratchet that would keep a compact frame at the smallest zoom some earlier phase of the rep
-     * needed.
+     * The zoom this camera was constructed with (the pose's authored `defaultZoom`), never the
+     * current [zoom]: [CameraFraming] measures its fit against this, so the fit stays a pure
+     * function of (viewpoint, pose, viewport) instead of a ratchet that keeps a compact frame at
+     * the smallest zoom some earlier phase of the rep needed.
      */
     val authoredZoom: Float = zoom
 
-    /**
-     * Projects a 3D world-space vector into the provided ProjectedPoint buffer.
-     */
     fun project(v: Vector3, width: Float, height: Float, buffer: ProjectedPoint) {
         val cy = cos(yaw)
         val sy = sin(yaw)

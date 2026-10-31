@@ -3,103 +3,65 @@ package com.monkfitness.app.animation
 import com.monkfitness.app.BuildConfig
 
 /**
- * Result of a single pipeline frame. [report] is non-null only when the frame was produced
- * through a validating entry point ([SkeletonPipeline.produceFrameValidated]).
+ * Result of a single pipeline frame; [report] is non-null only for frames produced through a
+ * validating entry point ([SkeletonPipeline.produceFrameValidated]).
  */
 data class PipelineResult(val pose: SkeletonPose, val report: ValidationReport?)
 
-/** A pipeline frame guaranteed to carry a validation report. */
 data class ValidatedFrame(val pose: SkeletonPose, val report: ValidationReport)
 
 /**
- * Architecture v2 — the ordered engine orchestrator (RFC_ENGINE_PIPELINE §3/§5, Gap 1).
+ * The ordered engine orchestrator: `pose.build()` → ConstraintSolver.solve (contacts only) →
+ * SkeletonPoseFinalizer.finalize (FK + flatten) → optional validator.
  *
- * **M2 scope (this file):** the pipeline is unconditionally live (Phase B collapsed the
- * `PIPELINE_ACTIVE` flag to its true branch) and `produceFrame` drives
- * the full ordered stage chain for every consumer:
+ * The pipeline is the sole caller of both the Solver and the Finalizer, in fixed order, which
+ * removes the re-entrancy a Finalizer-side solve call would create. The Solver no-ops on
+ * contact-less poses, so contact-less frames are unchanged.
  *
- * ```
- * Pose.build() → ConstraintSolver.solve (contacts only) → SkeletonPoseFinalizer.finalize (FK + flatten) → optional Validator
- * ```
- *
- * The Finalizer's internal `ConstraintSolver.solve` call was removed in M2 (RFC_ENGINE_PIPELINE
- * §8.1) — the pipeline is now the **sole** caller of both the Solver and the Finalizer, in fixed
- * order, which eliminates the latent re-entrancy (Finalizer→Solver→Finalizer) that existed before.
- * This is a **re-pointing** change: the Solver+Finalizer code paths are byte-identical to the
- * pre-M2 baseline (Solver still no-ops on contact-less poses; the Finalizer performs exactly the
- * same work it did when it called the Solver itself), so the rendered frame is unchanged.
- *
- * **No legacy bypass:** Phase B removed the `PIPELINE_ACTIVE` flag, so `produceFrame` always drives the
- * full stage pipeline (`pose.build()` → `ConstraintSolver.solve` → `finalizer.finalize()`). The
- * M0 byte-identity guarantee still holds for contact-less poses (the Solver no-ops on them).
- *
- * **Ownership & lifetime (RFC_ENGINE_PIPELINE §Issue 5):** a `SkeletonPipeline` owns its stage
- * *instances* (currently the [SkeletonPoseFinalizer] and an optional [ExerciseValidator]) and the
- * Frame History (RFC_RUNTIME_SKELETON_ARCHITECTURE §4.5) — the previous/pre-previous pose chain
- * consumed by the dynamics validator rules and (Phase 5 / §5 R10) the settled-root smoothing
- * input supplied to the solver's Inter-Frame Smoothing (§4.2). The Frame History is now the
- * engine's ONLY cross-frame temporal state: the ConstraintSolver previously kept a hidden
- * identity-keyed cache of its own (plan violation V3) and was made stateless with respect to
- * previous frames. The pipeline is a long-lived, per-engine/per-definition object — **not**
- * created per frame or per pose. It is not thread-safe (one instance per render loop), matching
- * the existing single-threaded finalizer.
+ * A pipeline owns its stage instances and the Frame History — the previous/pre-previous chain the
+ * dynamics rules read plus the settled-root smoothing input — and that history is the engine's
+ * ONLY cross-frame temporal state (the Solver keeps none). It is long-lived per
+ * engine/definition, never created per frame, and not thread-safe (one instance per render loop).
  */
 class SkeletonPipeline(
     private val definition: SkeletonDefinition,
     private val validator: ExerciseValidator? = null
 ) {
     init {
-        // Phase B (RFC_ENGINE_CLEANUP_PLAN): all engine migration flags are collapsed to their
-        // true branch, so the pipeline is unconditionally live and there is no coherence invariant
-        // left to enforce. The constructor is intentionally trivial.
+        // All engine migration flags are collapsed to their true branch, so the pipeline is
+        // unconditionally live and there is no coherence invariant left to enforce.
     }
 
     private val finalizer = SkeletonPoseFinalizer(definition)
 
     // Per-frame history for the dynamics validator rules (velocity/acceleration/discontinuity).
-    // Snapshots so a later frame's finalize (which reuses the finalizer's output buffer) cannot
-    // alias the previous frame's data.
-    // Phase 5 (R10) — this is the RFC §4.5 Frame History and the pipeline is its SOLE owner.
-    // It now advances on EVERY production path via [commitFrameHistory] (both [produceFrame]
-    // overloads and [produceFrameValidated]); before P5 it advanced only on the validating path
-    // while inter-frame smoothing secretly lived in the solver's identity-keyed WeakHashMap
-    // (the V3 violation R10 removes).
+    // Snapshots, so a later frame's finalize — which reuses the finalizer's output buffer — cannot
+    // alias the previous frame's data. The pipeline is the SOLE owner and it advances on EVERY
+    // production path via [commitFrameHistory].
     private var previous: SkeletonPose? = null
     private var prePrevious: SkeletonPose? = null
 
-    // Phase 5 (R10) — the Frame History input for the solver's Inter-Frame Smoothing (§4.2):
-    // the settled root of the most recent frame that RAN THE SOLVER, captured BY VALUE right
-    // after that solve (node buffers are reused across builds, so a reference must never be
-    // retained). Same value space the deleted solver cache persisted (the pelvis node's local
-    // position — the root space the solver seeds and eases in), so sequential-playback
-    // smoothing numerics are unchanged; what changed is WHO holds it and how the next solve
-    // receives it: the pipeline owns it and passes it as an explicit current-frame input, and
-    // it is never keyed by SkeletonPose identity — every consumer of this pipeline shares the
-    // single rolling history (RFC §5 R10; plan Risk 3). `null` until this pipeline has solved
-    // its first frame — the legitimate "first frame" case.
+    // The smoothing input for the solver's Inter-Frame Smoothing: the settled root of the most
+    // recent frame that RAN THE SOLVER, captured BY VALUE right after that solve (node buffers are
+    // reused across builds, so a reference must never be retained). It holds the pelvis node's
+    // local position — the root space the solver seeds and eases in — so sequential-playback
+    // numerics are unchanged; the pipeline owns it and passes it explicitly, never keyed by pose
+    // identity. `null` until this pipeline has solved its first frame.
     private var previousSmoothingRoot: Vector3? = null
-    // Debug trip-wire bookkeeping (see [runStages]): whether the most recent frame RAN the
-    // solver over a hierarchy with a settled pelvis node — i.e. whether it captured (or should
-    // have captured) a smoothing root for the next frame. Distinguishes a legitimate
-    // "first frame / solve skipped" state from "forgot to wire". Never read in release builds.
+    // Debug trip-wire bookkeeping (see [runStages]): whether the most recent frame RAN the solver
+    // over a hierarchy with a settled pelvis node, i.e. whether it captured (or should have
+    // captured) a smoothing root. Distinguishes "first frame / solve skipped" from "forgot to
+    // wire". Never read in release builds.
     private var lastFrameArmedSmoothingCapture = false
 
     /**
-     * Entry point for an already-built pose (renderer path). Runs the stage chain on [builtPose].
+     * Entry point for an already-built pose (renderer path). The caller supplies the engine-owned
+     * support model, because a bare SkeletonPose does not carry its declaration source.
      *
-     * **B-5 — the Frame Context is never silently erased.** The caller supplies the engine-owned
-     * support model ([environment] + [supportedPoints]) because this overload receives a bare
-     * SkeletonPose whose declaration source (`metadata`) is not on the carrier by construction
-     * (R8/R11: Production Metadata bypasses the carrier). Both parameters therefore default to the
-     * Frame Context the supplied frame ALREADY carries: omission preserves the frame's context,
-     * while an explicit argument is forwarded verbatim and wins. Before B-5 both defaults were the
-     * empty model and [injectRuntimeContext] overwrote unconditionally, so re-entering a produced
-     * frame through this entry point silently rewrote the caller's frame and re-published it without
-     * its Support Declaration (measured: 24 of the 49 registered poses carry one, and dropping it
-     * moved extremity geometry by up to 22.76 units).
-     *
-     * The PoseBuilder overload derives both halves of the context from `metadata` itself (§5 R8's
-     * External-definition sources: [SupportDefinition.supportPoints] + `metadata.environment`).
+     * Both parameters default to the context the supplied frame ALREADY carries: omission
+     * preserves it, an explicit argument is forwarded verbatim and wins. Defaulting to the empty
+     * model instead would silently drop the frame's support declaration on re-entry (24 of 49
+     * registered poses carry one; dropping it moved extremity geometry by up to 22.76 units).
      */
     fun produceFrame(
         builtPose: SkeletonPose,
@@ -108,17 +70,14 @@ class SkeletonPipeline(
     ): PipelineResult {
         injectRuntimeContext(builtPose, environment, supportedPoints)
         val finalized = runStages(builtPose)
-        // Phase 5 (R10) — Frame History is committed on this path too (see [commitFrameHistory]).
+        // Frame History is committed on this path too (see [commitFrameHistory]).
         commitFrameHistory(finalized)
         return PipelineResult(finalized, null)
     }
 
     /**
-     * Single entry point. The pipeline is unconditionally live (Phase B collapsed the flag), so this always drives
-     * the full ordered stage pipeline: `pose.build(context)` → `ConstraintSolver.solve` (contacts
-     * only) → `finalizer.finalize(...)` → FK flatten. This is exactly the pre-M0 `build` → `finalize`
-     * flow, but with the pipeline-owned Solver folded in. Returns a [PipelineResult] with a `null`
-     * report (use [produceFrameValidated] for validation).
+     * Builder entry point: drives the full ordered stage chain and returns a [PipelineResult] with
+     * a `null` report (use [produceFrameValidated] for validation).
      */
     fun produceFrame(pose: PoseBuilder, context: PoseContext): PipelineResult {
         val finalized = runStages(buildAndInject(pose, context))
@@ -127,40 +86,26 @@ class SkeletonPipeline(
     }
 
     /**
-     * Builder-path front half: `build()` + the single [injectRuntimeContext] call. Shared by
-     * [produceFrame] and [produceFrameValidated] (the validating entry must run the stages
-     * *before* committing history so it can validate against the PREVIOUS frame's chain).
+     * Builder-path front half: `build()` + the single [injectRuntimeContext] call. The validating
+     * entry runs the stages *before* committing history so it can validate against the PREVIOUS
+     * frame's chain.
      */
     private fun buildAndInject(pose: PoseBuilder, context: PoseContext): SkeletonPose {
         val built = pose.build(context)
-        // W1b — stamp the engine-owned support model onto the pose so the Finalizer can derive
-        // support planes for EVERY pose from the environment (ground + props) and the declared
-        // support contacts, instead of any per-pose hardcoded plane. Declarative: the pose only
-        // says WHICH points rest on WHAT; the engine decides the geometry. No-op for a pose with
-        // no environment/support declared (byte-identical geometry elsewhere).
-        // R8: deriving the support-point set from Contact Declarations counts as injection-time
-        // derivation (§4.1 Group B producer text), so it feeds the single injection call below.
-        // B-5 — the derivation itself lives in ONE production place
-        // (`SupportDefinition.supportPoints`), which is also what the renderer-path callers
-        // resolve; a second copy here is exactly how the renderer path silently diverged.
+        // Stamp the engine-owned support model onto the pose so the Finalizer can derive support
+        // planes for EVERY pose from the environment (ground + props) and the declared contacts,
+        // instead of a per-pose hardcoded plane: the pose only says WHICH points rest on WHAT, the
+        // engine decides the geometry. No-op when nothing is declared.
+        // The derivation lives in ONE production place (`SupportDefinition.supportPoints`), also
+        // used by the renderer path; a second copy here is exactly how that path diverged.
         injectRuntimeContext(built, pose.metadata.environment, pose.metadata.support.supportPoints)
         return built
     }
 
     /**
-     * R8 — Runtime Context Injection single-point (IMPLEMENTATION_PLAN_RUNTIME_SKELETON.md,
-     * Phase 1; RFC_RUNTIME_SKELETON_ARCHITECTURE §5 R8 / §3.1 Frame Context constituency).
-     *
      * The ONLY place the pipeline stamps [SkeletonPose.environment] and
-     * [SkeletonPose.supportedPoints]. Both [produceFrame] overloads call this exactly once,
-     * immediately before [runStages]; no other pipeline method writes these carriers. The
-     * renderer overload forwards its caller-supplied support model verbatim — or, when the caller
-     * supplies none, the context the frame itself already carries (B-5); the builder overload
-     * resolves it from `pose.metadata` at the call site (Contact Declaration derivation is
-     * injection-time derivation, kept inside this boundary).
-     *
-     * Behavior-preserving extraction: each overload previously performed exactly these writes
-     * inline, at the same position in the frame sequence.
+     * [SkeletonPose.supportedPoints]. Both [produceFrame] overloads call it exactly once,
+     * immediately before [runStages]; no other pipeline method writes these carriers.
      */
     private fun injectRuntimeContext(
         pose: SkeletonPose,
@@ -168,9 +113,9 @@ class SkeletonPipeline(
         supportedPoints: Set<SupportPoint>
     ) {
         pose.environment = environment
-        // B-5 — the renderer overload's defaults alias the carrier's own set (omission = "keep what
-        // the frame carries"). Clearing before re-adding that same instance would empty the carrier,
-        // so the rewrite is skipped when the source IS the carrier.
+        // The renderer overload's defaults alias the carrier's own set (omission = keep what the
+        // frame carries); clearing before re-adding that same instance would empty the carrier, so
+        // the rewrite is skipped when the source IS the carrier.
         if (supportedPoints !== pose.supportedPoints) {
             pose.supportedPoints.clear()
             pose.supportedPoints.addAll(supportedPoints)
@@ -179,73 +124,54 @@ class SkeletonPipeline(
 
     /**
      * Ordered stage chain shared by both entry points: Solver (contacts only) → Finalizer (FK +
-     * flatten). This is the single place the Solver and Finalizer are invoked, in fixed order
-     * (RFC_ENGINE_PIPELINE §8.1 — the pipeline is the sole caller of both, preventing re-entrancy).
+     * flatten) — the single place both are invoked, in fixed order.
      */
     private fun runStages(pose: SkeletonPose): SkeletonPose {
-        // P8 (§6 Phase 4 / §3.3) — window-start evidence: the pipeline is opening a NEW
-        // execution window over this carrier (R11 transfer), so any publication marker the
-        // finalizer holds from a previous frame of the SAME carrier (the reused jointsBuffer
-        // path — sequential playback produces one carrier per builder) is a legitimate
-        // re-arm, not a re-entry violation. Debug-only, same placement as every other
-        // boundary instrument in this function.
+        // Window-start evidence: the pipeline opens a NEW execution window over this carrier, so a
+        // publication marker the finalizer holds from a previous frame of the SAME carrier
+        // (sequential playback reuses one carrier per builder) is a legitimate re-arm, not a
+        // re-entry violation. Debug-only.
         if (BuildConfig.DEBUG) finalizer.beginPublishWindow()
-        // R8 enforcement (debug builds only) — snapshot the freshly injected context, then
-        // re-compare after every stage. Carrier-level post-injection writes by a stage fail
-        // fast with IllegalStateException("R8 violation: …"). This is characterization/
-        // enforcement of carrier-level mutation, not complete mechanical R8 enforcement:
-        // deep payload mutation and content-identical rewrites are outside its reach, and
-        // release builds compile the mechanism out entirely (no snapshot, no compare).
+        // Snapshot the freshly injected context and re-compare after every stage: a carrier-level
+        // post-injection write by a stage fails fast. It enforces carrier-level mutation only —
+        // deep payload mutation and content-identical rewrites are outside its reach — and release
+        // builds compile it out entirely.
         val r8 = if (BuildConfig.DEBUG) RuntimeContextSnapshot.of(pose) else null
-        // Phase 6 (R2) — root-authority boundary instrumentation (debug builds only; RFC §5 R2,
-        // plan §P6). Capture point A: this is the window-entry state — build has returned and
-        // Runtime Context Injection is done, so the pelvis transform holds the last lawful
-        // authoring write. `r2ProtectedRoot` is the snapshot later checks compare against; it
-        // switches ONLY at the explicit solve site below (capture B) — never inferred from the
-        // retained Frame History (P5 pitfall 1): a frame that legitimately skips the solve has
-        // no authorized root mover, so A must survive to publish untouched.
+        // Root-authority capture A: the window-entry state — build has returned and injection is
+        // done, so the pelvis holds the last lawful authoring write. It switches ONLY at the
+        // explicit solve site below (capture B), never inferred from retained history: a frame that
+        // legitimately skips the solve has no authorized root mover, so A must survive untouched.
         var r2ProtectedRoot =
             if (BuildConfig.DEBUG) PhaseBoundaryAsserts.captureRoot(pose, "capture A (post-build)") else null
-        // Phase 7 (R3) — settled-contact boundary instrumentation (debug builds only; RFC §5
-        // R3/R7, §3.2, plan §P7). `r3SettledContacts` holds the post-solve WORLD-position
-        // snapshot of the frame's settled-contact end-effectors; it arms ONLY at the explicit
-        // solve site below, and only when this solve actually PRODUCED the Settlement Result
-        // it references (identity-vs-prior evidence — never inferred from retained history or
-        // root state, per the P5/P6 armed-state pattern). A frame that skips the solve, or
-        // whose solve early-returned above the populate point, arms nothing: no settle means
-        // no settled geometry to protect.
+        // Post-solve WORLD-position snapshot of the frame's settled-contact end-effectors. Arms
+        // ONLY at the explicit solve site below, and only when this solve actually PRODUCED the
+        // Settlement Result it references (identity vs prior, never inferred). A frame that skips
+        // the solve, or whose solve early-returned above the populate point, arms nothing: no
+        // settle means no settled geometry to protect.
         var r3SettledContacts: PhaseBoundaryAsserts.SettledContactSnapshot? = null
-        // B1 (IkStage extraction) — the pipeline-owned limb stage consumes the §1.1 `limbTargets`
-        // carrier and re-derives each limb's local positions on the engine-owned node tree.
-        // P12 (state 3): this gate is the CONFIGURATION SELECTOR, not a legacy no-op — with the
-        // deployed default `true` the stage is the sole Active Limb Solver and the authoring bakes'
-        // realization branch is gated off (§12.7a). It runs
-        // before the ConstraintSolver so contact limbs are re-baked from its targets ahead of the
-        // root-repositioning pass, and before the Finalizer's FK.
+        // The pipeline-owned limb stage consumes `limbTargets` and re-derives each limb's local
+        // positions on the engine-owned node tree. `IK_STAGE_ACTIVE` is the CONFIGURATION SELECTOR,
+        // not a legacy no-op: with the deployed default the stage is the sole Active Limb Solver and
+        // the authoring bakes' realization branch is gated off. It runs before the ConstraintSolver
+        // so contact limbs are re-baked ahead of the root-repositioning pass, and before the FK.
         IkStage.apply(pose, definition)
         r8?.assertUnchanged(pose, "after IkStage")
-        // Phase 6 Check 1 — Phase 1 is not a root mover: the pelvis must be bit-identical to A
-        // (covers the engine-side-limb-stage-active configuration; the limb stage writes only
-        // middle/end joint locals, so a pelvis change here means a regression).
+        // Check 1 — the limb stage is not a root mover: it writes only middle/end joint locals, so
+        // a pelvis change here means a regression.
         if (BuildConfig.DEBUG) {
             r2ProtectedRoot?.assertUnchanged(pose, "Phase 1 (IkStage limb solve window)")
         }
-        // Stage 3 (ConstraintSolver) — posture/contact settling. Runs for contact poses (M3) and
-        // for any pose that names a non-CUSTOM posture intent so the engine owns the coarse root
-        // height. A CUSTOM, contact-less production pose is still a pure no-op. (Phase B collapsed
-        // PIPELINE_ACTIVE and SOLVER_OWNS_POSTURE to their true branch: the pipeline is always live
-        // and posture ownership is always on.)
+        // Posture/contact settling. Runs for contact poses and for any pose naming a non-CUSTOM
+        // posture intent, so the engine owns the coarse root height. A CUSTOM, contact-less pose is
+        // still a pure no-op.
         val postureDriven = pose.postureIntent.kind != PostureIntent.Kind.CUSTOM
-        // Phase 5 (R10) — the Frame History smoothing input is supplied to the solve as an
-        // explicit current-frame argument; the solver derives it from no other source (RFC
-        // §5 R10: behavior is a function of current-frame inputs plus supplied history, never
-        // of object identity). Debug `check` distinguishes the legitimate "first frame of the
-        // history window" from "forgot to wire": the trip-wire is armed only when the frame
-        // about to become `previous` actually RAN the solver over a hierarchy with a pelvis
-        // node (a frame that skipped the solve — contact-less CUSTOM — legitimately has no
-        // smoothing root to capture, exactly like the deleted cache which was written only
-        // by solving frames). If a future refactor drops the capture below, the next frame's
-        // solve throws here instead of silently losing smoothing.
+        // The smoothing input is supplied to the solve as an explicit current-frame argument; the
+        // solver derives it from no other source (behaviour is a function of current-frame inputs
+        // plus supplied history, never of object identity). The debug `check` distinguishes the
+        // legitimate "first frame of the history window" from "forgot to wire": the trip-wire is
+        // armed only when the frame about to become `previous` actually RAN the solver over a tree
+        // with a pelvis node. If a refactor drops the capture below, the next solve throws here
+        // instead of silently losing smoothing.
         if (BuildConfig.DEBUG) {
             check(
                 previous == null || !lastFrameArmedSmoothingCapture || previousSmoothingRoot != null
@@ -256,40 +182,32 @@ class SkeletonPipeline(
             }
         }
         if (pose.roots.isNotEmpty() && (pose.hasContacts() || postureDriven)) {
-            // Phase 7 (R3) — arming evidence read BEFORE the solve: the ConstraintSolver fixes
-            // a NEW Settlement Result instance on every complete settle, so `!== prior` after
-            // the call is per-frame production evidence at the execution site (P6 armed-state
-            // pattern). A solve that early-returns above the populate point leaves a stale
-            // carrier slot — identity is then equal and nothing arms; the reference is never
-            // inferred from retained history or root state.
+            // Arming evidence read BEFORE the solve: the ConstraintSolver fixes a NEW Settlement
+            // Result instance on every complete settle, so `!== prior` afterwards is per-frame
+            // production evidence. A solve that early-returns above the populate point leaves the
+            // stale slot — identity is equal and nothing arms.
             val priorSettlement = if (BuildConfig.DEBUG) pose.settlementResult else null
             ConstraintSolver.solve(pose, definition, previousSmoothingRoot)
-            // Phase 5 (R10) — capture THIS frame's settled root BY VALUE as the next frame's
-            // smoothing history, immediately after the solve (the sole root mover, R2). Read
-            // from the pelvis node's local position — the exact value space the deleted solver
-            // cache persisted (the root space the solver seeds/eases in), so sequential-
-            // playback smoothing numerics are unchanged. Node buffers are reused across
-            // builds, so the reference must never be retained. A pelvis-less solved tree
-            // captures nothing (the old cache could not have been written either — `solve`
-            // early-returns before settling without a pelvis).
+            // Capture THIS frame's settled root BY VALUE as the next frame's smoothing history,
+            // immediately after the solve (the sole root mover). Read from the pelvis node's local
+            // position — the exact value space the solver seeds/eases in, so sequential-playback
+            // numerics are unchanged. Node buffers are reused across builds, so the reference must
+            // never be retained. A pelvis-less solved tree captures nothing (`solve` early-returns
+            // before settling without a pelvis).
             val settledRoot = findPelvisNode(pose.roots)?.localPosition
             if (settledRoot != null) {
                 previousSmoothingRoot = Vector3(settledRoot.x, settledRoot.y, settledRoot.z)
             }
             if (BuildConfig.DEBUG) {
                 lastFrameArmedSmoothingCapture = settledRoot != null
-                // Phase 6 capture point B — the solve ran (the authorized root mover). The
-                // protected reference for the remaining windows switches to the settled root
-                // NOW, at the explicit branch site (the P5 armed-state pattern: the decision
-                // is made by instrumentation at the execution site, never inferred from
-                // retained history). A pelvis-less solved tree keeps A: no settled root was
-                // written, so the authored root remains the state that must survive.
+                // Capture point B — the solve ran (the authorized root mover), so the protected
+                // reference switches to the settled root NOW, at the execution site. A pelvis-less
+                // solved tree keeps A: no settled root was written, so the authored root must
+                // survive.
                 r2ProtectedRoot = PhaseBoundaryAsserts.captureRoot(pose, "capture B (post-settlement)")
-                // Phase 7 capture — arm the settled-contact reference ONLY when THIS solve
-                // produced the Settlement Result it lists (new instance vs the pre-call slot).
-                // The snapshot reads the reference set from the Settlement Result (the sole
-                // canonical producer output) and the world positions the solver's final FK +
-                // flatten just wrote into the carrier.
+                // Arm the settled-contact reference ONLY when THIS solve produced the Settlement
+                // Result it lists. The snapshot reads the joint set from that result and the world
+                // positions the solver's final FK + flatten just wrote.
                 if (pose.settlementResult !== priorSettlement) {
                     r3SettledContacts =
                         PhaseBoundaryAsserts.captureSettledContacts(pose, "post-settlement (Phase 2 exit)")
@@ -297,23 +215,19 @@ class SkeletonPipeline(
             }
         } else if (BuildConfig.DEBUG) {
             lastFrameArmedSmoothingCapture = false
-            // Phase 6 branch handling — the solve was legitimately skipped (contact-less
-            // CUSTOM), so no authorized mover exists after build: Checks 1/2 compare against
-            // A directly (plan §P6). `r2ProtectedRoot` intentionally still holds A here.
+            // The solve was legitimately skipped (contact-less CUSTOM), so no authorized mover
+            // exists after build: the later checks compare against A directly.
         }
         r8?.assertUnchanged(pose, "after ConstraintSolver")
-        // Stage 4+ (Finalizer) — world↔local conversion, extremity derivation, chest-frame
-        // reconstruction, FK flatten. The Finalizer no longer calls the Solver itself (M2).
+        // Finalizer: world↔local conversion, extremity derivation, chest-frame reconstruction, FK
+        // flatten. It no longer calls the Solver itself.
         val finalized = finalizer.finalize(pose)
-        // Checked on the INPUT pose: [finalize] copies into its own output buffer, so the R8
-        // question here is whether any stage wrote the injected context on the pose that
-        // entered the chain — not what the output copy carries.
+        // Checked on the INPUT pose: [finalize] copies into its own output buffer, so the question
+        // is whether a stage wrote the injected context on the pose that entered the chain.
         r8?.assertUnchanged(pose, "after Finalizer")
-        // Phase 6 Check 2 — Phases 3/4 (Finalize + publish) are not root movers: the published
-        // frame's pelvis must be bit-identical to the protected reference (B on solved frames,
-        // A on legitimately skipped frames). Checked on the FINALIZED pose — its `roots` are the
-        // same node tree the Finalizer published from, so this asserts on the state consumers
-        // actually receive (RFC §6 Phase 4: publication completes with these transforms).
+        // Check 2 — finalize + publish are not root movers: the published pelvis must be
+        // bit-identical to the protected reference (B on solved frames, A on skipped ones). Checked
+        // on the FINALIZED pose, whose `roots` are the tree consumers actually receive.
         if (BuildConfig.DEBUG) {
             r2ProtectedRoot?.assertUnchanged(
                 finalized,
@@ -321,40 +235,28 @@ class SkeletonPipeline(
                     (if (pose.hasContacts() || postureDriven) "ran" else "was skipped") +
                     " this frame)"
             )
-            // Phase 7 Check — R3 Settled-Contact Guarantee (RFC §5 R3/R7, plan §P7): every
-            // settled contact end-effector must still sit at its post-solve world position
-            // once Phase 3 finalization has completed. Checked on the FINALIZED pose — the
-            // tree consumers receive, so this detects a settled contact displaced by ANY
-            // finalization operation (frame-wide walk over the Settlement Result's list; per
-            // plan, whole-phase checking first — finer instrumentation only on triage).
+            // Every settled contact end-effector must still sit at its post-solve world position
+            // once finalization has completed. Checked on the FINALIZED pose, so this detects a
+            // settled contact displaced by ANY finalization operation (whole-phase check first;
+            // finer instrumentation only on triage).
             r3SettledContacts?.assertUnchanged(
                 finalized,
                 "Phase 3 finalization (post-settlement → completion of " +
                     "SkeletonPoseFinalizer.finalize)"
             )
         }
-        // Phase 4 (R5) / P12 §12.7b — strengthened runtime enforcement. Two pieces of execution
-        // evidence from the registered realization sites:
-        //  - WINDOW count (the first block below): the counter covers BOTH registered realization
-        //    sites (authoring bake branch + engine stage), so
-        //    · flag-ON (stage config): the stage window must have executed exactly once (it counts
-        //      at entry); any leaked second solver (a bake that realized while the stage was on, a
-        //      duplicated stage call, or a hidden third path) raises the count and the check fires
-        //      even when the two implementations produce byte-identical output;
-        //    · flag-OFF (authoring config): the bake's per-build realization counts once (the
-        //      authoring window is re-armed through the same registration path the sites call); the
-        //      `count == 0` case survives ONLY for the legacy skipped-window reading (no registered
-        //      realization this frame) — in particular a zero-limb/custom pose, which legitimately
-        //      opens no window while the stage is disabled. **In the deployed configuration
-        //      (state 3) the disjunct is unreachable** — `IkStage.apply` counts its window at entry,
-        //      so a frame that reaches the pipeline always reports exactly one window, and the
-        //      enforced formula there is exactly `count == 1` (§12.7b, §12.10 criterion 4).
-        //  - PER-EXECUTION evidence (WP-G): the window count has a resolution limit — two
-        //    realizations of ONE limb inside ONE window (a duplicated Limb Target handed to the
-        //    stage, or a second `bakeIkLimb` call for the same joint in one build) leave the same
-        //    window count and a byte-identical frame. `limbDuplicateRealizations` counts those
-        //    events, and the second check rejects the frame on that number alone: the violation is
-        //    EXECUTION evidence, never a comparison of world positions, floats, stamps or hashes.
+        // Runtime enforcement over two pieces of execution evidence:
+        //  - WINDOW count covers BOTH registered realization sites (authoring bake branch + engine
+        //    stage). The stage window must have executed exactly once; any leaked second solver — a
+        //    bake that realized while the stage was on, a duplicated stage call, a hidden third
+        //    path — raises the count and fires the check even when both produce identical output.
+        //    `count == 0` survives only for the legacy skipped-window reading while the stage is
+        //    disabled (a zero-limb/custom pose legitimately opens no window).
+        //  - PER-EXECUTION evidence: the window count cannot see two realizations of ONE limb inside
+        //    ONE window (a duplicated limb target, a second `bakeIkLimb` for the same joint) — same
+        //    count, byte-identical frame. `limbDuplicateRealizations` counts those events and the
+        //    second check rejects on that number alone: the violation is EXECUTION evidence, never
+        //    a comparison of world positions, floats, stamps or hashes.
         if (BuildConfig.DEBUG) {
             check(
                 pose.limbSolverExecutions == 1 ||
@@ -381,15 +283,10 @@ class SkeletonPipeline(
     }
 
     /**
-     * Phase 5 (R10) — the SOLE rotation site of the Frame History pose chain, called by every
-     * production entry point after the frame is produced (the validating path commits only
-     * after validation consumed the PREVIOUS chain, preserving dynamics-rule ordering).
-     * [previous]/[prePrevious] hold snapshots of the finalized frame per the §4.5 rolling
-     * two-frame lifetime. Behavior change vs pre-P5: the chain now also advances on the two
-     * non-validating [produceFrame] overloads (previously it advanced only on the validating
-     * path, while smoothing secretly lived in the solver's identity cache). The smoothing root
-     * capture lives in [runStages] (next to the solve it follows); both are pipeline-owned
-     * Frame History state.
+     * The SOLE rotation site of the Frame History chain, called by every production entry point
+     * after the frame is produced; the validating path commits only after validation consumed the
+     * PREVIOUS chain, preserving dynamics-rule ordering. Snapshots (not references), because the
+     * finalizer's output buffer is reused. The smoothing-root capture lives in [runStages].
      */
     private fun commitFrameHistory(finalized: SkeletonPose) {
         prePrevious = previous
@@ -415,10 +312,9 @@ class SkeletonPipeline(
     }
 
     /**
-     * [produceFrame] plus the mandatory validation stage. Requires a validator to have been
-     * supplied at construction. The dynamics rules read the previous/pre-previous Frame History
-     * before this frame is committed to it; call [resetHistory] when the animation
-     * restarts/seeks.
+     * [produceFrame] plus the mandatory validation stage; a validator must have been supplied at
+     * construction. The dynamics rules read the previous/pre-previous history before this frame is
+     * committed to it; call [resetHistory] on restart/seek.
      */
     fun produceFrameValidated(
         pose: PoseBuilder,
@@ -443,8 +339,7 @@ class SkeletonPipeline(
             prePreviousPose = prePrevious,
             deltaTime = deltaTime
         )
-        // Phase 5 (R10) — history rotation folded into the shared [commitFrameHistory]; the
-        // validate call above still reads the PREVIOUS chain before this frame commits.
+        // The validate call above still reads the PREVIOUS chain before this frame commits.
         commitFrameHistory(finalized)
         return ValidatedFrame(finalized, report)
     }

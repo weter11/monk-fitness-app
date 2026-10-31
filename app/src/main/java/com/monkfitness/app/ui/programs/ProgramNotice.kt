@@ -3,44 +3,34 @@ package com.monkfitness.app.ui.programs
 import com.monkfitness.app.R
 
 /**
- * What the Program screens report after an operation, in the four classes §28 and §15 require the user
- * to be able to tell apart.
+ * What the Program screens report after an operation, in the four classes the user must be able to tell
+ * apart.
  *
- * Every path through the Program System already answers with a typed result
- * ([com.monkfitness.app.domain.program.ProgramOperationResult],
- * [com.monkfitness.app.domain.program.ProgramEditorResult],
- * [com.monkfitness.app.domain.program.transfer.ProgramTransferResult]), so nothing in the UI has to
- * interpret an exception or a boolean. What is left for this type is the one thing those results
- * deliberately do not carry: **the sentence a user reads**, as a string resource rather than a literal
- * (§14).
+ * Every path already answers with a typed result, so nothing in the UI has to interpret an exception or a
+ * boolean; what is left for this type is the one thing those results deliberately do not carry: **the
+ * sentence a user reads**, as a string resource rather than a literal.
  *
- * ```text
- * Done      the operation happened, and this is what it did
- * Refused   a rule of §3, §4 or §29 stopped it — the user can act and try again
- * Invalid   the file or the draft is not acceptable — the user picks another file / fixes the draft
- * Failed    storage or the platform failed — recoverable, and never presented as success
- * ```
- *
- * The distinction between [Refused] and [Invalid] is §15's *"expected/refused action requiring user
- * action"* versus *"invalid imported data"*; the distinction between both and [Failed] is §33's
- * prohibition on turning a failure into an empty result or a silent no-op. A screen shows the message
- * and, for the three non-[Done] cases, keeps the user on the screen they were on.
+ * [Done] is the operation that happened and what it did; [Refused] a rule stopped it and the user can act
+ * and try again; [Invalid] the file or the draft is not acceptable, so the user picks another file or fixes
+ * the draft; [Failed] storage or the platform failed, recoverable and never presented as success. The
+ * [Refused]/[Invalid] split is *"expected/refused action requiring user action"* versus *"invalid imported
+ * data"*, and both stay apart from [Failed] so a failure is never turned into an empty result or a silent
+ * no-op. A screen shows the message and, for the three non-[Done] cases, keeps the user where they were.
  */
 sealed interface ProgramNotice {
 
     /** The user-facing sentence: a string resource, never a literal built here. */
     val messageRes: Int
 
-    /** The operation completed. */
     data class Done(override val messageRes: Int) : ProgramNotice
 
-    /** A rule refused the operation as an expected state (§28). */
+    /** A rule refused the operation: an expected state, and one the user can act on. */
     data class Refused(override val messageRes: Int) : ProgramNotice
 
     /** The data offered was not acceptable: a file that is not a program, or a draft that cannot be saved. */
     data class Invalid(override val messageRes: Int) : ProgramNotice
 
-    /** Storage or the platform failed (§28's `SYSTEM_FAILURE`). Never reported as a success. */
+    /** Storage or the platform failed. Never reported as a success. */
     data class Failed(override val messageRes: Int) : ProgramNotice
 
     companion object {
@@ -49,7 +39,7 @@ sealed interface ProgramNotice {
         val SELECTED: ProgramNotice = Done(R.string.programs_notice_selected)
         val RENAMED: ProgramNotice = Done(R.string.programs_notice_renamed)
 
-        /** §3's planned start date: the date was saved, which is a different sentence from a rename. */
+        /** The planned start date was saved, which is a different sentence from a rename. */
         val PLANNED_START_DATE_SET: ProgramNotice = Done(R.string.programs_notice_planned_start_set)
         val ARCHIVED: ProgramNotice = Done(R.string.programs_notice_archived)
         val UNARCHIVED: ProgramNotice = Done(R.string.programs_notice_unarchived)
@@ -62,7 +52,6 @@ sealed interface ProgramNotice {
         val DRAFT_UNCHANGED: ProgramNotice = Done(R.string.programs_notice_nothing_changed)
         val IMPORTED: ProgramNotice = Done(R.string.programs_notice_imported)
 
-        /** §3, §4 and §29's refusals, each with the sentence that explains it. */
         val STANDARD_CANNOT_BE_EDITED: ProgramNotice =
             Refused(R.string.programs_refused_standard_edit)
         val STANDARD_CANNOT_BE_DELETED: ProgramNotice =
@@ -73,7 +62,6 @@ sealed interface ProgramNotice {
         val ILLEGAL_TRANSITION: ProgramNotice = Refused(R.string.programs_refused_transition)
         val PROGRAM_NOT_FOUND: ProgramNotice = Refused(R.string.programs_refused_not_found)
 
-        /** §15's *"invalid imported data"*, one case per refusal kind §19 of the transfer stage names. */
         val NOT_A_PROGRAM_FILE: ProgramNotice = Invalid(R.string.programs_import_not_a_file)
         val UNSUPPORTED_FORMAT_VERSION: ProgramNotice =
             Invalid(R.string.programs_import_unsupported_version)
@@ -84,56 +72,54 @@ sealed interface ProgramNotice {
         val DRAFT_REJECTED: ProgramNotice = Invalid(R.string.programs_draft_rejected)
 
         /**
-         * §7's Generated path, when the app still states **no** focus classification for any exercise.
+         * The Generated path when the app states **no** focus classification for any exercise.
          *
-         * P24 closed that gap for the shipped catalogue
-         * ([com.monkfitness.app.domain.usecase.ProductionFocusClassification]), so this is no longer
-         * the ordinary answer to Generate — it is the answer for a catalogue that has regressed to
-         * stating nothing, which is exactly the state a user must be told about rather than shown a
-         * plan built from a guess. Kept, not deleted, because a gap that can reopen needs a sentence.
+         * Not the ordinary answer to Generate — the shipped catalogue is classified — but the answer for a
+         * catalogue that has regressed to stating nothing, which is exactly the state a user must be told
+         * about rather than shown a plan built from a guess. Kept, not deleted, because a gap that can
+         * reopen needs a sentence.
          */
         val GENERATION_UNAVAILABLE: ProgramNotice = Refused(R.string.programs_generation_unavailable)
 
-        /** §7's Generate produced a plan and reconciled it into the draft; nothing was persisted. */
+        /** Generate produced a plan and reconciled it into the draft; nothing was persisted. */
         val GENERATED: ProgramNotice = Done(R.string.programs_notice_generated)
 
         /**
-         * §30 step 26: a **Preview** was produced and is on screen. Nothing about the draft has
-         * changed, so the sentence says so rather than repeating `GENERATED` — a user who reads
-         * *"a plan was generated into the draft"* next to a draft that is untouched has been told
-         * something false, and §33's whole subject is not telling them that.
+         * A **Preview** was produced and is on screen. Nothing about the draft has changed, so the
+         * sentence says so rather than repeating `GENERATED`: a user who reads *"a plan was generated into
+         * the draft"* next to an untouched draft has been told something false.
          */
         val GENERATION_PREVIEWED: ProgramNotice = Done(R.string.programs_notice_previewed)
 
         /**
-         * §7's Generate was refused for this configuration: nothing in the library can serve it with
-         * the equipment available.
+         * Generate was refused for this configuration: nothing in the library can serve it with the
+         * equipment available.
          *
-         * A [Refused] rather than a [Failed] and rather than a success with an empty plan (§33): the
-         * user's own draft is untouched and the reason is one they can act on — declare the equipment
-         * they own, or choose focuses the library can serve.
+         * A [Refused] rather than a [Failed] and rather than a success with an empty plan: the user's own
+         * draft is untouched and the reason is one they can act on — declare the equipment they own, or
+         * choose focuses the library can serve.
          */
         val GENERATION_REFUSED: ProgramNotice = Refused(R.string.programs_generation_refused)
 
         /**
-         * The generation pass itself failed. The draft is unchanged and the user is told so, which is
-         * what §28's `SYSTEM_FAILURE` class is for: never presented as a completed generation.
+         * The generation pass itself failed. The draft is unchanged and the user is told so: never
+         * presented as a completed generation.
          */
         val GENERATION_FAILED: ProgramNotice = Failed(R.string.programs_generation_failed)
 
         /**
-         * §30 step 21: the Program **started**, and its target schedule was not planned.
+         * The Program **started**, and its target schedule was not planned.
          *
-         * This is not a lifecycle refusal — the Program is running and its factual start date is
-         * recorded — and it is not a success either, because nothing was planned for it. Reporting
-         * the start's own success would tell the user a Program was scheduled when no target row
-         * exists, so the composition's second half gets its own sentence.
+         * Not a lifecycle refusal — the Program is running and its factual start date is recorded — and not
+         * a success either, because nothing was planned for it: reporting the start's own success would
+         * tell the user a Program was scheduled when no target row exists, so the composition's second
+         * half gets its own sentence.
          */
         val TARGET_SCHEDULING_UNAVAILABLE: ProgramNotice =
             Invalid(R.string.programs_notice_target_scheduling_unavailable)
 
 
-        /** §28's `SYSTEM_FAILURE`: reported, retryable, and never mistaken for a completed operation. */
+        /** A system failure: reported, retryable, and never mistaken for a completed operation. */
         val STORAGE_FAILED: ProgramNotice = Failed(R.string.programs_notice_failed)
         val IMPORT_FAILED: ProgramNotice = Failed(R.string.programs_import_failed)
         val SHARE_FAILED: ProgramNotice = Failed(R.string.programs_notice_share_failed)

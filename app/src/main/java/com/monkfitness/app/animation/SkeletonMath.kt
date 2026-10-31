@@ -83,19 +83,16 @@ class Vector3(var x: Float = 0f, var y: Float = 0f, var z: Float = 0f) {
 }
 
 /**
- * General, shared angular limits for a two-bone limb chain, expressed in degrees.
+ * Shared angular limits for a two-bone limb chain, in degrees.
  *
- * These describe anatomical *angular* ranges rather than the reach-distance band, so the
- * engine can reject orientations the distance clamp could not (e.g. an over-folded knee or a
- * hyperextended elbow) and so validation can mirror them. The values are named and shared —
- * never per-exercise magic numbers.
+ * These are anatomical *angular* ranges, not the reach-distance band, so the engine can reject
+ * orientations the distance clamp cannot (an over-folded knee, a hyperextended elbow) and
+ * validation can mirror them. Named and shared — never per-exercise magic numbers.
  *
- * - `minFlexionDegrees` / `maxFlexionDegrees`: allowed interior angle at the middle joint
- *   (elbow/knee). `minFlexionDegrees` corresponds to the historical most-folded flexion;
- *   `maxFlexionDegrees` caps hyperextension (180° == perfectly straight limb).
- * - `maxRootDeviationDegrees`: allowed deviation of the proximal bone (root -> middle) from
- *   its anatomical neutral direction. A generous general bound; the solver clamps this only
- *   when a neutral direction is supplied by the caller.
+ * `minFlexionDegrees`/`maxFlexionDegrees` bound the interior angle at the middle joint;
+ * `maxFlexionDegrees` caps hyperextension (180° == perfectly straight). `maxRootDeviationDegrees`
+ * bounds the proximal bone's deviation from its anatomical neutral, clamped only when the caller
+ * supplies a neutral direction.
  */
 data class AngularJointLimits(
     val minFlexionDegrees: Float,
@@ -103,8 +100,7 @@ data class AngularJointLimits(
     val maxRootDeviationDegrees: Float
 ) {
     companion object {
-        // Named, shared bounds (no magic numbers). These are general human-range caps, not
-        // per-exercise values.
+        // Named, shared human-range caps — not per-exercise values.
         const val DEFAULT_MIN_FLEXION_DEGREES = 30f
         const val DEFAULT_MAX_FLEXION_DEGREES = 180f
         const val DEFAULT_MAX_ROOT_DEVIATION_DEGREES = 170f
@@ -123,18 +119,15 @@ data class AngularJointLimits(
 }
 
 /**
- * Named, shared anatomical range-of-motion (ROM) limits for the hip — a genuine 3-DOF
- * ball-and-socket at the acetabulum (UNI-3). Unlike the knee/elbow middle-joint band, the hip
- * was previously unbounded (only a shared 30° knee-flexion floor limited the chain), so a pose
- * could flex / abduct / rotate the hip beyond human ROM and still validate as clean. These
- * named degrees are the single source of truth read by both the validator (`HIP_ROM_LIMIT`
- * rule) and (optionally) the constraint solver's femur-direction clamp. No per-exercise magic
- * numbers.
+ * Shared anatomical range-of-motion limits for the hip — a genuine 3-DOF ball-and-socket at the
+ * acetabulum, unlike the knee/elbow middle-joint band, so without these a pose could flex, abduct
+ * or rotate the hip beyond human ROM and still validate clean. These degrees are the single source
+ * of truth for the validator's `HIP_ROM_LIMIT` rule and the solver's femur-direction clamp.
  *
- * Flexion / extension are measured about the sagittal (Z) axis from the neutral down direction;
- * abduction / adduction about the lateral (X) axis; internal / external rotation about the
- * femur's long axis. Generous human-range caps: a full split (~90° abduction) and a deep squat
- * (~120° flexion) pass, while a femur swung "through the torso" (~180°) is caught.
+ * Flexion/extension are measured about the sagittal (Z) axis from the neutral down direction;
+ * abduction/adduction about the lateral (X) axis; internal/external rotation about the femur's long
+ * axis. Caps are generous: a full split (~90° abduction) and a deep squat (~120° flexion) pass,
+ * while a femur swung "through the torso" (~180°) is caught.
  */
 data class HipRomLimits(
     val maxFlexionDegrees: Float,
@@ -144,11 +137,9 @@ data class HipRomLimits(
     val maxInternalRotationDegrees: Float,
     val maxExternalRotationDegrees: Float,
     /**
-     * Maximum total excursion of the femur from its neutral (straight-down) direction. A single,
-     * axis-label-agnostic cap that reliably catches an over-range hip (e.g. a femur swung "through
-     * the torso", ~180°) without false-positives on valid extreme-but-anatomical poses. The
-     * per-axis fields above remain the shared vocabulary for finer, future per-plane checks; the
-     * validator's over-range detector uses this total-excursion bound.
+     * Maximum total excursion of the femur from its neutral (straight-down) direction. A single
+     * axis-label-agnostic cap that catches an over-range hip without false-positives on valid
+     * extreme-but-anatomical poses; the validator's over-range detector uses this bound.
      */
     val maxExcursionDegrees: Float
 ) {
@@ -174,13 +165,11 @@ data class HipRomLimits(
 }
 
 /**
- * B5 (RFC_BRANCH_B_IMPLEMENTATION) — §1.2 STATE stamp carrying a hip's femur direction
- * decomposed into the four independent anatomical angles the [HipRomLimits] bound. Produced by
- * the engine ([computeHipRomStamp]) from the solved skeleton so the validator reads it directly
- * instead of re-deriving geometry. All angles are in degrees; signs follow [HipRomLimits] semantics
- * (sagittal + = flexion toward +X; frontal + = abduction, mirrored per side; axial + = internal
- * rotation about the femur's long axis — the caller mirrors it per side to keep internal/external
- * consistent for both legs).
+ * A hip's femur direction decomposed into the four anatomical angles [HipRomLimits] bounds,
+ * produced by the engine so the validator reads it instead of re-deriving geometry.
+ *
+ * All angles are in degrees; signs follow [HipRomLimits] (sagittal + = flexion toward +X; frontal
+ * + = abduction, mirrored per side; axial + = internal rotation about the femur's long axis).
  */
 data class HipRomStamp(
     val excursionDegrees: Float,
@@ -194,27 +183,22 @@ data class IKConstraint(
     val maximumExtensionRatio: Float,
     val angularLimits: AngularJointLimits = AngularJointLimits.ArmAngularLimits,
     /**
-     * PR-11 opt-in. When `false` (the default) a limb is capped at
-     * [maximumExtensionRatio]·(L1+L2) — the 0.98 safety band that keeps dynamic motion from
-     * ever snapping to a locked-out joint. When `true`, the effective cap becomes the true
-     * anatomical length (ratio 1.0), so a deliberately rigid reference limb (Dead Hang arms,
-     * Pike Sit / Middle Split legs, …) can be perfectly straight instead of a few percent bent.
-     * This is a policy flag only; it never changes bent-limb behaviour.
+     * When `false` (the default) a limb is capped at [maximumExtensionRatio]·(L1+L2) — the 0.98
+     * safety band that keeps dynamic motion from snapping to a locked-out joint. When `true` the cap
+     * is the true anatomical length, so a deliberately rigid reference limb (Dead Hang arms, Pike
+     * Sit / Middle Split legs) can be perfectly straight instead of a few percent bent. A policy flag
+     * only; it never changes bent-limb behaviour.
      */
     val allowFullExtension: Boolean = false
 ) {
     /**
-     * The extension ratio the solver should actually honour: 1.0 when full extension is opted
-     * into, otherwise the default safety cap. Kept here so both [SkeletonMath.solveIK] and
-     * [SkeletonMath.solveStraightLimb] read a single source of truth.
+     * The ratio the solver actually honours: 1.0 when full extension is opted into, otherwise the
+     * safety cap. Kept here so both solve paths read a single source of truth.
      */
     val effectiveExtensionRatio: Float
         get() = if (allowFullExtension) 1f else maximumExtensionRatio
 
-    /**
-     * Returns a copy of this constraint with full extension enabled (allocation-free when the
-     * flag is already set). Callers that want a truly straight reference limb opt in via this.
-     */
+    /** Copy with full extension enabled (allocation-free when already set). */
     fun fullyExtended(): IKConstraint = if (allowFullExtension) this else copy(allowFullExtension = true)
 
     companion object {
@@ -224,15 +208,13 @@ data class IKConstraint(
 }
 
 /**
- * A fixed support contact the end-effector must respect. When an IK solve would
- * drive a planted hand/foot through the support surface, the solver clamps the
- * end joint *onto* the [normal]/[point] plane (projecting the target onto the
- * surface) instead of along the free direction. This keeps a contact on the
- * ground / bar / prop and prevents penetration, while still recording the
- * reachability clamp.
+ * A fixed support contact the end-effector must respect: when a solve would drive a planted
+ * hand/foot through the surface, the end joint is clamped *onto* the [normal]/[point] plane rather
+ * than along the free direction, so the contact stays on the ground/bar/prop without penetration
+ * while the reachability clamp is still recorded.
  *
- * The plane is general data supplied by the caller (a ground plane, a bar-top
- * plane, a prop surface) — never a single-pose magic constant.
+ * The plane is general caller data — a ground plane, a bar top, a prop surface — never a single-pose
+ * constant.
  */
 data class ContactConstraint(
     val normal: Vector3,
@@ -248,7 +230,7 @@ data class ContactConstraint(
     // Scratch for deriving the default world pole (never allocates per solve).
     private val defaultPoleAim = Vector3()
 
-    // Zero pole reused by the UNI-9 degenerate-straight-limb fallback: a zero-magnitude pole makes
+    // Zero pole reused by the degenerate-straight-limb fallback: a zero-magnitude pole makes
     // [solveTriangleJoint] pick its stable world-down bend plane (never allocates per solve).
     private val straightDegeneratePole = Vector3(0f, 0f, 0f)
 
@@ -258,10 +240,9 @@ data class ContactConstraint(
     class NearStraightLimbResult(var x: Float = 0f, var y: Float = 0f, var d: Float = 0f)
 
     /**
-     * Computes the perpendicular (kX, kY)-style local offset for a two-bone limb
-     * that should look nearly straight, driven by a target flexion angle rather
-     * than an arbitrary linear-extension ratio (which does not correspond
-     * linearly to visual straightness near full extension).
+     * The perpendicular (kX, kY) local offset for a two-bone limb that should look nearly straight,
+     * driven by a target flexion angle rather than a linear-extension ratio — the ratio does not
+     * correspond linearly to visual straightness near full extension.
      */
     fun solveNearStraightLimb(
         L1: Float,
@@ -279,17 +260,13 @@ data class ContactConstraint(
         return result
     }
 
-    /**
-     * Standard Ease-In-Out Quintic
-     */
+    /** Ease-in-out quintic. */
     fun easeIO(x: Float): Float {
         val cx = x.coerceIn(0f, 1f)
         return cx * cx * cx * (cx * (cx * 6 - 15) + 10)
     }
 
-    /**
-     * Reference Implementation Ease-In-Out (Quadric)
-     */
+    /** Ease-in-out quadratic. */
     fun easeInOut(x: Float): Float {
         return if (x < 0.5f) {
             2f * x * x
@@ -342,7 +319,6 @@ data class ContactConstraint(
         return rotAround(v, axis, ang, Vector3())
     }
 
-    // Hard-locked 2-bone IK solver
     class IKResult(
         val joint: Vector3 = Vector3(),
         val end: Vector3 = Vector3(),
@@ -350,36 +326,33 @@ data class ContactConstraint(
         var clampedDistance: Float = 0f,
         var clampAmount: Float = 0f,
         var angularClampAmount: Float = 0f,
-        // Phase 4 (R5) — the Straight-Limb Fallback outcome of THIS solve, recorded at the
-        // branch that actually took it (RFC §4.3: the Limb Solve Result scratch carries the
-        // clamp/straight/bone-length readings). Private scratch; never crosses a subsystem
-        // boundary. Producers fold it into the carrier stamp via ValidationStampMerge.dropped.
+        // The straight-limb fallback outcome of THIS solve, recorded at the branch that actually
+        // took it. Private scratch; producers fold it into the carrier stamp.
         var straightIntentDropped: Boolean = false
     )
 
     /**
-     * Minimum reachable end-effector distance for a 2-bone chain: the distance when the middle
-     * joint is at its tightest allowed interior angle ([IKConstraint.minimumFlexionAngle]).
+     * Minimum reachable end distance for a 2-bone chain: the distance with the middle joint at its
+     * tightest allowed interior angle.
      */
     fun minReach(L1: Float, L2: Float, constraint: IKConstraint): Float {
         val minCos = cos(constraint.minimumFlexionAngle * DEG2RAD)
         return sqrt(L1 * L1 + L2 * L2 - 2f * L1 * L2 * minCos)
     }
 
-    /** Maximum reachable end-effector distance for a 2-bone chain (honours the extension cap). */
+    /** Maximum reachable end distance for a 2-bone chain (honours the extension cap). */
     fun maxReach(L1: Float, L2: Float, constraint: IKConstraint): Float =
         (L1 + L2) * constraint.effectiveExtensionRatio
 
     /**
-     * R2 (reach target authoring): project an authored IK [target] onto the *reachable annulus*
-     * `[minReach, maxReach]` centred on [root], along the root→target direction, writing the
-     * result into [out]. A target inside the band is copied unchanged. A tiny [margin] keeps the
-     * result strictly inside the band so the solver records **zero** clamp (the reachability
-     * signal stays honest — this fixes the authored target instead of muting the validator).
+     * Projects an authored IK [target] onto the *reachable annulus* `[minReach, maxReach]` centred
+     * on [root], along the root->target direction, into [out]; a target inside the band is copied
+     * unchanged. [margin] keeps the result strictly inside the band so the solver records **zero**
+     * clamp — the reachability signal stays honest, fixing the authored target rather than muting
+     * the validator.
      *
-     * This encodes "reachable-by-construction": poses author the intended direction/stance and
-     * the engine guarantees the target lies where a real limb can actually place the end-effector.
-     * Allocation-free.
+     * This is "reachable by construction": poses author the intended direction and the engine
+     * guarantees a real limb can place the end-effector there. Allocation-free.
      */
     fun clampTargetToReach(
         root: Vector3,
@@ -404,9 +377,7 @@ data class ContactConstraint(
         return out.set(root.x + dx * s, root.y + dy * s, root.z + dz * s)
     }
 
-    /**
-     * Analytical IK with strict Biological Clamps
-     */
+    /** Analytical IK with strict biological clamps. */
     fun solveIK(
         root: Vector3,
         target: Vector3,
@@ -417,15 +388,15 @@ data class ContactConstraint(
         result: IKResult = IKResult(),
         contact: ContactConstraint? = null
     ): IKResult {
-        // Phase 4 (R5): per-solve reset — a reused scratch buffer must not leak a previous
-        // straight limb's outcome into this solve (bake sites reuse one IKResult per limb).
+        // Per-solve reset: a reused scratch must not leak a previous straight limb's outcome into
+        // this solve (bake sites reuse one IKResult per limb).
         result.straightIntentDropped = false
         val dx = target.x - root.x
         val dy = target.y - root.y
         val dz = target.z - root.z
         val dMag = sqrt(dx * dx + dy * dy + dz * dz)
 
-        // PR-11: honour a true straight limb when the constraint opts into full extension.
+        // Honour a true straight limb when the constraint opts into full extension.
         val maxDist = (L1 + L2) * constraint.effectiveExtensionRatio
 
         val minCos = cos(constraint.minimumFlexionAngle * DEG2RAD)
@@ -443,16 +414,11 @@ data class ContactConstraint(
 
         // 2) Angular band on the middle joint interior angle.
         //
-        //    The angular clamp records whether the *requested* pose (what the author actually
-        //    asked for, via `dMag`) violates the joint's flexion limits — e.g. a fully extended
-        //    limb (180 deg interior angle) is a hyperextension past `maxFlexionDegrees`. The
-        //    clamp is computed from the requested angle so a straight-limb request that the reach
-        //    band pre-clamps to 98% reach is still honestly reported as a hyperextension.
-        //
-        //    The *placed* joint is solved at the capped angle (not the reach-band-clamped
-        //    distance), so the final interior angle always honours the angular limit while the
-        //    resulting distance is still coerced inside the reach band. Diagnostic-instrument
-        //    rule: surface the violation, don't mute it.
+        //    The clamp is computed from the *requested* angle (`dMag`), so a straight-limb request
+        //    that the reach band pre-clamps to 98% is still honestly reported as a hyperextension
+        //    past `maxFlexionDegrees`. The *placed* joint is solved at the capped angle instead, so
+        //    the interior angle honours the limit while the distance stays inside the reach band:
+        //    surface the violation, don't mute it.
         val denom = (2f * L1 * L2)
         val reqCosT = ((L1 * L1 + L2 * L2 - dMag * dMag) / denom).coerceIn(-1f, 1f)
         val reqTheta = acos(reqCosT) * RAD2DEG
@@ -463,8 +429,8 @@ data class ContactConstraint(
             else -> 0f
         }
 
-        // Geometry solve: place the middle joint at the capped interior angle, then keep the
-        // resulting distance inside the reach band.
+        // Place the middle joint at the capped interior angle, then keep the resulting distance
+        // inside the reach band.
         dist = sqrt(L1 * L1 + L2 * L2 - 2f * L1 * L2 * cos(cappedTheta * DEG2RAD)).coerceIn(minDist, maxDist)
 
         result.requestedDistance = dMag
@@ -482,10 +448,9 @@ data class ContactConstraint(
         val endY = root.y + dirY * dist
         val endZ = root.z + dirZ * dist
 
-        // 3) Contact awareness: if the (clamped) end penetrates the support plane, re-solve the
-        //    end *onto* the plane at the same reachable distance, directed toward the target's
-        //    surface projection. This keeps a planted hand/foot on the ground/bar instead of
-        //    driving it through, while the recorded clamp still surfaces unreachability (PR-10).
+        // 3) Contact awareness: if the clamped end penetrates the support plane, re-solve it *onto*
+        //    the plane at the same reachable distance, toward the target's surface projection, so a
+        //    planted hand/foot stays on the ground/bar instead of driving through it.
         if (contact != null) {
             val signed = (endX - contact.point.x) * contact.normal.x +
                 (endY - contact.point.y) * contact.normal.y +
@@ -502,9 +467,8 @@ data class ContactConstraint(
     }
 
     /**
-     * Middle-joint position for a two-bone chain given a *fixed* end point: the standard
-     * triangle IK offset (perpendicular to the root→end axis, sized by the pole, at height
-     * `h` from the axis). Allocation-free: writes [outJoint].
+     * Middle joint for a two-bone chain given a *fixed* end: the standard triangle IK offset,
+     * perpendicular to the root->end axis, sized by the pole at height `h` from the axis.
      */
     private fun solveTriangleJoint(
         root: Vector3,
@@ -557,9 +521,8 @@ data class ContactConstraint(
     }
 
     /**
-     * Middle-joint position for a straight limb given a fixed end point: the middle sits at
-     * exactly `L1` along the root→end direction (clamped so it never overshoots the end).
-     * Allocation-free: writes [outJoint].
+     * Middle joint for a straight limb: exactly `L1` along the root->end direction, clamped so it
+     * never overshoots the end.
      */
     private fun solveStraightMiddle(root: Vector3, end: Vector3, L1: Float, outJoint: Vector3) {
         val dxe = end.x - root.x
@@ -581,11 +544,10 @@ data class ContactConstraint(
     }
 
     /**
-     * Re-solves the end joint onto the [contact] plane at the reachable [dist] from [root],
-     * directed toward the target's surface projection, then derives the middle joint (triangle
-     * or straight). Sliding the contact along the surface at the same radius keeps the end on
-     * the support surface (no penetration) at the closest reachable point to the authored
-     * target. Allocation-free: mutates [result].
+     * Re-solves the end joint onto the [contact] plane at the reachable [dist] from [root], toward
+     * the target's surface projection, then derives the middle joint (triangle or straight).
+     * Sliding along the surface at the same radius keeps the end on its support without
+     * penetration, at the closest reachable point to the authored target.
      */
     private fun resolveContactPlane(
         root: Vector3,
@@ -658,16 +620,12 @@ data class ContactConstraint(
     }
 
     /**
-     * Analytical straight / rigid-segment limb solve. Places the middle and end joints
-     * collinear with `root -> target`, so the two-bone chain becomes a rigid straight
-     * segment aimed at the target. The end is clamped into `[minDist, maxDist]` — the same
-     * biological band [solveIK] uses — so an unreachable target still yields a valid straight
-     * limb (respecting [IKConstraint.effectiveExtensionRatio]; PR-11 lets a constraint opt into
-     * full extension so a limb can reach its true anatomical length instead of the 0.98 safety
-     * cap, giving a genuinely straight reference). The middle sits at exactly `L1` along the aim
-     * direction, keeping the first bone length exact; the second bone spans the (clamped) remainder.
-     *
-     * Allocation-free: writes into [result]; reuses no scratch beyond scalar locals.
+     * Analytical straight / rigid-segment limb solve: the middle and end joints are placed
+     * collinear with `root -> target`, so the two-bone chain becomes a rigid segment aimed at the
+     * target. The end is clamped into the same biological band [solveIK] uses, so an unreachable
+     * target still yields a valid straight limb; a constraint may opt into full extension to reach
+     * its true anatomical length instead of the 0.98 cap. The middle sits at exactly `L1`, keeping
+     * the first bone exact; the second spans the clamped remainder.
      */
     fun solveStraightLimb(
         root: Vector3,
@@ -678,15 +636,14 @@ data class ContactConstraint(
         result: IKResult = IKResult(),
         contact: ContactConstraint? = null
     ): IKResult {
-        // Phase 4 (R5): per-solve reset (see solveIK) — the scratch reading always describes
-        // THIS solve.
+        // Per-solve reset (see solveIK): the scratch reading always describes THIS solve.
         result.straightIntentDropped = false
         val dx = target.x - root.x
         val dy = target.y - root.y
         val dz = target.z - root.z
         val dMag = sqrt(dx * dx + dy * dy + dz * dz)
 
-        // PR-11: honour a true straight limb when the constraint opts into full extension.
+        // Honour a true straight limb when the constraint opts into full extension.
         val maxDist = (L1 + L2) * constraint.effectiveExtensionRatio
         val minCos = cos(constraint.minimumFlexionAngle * PI.toFloat() / 180f)
         val minDist = sqrt(L1 * L1 + L2 * L2 - 2f * L1 * L2 * minCos)
@@ -710,41 +667,34 @@ data class ContactConstraint(
             0f
         }
 
-        // Contact awareness: a planted straight limb that would penetrate the support surface is
-        // re-solved onto the surface at the same reachable distance (see [resolveContactPlane]).
+        // A planted straight limb that would penetrate the support is re-solved onto the surface at
+        // the same reachable distance (see [resolveContactPlane]).
         if (contact != null) {
             val signed = (root.x + dirX * dist - contact.point.x) * contact.normal.x +
                 (root.y + dirY * dist - contact.point.y) * contact.normal.y +
                 (root.z + dirZ * dist - contact.point.z) * contact.normal.z
             if (signed < 0f) {
-                // Phase 4 (R5): the limb is slid onto the surface and its middle joint placed
-                // by the straight-collinear helper — the rigid-straight solve could not be
-                // delivered at the requested placement, so the fallback outcome is honest iff
-                // the collinear middle had to be pulled inside the end (middleDist = dMag < L1)
-                // OR the requested distance was unreachable (clamped) below full straight reach.
-                // Geometry-observing flag only — no placement changes.
+                // The limb is slid onto the surface and its middle placed by the straight-collinear
+                // helper, so the rigid-straight solve was not delivered: the fallback is honest iff
+                // the collinear middle had to be pulled inside the end (`dist < L1`) or the requested
+                // distance was unreachable. Geometry-observing flag only — no placement changes.
                 if (dist < L1) result.straightIntentDropped = true
                 resolveContactPlane(root, target, dist, Vector3(0f, 0f, 0f), L1, L2, constraint, contact, result, straight = true)
                 return result
             }
         }
 
-        // Middle at exactly L1 along the aim direction (keeps the upper bone length exact);
-        // never let it overshoot the clamped end.
-        //
-        // UNI-9: when the (clamped) reach is shorter than the upper bone (`dist < L1`) a straight
-        // limb is geometrically impossible without collapsing the second bone to zero length —
-        // the old `middleDist = min(L1, dist)` wrote `middle == end == target`, a degenerate
-        // zero-length shin/forearm that only survived because the global ConstraintSolver later
-        // re-baked it via triangle IK. If that solver was skipped (no contact registered) the pose
-        // shipped a zero-length segment and failed BONE_LENGTH. Fall back to a valid bent limb here
-        // (the same triangle solve the ConstraintSolver would apply) so both bone lengths are
-        // preserved at bake time, removing the hidden dependency on the solver. A zero pole selects
-        // the solver's stable world-down bend plane.
+        // When the clamped reach is shorter than the upper bone (`dist < L1`) a straight limb is
+        // geometrically impossible without collapsing the second bone to zero length: a plain
+        // `middleDist = min(L1, dist)` writes `middle == end == target`, a degenerate zero-length
+        // shin/forearm that only survived because the global ConstraintSolver later re-baked it via
+        // triangle IK — and if no contact was registered, that solver never ran and the pose shipped
+        // a zero-length segment. Fall back to a valid bent limb here (the same triangle solve) so
+        // both bone lengths hold at bake time, with no hidden dependency on the solver. A zero pole
+        // selects the stable world-down bend plane.
         if (dist < L1) {
-            // Phase 4 (R5): the straight request degenerates below the proximal bone and this
-            // branch executes the bent fallback — record the semantic outcome at the branch
-            // that took it (geometry untouched).
+            // The straight request degenerates below the proximal bone and this branch executes the
+            // bent fallback: record the outcome at the branch that took it (geometry untouched).
             result.straightIntentDropped = true
             result.end.set(
                 root.x + dirX * dist,
@@ -771,32 +721,27 @@ data class ContactConstraint(
     }
 
     /**
-     * Rotates a direction authored in a parent's LOCAL frame into world space using the
-     * parent's current [JointRotation]. Reuses [rotAround] (the same axis-angle convention the
-     * Forward-Kinematics traversal uses) so a pole written in the chest/pelvis frame follows
-     * the body exactly as it rotates. Allocation-free: writes into [out].
+     * Rotates a direction authored in a parent's LOCAL frame into world space with the parent's
+     * [JointRotation], using the same axis-angle convention as the FK traversal, so a pole written
+     * in the chest/pelvis frame follows the body exactly as it rotates.
      */
     fun toWorldDirection(localDir: Vector3, rotation: JointRotation, out: Vector3): Vector3 {
         return rotAround(localDir, rotation.axis, rotation.angle, out)
     }
 
     /**
-     * Inverse of [toWorldDirection]: rotates a world-space direction into the parent's LOCAL
-     * frame. Used to convert a legacy world-space pole into the local frame at authoring time.
-     * Allocation-free: writes into [out].
+     * Inverse of [toWorldDirection]: a world-space direction into the parent's LOCAL frame, used to
+     * convert a legacy world-space pole at authoring time.
      */
     fun toLocalDirection(worldDir: Vector3, rotation: JointRotation, out: Vector3): Vector3 {
         return rotAround(worldDir, rotation.axis, -rotation.angle, out)
     }
 
-    // --- Shoulder-girdle (scapula) degrees of freedom -----------------------------
-    //
-    // The scapula is a real joint: elevation/depression (about the transverse X axis) and
-    // protraction/retraction (about the vertical Y axis) are genuine rotations, never a raw
-    // translation of the shoulder (BIOMECHANICS.md §4/§10). The pull-family expresses scapular
-    // activation as an intensity in shared, named units (depression 0..1, retraction 0..N);
-    // the constants below map that intensity to a rotation within the general human scapular
-    // range of motion. They are named and shared — not per-exercise magic numbers.
+    // Scapula degrees of freedom. Elevation/depression (transverse X) and
+    // protraction/retraction (vertical Y) are genuine rotations, never a raw translation of the
+    // shoulder. The pull family expresses scapular activation as an intensity in shared units
+    // (depression 0..1, retraction 0..N); the constants below map that intensity into the general
+    // human scapular range of motion. Named and shared — not per-exercise magic numbers.
     const val SCAPULA_DEPRESSION_TO_RAD = 0.0218f // ~1.25 deg per activation unit
     const val SCAPULA_RETRECTION_TO_RAD = 0.035f  // ~2.0 deg per activation unit
 
@@ -808,13 +753,10 @@ data class ContactConstraint(
     private val scapRotB = JointRotation(Vector3(0f, 1f, 0f), 0f)
 
     /**
-     * Composes the scapula's local rotation from elevation/depression and protraction/retraction
-     * activation. `depression`/`retraction` are the pull-family activation intensities (shared
-     * units); the result is a real [JointRotation] the FK traversal applies to the scapula, which
-     * in turn derives the shoulder (glenoid) position. `sideSign` is -1 for the left/active (-Z)
-     * girdle and +1 for the right/passive (+Z) girdle so that depression drops *both* shoulders
-     * symmetrically (the depression pivot is mirrored across the body's mid-line).
-     * Allocation-free: writes into [out].
+     * Composes the scapula's local rotation from [depression]/[retraction] activation intensities,
+     * which FK applies to the scapula and so to the shoulder (glenoid) position. `sideSign` is -1
+     * for the left/active (-Z) girdle and +1 for the right/passive (+Z), so depression drops *both*
+     * shoulders symmetrically — the pivot is mirrored across the mid-line.
      */
     fun buildScapularRotation(
         retraction: Float,
@@ -836,17 +778,12 @@ data class ContactConstraint(
         return out
     }
 
-    // --- Shoulder-girdle (clavicle) degrees of freedom -----------------------------
-    //
-    // The clavicle is the PROXIMAL member of the shoulder girdle (CHEST -> CLAVICLE ->
-    // SCAPULA -> SHOULDER). It carries genuine rotations at the SC (sternoclavicular) and
-    // AC (acromioclavicular) joints: elevation/depression (about the transverse X axis),
-    // protraction/retraction (about the vertical Y axis) and axial rotation about its own
-    // long (sagittal Z) axis. Previously the clavicle was a rigid pass-through (UNI-7):
-    // only the scapula was driven, so overhead reaching under-drove shoulder height. This
-    // helper gives the clavicle a real, named-ROM DOF mirroring [buildScapularRotation];
-    // activation is expressed in shared units and the constants map it into the general
-    // human clavicular range of motion. Named and shared — not per-exercise magic numbers.
+    // Clavicle degrees of freedom. The clavicle is the PROXIMAL member of the shoulder girdle
+    // (CHEST -> CLAVICLE -> SCAPULA -> SHOULDER) and carries genuine SC/AC rotations: elevation
+    // (transverse X), protraction (vertical Y) and axial rotation about its own long Z axis. Left
+    // as a rigid pass-through, only the scapula was driven and overhead reaching under-drove
+    // shoulder height, so this mirrors [buildScapularRotation] with shared-unit activation mapped
+    // into the general human clavicular range. Named and shared — no per-exercise magic numbers.
     const val CLAVICLE_ELEVATION_TO_RAD = 0.5236f    // ~30 deg per elevation unit
     const val CLAVICLE_PROTRACTION_TO_RAD = 0.2618f // ~15 deg per protraction unit
     const val CLAVICLE_AXIAL_TO_RAD = 0.1745f       // ~10 deg per axial-rotation unit
@@ -861,18 +798,12 @@ data class ContactConstraint(
     private val clavRotZ = JointRotation(Vector3(0f, 0f, 1f), 0f)
 
     /**
-     * Composes the clavicle's local rotation from elevation/depression, protraction/retraction
-     * and axial-rotation activation. `elevation`/`protraction`/`axialRotation` are shared-unit
-     * activation intensities (named ROM constants below map them to radians); the result is a
-     * real [JointRotation] the FK traversal applies to the clavicle, which sits *between* the
-     * chest and the scapula and therefore lifts and carries the whole shoulder (glenoid) on
-     * overhead reaches. `sideSign` is -1 for the left/active (-Z) girdle and +1 for the
-     * right/passive (+Z) girdle so that elevation raises *both* shoulders symmetrically (the
-     * elevation pivot is mirrored across the body's mid-line). Composition:
-     * `R = Ry(protraction) · Rx(-elevation · sideSign) · Rz(axialRotation)`
-     * (the negated elevation term makes a positive `elevation` raise the shoulder, the mirror
-     * of scapular depression, which lowers it).
-     * Allocation-free: writes into [out]. Mirrors [buildScapularRotation].
+     * Composes the clavicle's local rotation from shared-unit activation intensities (the named
+     * constants map them to radians). The clavicle sits *between* the chest and the scapula, so this
+     * lifts and carries the whole shoulder on overhead reaches. `sideSign` is -1 for the left/active
+     * (-Z) girdle and +1 for the right/passive (+Z), so elevation raises *both* shoulders
+     * symmetrically. `R = Ry(protraction) · Rx(-elevation · sideSign) · Rz(axialRotation)` — the
+     * negated elevation makes a positive value raise the shoulder, the mirror of scapular depression.
      */
     fun buildClavicularRotation(
         elevation: Float,
@@ -900,13 +831,9 @@ data class ContactConstraint(
         return out
     }
 
-    // --- General axis-angle composition -------------------------------------------
-    //
-    // Composes two [JointRotation]s into a single equivalent rotation `out = a ∘ b`
-    // (apply `b` first, then `a`) by multiplying their rotation matrices with the existing
-    // matrix utilities — no duplicated rotation math, no quaternion type. This is the shared
-    // primitive that lets a joint carry more than one degree of freedom in one exact rotation
-    // (e.g. a 2-DOF wrist/ankle, UNI-8). Allocation-free: writes into [out].
+    // General axis-angle composition: `out = a ∘ b` (apply `b` first, then `a`) by multiplying the
+    // rotation matrices with the existing utilities — no duplicated rotation math, no quaternion
+    // type. This is the primitive that lets a joint carry more than one DOF in one exact rotation.
     private val composeAX = Vector3(); private val composeAY = Vector3(); private val composeAZ = Vector3()
     private val composeBX = Vector3(); private val composeBY = Vector3(); private val composeBZ = Vector3()
     private val composeRX = Vector3(); private val composeRY = Vector3(); private val composeRZ = Vector3()
@@ -919,32 +846,23 @@ data class ContactConstraint(
         return out
     }
 
-    // --- Wrist and ankle: 2-DOF combined articulation (UNI-8) ---------------------
+    // Wrist and ankle: 2-DOF combined articulation. Neither is a single-axis hinge — the wrist
+    // combines flexion/extension with radial/ulnar deviation, the ankle dorsi/plantar-flexion with
+    // inversion/eversion. A single axis-angle rotation can express one axis but never combine two:
+    // the second DOF silently overwrites the first. These helpers compose both into one exact
+    // rotation (via [composeRotations]) that FK propagates and the finalizer honours.
     //
-    // The real wrist and ankle are not single-axis hinges: the wrist combines flexion/extension
-    // with radial/ulnar deviation, and the ankle combines dorsi/plantar-flexion with
-    // inversion/eversion. Previously the hand/foot completion took a single axis-angle
-    // [JointRotation], so an author could express one of those axes but never *combine* two
-    // (dorsiflexion **and** inversion, or wrist flexion **and** deviation) — the second DOF
-    // silently overwrote the first. These helpers compose the two anatomical DOFs into one exact
-    // rotation (via [composeRotations]) that FK propagates and the finalizer honours through the
-    // existing single-rotation completion path, mirroring how [buildScapularRotation] /
-    // [buildClavicularRotation] gave the shoulder girdle real DOFs.
-    //
-    // Axes follow the shared skeleton frame (sagittal motion about Z, the convention every pose
-    // uses for pitch/lean): flexion/dorsiflexion about the mediolateral Z axis; wrist deviation
-    // about the antero-posterior Y axis; ankle inversion/eversion about the long X axis. Angles
-    // are radians — the caller supplies anatomical values, so there are no per-pose magic numbers.
+    // Axes follow the shared skeleton frame: flexion/dorsiflexion about the mediolateral Z axis,
+    // wrist deviation about the antero-posterior Y axis, ankle inversion/eversion about the long X
+    // axis. Angles are radians — the caller supplies anatomical values.
     private val wristRotFlex = JointRotation(Vector3(0f, 0f, 1f), 0f)
     private val wristRotDev = JointRotation(Vector3(0f, 1f, 0f), 0f)
     private val ankleRotFlex = JointRotation(Vector3(0f, 0f, 1f), 0f)
     private val ankleRotInv = JointRotation(Vector3(1f, 0f, 0f), 0f)
 
     /**
-     * Composes the wrist's 2-DOF local rotation from [flexion] (flexion/extension about the
-     * mediolateral Z axis) and [deviation] (radial/ulnar deviation about the antero-posterior Y
-     * axis): `R = Rz(flexion) · Ry(deviation)`. The two combine exactly instead of one axis
-     * dropping the other. Allocation-free: writes into [out].
+     * The wrist's 2-DOF rotation from [flexion] (about mediolateral Z) and [deviation] (about
+     * antero-posterior Y): `R = Rz(flexion) · Ry(deviation)`, so neither axis drops the other.
      */
     fun buildWristRotation(flexion: Float, deviation: Float, out: JointRotation): JointRotation {
         wristRotFlex.axis.set(0f, 0f, 1f); wristRotFlex.angle = flexion
@@ -953,10 +871,8 @@ data class ContactConstraint(
     }
 
     /**
-     * Composes the ankle's 2-DOF local rotation from [dorsiflexion] (dorsi/plantar-flexion about
-     * the mediolateral Z axis) and [inversion] (inversion/eversion about the long X axis):
-     * `R = Rz(dorsiflexion) · Rx(inversion)`. The two combine exactly instead of one axis
-     * dropping the other. Allocation-free: writes into [out].
+     * The ankle's 2-DOF rotation from [dorsiflexion] (about mediolateral Z) and [inversion] (about
+     * the long X axis): `R = Rz(dorsiflexion) · Rx(inversion)`, so neither axis drops the other.
      */
     fun buildAnkleRotation(dorsiflexion: Float, inversion: Float, out: JointRotation): JointRotation {
         ankleRotFlex.axis.set(0f, 0f, 1f); ankleRotFlex.angle = dorsiflexion
@@ -964,21 +880,14 @@ data class ContactConstraint(
         return composeRotations(ankleRotFlex, ankleRotInv, out)
     }
 
-    // --- Hip: 3-DOF ball-and-socket authoring (UNI-10) ----------------------------
-    //
-    // The hip is a genuine ball-and-socket at the acetabulum. Poses previously expressed hip
-    // motion inconsistently (raw `hip.localRotation` in some poses, IK-implied femur in others)
-    // and femoral internal/external rotation was entangled with the IK pole. This composer gives
-    // the hip a first-class, named authoring path mirroring [buildChestOrientation]: flexion/
-    // extension in the sagittal plane about the mediolateral Z axis; abduction/adduction in the
-    // frontal plane about the antero-posterior Y axis; internal/external rotation about the femur's
-    // long X axis (kept separate from the IK pole, which only selects the knee-bend plane).
-    // [sideSign] mirrors abduction and axial rotation across the body mid-line (-1 left, +1 right)
-    // so a positive value spreads/rotates both legs symmetrically. The anatomical ROM vocabulary
-    // lives in [HipRomLimits] (shared, named — no per-pose magic numbers); this helper composes
-    // the authored angles and leaves ROM enforcement to the validator's `HIP_ROM_LIMIT` rule.
-    // Composition: `R = Rz(flexion) · Ry(abduction · sideSign) · Rx(rotation · sideSign)`.
-    // Allocation-free: writes into [out].
+    // Hip: 3-DOF ball-and-socket authoring. Flexion/extension in the sagittal plane about the
+    // mediolateral Z axis, abduction/adduction in the frontal plane about the antero-posterior Y
+    // axis, internal/external rotation about the femur's long X axis — the last kept separate from
+    // the IK pole, which only selects the knee-bend plane. [sideSign] mirrors abduction and axial
+    // rotation across the mid-line (-1 left, +1 right) so a positive value spreads both legs
+    // symmetrically. The ROM vocabulary lives in [HipRomLimits]; ROM enforcement stays with the
+    // validator's `HIP_ROM_LIMIT` rule.
+    // `R = Rz(flexion) · Ry(abduction · sideSign) · Rx(rotation · sideSign)`.
     private val hipRotFlex = JointRotation(Vector3(0f, 0f, 1f), 0f)
     private val hipRotAbd = JointRotation(Vector3(0f, 1f, 0f), 0f)
     private val hipRotAxial = JointRotation(Vector3(1f, 0f, 0f), 0f)
@@ -999,24 +908,21 @@ data class ContactConstraint(
         return out
     }
 
-    // B5 (RFC_BRANCH_B_IMPLEMENTATION) — §1.2 STATE stamp production.
-    // Scratch buffers for the hip-ROM stamp computation (no hot-path allocation).
+    // Scratch for the hip-ROM stamp computation (no hot-path allocation).
     private val hipScratchV1 = Vector3()
     private val hipScratchV2 = Vector3()
     private val hipScratchV3 = Vector3()
 
     /**
-     * B5 — produces a [HipRomStamp] for one hip from the solved skeleton. This is the EXACT
-     * femur-direction math the validator's old `validateHipRom` performed inline; lifted here so the
-     * engine writes the stamp once and the validator (B5) only *reads* it — no `toLocalDirection` /
-     * `angleBetweenDegrees` / `atan2` remain in the validator. The four returned angles are
-     * byte-identical to the values `validateHipRom` used to compute, so the rule's verdicts are
-     * unchanged.
+     * Produces a [HipRomStamp] for one hip from the solved skeleton. The engine writes the stamp
+     * once so the validator only *reads* it — no `toLocalDirection` / `angleBetweenDegrees` /
+     * `atan2` re-derivation on the validation path. The four angles are byte-identical to the
+     * inline math they replaced, so the rule's verdicts are unchanged.
      *
-     * [pelvisRotation] is the pelvis world rotation; [hipPos]/[kneePos] are the hip/knee world
-     * positions; [abductionSign] mirrors abduction/axial so both legs report abduction/rotation
-     * positively outward. [hipRotation] is the hip's authored local rotation (the acetabular twist,
-     * UNI-10) — its swing-twist decomposition yields the axial component.
+     * [pelvisRotation] is the pelvis world rotation, [hipPos]/[kneePos] the hip/knee world
+     * positions, [abductionSign] mirrors abduction/axial so both legs report positively outward,
+     * and [hipRotation] is the hip's authored local rotation whose swing-twist yields the axial
+     * component.
      */
     fun computeHipRomStamp(
         pelvisRotation: JointRotation,
@@ -1062,9 +968,9 @@ data class ContactConstraint(
     }
 
     /**
-     * Angle (degrees) between two directions, allocation-free. Used by the angular
-     * joint-limit validator and by any caller that needs the deviation of a proximal bone from
-     * its anatomical neutral direction (the root-joint cone in [AngularJointLimits]).
+     * Angle in degrees between two directions. Used by the angular joint-limit validator and for
+     * the deviation of a proximal bone from its neutral direction (the root-joint cone in
+     * [AngularJointLimits]).
      */
     fun angleBetweenDegrees(a: Vector3, b: Vector3): Float {
         val ma = a.mag()
@@ -1075,13 +981,13 @@ data class ContactConstraint(
     }
 
     /**
-     * Phase 1 (F6) — default world-space IK pole, derived by the engine when a pose omits one.
+     * Default world-space IK pole, derived by the engine when a pose omits one.
      *
-     * The bend plane is anchored to world-up projected perpendicular to the `root -> target` aim,
-     * so elbows/knees bend in the body's natural sagittal/frontal plane regardless of how the
-     * parent frame is rotated (the solver receives a world pole, never a parent-frame one — F4).
-     * If the aim is (near) vertical the anchor falls back to world-forward (+Z), then to world-X,
-     * so the pole is always a well-defined unit vector. Allocation-free: writes into [out].
+     * The bend plane is anchored to world-up projected perpendicular to the `root -> target` aim, so
+     * elbows and knees bend in the body's natural sagittal/frontal plane however the parent frame is
+     * rotated — the solver receives a world pole, never a parent-frame one. A (near) vertical aim
+     * falls back to world-forward (+Z), then to world-X, so the pole is always a well-defined unit
+     * vector.
      */
     fun deriveDefaultPole(root: Vector3, target: Vector3, out: Vector3): Vector3 {
         var ax = target.x - root.x
@@ -1116,9 +1022,8 @@ data class ContactConstraint(
     }
 
     /**
-     * Phase 1 (F5) — bone-length invariant check. Returns true iff the solved chain preserves
-     * both bone lengths to within [eps] (the IK solve must be exact). Written by the IK path and
-     * folded into [SkeletonPose.boneLengthsVerified]. Allocation-free.
+     * True iff the solved chain preserves both bone lengths to within [eps] — the IK solve must be
+     * exact. Folded into [SkeletonPose.boneLengthsVerified].
      */
     fun bonesExact(root: Vector3, mid: Vector3, end: Vector3, L1: Float, L2: Float, eps: Float = 1e-3f): Boolean {
         val d1x = mid.x - root.x; val d1y = mid.y - root.y; val d1z = mid.z - root.z
@@ -1128,7 +1033,7 @@ data class ContactConstraint(
         return abs(d1 - L1) <= eps && abs(d2 - L2) <= eps
     }
 
-    // High-fidelity 3D Rotation Matrix utilities for zero-allocation FK propagation
+    // Rotation matrix utilities: column-vector form, for zero-allocation FK propagation.
 
     fun rotationToMatrix(rot: JointRotation, colX: Vector3, colY: Vector3, colZ: Vector3) {
         val c = cos(rot.angle)

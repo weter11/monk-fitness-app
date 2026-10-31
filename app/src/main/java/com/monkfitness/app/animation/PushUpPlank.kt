@@ -76,7 +76,6 @@ object PushUpPlank {
             legTargetLen * LEG_OFFSET_BOTTOM_RATIO
         }
 
-        // Linearly interpolate pelvis offset based on progress
         val pelvisOffset = pelvisOffsetTop + (pelvisOffsetBottom - pelvisOffsetTop) * progress
 
         val baseHeight = if (pivot == PivotType.KNEES) BASE_KNEE_HEIGHT else BASE_ANKLE_HEIGHT

@@ -1,8 +1,7 @@
 package com.monkfitness.app.animation
 
 /**
- * HandDefinition describes the anatomical structure of the hand.
- * All positions are offsets relative to the wrist (0,0,0).
+ * Anatomical structure of the hand; all positions are offsets relative to the wrist (0,0,0).
  */
 data class HandDefinition(
     val palmLength: Float = 12f,
@@ -19,10 +18,8 @@ data class HandDefinition(
     private val scratchDir = Vector3()
 
     /**
-     * Computes the positions of the hand joints in world space.
-     * The hand is treated as a rigid extension of the forearm along [direction].
-     * @param wrist The world position of the wrist joint.
-     * @param direction The forward direction of the hand (forearm direction).
+     * Computes the hand joints in world space, treating the hand as a rigid extension of the
+     * forearm along [direction] (the forearm direction).
      */
     fun computeHandJoints(wrist: Vector3, direction: Vector3, result: HandJoints) {
         val dir = direction.normalizedCopy()
@@ -30,13 +27,9 @@ data class HandDefinition(
     }
 
     /**
-     * Orientation-aware overload. Promotes the wrist to a real joint: the authored
-     * [wristRotation] is composed with the forearm [direction] to build the completed
-     * hand basis, so grips (pronation / supination / wrist flexion) are honored instead
-     * of being dropped. When [wristRotation] is the identity rotation the result is
-     * identical to [computeHandJoints], preserving all non-grip rendering.
-     *
-     * Allocation-free: writes into [scratchDir] and [result].
+     * Orientation-aware overload: the authored [wristRotation] is composed with the forearm
+     * [direction] so grips (pronation / supination / wrist flexion) are honoured instead of
+     * dropped. Identity [wristRotation] reproduces [computeHandJoints]. Allocation-free.
      */
     fun computeHandJoints(
         wrist: Vector3,
