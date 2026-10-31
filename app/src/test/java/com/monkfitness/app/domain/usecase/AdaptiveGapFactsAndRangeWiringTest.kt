@@ -346,7 +346,14 @@ class AdaptiveGapFactsAndRangeWiringTest {
         assertEquals(
             "three days apart before the gap, and three days apart as a stated habit",
             Duration.ofDays(3),
-            usualIntervalOf(history, SessionId("session-today"), ::familyOf, FAMILY, 5)
+            usualIntervalOf(
+                history,
+                SessionId("session-today"),
+                ::familyOf,
+                FAMILY,
+                sessionsToConsider = 5,
+                minimumSessions = ProgramAdaptivePolicy.V1.sessionsBeforeAnIntervalIsUsual
+            )
         )
     }
 
@@ -615,7 +622,14 @@ class AdaptiveGapFactsAndRangeWiringTest {
             (starts.lastOrNull() ?: Instant.parse("2026-10-01T07:00:00Z")).plus(Duration.ofDays(1)),
             "pushups"
         )
-        return usualIntervalOf(history + completing, completing.sessionId, ::familyOf, FAMILY, sessionsToConsider)
+        return usualIntervalOf(
+            history + completing,
+            completing.sessionId,
+            ::familyOf,
+            FAMILY,
+            sessionsToConsider = sessionsToConsider,
+            minimumSessions = ProgramAdaptivePolicy.V1.sessionsBeforeAnIntervalIsUsual
+        )
     }
 
     /** The caller's exercise→family classification, as production states it. */
