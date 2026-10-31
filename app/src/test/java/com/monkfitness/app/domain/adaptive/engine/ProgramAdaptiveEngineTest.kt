@@ -5,7 +5,6 @@ import com.monkfitness.app.domain.adaptive.AdaptiveState
 import com.monkfitness.app.domain.adaptive.engine.ProgramAdaptiveRig.ADJUSTMENT_ID
 import com.monkfitness.app.domain.adaptive.engine.ProgramAdaptiveRig.DECISION_ID
 import com.monkfitness.app.domain.adaptive.engine.ProgramAdaptiveRig.EASIER
-import com.monkfitness.app.domain.adaptive.engine.ProgramAdaptiveRig.EVERY_EXERCISE
 import com.monkfitness.app.domain.adaptive.engine.ProgramAdaptiveRig.FAMILY
 import com.monkfitness.app.domain.adaptive.engine.ProgramAdaptiveRig.HARDER
 import com.monkfitness.app.domain.adaptive.engine.ProgramAdaptiveRig.PRESENTED

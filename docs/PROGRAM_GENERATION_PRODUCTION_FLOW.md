@@ -227,7 +227,7 @@ A refusal and a failure both leave the user's draft exactly as it was. `GENERATI
 | the service writes no revision and creates no Program | `…theServiceWritesNoRevisionAndCreatesNoProgram` |
 | the service consults no adaptive source | `…theServiceConsultsNoAdaptiveSource` |
 | the neutral preferences are the declared defaults, and the pass's required inputs are required | `…theServiceStatesTheNeutralPreferencesRatherThanDefaultingThemQuietly` |
-| the result is the three classes the UI must tell apart | `…theResultIsTheThreeClassesTheUiMustTellApart` |
+| the result is the three classes the UI must tell apart | — |
 | the controller reaches the service and nothing below it | `…theControllerReachesTheServiceAndNothingBelowIt` |
 | the controller consults no repository and no Room | `…theControllerConsultsNoRepositoryAndNoRoom` |
 | one construction site, in the composition root | `…theCompositionRootProvidesTheServiceAndNoOneElseBuildsOne` |

@@ -5,7 +5,6 @@ import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.io.File
-import java.lang.reflect.Modifier
 
 /**
  * The mechanical boundaries of the target-occurrence refactor, checked against the sources themselves.

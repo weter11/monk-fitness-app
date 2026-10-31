@@ -259,7 +259,7 @@ Measured on `feat/program-stage27-generation-context`, base `ecb3702`:
 | Generate and Preview receive equal preferences from equal state | `ProgramGenerationContextSnapshotTest.oneGenerateReadsTheContextExactlyOnce`, `…onePreviewReadsTheContextExactlyOnce`, `…generateAndPreviewOverTheSameSourceStateSeeTheSameSnapshot`, `StorageTest.generateAndPreviewOverTheSameStoredStateSeeTheSameFacts` |
 | one coherent snapshot per operation | `SnapshotTest.thePlanIsBuiltFromTheSnapshotThatWasReadAndNotFromAnother`, `…threeOperationsReadThreeSnapshotsAndNotOneCachedValue`, `…aSourceThatChangesBetweenOperationsIsHonouredRatherThanCached`, `ArchitectureTest.theServiceReadsTheContextExactlyOnceInsideTheSharedPass` |
 | the context source performs no writes | `StorageTest.theContextSourceWritesNothing` (whole-schema row-count sweep), `ArchitectureTest.theHistoryPortCanOnlyRead`, `…theContextSourceHoldsExactlyOneCollaboratorAndItIsTheReadPort` |
-| generated domain untouched | `ArchitectureTest.thePureGeneratedPackageGainedNoFileAndReachesNothingNew`, `…theGeneratedPreferencesTypeIsUnchanged`, `…theRequestTypeGainedNoFieldForThisStage` |
+| generated domain untouched | `ArchitectureTest.thePureGeneratedPackageGainedNoFileAndReachesNothingNew`, `…theGeneratedPreferencesTypeIsUnchanged` |
 | no second request-assembly path | `ArchitectureTest.allThreeEntryPointsRemainOneSharedPass`, `ProgramGenerationPreviewServiceTest.previewIsOneCallIntoTheSamePrivatePassRatherThanAPipelineOfItsOwn` |
 | the service reaches no storage | `ArchitectureTest.theServiceHoldsNoRepositoryAndNoStorageStill`, `…theServiceStillDeclaresNoPersistenceCollaborator` (both copies) |
 

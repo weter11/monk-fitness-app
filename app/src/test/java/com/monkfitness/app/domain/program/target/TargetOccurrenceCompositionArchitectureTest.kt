@@ -4,7 +4,6 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.io.File
-import java.lang.reflect.Modifier
 
 /** Mechanical one-way boundary for the pure occurrence-composition package. */
 class TargetOccurrenceCompositionArchitectureTest {

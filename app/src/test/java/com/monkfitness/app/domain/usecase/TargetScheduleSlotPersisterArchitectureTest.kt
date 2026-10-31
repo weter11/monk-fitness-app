@@ -1,6 +1,5 @@
 package com.monkfitness.app.domain.usecase
 
-import com.monkfitness.app.domain.program.target.TargetScheduleDecision
 import com.monkfitness.app.domain.program.target.TargetSlotMaterializer
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue

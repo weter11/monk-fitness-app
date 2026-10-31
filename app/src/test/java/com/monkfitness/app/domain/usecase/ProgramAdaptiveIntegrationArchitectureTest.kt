@@ -352,13 +352,6 @@ class ProgramAdaptiveIntegrationArchitectureTest {
         )
     }
 
-    private fun integrationNamesOfThisStage(): List<String> = listOf(
-        "AdaptiveInputGap", "AdaptiveIntegrationOutcome", "AdaptiveIntegrationResult",
-        "AdaptiveJudgement", "AdaptiveTargetSlot", "AdaptiveWindowRule", "PresentedElement",
-        "ProgressionRelationProvider", "ExerciseFamilyClassification", "ProgramAdaptiveIntegration",
-        "AdaptiveTargetElement"
-    )
-
     /** The files among [sources] that name one of [names] in whole-token form, comments excluded. */
     private fun legacyAndEngineNames(sources: List<String>, names: List<String>): List<String> =
         sources.flatMap { source ->

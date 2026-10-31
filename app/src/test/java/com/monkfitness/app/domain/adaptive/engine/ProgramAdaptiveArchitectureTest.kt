@@ -1,7 +1,6 @@
 package com.monkfitness.app.domain.adaptive.engine
 
 import com.monkfitness.app.domain.adaptive.AdaptiveScope
-import com.monkfitness.app.domain.adaptive.AdaptiveState
 import com.monkfitness.app.domain.adaptive.LoadProfile
 import com.monkfitness.app.domain.adaptive.decision.AdaptiveAction
 import com.monkfitness.app.domain.adaptive.decision.AdaptiveAdjustment
@@ -58,25 +57,6 @@ class ProgramAdaptiveArchitectureTest {
      * is a shipped writer over the legacy decision table; the point of the list is that every one of
      * these files is still present and still untouched.
      */
-    private val legacySources = listOf(
-        "domain/adaptive/AdaptivePolicy.kt",
-        "domain/adaptive/AdaptiveProgramEngine.kt",
-        "domain/adaptive/AdaptiveSignalCalculator.kt",
-        "domain/adaptive/AdaptiveDecision.kt",
-        "domain/adaptive/ProgressionResolver.kt",
-        "domain/adaptive/PilotProgressionProfiles.kt",
-        "domain/usecase/AdaptiveWorkoutIntegration.kt",
-        "data/repository/AdaptiveSessionDecisionRecorder.kt"
-    )
-
-    /** The Stage-1 suites: the inverse proof that the old generation is untouched is that it still runs. */
-    private val legacyTestSources = listOf(
-        "domain/adaptive/AdaptivePolicyTest.kt",
-        "domain/adaptive/AdaptiveProgramEngineTest.kt",
-        "domain/adaptive/AdaptiveSignalCalculatorTest.kt",
-        "domain/adaptive/ProgressionResolverTest.kt"
-    )
-
     @Test
     fun theEngineReachesNoDaoNoRoomNoAndroidAndNoUi() {
         val forbidden = listOf(

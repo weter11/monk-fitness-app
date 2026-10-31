@@ -1,6 +1,5 @@
 package com.monkfitness.app.domain.workout
 
-import com.monkfitness.app.domain.adaptive.decision.AdaptiveDecision
 import com.monkfitness.app.domain.common.AdjustmentId
 import com.monkfitness.app.domain.common.DecisionId
 import com.monkfitness.app.domain.common.ProgramId

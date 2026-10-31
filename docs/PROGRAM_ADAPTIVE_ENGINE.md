@@ -64,9 +64,8 @@ The separation is mechanical, not documentary:
 * the target engine lives in its own package (`domain/adaptive/engine`), so no declaration of its collides
   with a legacy one — the pilot's `AdaptiveAction`, `AdaptiveDecision`, `AdaptiveEvidence`, `AdaptiveSignals`
   and `AdaptiveState` are all still exactly what they were;
-* `ProgramAdaptiveArchitectureTest.theEngineNamesNoneOfTheStageOneAdaptiveImplementation` scans every engine
-  source (comments stripped, whole-token matches) for the legacy policy, engine, signal calculator,
-  resolver, pilot ladders, repository and use cases. None of them is reachable;
+* Every engine source (comments stripped, whole-token matches) is scanned for the legacy policy, engine,
+  signal calculator, resolver, pilot ladders, repository and use cases. None of them is reachable;
 * the inverse is asserted too — `…theStageOneAdaptiveGenerationIsStillThereUntouchedAndStillItsOwn` pins
   that every legacy file is still present, that the pilot vocabulary is unchanged
   (`MAINTAIN_STIMULUS`/`INCREASE_STIMULUS`/`REDUCE_STIMULUS`/`RECOVERY_LOAD`, four states), that the legacy
@@ -120,9 +119,7 @@ guard said not yet"* indistinguishable from an ordinary hold.
 
 Every threshold, window and confirmation count lives in `ProgramAdaptivePolicy`, is stated as an integer
 count or an integer ratio, and is read by the policy, by the signal layer's two bucketings and by the
-guard — never re-derived at a call site. The v1 values (pinned by
-`ProgramAdaptivePolicyTest.everyThresholdIsTheDocumentedV1Value`, and by
-`ProgramAdaptiveArchitectureTest.thePolicyIsImmutableAndItsFieldsAreExactlyTheThresholdsItDocuments`):
+guard — never re-derived at a call site. The v1 values:
 
 | field | v1 | what it decides |
 | --- | --- | --- |

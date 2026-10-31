@@ -12,7 +12,6 @@ import com.monkfitness.app.domain.adaptive.engine.ProgramAdaptiveRig.signals
 import com.monkfitness.app.domain.adaptive.engine.ProgramAdaptiveRig.window
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotEquals
-import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /**

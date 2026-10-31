@@ -378,7 +378,7 @@ Two claims are deliberately *not* expressed as mutations, because no single line
 
 | claim | suite |
 | --- | --- |
-| exactly three goals and seven focuses, and no fourth goal | `FocusPlanTest.theFocusVocabularyIsExactlyTheSevenValuesSectionEightNames` |
+| exactly three goals and seven focuses, and no fourth goal | — |
 | focus is not a day type and is never inferred from one | `FocusPlanTest.focusAndDayTypeAreTwoDifferentDimensionsThatHappenToShareOneWord`, `ProgramGeneratedArchitectureTest` (no `ProgramDayType`-derived focus in the planner) |
 | `CUSTOM` percentages sum to exactly 100% and invalid ones are refused | `FocusPlanTest.customPercentagesMustSumToExactlyOneHundred`, `…aShareThatIsNotAPositiveWholePercentageIsRefused` |
 | a configuration's focuses are canonical whatever order they were built in | `FocusPlanTest.aConfigurationsFocusesAreHeldInTheVocabularysOwnOrderWhateverOrderTheyWereBuiltIn` |
@@ -390,7 +390,7 @@ Two claims are deliberately *not* expressed as mutations, because no single line
 | a cautious context narrows stacking and changes nothing else | `FocusPlannerTest.aCautiousRecoveryContextNarrowsHowMuchAWorkoutStacksAndNothingElse` |
 | user choice outranks an adaptive preference; recency and diversity are honoured | `GeneratedPlannerTest.theUsersOwnChoiceOutranksAnAdaptivePreference`, `…anAdaptivePreferenceOutranksTheGeneratorsOwnDiversityRule`, `…anExerciseUsedMostRecentlyIsPassedOverWhileAnAlternativeExists`, `…theDeterministicTieBreakIsTheCanonicalExerciseId` |
 | hard constraints are never violated, and what cannot be planned is reported | `GeneratedPlannerTest.anExerciseTheEquipmentCannotSupportIsNeverChosen`, `…aFocusNothingTrainsIsReportedRatherThanFilled`, `…anEquipmentExcludedFocusIsReportedAndNeverSilentlySubstituted`, `…aDimensionWithoutASubtypeIsReportedRatherThanPrescribed` |
-| prescriptions are per set, in each element's own dimension, and §10's shapes | `GeneratedPlannerTest.thePlanIsPrescribedInEachExercisesOwnDimensionWithThePolicysTargets`, `…theTwoPrescriptionShapesAreTheOnesSectionTenWritesOut` |
+| prescriptions are per set, in each element's own dimension, and §10's shapes | `GeneratedPlannerTest.thePlanIsPrescribedInEachExercisesOwnDimensionWithThePolicysTargets` |
 | pinned survives; an override survives; a compatible choice survives; generated may change | `PlanReconcilerTest.aPinnedElementIsNeverAutomaticallyChanged`, `…anElementTheUserAuthoredIsNeverSilentlyReplaced`, `…aUsersCompatibleChoiceIsPreservedRatherThanReplacedBecauseWeRegenerated`, `…oneChangedGeneratedElementIsReplacedAndEverythingElseIsPreserved` |
 | a day the plan no longer fills goes, and one it adds is a training day | `PlanReconcilerTest.aDayThePlanNoLongerFillsIsRemovedAndOneItAddsIsAdded`, `…aGeneratedDayIsATrainingDayAndIsUnnamed` |
 | Generate/Regenerate persist nothing and create no revision | `ProgramGeneratedEditorTest.generateAndRegenerateWriteNothingAtAll`, `…aGenerateAndARegenerateCreateNoRevision` |

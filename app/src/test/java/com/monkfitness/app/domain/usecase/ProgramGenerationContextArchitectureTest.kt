@@ -3,7 +3,6 @@ package com.monkfitness.app.domain.usecase
 import java.io.File
 import java.lang.reflect.Modifier
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
