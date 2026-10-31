@@ -370,7 +370,14 @@ class AdaptiveGapFactsAndRangeWiringTest {
         assertEquals(
             "three days apart before the gap, and three days apart as a stated habit",
             Duration.ofDays(3),
-            usualIntervalOf(history, SessionId("session-today"), ::familyOf, FAMILY, 5)
+            usualIntervalOf(
+                history,
+                SessionId("session-today"),
+                ::familyOf,
+                FAMILY,
+                sessionsToConsider = 5,
+                minimumSessions = ProgramAdaptivePolicy.V1.sessionsBeforeAnIntervalIsUsual
+            )
         )
     }
 
