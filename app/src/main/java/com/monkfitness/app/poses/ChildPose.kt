@@ -4,103 +4,43 @@ import com.monkfitness.app.animation.*
 import kotlin.math.*
 
 /**
- * Child's Pose (`child_pose_hold`) — the kneeling **fold-and-hold with its own transition in and out**,
- * authored on the canonical `SkeletonFactory` tree through [BasePose] (the same tree, declared-spine
- * curve and registered package bake limbs every migrated family uses).
+ * Child's Pose (`child_pose_hold`) — the kneeling fold-and-hold with its own transition in and out, on the
+ * canonical `SkeletonFactory` tree through [BasePose].
  *
- * ## What the exercise is, and where that comes from
+ * **There is no BPS for this exercise**: its own copy is the only specification in the repository, and the
+ * pose authors its four `steps` in order (kneel, sit-back, fold, hold) and then the reverse, because the
+ * copy says "then slowly rise back up". `ChildPoseTest` measures each clause.
  *
- * **There is no BPS for this exercise.** `WorkoutGenerator` files it as a `STRETCHING` timer drill of
- * the `child_pose`/`SPINE` family, and its own copy is the only specification in the repository:
+ * The whole cycle is one scalar, [foldFraction] `s(p) ∈ [0,1]`: `0` at `p = 0` (the tall kneel), `1` from
+ * [ENTRY_END] to [EXIT_START] (the hold), `0` again at `p = 1`.
  *
- *  * `desc` — *"A restorative stretch that gently lengthens the back and helps relax the hips and
- *    shoulders."*
- *  * `steps` — *"1. Kneel on the floor and sit the hips back toward the heels. 2. Fold the torso
- *    forward and reach the arms long in front. 3. Let the forehead rest down and breathe into the
- *    ribcage. 4. Hold the stretch, then slowly rise back up."*
- *  * `tech` — *"Relax the shoulders and keep the breath slow. Widen the knees if you need more space
- *    for the torso."*
- *  * `mistakes` — *"Holding tension in the neck, bouncing into the stretch, and forcing the hips to
- *    the heels when mobility is limited."*
- *
- * The pose authors all four `steps` in that order — a **kneel**, a **sit-back**, a **fold**, a
- * **hold** — and then the reverse of it, because §4 says *"then slowly rise back up"*. Every clause is
- * a structural property below; the assertion that measures it is named per clause in
- * `ChildPoseTest`:
- *
- * | the copy says | the pose authors | measured by |
- * |---|---|---|
- * | "1. **Kneel** on the floor" | the knee is pinned on the mat's knee layer for the *whole* cycle and the shin lies flat from it back to the pinned ankle | `theShinsLieFlatOnTheMatForTheWholeCycle` |
- * | "**sit the hips back** toward the heels" | the hip travels back and down **on the circle of radius `thighLength` about the pinned knee**, so the knee cannot move while the hips travel (`92.0 u` back, `47.8 u` down) | `theHipsSitBackOverTheHeelsWithoutMovingTheKnees` |
- * | "2. **Fold the torso forward**" | the two-segment spine folds `109°` at the root and a further `26°` at the thorax | `theTorsoFoldsForwardAndDown` |
- * | "reach the **arms long in front**" | both hands travel to the mat `123.2 u` from their own shoulder, ahead of the head | `theArmsReachLongInFrontOntoTheMat` |
- * | "3. Let the **forehead rest down**" | the cervical chain carries a further `15°` of tuck; the head's tip publishes at the corpus's own mat layer (`9.0 u`) | `theHeadRestsAtTheMatLayer` |
- * | "4. **Hold** the stretch" | the fold plateau is flat for `45 %` of the cycle | `theHoldPlateauIsFlat` |
- * | "4. then **slowly rise back up**" | the cycle closes: the rise is the mirror of the entry and `progress 1 ≡ 0` | `theCycleClosesAndRisesBackUp` |
- * | "**bouncing** into the stretch" (a mistake) | the entry/rise ramps are monotone — nothing returns mid-ramp | `nothingBounces` |
- * | "**forcing the hips to the heels** when mobility is limited" (a mistake) | the sit-back stops where the *leg chain* stops: `55°` of femur, leaving `8.5 u` of its `56.01 u` fold stop | `theSitBackStopsAtTheLegChainsOwnFoldBound` |
- *
- * ## The motion, exactly
- *
- * The whole cycle is one scalar, [foldFraction] `s(p) ∈ [0,1]`: `0` at `p = 0` (the tall kneel), `1`
- * from [ENTRY_END] to [EXIT_START] (the hold), `0` again at `p = 1` (the rise completes). Everything
- * else is `s`:
- *
- *  * **The knee is the axis and does not move.** The hip is authored on the circle of radius
- *    `thighLength` about the pinned knee at ([KNEE_X], [KNEE_Y]), through `α = `[FOLD_ALPHA]`·s`. Because
- *    the hip is exactly `thighLength` from the knee, the leg chain's own IK puts the middle joint *at*
- *    the knee for every `α` — so the shins stay flat on the mat and the ankles do not move while the
- *    hips travel. This is the drill's actual biomechanics ("sit the hips back": the femur rotates on a
- *    knee that is planted), and it is what makes the pose's own ground contacts stable.
- *  * **The trunk folds** as the two-segment spine: [TRUNK_FOLD] at the root plus [THORACIC_FOLD] at
- *    the chest, i.e. the torso is carried `109°` forward by the pelvis and the thorax rounds a further
- *    `26°` — the copy's "fold the torso forward" with the thoracic component that puts the *shoulders*
- *    low rather than a single rigid hinge.
- *  * **The cervical chain tucks** a further [CERVICAL_TUCK] on top of the thorax's direction, and both
- *    bones are authored as their own directions in the chest's frame (the batch-4 neck pair's channel:
- *    `resolveHeadTarget` is the sole writer of those offsets and it only runs for a pose that declared
- *    a gaze target, so this authored chain reaches the published frame verbatim). The head's tip then
- *    publishes at [headTipY] ≈ `9.0 u` — the corpus's own mat layer (the prone family's `10 u`).
+ *  * **The knee is the axis and does not move.** The hip is authored on the circle of radius `thighLength`
+ *    about the pinned knee at ([KNEE_X], [KNEE_Y]) through `α = `[FOLD_ALPHA]`·s`. Because the hip is
+ *    exactly `thighLength` from the knee, the leg chain's own IK puts the middle joint *at* the knee for
+ *    every `α`, so the shins stay flat on the mat and the ankles do not move while the hips travel — the
+ *    drill's actual biomechanics, and what makes the pose's ground contacts stable.
+ *  * **The trunk folds** as the two-segment spine: [TRUNK_FOLD] at the root plus [THORACIC_FOLD] at the
+ *    chest, so the shoulders come low instead of a single rigid hinge.
+ *  * **The cervical chain tucks** a further [CERVICAL_TUCK], both bones authored as their own directions
+ *    in the chest's frame (`resolveHeadTarget` is the sole writer of those offsets and only runs for a
+ *    pose that declared a gaze target, so this authored chain reaches the published frame verbatim).
  *  * **The arms** travel from the tall kneel's hanging rest to a constant offset in front of the fold's
- *    shoulder ([HAND_FORWARD] forward, onto the mat at [HAND_Y], [HAND_INWARD] inboard), so at the hold
- *    the hands rest on the mat `123.2 u` from their own shoulder and well ahead of the head — *"reach
- *    the arms long in front"*. The interpolation is in the same `s`, so the arms arrive with the fold.
- *  * **The feet lie along the shins** (the kneel's own configuration, the top of the foot down): the
- *    foot heading channel (`setHeading`) carries them backward, which is also why the derivation lays
- *    them flat on the mat instead of standing them up.
+ *    shoulder, so at the hold the hands rest on the mat well ahead of the head.
+ *  * **The feet lie along the shins** (the top of the foot down): the heading channel carries them
+ *    backward, which is why the derivation lays them flat instead of standing them up.
  *
- * ## Physics/bounds, measured rather than asserted in prose
+ * Bounds, measured: the hip→ankle chord runs `148.8 u` (kneel) → `64.5 u` (hold) of the leg chain's
+ * `[56.01, 205.80] u` band, so the sit-back could not pass `58°` without folding past the chain's own stop
+ * (the copy's "forcing the hips to the heels when mobility is limited", honoured structurally). The hands'
+ * reach is `123.2 u` of the arm chain's `[40.13, 143.08] u` band; the knee layer is [KNEE_Y] `= 15 u`.
  *
- * * The authored hip→ankle chord runs `148.8 u` (the tall kneel) → `64.5 u` (the hold) of the leg
- *   chain's `[56.01, 205.80] u` band: every phase is reachable by construction, and the sit-back could
- *   not go past `58°` without the chain folding past its own stop — which is the copy's own *"forcing
- *   the hips to the heels when mobility is limited"* mistake, honoured structurally (see the KDoc row).
- * * The hands' authored reach is `123.2 u` of the arm chain's `[40.13, 143.08] u` band.
- * * The knee layer is [KNEE_Y] `= 15 u`, the corpus's own knee-contact layer
- *   (`PushUpPlank.BASE_KNEE_HEIGHT`, the layer `KneePushUpPose` and `CatCowPose` rest their knees on).
- *
- * ## Recorded gaps (no invented specification)
- *
- *  * **The drill's subject is the hold, and its contacts are declared for it.** `metadata.support` is
- *    per-pose, not per-frame: the kneeling base (both knees and both hands, pivot `KNEES` — the
- *    `KneePushUpPose`/`CatCowPose` declaration, and the quadrupeds' own four-point base) is the
- *    hold's. Through the entry and the rise the hands are *lifted* (they hang at the sides at `p = 0`),
- *    exactly as `YTRaisesPose` records for its lifted hands and `NinetyNinetyHipsPose` for its
- *    picked-up feet. The knees, by contrast, are on the mat for the whole cycle and their declaration
- *    is true at every phase.
- *  * **The forehead has no `SupportPoint`**: `SupportMath.jointsFor` carries no head entry, so the
- *    head's mat relationship is authored geometry ([headTipY]) and is **not declared** — the same
- *    vocabulary gap `YTRaisesPose` records for its supported forehead.
- *  * **The clasp/grip is not expressed**: the rig has no grip DOF (`HandDefinition` is one long axis),
- *    so the hands "reach long" by being placed on the mat, not by being curled into it.
- *  * **The knees' widening** (`tech`: *"Widen the knees if you need more space for the torso"*) is a
- *    *conditional* instruction for a lifter whose torso needs room; the authored stance is the neutral
- *    one (`KNEE_Z = hipWidth`, the thighs in their own sagittal planes) and the wider variant is
- *    recorded rather than authored — a second pose would be a second exercise.
- *  * **"Breathe into the ribcage"** and the breath cycle are not representable (the rig carries no
- *    breath channel); the hold's platean is the kinematics' part of that cue.
- *  * The fold angles, the hold's fraction of the cycle, the hands' placement and the cycle length are
- *    authored constants: the copy names no number, saying only "gently" / "slowly".
+ * Recorded gaps: `metadata.support` is per-pose, not per-frame, so the kneeling base is the HOLD's — the
+ * hands are lifted through the entry and the rise, while the knees are on the mat all cycle. The forehead
+ * has no `SupportPoint` (`SupportMath.jointsFor` carries no head entry), so its mat relationship is
+ * authored geometry ([headTipY]) and not declared; the rig has no grip DOF, so the hands "reach long" by
+ * placement, not by curling; the conditional knee widening is recorded rather than authored (a second
+ * pose would be a second exercise); and there is no breath channel, so the hold's plateau carries that
+ * cue's kinematics only.
  */
 class ChildPose : BasePose() {
 
@@ -154,7 +94,6 @@ class ChildPose : BasePose() {
         val thoracic = THORACIC_FOLD * s
         val cervical = CERVICAL_TUCK * s
 
-        // --- The kneel: the hip sits back on the circle of radius thighLength about the PINNED knee ---
         pelvis!!.localPosition.set(hipX(def, alpha), hipY(def, alpha), 0f)
         // "Fold the torso forward": the trunk's own two segments, both about the mediolateral axis.
         buildSpineCurve(pelvis!!, chest!!, -trunk, -thoracic, axisZ)
@@ -168,7 +107,6 @@ class ChildPose : BasePose() {
 
         for (root in roots!!) root.updateWorldTransforms(zeroVector, identityRotation)
 
-        // --- The shins: pinned flat on the mat, so the knee stays where the drill put it -----------
         val ankleX = kneeX(def) - def.shinLength
         bakeIkLimb(
             hipF!!.worldPosition, Vector3(ankleX, KNEE_Y, -kneeZ(def)), def.thighLength, def.shinLength,
@@ -185,7 +123,6 @@ class ChildPose : BasePose() {
         setHeading(Extremity.FOOT_F, footHeading(trunk))
         setHeading(Extremity.FOOT_B, footHeading(trunk))
 
-        // --- The arms: hanging at the tall kneel, long in front on the mat at the fold --------------
         val travel = s
         val shoulderAWorld = shoulderA!!.worldPosition
         bakeIkLimb(
@@ -274,7 +211,7 @@ class ChildPose : BasePose() {
          */
         fun kneeX(def: SkeletonDefinition): Float = def.shinLength
 
-        /** The knees sit under their own hips (the neutral, un-widened kneel — see the KDoc's gap). */
+        /** The knees sit under their own hips (the neutral, un-widened kneel; widening is recorded, not authored). */
         fun kneeZ(def: SkeletonDefinition): Float = def.hipWidth
 
         /**
@@ -349,20 +286,17 @@ class ChildPose : BasePose() {
         /** The tall kneel's hip X (`alpha = 0`): the hip directly above the pinned knee. */
         fun kneelHipX(def: SkeletonDefinition): Float = hipX(def, 0f)
 
-        /** The tall kneel's hip Y: a whole femur above the knee layer. */
         fun kneelHipY(def: SkeletonDefinition): Float = hipY(def, 0f)
 
         /** The hold's hip X (`alpha = `[FOLD_ALPHA]). */
         fun foldHipX(def: SkeletonDefinition): Float = hipX(def, FOLD_ALPHA)
 
-        /** The hold's hip Y. */
         fun foldHipY(def: SkeletonDefinition): Float = hipY(def, FOLD_ALPHA)
 
         /** The fold's chest X: the hip plus the trunk's own fold. */
         fun foldChestX(def: SkeletonDefinition): Float =
             foldHipX(def) + def.torsoLength * sin(TRUNK_FOLD)
 
-        /** The fold's chest Y. */
         fun foldChestY(def: SkeletonDefinition): Float =
             foldHipY(def) + def.torsoLength * cos(TRUNK_FOLD)
 

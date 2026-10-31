@@ -4,15 +4,9 @@ import com.monkfitness.app.animation.*
 import kotlin.math.*
 
 /**
- * Alternating Lateral (Side) Lunge.
- *
- * Biomechanics (driver = support leg):
- *  - One foot is the fixed support anchor; the other steps OUT to the side.
- *  - The swing foot lifts and travels laterally along its own arc; the knee tracks
- *    over that foot (no valgus). The pelvis drops and shifts sideways over the
- *    working leg (COM transfer), the torso stays upright (minimal forward lean).
- *  - Hands hold a light, symmetric counterbalance (no robotic locking).
- *  - Left and right alternate every half-cycle.
+ * Alternating Lateral (Side) Lunge. One foot is the fixed anchor; the other steps OUT to the side,
+ * knee tracking over that foot (no valgus), while the pelvis drops and shifts sideways and the torso
+ * stays upright. Hands hold a light symmetric counterbalance.
  */
 class AlternatingSideLungesPose : BaseLungePose() {
 
@@ -33,7 +27,7 @@ class AlternatingSideLungesPose : BaseLungePose() {
     override fun onBuild(context: PoseContext): SkeletonPose {
         val def = context.definition
         ensureHierarchy(def)
-        // B3 — every production pose declares its posture intent. This pose authors a
+        // Every production pose declares its posture intent. This pose authors a
         // shape-driven root, so it opts into CUSTOM (the solver leaves the authored root untouched).
         declarePosture(jointsBuffer, PostureIntent.Kind.CUSTOM)
 

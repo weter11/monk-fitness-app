@@ -4,73 +4,13 @@ import com.monkfitness.app.animation.*
 import kotlin.math.*
 
 /**
- * Inverted Bodyweight Row (`row_standard`) — the bar-supported HORIZONTAL pull, authored on the
- * bar-support pipeline ([BaseBarSupportPose]): the canonical `SkeletonFactory` tree, the hands FIXED
- * on a bar, and the body placed from an authored shoulder→bar reach.
+ * Inverted Bodyweight Row (`row_standard`) — the bar-supported horizontal pull on
+ * [BaseBarSupportPose]: the hands are FIXED on the bar and the body is placed from an authored
+ * shoulder→bar reach.
  *
- * ## What the exercise is (the catalog's own statement, `WorkoutGenerator`)
- *
- * `baseRepExercise("rows", "rows", "row_standard", …, requiredEquipment = setOf(Equipment.BAR),
- * imageRes = R.drawable.pull_up)` — the id is `rows`, the **title** is *"Inverted Bodyweight Row"*
- * and the equipment is a **BAR**. The catalog's `steps`/`tech` copy (`ex_rows_steps`: *"Hinge at the
- * hips with a flat back, holding a weight or resistance band… Pull the weight toward your lower
- * ribs"*) describes a **bent-over weighted row**, which the id, the title, the equipment and the
- * illustration (`ExerciseSkeletonData` groups `row_standard` with the pull-up/hang ids) all
- * contradict. The animation-coverage audit (`docs/ANIMATION_COVERAGE_PHASE.md` §2) already recorded
- * that contradiction as **stale copy** and decided the bar-supported movement the id/title/equipment
- * declare; this pose implements that decision and re-states it here. Only the `desc` line
- * (*"A pull exercise that builds thickness in the upper and middle back"*) is grip-neutral and is
- * what the movement below is authored to do.
- *
- * ## The authored movement
- *
- * The athlete stands under a fixed bar, plants the **heels**, and hangs in one straight line from the
- * planted feet to the shoulders, pulling the chest to the bar:
- *
- *  - **The body is one line, hinged at the shoulders' chain root — the feet.** The pelvis rides a
- *    circle of radius [LEG_LINE] about the fixed ankles; the trunk continues that line
- *    ([TORSO_LINE] = one torso length beyond the hip), so the ankle→heel→shoulder chain is straight
- *    by construction. The reach the arms take decides WHERE on that circle the body sits: the
- *    shoulder is `reach` from the fixed grip, which pins the incline to a single angle per frame
- *    ([inclineFor], the closed-form circle intersection below). `desc`'s "thickness in the upper and
- *    middle back" is the pull: the incline rises from [BOTTOM_REACH] (arms at the chain's own
- *    near-full extension) to [TOP_REACH] (the elbows folded, the chest at the bar).
- *  - **The bar is real, and it is where the bar has to be for this body.** [BAR_X]/[BAR_Y] are the
- *    fixed grip; the wall-seat lesson (`WallSitPose`: "an exercise defined against the wall must
- *    carry the wall") applies to a row's bar, so the environment carries a `BoxProp` (the bar's own
- *    slab, the shape `BaseVerticalPullPose` uses for the pull-up bar) plus a `BAR` anchor the two
- *    declared hand contacts name.
- *  - **The hands never move; the body does.** Both hands are declared supports on the bar anchor
- *    (`PivotType.HANDS`), and they are IK'd to constants, so the grip reads as attached — the same
- *    contract the vertical-pull family states. The plane their palm chain lies in is the bar's own
- *    top face ([BaseBarSupportPose.applyFlatBarGrip] derives the wrist articulation that keeps the
- *    hand IN that plane; a constant overhand tilt would poke the fingers `6.8 u` through it at the
- *    top of the rep).
- *  - **The feet are planted for the whole rep.** The ankles are IK'd to fixed floor targets and the
- *    feet are declared (`LEFT_FOOT`/`RIGHT_FOOT`), so the engine derives their contact plane and the
- *    foot's heading; the heading is declared explicitly (toes forward, flat on the mat) rather than
- *    left to drift from the shank's perpendicular, exactly as `WallSitPose` declares its own.
- *
- * ## Reach
- *
- * Both ends are inside the arm chain's `[40.134, 143.080]` band *and* inside the leg chain's
- * `[56.010, 205.800]` band by construction: the authored reaches are `138`/`76` and the hip–ankle
- * chord is [LEG_LINE] `= 204`, so the engine's reachability stamp reads `0` and no target is
- * projected. The incline the reach implies is measured, not tuned: `22.4°` at the bottom,
- * `36.4°` at the top ([inclineFor] is the pose's own closed form and the test asserts both ends).
- *
- * ## Gaps recorded (not invented)
- *
- *  * **`steps`/`tech`/`mistakes` describe a bent-over weighted row.** Flagged above and recorded as
- *    stale copy rather than resolved here (the same call the phase audit made).
- *  * **The foot position.** The copy says nothing about how the feet take the load. The rig's
- *    declared-foot derivation puts a flat foot on the mat, which is what this pose authors; the
- *    textbook "heels only, toes up" variant would need an out-of-plane ankle DOF that the declared
- *    foot derivation deliberately flattens (the same limitation the phase audit records under
- *    "toe-out is not expressible as an ankle articulation"). Recorded, not invented.
- *  * **The thorax-to-bar contact.** The rig carries no thorax-depth constant, so "the chest touches
- *    the bar" is realized as the shoulder arriving within [BAR_ARRIVAL_X] u of the bar's X plane
- *    (measured `34.2 u`) at the top of the pull, and is *not* asserted as a surface contact.
+ * The catalog's `steps`/`tech` describe a bent-over weighted row; the id, title, BAR equipment and
+ * illustration contradict it, and the coverage audit recorded that as stale copy. This pose
+ * implements the bar-supported movement the id declares.
  */
 class RowsPose : BaseBarSupportPose() {
 
@@ -142,7 +82,6 @@ class RowsPose : BaseBarSupportPose() {
         val ux = cos(incline)
         val uy = sin(incline)
 
-        // --- 1. The body: one straight line from the planted heels, pivoting over them --------
         // The pelvis sits on the circle of radius LEG_LINE about the fixed ankles, and the pelvis's
         // own rotation carries the WHOLE body's pitch (the hips/legs inherit it, which is why the
         // single-leg spine rule puts the lower segment on the pelvis).
@@ -169,7 +108,6 @@ class RowsPose : BaseBarSupportPose() {
         buildPelvis(pelvis!!, hipF!!, hipB!!, def.hipWidth)
         authoringFk()
 
-        // --- 2. The legs: the heels are planted, so the whole slide is the body over them ------
         val stance = def.hipWidth * STANCE_WIDTH_FACTOR
         targetF.set(ANKLE_X, FLOOR_ANKLE_Y, -stance)
         targetB.set(ANKLE_X, FLOOR_ANKLE_Y, stance)
@@ -181,7 +119,6 @@ class RowsPose : BaseBarSupportPose() {
         setHeading(Extremity.FOOT_F, Vector3(ux, uy, 0f))
         setHeading(Extremity.FOOT_B, Vector3(ux, uy, 0f))
 
-        // --- 3. The arms: FIXED grips on the bar, the body is what moved -----------------------
         barHandTargets(def)
         bakeArmsToBar(def)
         // The grip: a hand lying IN the bar's plane with the fingers along the bar, away from the
@@ -190,7 +127,6 @@ class RowsPose : BaseBarSupportPose() {
         authorFlatBarGrip(def, Extremity.HAND_A, handA!!, palmA!!, knucklesA!!, fingertipsA!!, GRIP_DIRECTION)
         authorFlatBarGrip(def, Extremity.HAND_P, handP!!, palmP!!, knucklesP!!, fingertipsP!!, GRIP_DIRECTION)
 
-        // --- 4. Gaze: the bar is the athlete's reference in this movement ----------------------
         val chestWorld = chest!!.worldPosition
         scratchGaze.set(BAR_X - chestWorld.x, BAR_Y - chestWorld.y, 0f)
         if (scratchGaze.mag() < 1e-4f) scratchGaze.set(0f, 1f, 0f)
@@ -281,10 +217,8 @@ class RowsPose : BaseBarSupportPose() {
          */
         const val TRUNK_BRACE = 0.06f
 
-        /** The incline the bottom of the rep realizes at [BOTTOM_REACH] (asserted by the test). */
         const val BOTTOM_INCLINE = 0.3906f
 
-        /** The incline the top of the rep realizes at [TOP_REACH] (asserted by the test). */
         const val TOP_INCLINE = 0.6360f
 
         /** How close to the bar's own X plane the shoulder arrives at the top of the pull (measured `34.2 u`). */

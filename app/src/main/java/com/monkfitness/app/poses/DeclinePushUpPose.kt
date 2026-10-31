@@ -9,9 +9,9 @@ class DeclinePushUpPose : BasePushUpPose() {
 
     override val gripWidthMultiplier = 1.5f
 
-    // M14 — feet elevated on the box; slope the head-to-heels plank downward so the
-    // chest/shoulders drop toward the floor (the real decline), while the pelvis stays
-    // on the horizontal leg chain and the hands re-solve to the floor via IK.
+    // Feet elevated on the box; slope the head-to-heels plank downward so the chest/shoulders drop
+    // toward the floor (the real decline), while the pelvis stays on the horizontal leg chain and the
+    // hands re-solve to the floor via IK.
     override val declineTrunkPitch = 0.35f
 
     override val metadata = PoseMetadata(

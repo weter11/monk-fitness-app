@@ -6,13 +6,10 @@ import kotlin.math.*
 class ProneCobraStretchPose : BasePose() {
 
     /**
-     * The whole-body **prone LAYOUT**: the pose's own authored rest pitch (spine local `+Y` → world
-     * `+X` = the head end, ventral `+X` → world `−Y` = face down). The root carries this and only
-     * this, constant across the rep — BPS §5/§7/§12: "the pelvis remains neutral and stays on the
-     * floor; the extension originates from the paraspinals, not from tilting the pelvis", "Hips stay
-     * grounded", "the pelvis stays grounded (hips do not lift)". (M3: the pre-fix pose drove
-     * `lerp(−1.57, −0.9)` into THIS declaration, so the pelvis itself was the rep's hinge and the
-     * chest followed rigidly.)
+     * The whole-body **prone LAYOUT**: spine local `+Y` → world `+X` (head end), ventral `+X` → world
+     * `−Y` (face down). The root carries this and only this, constant across the rep — BPS §5/§7:
+     * the pelvis stays neutral and grounded, the extension originates from the paraspinals. (The
+     * pre-fix pose drove `lerp(−1.57, −0.9)` into THIS declaration, so the pelvis was the hinge.)
      */
     private val proneLayoutPitch = -1.57f
 
@@ -27,9 +24,7 @@ class ProneCobraStretchPose : BasePose() {
      *  thoracic spine. */
     private val thoracicShare = 0.4f
 
-    // Shared camera (duplicated literal removed). Default pitch raised ~10% (0.22 -> 0.242)
-    // so the view tilts down slightly and the prone arch stays comfortably framed
-    // (yaw/zoom unchanged, no camera redesign). Mirrors the Hip Flexor audit.
+    // Shared camera; the default pitch is raised ~10% (0.22 -> 0.242) so the prone arch stays framed.
     private val cobraCamera = CameraDefinition(
         defaultYaw = 1.19f,
         defaultPitch = 0.242f,
@@ -43,7 +38,7 @@ class ProneCobraStretchPose : BasePose() {
         loopMode = LoopMode.PING_PONG,
         motionCurve = MotionCurve.EASE_IN_OUT,
         environment = cobraGround,
-        // M9 — the planted hands (the pillar the chest is pressed and lifted from) and the feet
+        // The planted hands (the pillar the chest is pressed and lifted from) and the feet
         // (the legs lie along the floor line), on the ONE canonical support channel. Declaring the
         // hands is what makes the engine's hand derivation resolve the contact at all: measured
         // pre-fix, the un-declared `FINGERTIPS_A/P` hung 6.99 units BELOW the floor at the seam.
@@ -104,12 +99,12 @@ class ProneCobraStretchPose : BasePose() {
     override fun onBuild(context: PoseContext): SkeletonPose {
         val def = context.definition
         ensureHierarchy(def)
-        // B3 — every production pose declares its posture intent. This pose authors a
+        // Every production pose declares its posture intent. This pose authors a
         // shape-driven root, so it opts into CUSTOM (the solver leaves the authored root untouched).
         declarePosture(jointsBuffer, PostureIntent.Kind.CUSTOM)
 
         // 1. Core Anchoring: the root carries the whole-body PRONE LAYOUT only, constant across the
-        // rep (M3 — see the constant's KDoc above; `declarePelvisTilt` already records the PELVIS
+        // rep (see the constant's KDoc above; `declarePelvisTilt` already records the PELVIS
         // joint intent, so no second, stale declaration is made here).
         val pelvisX = 0f
         val pelvisY = 15f // Rest perfectly flat on the ground
@@ -122,8 +117,8 @@ class ProneCobraStretchPose : BasePose() {
         lumbar!!.localPosition.set(0f, 0f, 0f)
         chest!!.localPosition.set(0f, def.torsoLength, 0f)
 
-        // 2. The rep's extension is ARTICULATED on the two-segment spine, not carried on the root
-        // (M3). BPS §5: "Thoracic: gently extended as the chest lifts — the upper back is the prime
+        // 2. The rep's extension is ARTICULATED on the two-segment spine, not carried on the root.
+        // BPS §5: "Thoracic: gently extended as the chest lifts — the upper back is the prime
         // mover" / "The extension is smooth along the spine, not a hinge at one segment"; §13: "The
         // chest lifts off the floor via thoracic extension while the lumbar spine stays neutral."
         // The thoracolumbar junction lifts the chest off the floor (the rep's authored amount, see
@@ -134,7 +129,7 @@ class ProneCobraStretchPose : BasePose() {
         buildSpineCurve(lumbar!!, chest!!, extension, extension * thoracicShare, axisZ)
 
         // Head tilts up dynamically to follow the cobra stretch. Declared as a gaze target
-        // (Phase 7 Gap 7) while the legacy direction path still writes the head.
+        // while the legacy direction path still writes the head.
         val headTilt = SkeletonMath.lerp(0f, -0.3f, context.progress)
         val headDir = SkeletonMath.rotAround(Vector3(0.2f, 1f, 0f), axisZ, headTilt, Vector3()).normalize()
         buildGaze(neck!!, head!!, def.neckLength, headDir)
@@ -144,7 +139,6 @@ class ProneCobraStretchPose : BasePose() {
 
         roots!!.forEach { it.updateWorldTransforms(zeroVector, identityRotation) }
 
-        // 2. Legs (Stretched flat on the floor)
         // IK pulls the ankles backward along the floor line (-X direction)
         val targetAnkleX = pelvisX - def.thighLength - def.shinLength + 15f
         val targetAnkleF = Vector3(targetAnkleX, 15f, -def.hipWidth)
@@ -153,9 +147,8 @@ class ProneCobraStretchPose : BasePose() {
         bakeIkLimb(hipF!!.worldPosition, targetAnkleF, def.thighLength, def.shinLength, Vector3(0f, 1f, 0f), def.legIKConstraint, pelvis!!.worldRotation, kneeF!!, ankleF!!, legFBuffer)
         bakeIkLimb(hipB!!.worldPosition, targetAnkleB, def.thighLength, def.shinLength, Vector3(0f, 1f, 0f), def.legIKConstraint, pelvis!!.worldRotation, kneeB!!, ankleB!!, legBBuffer)
 
-        // W1: engine now derives foot/hand orientation (removed manual endpoints + tilt counter-rotation).
+        // The engine now derives foot/hand orientation (removed manual endpoints + tilt counter-rotation).
 
-        // 3. Arms (Active Reach Backward)
         val chestW = chest!!.worldPosition
 
         // Hands lift off the ground and sweep back towards the hips/heels
@@ -165,23 +158,12 @@ class ProneCobraStretchPose : BasePose() {
         val targetHandA = Vector3(reachX, reachY, -def.shoulderWidth * 1.5f)
         val targetHandP = Vector3(reachX, reachY, def.shoulderWidth * 1.5f)
 
-        // R2/R4 reach-band authoring (third reach-band cleanup batch) — the authored sweep is
-        // projected onto each arm chain's own annulus along its own ray. Measured through the
-        // production entry point at `origin/main` @ `cf8a14f`, the sweep leaves the band at BOTH
-        // ends: its start (`23.000` from the shoulder) asks for an interior elbow angle of `14.39°`
-        // against the `IKConstraint`'s own `30°` stop, and its end (`154.027`) is LONGER than the
-        // arm's `80 + 66 = 146` u, so no chain geometry can honour it (the annulus is
-        // `[40.134, 143.080]`). The solver answered by relocating both hands `17.134` (p = 0) …
-        // `10.947` (p = 1) u along the authored ray and published them pinned on the chain's own
-        // stops (`30.00°` interior at the start, the `0.98` cap at the end). Unintended authoring
-        // error at both sites, of the same class as `JumpSquatPose`'s hands (`15.36°` against the
-        // `30°` stop) and its flight ankles (`107 %` of the limb): the request is past the pose's own
-        // model. The authored sweep — its direction, its extent along the ray and the sweep's own
-        // choreography in `x`/`y` — is preserved; only the radius moves onto the annulus, which is
-        // where the engine already publishes the hands. NOTE: the pose's own arm choreography
-        // (a "lift off the floor and sweep back toward the hips/heels", per its comment) is a
-        // separate exercise-design question from this reach-band correction — the BPS for this
-        // exercise describes a static "W" hold — and is deliberately NOT re-authored here.
+        // The authored sweep leaves the arm chain's annulus at BOTH ends: its start
+        // (`23.000` from the shoulder) asks for a `14.39°` interior elbow against the `30°` stop, and its
+        // end (`154.027`) is longer than the `80 + 66 = 146` u arm, so the solver relocated the hands by
+        // `17.134 … 10.947` u along the authored ray. Unintended authoring error at both sites: the
+        // authored sweep — direction, extent and its `x`/`y` choreography — is preserved, only the radius
+        // moves onto the annulus, which is where the engine already publishes the hands.
         SkeletonMath.clampTargetToReach(shoulderA!!.worldPosition, targetHandA, def.upperArmLength, def.forearmLength, def.armIKConstraint, targetHandA, REACH_MARGIN)
         SkeletonMath.clampTargetToReach(shoulderP!!.worldPosition, targetHandP, def.upperArmLength, def.forearmLength, def.armIKConstraint, targetHandP, REACH_MARGIN)
 
@@ -190,7 +172,7 @@ class ProneCobraStretchPose : BasePose() {
         bakeIkLimb(shoulderP!!.worldPosition, targetHandP, def.upperArmLength, def.forearmLength, Vector3(0f, 1f, 1f), def.armIKConstraint, chest!!.worldRotation, elbowP!!, handP!!, armPBuffer)
 
         // Hands parallel to the floor, palms facing down
-        // W1: engine now derives hand orientation (removed tilt counter-rotation + 6/6/10 offsets).
+        // The engine now derives hand orientation (removed tilt counter-rotation + 6/6/10 offsets).
 
         SkeletonPose.fromHierarchy(roots!!, jointsBuffer)
         jointsBuffer.getJoint(Joint.WRIST_A).set(jointsBuffer.getJoint(Joint.HAND_A))
@@ -200,15 +182,11 @@ class ProneCobraStretchPose : BasePose() {
 
     companion object {
         /**
-         * R2/R4 projection margin for the hand sweep's two authored endpoints — a hundredth of a
-         * percent of the chain's span (`0.014` u on this pose's `146` u arm).
-         *
-         * Both endpoints ARE effector positions the engine already publishes (its relocation was the
-         * boundary projection), so the margin only has to keep the target strictly inside the
-         * annulus: at `3e-5` carrier resolution a boundary-exact target re-fires a float-noise
-         * relocation and a non-zero stamp. The helper's canonical `0.02` would instead move the start
-         * hand `0.81` u and the swept hand `2.87` u away from where the engine publishes them —
-         * geometry the reach defect does not require.
+         * Projection margin for the sweep's two endpoints — a hundredth of a percent of the
+         * chain's span. Both endpoints ARE effector positions the engine already publishes, so the
+         * margin only keeps the target strictly inside the annulus: at `3e-5` carrier resolution a
+         * boundary-exact target re-fires a float-noise relocation. The helper's `0.02` would instead
+         * move the hands `0.81` / `2.87` u away from where the engine publishes them.
          */
         const val REACH_MARGIN = 1e-4f
     }

@@ -3,11 +3,9 @@ package com.monkfitness.app.poses
 import com.monkfitness.app.animation.*
 
 /**
- * Single-diagonal Bird Dog rep. One diagonal (arm + opposite leg) extends and
- * lowers on a sine loop; the active diagonal is chosen by [PoseContext.side].
- *
- * Migrated onto [BaseBirdDogPose] so it shares the family's tabletop anchoring,
- * IK baking and extremity geometry instead of reimplementing them.
+ * Single-diagonal Bird Dog rep: one diagonal (arm + opposite leg) extends and lowers on a sine loop, the
+ * active diagonal chosen by [PoseContext.side]. Shares the family's tabletop anchoring, IK baking and
+ * extremity geometry through [BaseBirdDogPose].
  */
 class BirdDogPose : BaseBirdDogPose() {
 
@@ -21,7 +19,7 @@ class BirdDogPose : BaseBirdDogPose() {
     override fun onBuild(context: PoseContext): SkeletonPose {
         val def = context.definition
         ensureHierarchy(def)
-        // B3 — every production pose declares its posture intent. This pose authors a
+        // Every production pose declares its posture intent. This pose authors a
         // shape-driven root, so it opts into CUSTOM (the solver leaves the authored root untouched).
         declarePosture(jointsBuffer, PostureIntent.Kind.CUSTOM)
         anchorTabletop(def)

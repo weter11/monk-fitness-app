@@ -30,15 +30,10 @@ import com.monkfitness.app.animation.Vector3
 import com.monkfitness.app.animation.WorldTarget
 
 /**
- * Base class for Engineering Validation poses.
- *
- * This is a parallel implementation of the production [com.monkfitness.app.animation.BasePose].
- * It deliberately does NOT extend it and does NOT use any [com.monkfitness.app.animation.MotionDrivers],
- * breathing, interpolation or animation loops. A validation pose is a frozen snapshot:
- * [build] ignores [PoseContext.state] entirely and returns the same static skeleton every time.
- *
- * It only depends on the shared rendering engine primitives (SkeletonFactory, SkeletonMath,
- * SkeletonPose) — never on the exercise / workout / catalog systems.
+ * Base class for Engineering Validation poses: a parallel implementation of the production base that
+ * deliberately does not extend it and uses no motion drivers, breathing or loops. A validation pose is a
+ * frozen snapshot — [build] ignores [PoseContext.state] and returns the same static skeleton every time —
+ * and depends only on the rendering primitives, never on the exercise/workout/catalog systems.
  */
 abstract class BaseValidationPose : PoseBuilder {
 
@@ -55,7 +50,6 @@ abstract class BaseValidationPose : PoseBuilder {
     protected val legScratch = SkeletonMath.NearStraightLimbResult()
     protected val jointsBuffer = SkeletonPose()
 
-    // IK buffers
     protected val legFBuffer = SkeletonMath.IKResult()
     protected val legBBuffer = SkeletonMath.IKResult()
     protected val armABuffer = SkeletonMath.IKResult()
@@ -83,21 +77,9 @@ abstract class BaseValidationPose : PoseBuilder {
         hipB = nodes.hipB; kneeB = nodes.kneeB; ankleB = nodes.ankleB; heelB = nodes.heelB; toeB = nodes.toeB
     }
 
-    // --- Shared body construction helpers -----------------------------------------
-
-
     /**
-     * Gaze-as-target (Gap 7 / Branch C) — declares the gaze as a world-space HeadTarget intent that
-     * the Finalizer (SkeletonPoseFinalizer.resolveHeadTarget) resolves into the neck/head local
-     * offsets. Mirrors com.monkfitness.app.animation.BasePose.buildGaze. The pose only *declares*
-     * the target; the head is written by the engine-owned resolver alone (single source of truth),
-     * which reproduces the identical geometry the earlier direction-based gaze authored (proven
-     * byte-identical in HeadTargetBaselineTest). Validation poses are diagnostic instruments and are
-     * NOT retuned, so the migration swaps the node-write for the intent record only — the resulting
-     * skeleton is unchanged.
-     *
-     * @param gazeDir the authored world-space gaze direction; a synthetic HeadTarget is recorded a
-     *   fixed distance along it from the neck's current world position for the Finalizer to resolve.
+     * Declares the gaze as a world-space `HeadTarget` intent that the engine-owned resolver turns into
+     * the neck/head offsets: the pose only *declares* a target, so the head has a single writer.
      */
     protected fun buildGaze(
         neck: SkeletonNode,
@@ -114,21 +96,16 @@ abstract class BaseValidationPose : PoseBuilder {
     }
 
     /**
-     * B2 (RFC_BRANCH_B_IMPLEMENTATION §2) — records a single joint articulation into the §1.1
-     * `jointIntents` carrier via the sole-mutator `IntentBuilder`. The node is still written by the
-     * caller (so build-time FK stays intact); the Finalizer consumes `jointIntents` and re-derives
-     * the rotation idempotently, byte-identical to the pre-B2 baseline.
+     * Records one articulation into the intent carrier. The caller still writes the node, so build-time
+     * FK stays intact while the finalizer re-derives the rotation idempotently.
      */
     protected fun declareJointIntent(joint: Joint, rotation: JointRotation) {
         IntentBuilder(jointsBuffer).joint(joint, rotation)
     }
 
     /**
-     * Branch C — authors a **wrist articulation** (grip) as the §1.3 [Extremity] intent, mirroring
-     * [com.monkfitness.app.animation.BasePose.buildWristArticulation]. Composes the 2-DOF wrist
-     * rotation via [SkeletonMath.buildWristRotation] (never dropping a DOF), writes the wrist node
-     * `localRotation` for build-time FK, and records `extremityArticulations[HAND_A/HAND_P]` for the
-     * Finalizer (W1) to consume as the single source of truth.
+     * Authors a wrist articulation as the extremity intent: composes the 2-DOF rotation (never dropping a
+     * DOF) for build-time FK and records it for the finalizer to consume.
      */
     protected fun buildWristArticulation(
         extremity: Extremity,
@@ -140,12 +117,7 @@ abstract class BaseValidationPose : PoseBuilder {
         IntentBuilder(jointsBuffer).extremity(extremity, JointRotation(handNode.localRotation.axis, handNode.localRotation.angle))
     }
 
-    /**
-     * Branch C — authors an **ankle articulation** (foot plant) as the §1.3 [Extremity] intent,
-     * mirroring [com.monkfitness.app.animation.BasePose.buildAnkleArticulation]. Composes the 2-DOF
-     * ankle rotation via [SkeletonMath.buildAnkleRotation], writes the ankle node `localRotation` for
-     * build-time FK, and records `extremityArticulations[FOOT_F/FOOT_B]` for W1 to consume.
-     */
+    /** The ankle equivalent of [buildWristArticulation]: 2-DOF foot plant, recorded as an intent. */
     protected fun buildAnkleArticulation(
         extremity: Extremity,
         dorsiflexion: Float,
@@ -157,13 +129,9 @@ abstract class BaseValidationPose : PoseBuilder {
     }
 
     /**
-     * B2 — the single declarative spine curve (lower + thoracic about a shared axis), mirroring
-     * [com.monkfitness.app.animation.BasePose.buildSpineCurve]. Writes both nodes and records the
-     * `spineIntent` plus per-joint `jointIntents` entries for the Finalizer to consume.
-     *
-     * Phase 10 (R13): like the production base, the axis-less default resolves from the current
-     * build definition's anatomical forward — the validation authoring path gets no separate
-     * hardcoded anatomical default; an explicit [axis] remains the author's override.
+     * The declarative spine curve, mirroring the production base. The axis-less default resolves from the
+     * current build definition's anatomical forward — there is no hardcoded default here — and an explicit
+     * axis remains the author's override.
      */
     protected fun buildSpineCurve(
         lower: SkeletonNode,
@@ -189,11 +157,8 @@ abstract class BaseValidationPose : PoseBuilder {
         shoulderP.localPosition.set(0f, 0f, shoulderWidth)
     }
 
-    // --- Joint-DOF authoring helpers (mirror com.monkfitness.app.animation.BasePose) ---
-    // The validation base previously only set raw local offsets/rotations. These named paths
-    // give the validation poses access to the same anatomical DOFs the engine exposes (UNI-7/8/10),
-    // so authoring can express hip rotation, scapular/clavicular girdle motion and 2-DOF
-    // wrist/ankle articulation without raw, ambiguous localRotation writes.
+    // The named DOF paths below replace raw localRotation writes, so authoring can express hip rotation,
+    // girdle motion and 2-DOF wrist/ankle articulation unambiguously.
 
     protected fun buildHipRotation(hip: SkeletonNode, rotationRad: Float, sideSign: Float) {
         hip.localRotation.set(axisX, rotationRad * sideSign)
@@ -217,34 +182,25 @@ abstract class BaseValidationPose : PoseBuilder {
         sideSign: Float
     ) {
         SkeletonMath.buildClavicularRotation(elevation, protraction, axialRotation, sideSign, clavicle.localRotation)
-        // B2: girdle articulation intent (jointIntents).
         declareJointIntent(clavicle.joint, JointRotation(clavicle.localRotation.axis, clavicle.localRotation.angle))
     }
 
     /**
-     * W1 — opt an [extremity] out of engine-derived orientation and into an explicit author
-     * override (mirrors [com.monkfitness.app.animation.BasePose.overrideExtremityOrientation]). The
-     * engine then preserves the endpoint local positions this pose authored verbatim. Validation
-     * poses are diagnostic instruments and are NOT modified by W1; this exists so a future
-     * instrument can deliberately probe the override path.
+     * Opts an extremity out of engine-derived orientation and into an author override, so the engine
+     * preserves the authored endpoints verbatim. Exists so a future instrument can probe that path.
      */
     protected fun overrideExtremityOrientation(pose: SkeletonPose, extremity: com.monkfitness.app.animation.Extremity) {
         pose.overrideExtremityOrientation(extremity)
     }
 
-    // --- Shared IK helpers ---------------------------------------------------------
-
-    // PR-11: cached full-extension variants of the definition's IK constraints. Straight
-    // reference limbs opt into a true 1.0 extension ratio (instead of the 0.98 safety cap) so
-    // they render perfectly straight. Cached so repeated builds allocate nothing on the hot path.
+    // Straight reference limbs opt into a true 1.0 extension ratio instead of the 0.98 safety cap so they
+    // render perfectly straight; cached so repeated builds allocate nothing on the hot path.
     private var armFullExtensionConstraint: IKConstraint? = null
     private var legFullExtensionConstraint: IKConstraint? = null
 
-    /** Arm constraint opted into full extension for a genuinely straight reference arm. */
     protected fun armStraightConstraint(def: SkeletonDefinition): IKConstraint =
         armFullExtensionConstraint ?: def.armIKConstraint.fullyExtended().also { armFullExtensionConstraint = it }
 
-    /** Leg constraint opted into full extension for a genuinely straight reference leg. */
     protected fun legStraightConstraint(def: SkeletonDefinition): IKConstraint =
         legFullExtensionConstraint ?: def.legIKConstraint.fullyExtended().also { legFullExtensionConstraint = it }
 
@@ -262,23 +218,17 @@ abstract class BaseValidationPose : PoseBuilder {
         straight: Boolean = false,
         contact: ContactConstraint? = null
     ) {
-        // Sanctioned build-scoped re-arm (Phase 2 decision F2 — not a strengthening merge;
-        // mirrors BasePose.bakeIkLimb). P12 (WP-F / §12.5 acceptance): the fresh-window block is
-        // build-window bookkeeping, NOT realization, so it runs in BOTH configurations — a
-        // reused instrument carrier may never open a new authoring cycle carrying the previous
-        // frame's solver readings (a stale straight-dropped `true` would let a probe report a
-        // drop no implementation executed this cycle). Only the solve + folds + node writes
-        // below the realization gate belong to the Active Limb Solver.
+        // The fresh-window re-arm is build-window bookkeeping, not realization, so it runs in both
+        // configurations: a reused carrier must never open a new authoring cycle still holding the
+        // previous frame's solver readings.
         val parentRot = if (middleNode.parent != null) middleNode.parent!!.worldRotation else parentRotation
         if (jointsBuffer.isTransformsUpdated) {
             jointsBuffer.boneLengthsVerified = true
-            // Phase 4 (R5): dropped-flag re-arm mirrors BasePose.bakeIkLimb (fresh-window, F2).
             jointsBuffer.straightIntentDropped = false
             jointsBuffer.isTransformsUpdated = false
         }
-        // B1 (IkStage extraction) — forward the end joint + full IK context into the §1.1
-        // `limbTargets` carrier so the engine-owned IkStage can reproduce this solve byte-for-byte
-        // (dead→live flip).
+        // The end joint and the full IK context travel in the carrier so the engine-owned stage can
+        // reproduce this solve.
         jointsBuffer.limbTargets.add(
             WorldTarget(
                 endNode.joint,
@@ -291,9 +241,8 @@ abstract class BaseValidationPose : PoseBuilder {
                 constraint
             )
         )
-        // PR-04: register the fixed support contact so the global constraint solver can
-        // reposition the root and re-bake the limb to honor it. P12 (§12.5 acceptance):
-        // registration runs in BOTH configurations; only realization below is gated.
+        // Registering the fixed contact is unconditional — only realization below is gated — so the
+        // global solver can reposition the root and re-bake the limb.
         if (contact != null) {
             val chain = ConstraintSolver.chainForEnd(endNode.joint)
             if (chain != null) {
@@ -314,14 +263,11 @@ abstract class BaseValidationPose : PoseBuilder {
                 )
             }
         }
-        // P12 (§12.7a): realization runs only while the engine stage is off; registration and
-        // the fresh-window block above are unconditional. Counter evidence per authoring cycle
-        // mirrors BasePose.bakeIkLimb (single registration point).
+        // Realization runs only while the engine stage is off; registration above is unconditional.
         if (IK_STAGE_ACTIVE) return
         jointsBuffer.registerLimbRealization(endNode.joint, authoringWindow = true)
 
-        // Phase 1 (F6): a zero-length pole means the pose omitted one — derive the default world
-        // pole so the bend plane is always well-defined.
+        // A zero-length pole means the pose omitted one: derive a default so the bend plane is defined.
         val worldPole = if (pole.mag() < 1e-4f) {
             SkeletonMath.deriveDefaultPole(rootWorldPos, targetWorldPos, tempPoleWorld)
         } else {
@@ -332,23 +278,20 @@ abstract class BaseValidationPose : PoseBuilder {
         } else {
             SkeletonMath.solveIK(rootWorldPos, targetWorldPos, length1, length2, worldPole, constraint, ikBuffer, contact)
         }
-        // Single source of truth: automatically propagate the solver's clamp amount into the
-        // pose so reachability is detected without per-pose manual bookkeeping.
+        // Propagating the solver's clamp into the pose means reachability needs no per-pose bookkeeping.
         jointsBuffer.maxIkClampAmount =
             ValidationStampMerge.clamp(jointsBuffer.maxIkClampAmount, ikResult.clampAmount)
-        // Phase 4 (R5): diagnostic-instrument bake fold — mirrors BasePose.bakeIkLimb; this is
-        // the producer for the only production authors of `straight = true` (validation poses).
+        // This is the only production producer of `straight = true` (validation poses).
         jointsBuffer.straightIntentDropped =
             ValidationStampMerge.dropped(
                 jointsBuffer.straightIntentDropped,
                 if (straight) ikResult.straightIntentDropped else false
             )
-        // Phase 1 (F5): assert the solved chain preserved both bone lengths exactly and fold the
-        // result into the pose's single `boneLengthsVerified` stamp (AND across all limbs).
+        // Bone lengths must survive the solve exactly; the result is AND-folded into one stamp.
         val bonesOk = SkeletonMath.bonesExact(rootWorldPos, ikResult.joint, ikResult.end, length1, length2)
         jointsBuffer.boneLengthsVerified =
             ValidationStampMerge.verified(jointsBuffer.boneLengthsVerified, bonesOk)
-        // Store the limb offsets in the parent's true local frame (no hand-fed inverse-Z scalar).
+        // Offsets go into the parent's true local frame — no hand-fed inverse-Z scalar.
         tempV1.set(ikResult.joint).subtract(rootWorldPos)
         SkeletonMath.toLocalDirection(tempV1, parentRot, middleNode.localPosition)
         tempV1.set(ikResult.end).subtract(ikResult.joint)
@@ -357,26 +300,18 @@ abstract class BaseValidationPose : PoseBuilder {
     }
 
     /**
-     * Phase 2 (F2/F7) — declares the coarse posture intent the [ConstraintSolver] should honour
-     * (seeding the root/pelvis height) and the contact-conflict precedence order. Mirrors the
-     * production [com.monkfitness.app.animation.BasePose.declarePosture]; writes onto this pose's
-     * [jointsBuffer]. Validation poses are diagnostic instruments and are NOT retuned, so this is
-     * opt-in: a validation pose calls it only when it wants the engine-owned root seed.
-     *
-     * [precedence] lists contact end-joint names in priority order (index 0 wins); an empty list
-     * means all contacts are equal.
+     * Declares the coarse posture intent the constraint solver should honour (seeding the root height)
+     * and the contact-conflict precedence, index 0 winning. Opt-in: an instrument calls it only when it
+     * wants the engine-owned root seed.
      */
     protected fun declarePosture(
         kind: PostureIntent.Kind,
         tolerance: Float = 0f,
         precedence: List<Joint> = emptyList()
     ) {
-        // Route through the sole-mutator IntentBuilder (B0 compile guard: §1.1 carriers are
-        // private-set on SkeletonPose, so only the builder may write them).
+        // Carriers are private-set, so only the builder may write them.
         IntentBuilder(jointsBuffer).posture(kind, tolerance, precedence)
     }
-
-    // --- Finalization (mirrors production poses; produces a rotation-driven snapshot) --
 
     protected fun finalizePose(): SkeletonPose {
         SkeletonPose.fromHierarchy(roots!!, jointsBuffer)
@@ -385,39 +320,25 @@ abstract class BaseValidationPose : PoseBuilder {
         return jointsBuffer
     }
 
-    /**
-     * Produces the static snapshot. Subclasses must ignore animation state and describe a
-     * single frozen skeleton.
-     */
+    /** The static snapshot: subclasses ignore animation state and describe a frozen skeleton. */
     protected abstract fun buildStatic(definition: SkeletonDefinition): SkeletonPose
 
     final override fun build(context: PoseContext): SkeletonPose {
-        // PR-04 grew into full carrier hygiene: a reused pose instance is built more than
-        // once, so reset ALL §1.1 intent carriers before re-authoring — neither the global
-        // solver (stale fixed contacts) nor the Finalizer (stale joint/extremity intents)
-        // may replay state from a previous build. [IntentBuilder.reset] covers contacts,
-        // jointIntents, limbTargets, extremity carriers and posture in O(carriers), keeping
-        // per-frame intent complexity constant.
+        // A reused pose instance is built more than once, so every carrier is reset before re-authoring:
+        // neither the solver nor the finalizer may replay a previous build's state.
         SkeletonPose.IntentBuilder(jointsBuffer).reset()
-        // Phase 10 (R13): capture the build's definition so the axis-less spine default in
-        // buildSpineCurve resolves definition-owned (mirrors BasePose.build). Authoring-
-        // lifetime only; the reference never enters SkeletonPose state.
+        // Captured so the axis-less spine default resolves definition-owned; authoring-lifetime only.
         buildDefinition = context.definition
-        // Validation poses are frozen: animation progress / side / mirroring are ignored.
         return buildStatic(context.definition)
     }
 
-    /**
-     * Phase 10 (R13) — the definition of the [build] currently in progress (or the most recent
-     * one; same single-threaded authoring contract as [jointsBuffer]). Written only by the final
-     * [build] template; read by the definition-owned spine default.
-     */
+    /** The definition of the [build] in progress; written only by the final [build] template. */
     private var buildDefinition: SkeletonDefinition? = null
 
     /**
-     * Resolve the current build's definition-owned anatomical forward (RFC §5 R13). Fails fast
-     * when no build has run: an axis-less spine default outside the authoring lifecycle has no
-     * definition to derive from and must not silently pick a constant.
+     * The build's definition-owned anatomical forward. Fails fast when no build has run: an axis-less
+     * default outside the authoring lifecycle has no definition to derive from and must not pick a
+     * constant.
      */
     private fun anatomicalForward(): Vector3 {
         val definition = buildDefinition

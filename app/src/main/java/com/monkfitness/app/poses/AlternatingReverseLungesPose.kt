@@ -4,14 +4,9 @@ import com.monkfitness.app.animation.*
 import kotlin.math.*
 
 /**
- * Alternating Reverse Lunge.
- *
- * Biomechanics (driver = support leg):
- *  - The FRONT foot is the fixed support anchor; it never slides.
- *  - The swing foot lifts and travels BACKWARD along its own arc, landing behind.
- *  - The hips shift back while the torso hinges FORWARD over the planted front foot
- *    (distinct from the forward lunge, where the hips shift forward).
- *  - Contralateral arm swing; left and right alternate every half-cycle.
+ * Alternating Reverse Lunge. The FRONT foot is the fixed support anchor; the swing foot travels
+ * BACKWARD. The hips shift back while the torso hinges FORWARD over the planted foot — the opposite
+ * of the forward lunge. Left and right alternate every half cycle.
  */
 class AlternatingReverseLungesPose : BaseLungePose() {
 
@@ -32,7 +27,7 @@ class AlternatingReverseLungesPose : BaseLungePose() {
     override fun onBuild(context: PoseContext): SkeletonPose {
         val def = context.definition
         ensureHierarchy(def)
-        // B3 — every production pose declares its posture intent. This pose authors a
+        // Every production pose declares its posture intent. This pose authors a
         // shape-driven root, so it opts into CUSTOM (the solver leaves the authored root untouched).
         declarePosture(jointsBuffer, PostureIntent.Kind.CUSTOM)
 

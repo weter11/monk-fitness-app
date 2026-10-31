@@ -30,7 +30,7 @@ class PikePushUpPose : BasePushUpPose() {
     override fun onBuild(context: PoseContext): SkeletonPose {
         val def = context.definition
         ensureHierarchy(def)
-        // B3 — every production pose declares its posture intent. This pose authors a
+        // Every production pose declares its posture intent. This pose authors a
         // shape-driven root, so it opts into CUSTOM (the solver leaves the authored root untouched).
         declarePosture(jointsBuffer, PostureIntent.Kind.CUSTOM)
 
@@ -43,7 +43,6 @@ class PikePushUpPose : BasePushUpPose() {
         val chestX = lerp(-40f, 10f, context.progress)
         val chestY = lerp(130f, 35f, context.progress)
 
-        // Kinematic Triangle Solver
         val dx = chestX - ankleX
         val dy = chestY - ankleHeight
         val d = sqrt(dx * dx + dy * dy).coerceAtLeast(0.001f)
@@ -73,7 +72,7 @@ class PikePushUpPose : BasePushUpPose() {
         val torsoGlobalPitch = atan2(-torsoVecY, -torsoVecX)
 
         ankleF!!.localPosition.set(ankleX, ankleHeight, -def.hipWidth)
-        // Branch C: ankle articulation (plantar/dorsi-flexion) routes through the §1.3 intent
+        // ankle articulation (plantar/dorsi-flexion) routes through the §1.3 intent
         // carrier via the 2-DOF composer; flexion about the mediolateral Z axis, no inversion.
         buildAnkleArticulation(Extremity.FOOT_F, legPitch, 0f, ankleF!!)
         kneeF!!.localPosition.set(-def.shinLength, 0f, 0f)
@@ -84,16 +83,14 @@ class PikePushUpPose : BasePushUpPose() {
         // (STABILIZATION_AUDIT P2: no duplicate joint intent line).
         declarePelvisTilt(pelvis!!, jointsBuffer, axisZ, torsoGlobalPitch - legPitch)
         chest!!.localPosition.set(-def.torsoLength, 0f, 0f)
-        // B-8 — the pike lays its trunk exactly like the flat plank members (one torso length along
+        // The pike lays its trunk exactly like the flat plank members (one torso length along
         // the pelvis's local -X), so it declares the same pose-owned trunk frame. Its own authoring
         // path is separate from `BasePushUpPose.onBuild`, so the family declaration is invoked here
         // too — one implementation, one statement of the family's trunk frame.
         declareFlatPlankTrunkFrame()
 
-        // 1. Correcting the Right-Side (Side B) Floating Leg Asymmetry
-        // By subtracting the torso pitch, we isolate and enforce the exact same global leg pitch on both sides.
+        // 1. Both legs get the same global leg pitch: subtracting the torso pitch enforces it on both sides.
         hipB!!.localPosition.set(0f, 0f, def.hipWidth)
-        // Phase 6 (W15/G7): route hip through the documented helper.
         buildHipFlexion(hipB!!, legPitch - torsoGlobalPitch)
         kneeB!!.localPosition.set(def.thighLength, 0f, 0f)
         kneeB!!.localRotation.set(axisZ, 0f)
@@ -107,7 +104,7 @@ class PikePushUpPose : BasePushUpPose() {
             roots!![i].updateWorldTransforms(zeroVector, identityRotation)
         }
 
-        // Phase 7 (G6) — route the shoulder girdle through buildShoulders + FK instead of the
+        // Route the shoulder girdle through buildShoulders + FK instead of the
         // hand-computed rotAround world-position. The chest world rotation already carries the torso
         // pitch, so FK-derived shoulderA/shoulderP.worldPosition equals the old rotAround result
         // (geometry unchanged), and the IK root now sits where the engine owns it.
@@ -131,9 +128,9 @@ class PikePushUpPose : BasePushUpPose() {
         val armPPoleWorld = Vector3(1f, 1f, 2f)
         bakeIkLimb(shoulderPW, targetHandP, def.upperArmLength, def.forearmLength, armPPoleWorld, def.armIKConstraint, chest!!.worldRotation, elbowP!!, handP!!, armPIK)
 
-        // Branch C: wrist articulation (overhand-ish grip + counter torso pitch) routes
+        // wrist articulation (overhand-ish grip + counter torso pitch) routes
         // through the §1.3 intent carrier; flexion about the mediolateral Z axis, no
-        // deviation. The engine (W1) derives the WRIST_* nodes from the hand + this
+        // deviation. The engine derives the WRIST_* nodes from the hand + this
         // articulation, so the pose must NOT also copy wrist onto hand.
         buildWristArticulation(Extremity.HAND_A, -torsoGlobalPitch, 0f, handA!!)
 

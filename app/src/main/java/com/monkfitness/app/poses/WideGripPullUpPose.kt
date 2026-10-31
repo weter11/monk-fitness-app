@@ -3,15 +3,9 @@ package com.monkfitness.app.poses
 import com.monkfitness.app.animation.*
 
 /**
- * Wide-grip (overhand) pull-up — biomechanics-first rewrite.
- *
- * The wider grip abducts the shoulders, so the hands sit well outside the
- * shoulders and the elbows flare outward and down. Because the lateral span
- * "uses up" part of the arm length, the shoulders already sit higher at the
- * bottom and the vertical shoulder travel to a chin-over-bar top is larger
- * (this is why the wide grip is harder). The pull still begins from the
- * scapulae — the bottom is the extended hang, elbows flare only as the
- * reach shortens. Hands are FIXED on the bar.
+ * Wide-grip (overhand) pull-up — the wider grip abducts the shoulders and spends part of the arm length
+ * laterally, so the shoulders already sit higher at the bottom and the vertical travel to a chin-over-bar
+ * top is larger (that is why the wide grip is harder). Hands are FIXED on the bar.
  */
 class WideGripPullUpPose : BaseVerticalPullPose() {
 

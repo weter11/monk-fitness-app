@@ -20,41 +20,33 @@ abstract class BasePushUpPose : BasePose() {
     open val declineTrunkPitch: Float = 0f
 
     // Knee-pivot depth: sagittal hip flexion (radians) at the bottom of the rep, i.e. how far the
-    // trunk pitches over the planted knee so the shoulders descend and the elbows press. The
-    // previously authored depth pitch amplitude, unchanged — but applied at the hip on a plank
-    // whose pelvis the solver places (`PushUpPlank.solve`, KNEES), instead of bending the trunk
-    // about the pelvis. Calibrated against the arm: the deepest trunk pitch must still leave the
-    // authored hand target inside `SkeletonMath`'s reachable annulus.
+    // trunk pitches over the planted knee so the shoulders descend and the elbows press. Applied at
+    // the hip on a plank whose pelvis the solver places (`PushUpPlank.solve`, KNEES), instead of
+    // bending the trunk about the pelvis. Calibrated against the arm: the deepest trunk pitch must
+    // still leave the authored hand target inside `SkeletonMath`'s reachable annulus.
     private val kneePivotDepthHipFlexion: Float = 0.42f
 
     /**
-     * B-8 — the flat plank's trunk-frame roll, in radians, about the chest's lateral Z axis.
+     * The flat plank's trunk-frame roll, in radians, about the chest's lateral Z axis.
      *
-     * `buildTorso` lays the chest one torso length along the pelvis's LOCAL -X while the chest's
-     * local +Y is its anatomical spine (up) axis, so the trunk frame that matches that layout is
-     * the chest's local frame rolled +pi/2: the chest's local +Y then lies on the trunk axis and
-     * its local -Z on the shoulder line. This is exactly the rotation
-     * `SkeletonPoseFinalizer.reconstructChestFrame` derives for this layout (verified bit-equal:
-     * axis (0,0,1), angle 1.5707964 = `PI.toFloat() / 2f`), so declaring it here does not change
-     * the frame the pose publishes — it only makes it authoritative BEFORE the limb realization.
+     * `buildTorso` lays the chest one torso length along the pelvis's LOCAL -X while the chest's local
+     * +Y is its anatomical spine (up) axis, so the matching trunk frame is the chest's local frame
+     * rolled +pi/2. That is exactly the rotation `reconstructChestFrame` derives for this layout
+     * (verified bit-equal: axis (0,0,1), angle `PI.toFloat() / 2f`), so declaring it does not change
+     * the published frame — it only makes it authoritative BEFORE the limb realization.
      */
     private val trunkFrameRoll: Float = PI.toFloat() / 2f
 
     /**
-     * B-8 — declares this family's trunk (chest) frame as pose-owned Phase-0 intent: the node write
-     * plus the paired §1.1 chest carrier, the same two-effect form every other authored
-     * articulation in [BasePose] uses.
+     * Declares this family's trunk (chest) frame as pose-owned intent: the node write plus
+     * the paired §1.1 chest carrier, the two-effect form every authored articulation in [BasePose] uses.
      *
-     * Why it is here and not in the engine: the frozen pipeline assigns the chest intent to the
-     * POSE (`ARCHITECTURE_V2` §4.1 "Chest/hip/girdle/ankle/wrist intent | Pose (relative)") and
-     * runs the limb realization in Phase 1, while the Finalizer's chest-frame reconstruction is a
-     * Phase-3, read-only-on-settled *fallback* (§2.4, §3 PHASE 3, INVARIANT 4). A pose that leaves
-     * the frame unauthored therefore realizes its limbs in the pelvis-only frame and is corrected
-     * afterwards — the B-8 defect. Declaring the frame here fixes the order without moving engine
-     * phases, without a second realization path and without touching the fallback.
-     *
-     * A member that authors its own trunk rotation ([declineTrunkPitch]) keeps it: the engine
-     * treats a non-identity chest as authored intent (Issue F) and never reconstructs it.
+     * Why here and not in the engine: the frozen pipeline assigns the chest intent to the POSE
+     * (`ARCHITECTURE_V2` §4.1) and runs limb realization first, while the Finalizer's chest-frame
+     * reconstruction is a Phase-3 read-only-on-settled *fallback*. A pose that leaves the frame
+     * unauthored therefore realizes its limbs in the pelvis-only frame and is corrected afterwards —
+     * the trunk-frame defect. A member that authors its own trunk rotation ([declineTrunkPitch]) keeps it: the
+     * engine treats a non-identity chest as authored intent (Issue F) and never reconstructs it.
      */
     protected fun declareFlatPlankTrunkFrame() {
         if (declineTrunkPitch != 0f) return
@@ -114,7 +106,7 @@ abstract class BasePushUpPose : BasePose() {
     override fun onBuild(context: PoseContext): SkeletonPose {
         val def = context.definition
         ensureHierarchy(def)
-        // B3 — every production pose declares its posture intent. This pose authors a
+        // Every production pose declares its posture intent. This pose authors a
         // shape-driven root, so it opts into CUSTOM (the solver leaves the authored root untouched).
         declarePosture(jointsBuffer, PostureIntent.Kind.CUSTOM)
 
@@ -128,11 +120,10 @@ abstract class BasePushUpPose : BasePose() {
 
         val isKneePivot = metadata.support.pivot == PivotType.KNEES
 
-        // The rep's depth phase — a full raised-cosine cycle: 0 at the top of the rep (progress 0
-        // and 1), 1 at the bottom (progress 0.5). It is the pose's authored *timing* (motionCurve
-        // EASE_IN_OUT, loopMode LOOP) and is the phase the knee pivot also feeds the plank solver
-        // (below) — the solver's offsets are declared as top-of-rep / bottom-of-rep ratios, so the
-        // linear animation phase would put its bottom-of-rep geometry on the animation's loop seam.
+        // The rep's depth phase — a full raised-cosine cycle: 0 at the top (progress 0 and 1), 1 at the
+        // bottom. The knee pivot feeds this phase to the plank solver, whose offsets are declared as
+        // top/bottom-of-rep ratios, so the linear animation phase would put its bottom-of-rep geometry on
+        // the animation's loop seam.
         val kneeDepth = 0.5f - 0.5f * cos(context.progress * 2f * PI.toFloat())
         val plankPhase = if (isKneePivot) kneeDepth else context.progress
 
@@ -150,11 +141,10 @@ abstract class BasePushUpPose : BasePose() {
         val ankleHeightVal = solverGeometry.ankleHeight
 
         if (isKneePivot) {
-            // 1. Root Anchoring — the planted ankle, at the solver's declared ankle placement.
             ankleF!!.localPosition.set(ankleX, ankleHeightVal, -def.hipWidth)
 
             // The planted flat foot is owned by the engine: the Finalizer derives heel/toe
-            // from the shank + the neutral ankle articulation (W1 automatic). The pose declares
+            // from the shank + the neutral ankle articulation (automatic). The pose declares
             // the leg chain; it does not touch the foot endpoints.
 
             // 2. Main Plank (Side F). The knee is the pivot and the declared floor contact, so it is
@@ -175,22 +165,17 @@ abstract class BasePushUpPose : BasePose() {
             pelvis!!.localPosition.set(0f, 0f, def.hipWidth)
             buildTorso(pelvis!!, chest!!, def.torsoLength)
 
-            // 3. Knee-pivot descent: the knee is the floor pivot and the trunk flexes at the hip with
-            // progress, so the shoulders descend toward the hands and the arm IK bends the elbows —
-            // the BPS §9 rep ("the trunk rotates about the knee so the shoulder drops toward the
-            // hands"), i.e. a real press rather than a static plank. The flexion is authored on the
-            // hip (buildHipFlexion, the documented sagittal hip path, UNI-10) so the pelvis itself
-            // stays neutral and in line with the plank (BPS §5) instead of the trunk bending about
-            // the pelvis. Amplitude is the previously authored depth pitch, unchanged.
+            // 3. Knee-pivot descent: the trunk flexes at the hip with progress, so the shoulders descend
+            // toward the hands and the arm IK bends the elbows — the BPS §9 rep. The flexion is authored on
+            // the hip (buildHipFlexion, UNI-10) so the pelvis stays neutral and in line with the plank (BPS
+            // §5) instead of the trunk bending about the pelvis.
             val hipFlexion = kneeDepth * kneePivotDepthHipFlexion
             buildHipFlexion(hipF!!, hipFlexion)
 
-            // 4. Perfect Symmetry (Side B). The mirror leg is planted on the same surface, so its
-            // chain is laid out in the solver's own frame: the pelvis-frame pitch is cancelled on the
-            // hip first, otherwise the planted mirror leg would ride the trunk rotation up into the
-            // air. Its offsets are the solver's declared knee→hip and ankle→knee deltas traversed down
-            // the other leg (bone-exact: thighLength and shinLength), which lands the mirror knee on
-            // the same support surface as the front knee and keeps both feet floor-aligned.
+            // 4. Perfect Symmetry (Side B). The pelvis-frame pitch is cancelled on the mirror hip first,
+            // otherwise the planted mirror leg rides the trunk rotation up into the air. Its offsets are the
+            // solver's declared knee→hip and ankle→knee deltas traversed down the other leg (bone-exact), so
+            // the mirror knee lands on the same support surface and both feet stay floor-aligned.
             hipB!!.localPosition.set(0f, 0f, def.hipWidth)
             hipB!!.localRotation.set(axisZ, theta - hipFlexion)
             declareJointIntent(Joint.HIP_B, JointRotation(axisZ, theta - hipFlexion))
@@ -206,11 +191,10 @@ abstract class BasePushUpPose : BasePose() {
                 0f
             )
         } else {
-            // Feet Pivot push-up (Standard, Wide, Decline, Diamond, Military).
-            // BPS: the body is a rigid plank supported on straight arms; depth is created by the
-            // ARMS (elbow flexion), not by dropping the pelvis. So the plank (hips -> chest ->
-            // head) rides at ARM height and descends with progress, while the feet stay planted
-            // on the floor and the (near-straight) legs slope up from the floor to the raised hips.
+            // Feet Pivot push-up (Standard, Wide, Decline, Diamond, Military). The body is a rigid plank
+            // supported on straight arms; depth comes from the ARMS (elbow flexion), not from dropping the
+            // pelvis. So the plank rides at ARM height and descends with progress while the feet stay planted
+            // and the (near-straight) legs slope up from the floor to the raised hips.
             val depth = 0.5f - 0.5f * cos(context.progress * 2f * PI.toFloat())
             val armLen = def.upperArmLength + def.forearmLength
             val topH = armLen * 0.92f            // shoulders near full extension at the top
@@ -232,10 +216,9 @@ abstract class BasePushUpPose : BasePose() {
             pelvis!!.localPosition.set(0f, 0f, def.hipWidth)
             buildTorso(pelvis!!, chest!!, def.torsoLength)
 
-            // M14 — Decline tilt: slope the head-to-heels plank downward for feet-elevated
-            // variants by pitching the chest about the spine's mediolateral Z axis. The pelvis is
-            // left untouched so the planted legs stay on the box; the IK below re-solves the hands
-            // to the floor, so both contacts are preserved. 0 for every flat-planar member.
+            // Decline tilt: slope the plank by pitching the chest (the pelvis is left untouched so the
+            // planted legs stay on the box; the IK below re-solves the hands to the floor, preserving both
+            // contacts).
             if (declineTrunkPitch != 0f) {
                 chest!!.localRotation.set(axisZ, declineTrunkPitch)
                 declareJointIntent(Joint.CHEST, JointRotation(axisZ, declineTrunkPitch))
@@ -252,30 +235,15 @@ abstract class BasePushUpPose : BasePose() {
             ankleB!!.localPosition.set(uxB * def.shinLength, uyB * def.shinLength, 0f)
         }
 
-        // B-8 — declare the flat plank's trunk frame in Phase 0 (§4.1 "Chest/hip/girdle/ankle/wrist
-        // intent | Pose (relative)"): the chest frame is POSE-owned intent, so the pose is the
-        // subsystem that must make it authoritative before the limb realization runs.
-        //
-        // Both pivot branches above lay the trunk with `buildTorso` — one torso length along the
-        // pelvis's LOCAL -X — while the chest's local +Y is its anatomical spine (up) axis. The
-        // frame that matches that layout is therefore the chest's local frame rolled +pi/2 about
-        // its lateral Z (its local -Z then lies on the shoulder line), and the node write is
-        // paired with the §1.1 chest intent exactly as every other authored articulation in this
-        // file does (B2).
-        //
-        // Left unauthored, the frame was established only by the Finalizer's PHASE-3 fallback
-        // (`SkeletonPoseFinalizer.reconstructChestFrame`, which derives precisely this rotation
-        // for this layout) — i.e. AFTER the Phase-1 limb realization had already baked the arms
-        // in the pelvis-only frame. The fallback then re-FK'd the chest subtree and dragged the
-        // realized arms with it: on a builder's first build the hands landed ~109 units above the
-        // floor instead of on their authored target. Frames >= 1 only looked correct because the
-        // fallback's write survived in the reused node buffer and was read back as authored
-        // intent, so the fallback early-returned — steady-state correctness was a property of
-        // cross-build buffer reuse, not of the frame (B-8).
-        //
-        // A member that authors its own trunk pitch (`declineTrunkPitch`) keeps that authorship:
-        // the engine treats any non-identity chest rotation as authored intent (Issue F) and never
-        // reconstructs it, so those members are left exactly as they were.
+        // Declare the flat plank's trunk frame (§4.1): the chest frame is POSE-owned
+        // intent, so the pose must make it authoritative before the limb realization runs. Left unauthored,
+        // the frame was established only by the Finalizer's PHASE-3 fallback — AFTER the Phase-1 limb
+        // realization had baked the arms in the pelvis-only frame — and the fallback then re-FK'd the chest
+        // subtree and dragged the realized arms with it: on a builder's first build the hands landed ~109
+        // units above the floor instead of on their authored target. Frames >= 1 only looked correct because
+        // the fallback's write survived in the reused node buffer and was read back as authored intent, so
+        // the fallback early-returned — steady-state correctness was a property of cross-build buffer reuse,
+        // not of the frame.
         declareFlatPlankTrunkFrame()
 
         buildGaze(neck!!, head!!, def.neckLength, pushUpHeadDirection)
@@ -285,19 +253,15 @@ abstract class BasePushUpPose : BasePose() {
         // the correct world shoulder root (MIGRATION_RULES A6: no hand-computed rotAround).
         buildShoulders(shoulderA!!, shoulderP!!, def.shoulderWidth)
 
-        // Authoring-FK: establish world frames so the arm IK bakes below read
-        // correct parent/world rotations. The Finalizer re-runs FK idempotently
-        // (isTransformsUpdated is not set here), so this is the pose's one
-        // legitimate forward-kinematics pass — it is NOT a duplicated solver pass.
+        // Authoring-FK: establish world frames so the arm IK bakes below read correct parent/world
+        // rotations. The Finalizer re-runs FK idempotently, so this is the pose's one legitimate FK pass.
         val rSize = roots!!.size
         for (i in 0 until rSize) {
             roots!![i].updateWorldTransforms(zeroVector, identityRotation)
         }
 
-        // Shoulder world positions are read straight from the FK-updated hierarchy
-        // (MIGRATION_RULES A6: no hand-computed rotAround — the clothed clavicle/scapula
-        // are identity, so shoulderA.worldPosition equals the old rotAround result, geometry
-        // unchanged). The arm IK roots now sit where the engine owns them.
+        // Shoulder world positions come straight from the FK-updated hierarchy (MIGRATION_RULES A6: no
+        // hand-computed rotAround — the clothed clavicle/scapula are identity, so the geometry is unchanged).
         val shoulderAW = shoulderA!!.worldPosition
         val shoulderPW = shoulderP!!.worldPosition
 
@@ -305,39 +269,31 @@ abstract class BasePushUpPose : BasePose() {
         val targetHandA = targetHandABuffer.set(finalHandAnchorX, 0f, -def.shoulderWidth * gripWidthMultiplier)
         val targetHandP = targetHandPBuffer.set(finalHandAnchorX, 0f, def.shoulderWidth * gripWidthMultiplier)
 
-        // R2 (reach target authoring): keep the authored hand target inside the arm's reachable
-        // band so a compact stance (narrow grip / shallow shoulder drop) cannot ask for a target
-        // closer than the elbow's minimum-flexion reach — which would fire IK_TARGET_UNREACHABLE.
-        // A target already in band (Wide/Decline) is unchanged; only the radius is nudged, the
-        // grip direction is preserved.
+        // Reach-target authoring: keep the authored hand target inside the arm's reachable band so a
+        // compact stance (narrow grip / shallow shoulder drop) cannot ask for a target closer than the
+        // elbow's minimum-flexion reach, which would fire IK_TARGET_UNREACHABLE. Only the radius is nudged;
+        // the grip direction is preserved.
         SkeletonMath.clampTargetToReach(shoulderAW, targetHandA, def.upperArmLength, def.forearmLength, def.armIKConstraint, targetHandA)
         SkeletonMath.clampTargetToReach(shoulderPW, targetHandP, def.upperArmLength, def.forearmLength, def.armIKConstraint, targetHandP)
 
-        // Elbow poles are authored in WORLD space (MIGRATION_RULES A8: the pose never converts
-        // frames — `bakeIkLimb` consumes the pole as world, the Finalizer owns any local→world
-        // conversion). P12 §12.5: the former `val armA`/`armP` IK-result captures were
-        // bookkeeping-only (never read) and are dropped — the bake's registration + (gated)
-        // realization effects run identically without them (WP-C differential: byte-identical).
+        // Elbow poles are authored in WORLD space (MIGRATION_RULES A8: the pose never converts frames).
+        // The former `val armA`/`armP` IK-result captures were bookkeeping-only (never read) and
+        // are dropped — the bake's effects run identically without them (byte-identical).
         bakeIkLimb(shoulderAW, targetHandA, def.upperArmLength, def.forearmLength, poleA, def.armIKConstraint, chest!!.worldRotation, elbowA!!, handA!!, armAIK)
         bakeIkLimb(shoulderPW, targetHandP, def.upperArmLength, def.forearmLength, poleP, def.armIKConstraint, chest!!.worldRotation, elbowP!!, handP!!, armPIK)
 
-        // The palm/knuckles/fingertips and the wrist are OWNED by the engine:
-        // the Finalizer derives heel/toe (foot) and palm/wrist/hand (W1 automatic)
-        // from the limb + the neutral articulation. The pose declares the hand IK
-        // target and lets the engine resolve the extremity — it never copies wrist
-        // onto hand or hand onto wrist.
+        // The palm/knuckles/fingertips and the wrist are OWNED by the engine: the Finalizer derives
+        // palm/wrist/hand (automatic) from the limb plus the neutral articulation. The pose declares the
+        // hand IK target and never copies wrist onto hand or hand onto wrist.
 
-        // W1b — declare the support planes for the engine's automatic extremity orientation.
-        // The hands rest on the floor (feet-pivot push-ups) or on the same plane the plank rides;
-        // the planted feet/knee rest on the floor. The Finalizer flattens palm and foot geometry
-        // onto these planes so palms lie flat instead of slicing into the ground and feet plant
-        // instead of floating. Declared here (not via a contact-bearing bake) because the push-up
-        // authors its plank by FK and bakes the arms without a ContactConstraint.
+        // Declare the support planes for the engine's automatic extremity orientation, so palms lie
+        // flat instead of slicing into the ground and feet plant instead of floating. Declared here (not via
+        // a contact-bearing bake) because the push-up authors its plank by FK and bakes the arms without a
+        // ContactConstraint.
 
-        // Heading (exercise intent): for planted push-up hands, declare the forward
-        // direction in root-relative space. The Finalizer transforms this to world space
-        // using the pelvis rotation and projects it onto the support plane (floor).
-        // BODY_FORWARD = -X in pelvis frame (skeleton faces -X).
+        // Heading (exercise intent): the forward direction in root-relative space; the Finalizer transforms
+        // it to world space using the pelvis rotation and projects it onto the support plane. BODY_FORWARD
+        // = -X in the pelvis frame (the skeleton faces -X).
         val bodyForward = Vector3(-1f, 0f, 0f)
         setHeading(Extremity.HAND_A, bodyForward)
         setHeading(Extremity.HAND_P, bodyForward)

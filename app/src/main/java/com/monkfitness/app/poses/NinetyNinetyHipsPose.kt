@@ -4,79 +4,12 @@ import com.monkfitness.app.animation.*
 import kotlin.math.*
 
 /**
- * 90/90 Hips (`ninety_ninety_hips`) — the seated 90/90 hip-switch drill, authored on the canonical
- * `SkeletonFactory` tree through [BasePose].
+ * 90/90 Hips (`ninety_ninety_hips`) — the seated 90/90 hip switch. No BPS exists: the exercise's own
+ * copy is the only specification. Each bent limb is built from its thigh and shin directions, which are
+ * perpendicular by construction, so the knee is exactly `90°` at every phase.
  *
- * ## The exercise (its own copy — the only specification in the repository; no BPS exists)
- *
- * `ex_ninety_ninety_hips_steps`: *"1. Sit on the floor with both knees bent to 90 degrees, one leg in
- * front and one to the side. 2. Sit tall and lean slightly over the front shin. 3. Rotate through the
- * hips to switch both knees to the other side. 4. Repeat slowly, staying controlled throughout."*
- * `desc` *"A seated hip mobility drill that trains both internal and external rotation."*
- * `tech` *"Keep the sit bones grounded as much as possible and move from the hips rather than throwing
- * the knees around."* `mistakes` *"Rounding the back heavily, forcing the knees down, and rushing the
- * side-to-side transition."*
- *
- * ## The authored movement, one statement per copy line
- *
- *  * **§1 "both knees bent to 90 degrees, one leg in front and one to the side"** is authored as the
- *    configuration itself, not as a pose that merely looks seated: for each leg the pose builds the
- *    bent limb from its **thigh direction** and its **shin direction**, which are perpendicular by
- *    construction — so the knee is exactly `90°` ([KNEE_ANGLE_DEG]) at every phase — with the F leg's
- *    thigh pointing forward ([THIGH_AZIMUTH_F0_DEG]) and the B leg's pointing to the side
- *    ([THIGH_AZIMUTH_B0_DEG]). The two thighs are exactly `90°` apart in azimuth, which is the
- *    "90/90" of the hip: one hip internally rotated, the other externally rotated.
- *  * **§2 "Sit tall"** — the pelvis sits on the floor ([SEAT_Y]) with its height **constant** and no
- *    roll or yaw, and the trunk is carried upright; **"lean slightly over the front shin"** is the
- *    authored constant forward lean ([SEATED_LEAN]), which leans over the front shin at *both* ends of
- *    the cycle (the front leg alternates — the lean is a property of the seat, not of one leg).
- *  * **§3 "Rotate through the hips to switch both knees to the other side"** — the whole 90/90
- *    arrangement **rotates about the vertical axis by the same amount** ([SWITCH_SWEEP_DEG], applied
- *    to both legs), so the two thighs keep their exact `90°` separation throughout and the
- *    configuration ends mirror-swapped (the leg that was in front is now to the side, and vice
- *    versa). The rotation is carried by the HIPS — the pose moves the thigh directions, never the
- *    trunk and never the seat.
- *  * **§3 "switch" is a real transition, not a slide**: the lower leg of each side swings about its
- *    own thigh axis through vertical ([SHIN_SWING_DEG] `0 → 180°`), lifting the shin and foot over
- *    the floor and setting them down on the other side — the windshield-wiper transition the drill
- *    actually performs — while the knees lift slightly ([KNEE_LIFT_DEG]) to clear the floor. The
- *    knee stays at exactly `90°` through the whole sweep, so no part of the transition is a
- *    straight-legged swing.
- *  * **`tech` "Keep the sit bones grounded" / "move from the hips"** — the pelvis's world height is a
- *    constant and its lateral axis stays on the rig's mid-line (measured: no lift, no roll, no yaw);
- *    the motion is entirely in the two thigh directions.
- *  * **`mistakes` "Rounding the back heavily" / "Twisting the pelvis off the floor"** — the trunk is
- *    upright (a constant slight lean only) and the pelvis's `HIP_F`/`HIP_B` pair keeps its exact
- *    `2 × hipWidth` lateral separation at every phase, which is what a pelvis twisting off the floor
- *    would break first.
- *
- * ## Contacts, and what is deliberately NOT declared
- *
- * The seat is declared: `HIPS` — the canonical core support point, whose joint family is
- * `{PELVIS, HIP_F, HIP_B}` (`SupportMath`), i.e. exactly the sit bones that stay grounded. The FEET
- * are **not** declared: the drill's whole point is that they are picked up and set down again on the
- * other side, and the declaration channel is per-pose, not per-frame — a foot contact would be a
- * false statement for the transition (the same reasoning `YTRaisesPose` records for its lifted hands).
- *
- * ## Reach and the floor (measured)
- *
- * A `90°` bent limb with these segments has a hip→ankle chord of `sqrt(thigh² + shin²)` = `148.82 u`,
- * comfortably inside the leg chain's `[56.01, 205.80]` band, and the pole each limb declares is derived
- * from the authored knee's own offset off that chord (`pole = knee − (hip + u·a)`) — the chain's own
- * statement of where it bends, exactly as `BaseSquatPose`'s and the B1/B2 recipes' poles are. So the
- * reach stamp reads `0` at every phase and the published knee IS the authored knee (the test asserts
- * that identity, not merely that a leg moved). Every joint stays above the declared floor for the whole
- * cycle, including the mid-transition lift.
- *
- * ## Recorded gaps (no invented specification)
- *
- *  * The seat height, the lean angle and the lift are **authored constants**: the copy states none of
- *    them (the rig has no pelvis-thickness constant, so the seat height is the value at which the
- *    pelvis and its hips publish above `y = 0` — the same `14`/`12` layer the corpus's other seated /
- *    supine poses author).
- *  * The copy's *"forcing the knees down"* mistake is structurally honoured (the knee angle is fixed
- *    at `90°` by construction and the shins rest on the floor plane at the two configurations), but the
- *    rig expresses it as geometry, not as a constraint: there is no "knee pressure" channel to drive.
+ * The FEET are not declared: the transition picks them up and sets them down on the other side, and the
+ * contact channel is per-pose, not per-frame. The seat (`HIPS`) is.
  */
 class NinetyNinetyHipsPose : BasePose() {
 
@@ -99,8 +32,7 @@ class NinetyNinetyHipsPose : BasePose() {
         motionCurve = MotionCurve.EASE_IN_OUT,
         environment = EnvironmentDefinition(ground = GroundDefinition(visible = true, level = 0f)),
         // The sit bones are the drill's ground contact, and so are the hands that carry the seat's
-        // weight behind the hips; the feet are picked up and set down again, so they are not declared
-        // (see the KDoc).
+        // weight behind the hips; the feet are picked up and set down again, so they are not declared.
         support = SupportDefinition(
             pivot = PivotType.PELVIS,
             contacts = setOf(
@@ -131,7 +63,6 @@ class NinetyNinetyHipsPose : BasePose() {
         // Shape-driven root (the seat is authored arithmetic), so the solver leaves it untouched.
         declarePosture(jointsBuffer, PostureIntent.Kind.CUSTOM)
 
-        // --- 1. The seat: grounded, still, upright (§2 "Sit tall", tech) ------------------------
         pelvis!!.localPosition.set(SEAT_X, SEAT_Y, 0f)
         declarePelvisTilt(pelvis!!, jointsBuffer, axisZ, -SEATED_LEAN)
         chest!!.localPosition.set(0f, def.torsoLength, 0f)
@@ -142,7 +73,6 @@ class NinetyNinetyHipsPose : BasePose() {
 
         for (root in roots!!) root.updateWorldTransforms(zeroVector, identityRotation)
 
-        // --- 2. The 90/90 itself: both bent limbs built from their own authored directions ------
         val azimuthF = thighAzimuthF(context.progress)
         val azimuthB = thighAzimuthB(context.progress)
         val elevation = thighElevation(context.progress)
@@ -151,7 +81,6 @@ class NinetyNinetyHipsPose : BasePose() {
         bakeBentLeg(def, hipF!!, kneeF!!, ankleF!!, azimuthF, elevation, shinSwing, legFBuffer)
         bakeBentLeg(def, hipB!!, kneeB!!, ankleB!!, azimuthB, elevation, shinSwing, legBBuffer)
 
-        // --- 3. Arms: the seated support, hands on the floor beside the seat -------------------
         val handY = FLOOR_HAND_Y
         bakeIkLimb(shoulderA!!.worldPosition, Vector3(SEAT_X - HAND_BEHIND, handY, -(def.hipWidth + HAND_OUTBOARD)), def.upperArmLength, def.forearmLength, armPoleA, def.armIKConstraint, chest!!.worldRotation, elbowA!!, handA!!, armABuffer)
         bakeIkLimb(shoulderP!!.worldPosition, Vector3(SEAT_X - HAND_BEHIND, handY, def.hipWidth + HAND_OUTBOARD), def.upperArmLength, def.forearmLength, armPoleP, def.armIKConstraint, chest!!.worldRotation, elbowP!!, handP!!, armPBuffer)
@@ -163,9 +92,8 @@ class NinetyNinetyHipsPose : BasePose() {
     }
 
     /**
-     * Declares ONE bent leg through the registered authoring bake: the pose owns the chain root (the
-     * hip), the end target (the ankle) and the pole, exactly as every other limb in the corpus does —
-     * and both the target and the pole are derived here from the limb's own authored directions, so the
+     * Declares one bent leg through the registered authoring bake: the pose owns the chain root, the end
+     * target and the pole, and both are derived from the limb's own authored directions — so the
      * published knee is the authored knee.
      */
     private fun bakeBentLeg(
@@ -264,15 +192,11 @@ class NinetyNinetyHipsPose : BasePose() {
         class LegGeometry(val thigh: Vector3, val shin: Vector3)
 
         /**
-         * The authored geometry of one 90/90 leg, from its thigh azimuth [azimuthRad], its thigh
-         * elevation [elevationRad] and the lower leg's swing [shinSwingRad] about that thigh's axis.
-         *
-         * The shin is built in a basis PERPENDICULAR to the thigh (`b1` = the floor-plane perpendicular
-         * at azimuth `+90°`, `b2` = the up-facing perpendicular), so `|uS| = 1` and `uS ⟂ uT` hold
-         * exactly: the knee interior angle is `90°` for every input, which is what the exercise's name
-         * requires and what the class asserts on the published frame. `shinSwing = 0` lies the shin in
-         * the floor plane crossing medially; `π/2` lifts it to vertical; `π` lies it across laterally —
-         * the transition the drill performs.
+         * The authored geometry of one 90/90 leg, from its thigh azimuth, its elevation and the shin's
+         * swing about that thigh's axis. The shin is built in a basis PERPENDICULAR to the thigh, so
+         * `|uS| = 1` and `uS ⟂ uT` hold exactly and the knee is `90°` for every input. `shinSwing = 0`
+         * lies the shin in the floor plane crossing medially; `π/2` lifts it vertical; `π` lies it
+         * across laterally — the transition the drill performs.
          */
         fun legGeometry(azimuthRad: Float, elevationRad: Float, shinSwingRad: Float): LegGeometry {
             val ca = cos(azimuthRad); val sa = sin(azimuthRad)

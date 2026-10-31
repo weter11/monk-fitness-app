@@ -11,7 +11,7 @@ class MountainClimberPose : PoseBuilder {
         loopMode = LoopMode.LOOP,
         motionCurve = MotionCurve.LINEAR,
         environment = EnvironmentDefinition(ground = GroundDefinition(visible = true, level = 0f)),
-        // M10 — the planted HANDS (the plank pillar the knees drive in under), on the ONE canonical
+        // The planted HANDS (the plank pillar the knees drive in under), on the ONE canonical
         // support channel (`metadata.support`). The FEET are not declared: the driving knees lift
         // them off the surface within the rep, and the foot derivation has no "planted" gate.
         support = SupportDefinition(
@@ -35,12 +35,8 @@ class MountainClimberPose : PoseBuilder {
 
     private fun ensureHierarchy(def: SkeletonDefinition) {
         if (roots != null) return
-        // Canonical hierarchy (`SkeletonFactory.createStandardSkeleton()` — the M11 shape the migrated
-        // families publish). The factory's added nodes are pass-throughs between the links this pose
-        // already authored: LUMBAR is coincident with the PELVIS (identity rotation) and
-        // CLAVICLE_*/SCAPULA_* are coincident with the CHEST, so every transform authored below
-        // resolves exactly as before. What changes is that the five canonical joints carry their
-        // authored transforms instead of publishing at the world origin.
+        // Canonical hierarchy (`SkeletonFactory.createStandardSkeleton()`): LUMBAR is coincident with
+        // PELVIS and CLAVICLE_*/SCAPULA_* with CHEST, so every transform authored below resolves as before.
         val nodes = SkeletonFactory.createStandardSkeleton()
         roots = nodes.roots
         pelvis = nodes.pelvis; chest = nodes.chest; neck = nodes.neck; head = nodes.head
@@ -58,15 +54,13 @@ class MountainClimberPose : PoseBuilder {
     }
 
     override fun build(context: PoseContext): SkeletonPose {
-        // Per-frame hygiene: clear last build's §1.1 carriers from this reused singleton buffer.
         SkeletonPose.IntentBuilder(jointsBuffer).reset()
         val def = context.definition
         ensureHierarchy(def)
-        // B3 — every production pose declares its posture intent. This pose authors a
+        // Every production pose declares its posture intent. This pose authors a
         // shape-driven root, so it opts into CUSTOM (the solver leaves the authored root untouched).
         SkeletonPose.IntentBuilder(jointsBuffer).posture(PostureIntent.Kind.CUSTOM)
 
-        // 1. Rigid Plank Core Positioning
         val pelvisX = 15f
         val pelvisY = 75f
         val leanAngle = 1.50f // Lying horizontally
@@ -85,24 +79,21 @@ class MountainClimberPose : PoseBuilder {
         // Flush Spine FK to get precise Hip and Shoulder origins
         roots!!.forEach { it.updateWorldTransforms(Vector3(0f, 0f, 0f), JointRotation()) }
 
-        // 2. Dual-Sided Contralateral Alternation
         val cycle = context.progress * 2f * PI.toFloat()
         val rawSin = sin(cycle)
         val actF = if (rawSin > 0f) smootherStep(0f, 1f, rawSin) else 0f
         val actB = if (rawSin < 0f) smootherStep(0f, 1f, -rawSin) else 0f
 
-        // 3. ARM TARGETS (Planted firmly on the ground)
         val targetHandA = Vector3(chest!!.worldPosition.x, 15f, -def.shoulderWidth * 1.2f)
         val targetHandP = Vector3(chest!!.worldPosition.x, 15f, def.shoulderWidth * 1.2f)
 
-        // P12 (§12.6): arms declared through the registered authoring bake (was direct
+        // Arms declared through the registered authoring bake (was direct
         // solveIK + raw-offset writes — the bypass family).
         bakeIkLimb(shoulderA!!.worldPosition, targetHandA, def.upperArmLength, def.forearmLength, Vector3(-1f, -1f, -1f), def.armIKConstraint, chest!!.worldRotation, elbowA!!, handA!!, armABuffer, jointsBuffer)
         bakeIkLimb(shoulderP!!.worldPosition, targetHandP, def.upperArmLength, def.forearmLength, Vector3(-1f, -1f, 1f), def.armIKConstraint, chest!!.worldRotation, elbowP!!, handP!!, armPBuffer, jointsBuffer)
 
-        // W1: engine now derives foot/hand orientation (removed manual endpoints + tilt counter-rotation).
+        // The engine now derives foot/hand orientation (removed manual endpoints + tilt counter-rotation).
 
-        // 4. LEG TARGETS (Alternating knee pulls)
         val totalLegLen = def.thighLength + def.shinLength
         val extendedAnkleX = pelvis!!.worldPosition.x - totalLegLen * 0.94f
         val extendedAnkleY = 15f
@@ -110,7 +101,6 @@ class MountainClimberPose : PoseBuilder {
         val bentAnkleX = pelvis!!.worldPosition.x - totalLegLen * 0.45f
         val bentAnkleY = 28f
 
-        // Interpolate target ankle coordinates
         val targetAnkleF = Vector3(
             lerp(extendedAnkleX, bentAnkleX, actF),
             lerp(extendedAnkleY, bentAnkleY, actF) + sin(actF * PI.toFloat()) * 12f,
@@ -122,7 +112,7 @@ class MountainClimberPose : PoseBuilder {
             def.hipWidth * 1.2f
         )
 
-        // P12 (§12.6): legs declared through the registered authoring bake.
+        // Legs declared through the registered authoring bake.
         bakeIkLimb(hipF!!.worldPosition, targetAnkleF, def.thighLength, def.shinLength, Vector3(0f, 1f, 0f), def.legIKConstraint, pelvis!!.worldRotation, kneeF!!, ankleF!!, legFBuffer, jointsBuffer)
         bakeIkLimb(hipB!!.worldPosition, targetAnkleB, def.thighLength, def.shinLength, Vector3(0f, 1f, 0f), def.legIKConstraint, pelvis!!.worldRotation, kneeB!!, ankleB!!, legBBuffer, jointsBuffer)
 

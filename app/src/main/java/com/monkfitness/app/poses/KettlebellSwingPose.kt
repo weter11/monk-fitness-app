@@ -11,7 +11,7 @@ class KettlebellSwingPose : PoseBuilder {
         loopMode = LoopMode.LOOP,
         motionCurve = MotionCurve.LINEAR,
         environment = EnvironmentDefinition(ground = GroundDefinition(visible = true, level = 0f)),
-        // M8 — the planted feet (standing hinge: the feet never leave the ground), on the ONE
+        // The planted feet (standing hinge: the feet never leave the ground), on the ONE
         // canonical support channel (`metadata.support`).
         support = SupportDefinition(
             pivot = PivotType.FEET,
@@ -34,12 +34,8 @@ class KettlebellSwingPose : PoseBuilder {
 
     private fun ensureHierarchy(def: SkeletonDefinition) {
         if (roots != null) return
-        // Canonical hierarchy (`SkeletonFactory.createStandardSkeleton()` — the M11 shape the migrated
-        // families publish). The factory's added nodes are pass-throughs between the links this pose
-        // already authored: LUMBAR is coincident with the PELVIS (identity rotation) and
-        // CLAVICLE_*/SCAPULA_* are coincident with the CHEST, so every transform authored below
-        // resolves exactly as before. What changes is that the five canonical joints carry their
-        // authored transforms instead of publishing at the world origin.
+        // Canonical hierarchy (`SkeletonFactory.createStandardSkeleton()`): LUMBAR is coincident with
+        // PELVIS and CLAVICLE_*/SCAPULA_* with CHEST, so every transform authored below resolves as before.
         val nodes = SkeletonFactory.createStandardSkeleton()
         roots = nodes.roots
         pelvis = nodes.pelvis; chest = nodes.chest; neck = nodes.neck; head = nodes.head
@@ -52,28 +48,20 @@ class KettlebellSwingPose : PoseBuilder {
     }
 
     override fun build(context: PoseContext): SkeletonPose {
-        // Per-frame hygiene: clear last build's §1.1 carriers from this reused singleton buffer.
         SkeletonPose.IntentBuilder(jointsBuffer).reset()
         val def = context.definition
         ensureHierarchy(def)
-        // B3 — every production pose declares its posture intent. This pose authors a
+        // Every production pose declares its posture intent. This pose authors a
         // shape-driven root, so it opts into CUSTOM (the solver leaves the authored root untouched).
         SkeletonPose.IntentBuilder(jointsBuffer).posture(PostureIntent.Kind.CUSTOM)
 
-        // 1. CORE HIP HINGE — the pelvis's path IS the hinge (BPS §5/§7/§9, M6).
-        // The swing is a HIP HINGE, not a squat: at the bottom the hips travel BACK over
-        // barely-bent knees, and the pelvis's height is whatever the leg's authored span allows.
-        // Both spans are authored inside the solver's own reachable length (its
-        // `effectiveExtensionRatio` cap), so the leg is realized where it is declared.
-        //   top    : hips extended — 0.99 of the reachable leg length above the ankle plant
-        //   hinge  : 0.98 of it, pushed HINGE_HIP_BACK units back; the kneecap therefore stays
-        //            over the mid-foot (measured knee x: 24.30 at the top -> -1.05 at the hinge,
-        //            shin 14.4° -> 0.6° from vertical) and the knee bends only 4.41° more than at
-        //            the top ("knee flexion: only slight … this distinguishes the swing from a
-        //            squat", §9; §12 lists squatting instead of hinging as mistake #1).
-        // The previous authoring lerped `pelvisY` 175 -> 210 while moving the pelvis back only
-        // 20 units: the hip->ankle span collapsed to 166.57 of the 210-unit leg (75° of knee
-        // flexion) and the hips sank instead of pushing back.
+        // 1. CORE HIP HINGE — the pelvis's path IS the hinge (BPS §5/§7/§9). The swing is a HIP
+        // HINGE, not a squat: at the bottom the hips travel BACK over barely-bent knees. Both spans are
+        // authored inside the solver's own reachable leg length, so each leg is realized as declared:
+        // `top` = 0.99 of it, `hinge` = 0.98 pushed `HINGE_HIP_BACK` back — the kneecap therefore stays
+        // over the mid-foot (measured knee x `24.30 → −1.05`, shin `14.4° → 0.6°` from vertical) and the
+        // knee bends only `4.41°` more than at the top. The previous authoring lerped `pelvisY` 175 → 210
+        // while moving the pelvis back only 20 units, so the hips sank instead of pushing back.
         val u = (1f - cos(context.progress * 2f * PI.toFloat())) * 0.5f
 
         val legReach = reach(def.thighLength, def.shinLength, def.legIKConstraint)
@@ -96,7 +84,6 @@ class KettlebellSwingPose : PoseBuilder {
         // Flush Spine FK to get precise Hip and Shoulder origins
         roots!!.forEach { it.updateWorldTransforms(Vector3(0f, 0f, 0f), JointRotation()) }
 
-        // 2. LEG TARGETS (Completely planted on the floor, feet never leave their plant)
         val targetAnkleF = Vector3(0f, ANKLE_LEVEL, -def.hipWidth * 1.5f)
         val targetAnkleB = Vector3(0f, ANKLE_LEVEL, def.hipWidth * 1.5f)
 
@@ -108,15 +95,12 @@ class KettlebellSwingPose : PoseBuilder {
         // foot on the forward-leaning shank is intentionally NOT hand-authored here; if the engine
         // derivation lands the foot imperfectly that is an engine limitation left exposed.
 
-        // 3. ARM TARGETS — the load is a STRAIGHT pendulum hung from the shoulder (BPS §6/§9/§11:
-        // "the arms are straight — they do not curl or press the load"; the load travels "from low
-        // (between legs) to ~horizontal/chest height (top) — driven by the hips, not shoulder
-        // flexion"). The hand is therefore placed on the arm's own reachable circle around the
-        // shoulder and swung through the sagittal plane, instead of being lerped between two
-        // world points: the previous authoring left only 41.0 units of shoulder->hand distance at
-        // the top (the arm is 146), so the elbow folded onto the solver's minimum-flexion stop
-        // (published interior angle 30.0° = 150° of flexion) with the elbow flared 80.6 units
-        // sideways — the "curl the load up with the arms" mistake §12 names.
+        // 3. ARM TARGETS — the load is a STRAIGHT pendulum hung from the shoulder (BPS §6/§9/§11: "the
+        // arms are straight — they do not curl or press the load"). The hand is placed on the arm's own
+        // reachable circle around the shoulder and swung through the sagittal plane instead of being
+        // lerped between two world points: the previous authoring left only 41.0 u of shoulder→hand
+        // distance at the top (the arm is 146), folding the elbow onto the `30°` stop with the elbow
+        // flared `80.6` u sideways — the "curl the load with the arms" mistake.
         val armReach = reach(def.upperArmLength, def.forearmLength, def.armIKConstraint)
         val gripLateral = def.shoulderWidth - def.shoulderWidth * GRIP_WIDTH_RATIO
         // In-plane component of the arm so the 3D grip offset (hands inside the shoulders) leaves
@@ -129,7 +113,7 @@ class KettlebellSwingPose : PoseBuilder {
         bakeIkLimb(shoulderA!!.worldPosition, Vector3(targetHandX, targetHandY, -def.shoulderWidth * GRIP_WIDTH_RATIO), def.upperArmLength, def.forearmLength, Vector3(0f, -1f, -1f), def.armIKConstraint, JointRotation(), elbowA!!, handA!!, armABuffer, jointsBuffer)
         bakeIkLimb(shoulderP!!.worldPosition, Vector3(targetHandX, targetHandY, def.shoulderWidth * GRIP_WIDTH_RATIO), def.upperArmLength, def.forearmLength, Vector3(0f, -1f, 1f), def.armIKConstraint, JointRotation(), elbowP!!, handP!!, armPBuffer, jointsBuffer)
 
-        // W1: engine now derives foot/hand orientation (removed manual endpoints + tilt counter-rotation).
+        // The engine now derives foot/hand orientation (removed manual endpoints + tilt counter-rotation).
 
         SkeletonPose.fromHierarchy(roots!!, jointsBuffer)
         jointsBuffer.getJoint(Joint.WRIST_A).set(jointsBuffer.getJoint(Joint.HAND_A))

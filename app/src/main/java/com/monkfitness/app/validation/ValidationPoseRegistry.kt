@@ -8,14 +8,8 @@ import com.monkfitness.app.validation.poses.MiddleSplitPose
 import com.monkfitness.app.validation.poses.PikeSitPose
 
 /**
- * Separate, self-contained registry for Engineering Validation poses.
- *
- * This registry is intentionally independent of [com.monkfitness.app.poses.PoseRegistry],
- * [com.monkfitness.app.domain.usecase.WorkoutGenerator] and the exercise catalog. It only
- * shares the rendering engine ([com.monkfitness.app.animation.PoseBuilder],
- * [com.monkfitness.app.animation.SkeletonFactory], [com.monkfitness.app.animation.SkeletonRenderer]).
- *
- * It contains exactly four static reference poses and nothing else.
+ * Self-contained registry for Engineering Validation poses: independent of the pose registry, the
+ * workout generator and the exercise catalog, sharing only the rendering engine.
  */
 object ValidationPoseRegistry {
 

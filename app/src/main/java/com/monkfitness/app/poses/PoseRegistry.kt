@@ -59,25 +59,20 @@ object PoseRegistry {
         "lunge_side" to false,
         "cossack_squat" to false,
         "step_up_standard" to false,
-        // Animation-coverage phase (batch 1) — the standing lower-body family.
         "horse_stance_hold" to false,
         "wall_sit_hold" to false,
         "ankle_mobility_standard" to false,
         "calf_stretch_hold" to false,
-        // Animation-coverage phase (batch 2) — the upper-body pull / bar-support family.
         "row_standard" to false,
         "dip_parallel_bar" to false,
         "band_pull_aparts_standard" to false,
         "yt_raises_standard" to false,
-        // Animation-coverage phase (batch 3) — the hip-mobility / hip-rotation family.
         "hip_circles_hold" to false,
         "leg_swings_hold" to false,
         "ninety_ninety_hips" to false,
         "piriformis_stretch_hold" to false,
-        // Animation-coverage phase (batch 4) — the cervical-mobility family.
         "chin_tuck_standard" to false,
         "neck_circles_hold" to false,
-        // Animation-coverage phase (batch 5) — the phase's tail.
         "shoulder_cars_standard" to false,
         "jumping_jack_standard" to false,
         "child_pose_hold" to false

@@ -3,13 +3,9 @@ package com.monkfitness.app.poses
 import com.monkfitness.app.animation.*
 
 /**
- * Neutral-grip (palms facing each other) pull-up — biomechanics-first rewrite.
- *
- * The neutral handles keep the elbows tucked tight to the ribs and driving
- * down/forward; the palms face inward. The grip is at shoulder width so
- * the hands sit almost directly below the shoulders (no lateral arm
- * abduction). The chest still leads up to the bar and the pull begins
- * from the scapulae. Hands are FIXED on the bar.
+ * Neutral-grip pull-up — the neutral handles keep the elbows tucked to the ribs and driving down/forward,
+ * with the grip at shoulder width so the hands sit almost directly below the shoulders (no lateral
+ * abduction). Hands are FIXED on the bar.
  */
 class NeutralGripPullUpPose : BaseVerticalPullPose() {
 

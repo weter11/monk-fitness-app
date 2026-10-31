@@ -4,25 +4,15 @@ import com.monkfitness.app.animation.*
 import kotlin.math.*
 
 /**
- * BaseHipFlexorPose is the single owner of the shared Hip Flexor scaffolding.
- *
- * Both family members (CouchStretch, HalfKneelingStretch) previously duplicated the
- * manual SkeletonNode construction, manual solveIK + rotAround IK, the camera literal,
- * the hand geometry and the foot-ratio constants. This base consolidates all of that and
- * delegates to the engine: SkeletonFactory for the hierarchy, BasePose.bakeIkLimb() for the
- * front-leg and arm IK (replacing manual solveIK + rotAround), and the head/pelvis construction
- * helpers for the upper body, and FootDefinition for the heel/toe ratios.
- *
- * What intentionally remains local (Bird-Dog-style pose biomechanics, not engine knowledge):
- *  - The rigid Pythagorean pelvis solver (pelvis slides along a fixed back-knee constraint).
- *  - The back-leg fixed kinematics (knee is pinned; shin is vertical or flat on the ground).
- *  - The per-variant back-foot world direction (up the wall vs. flat backward).
+ * BaseHipFlexorPose owns the shared Hip Flexor scaffolding: the hierarchy, the IK baking for the front
+ * leg and the arms, the camera, the hand geometry and the foot-ratio constants. What stays local is
+ * pose biomechanics, not engine knowledge: the rigid Pythagorean pelvis solver, the back-leg
+ * kinematics, and the per-variant back-foot world direction.
  */
 abstract class BaseHipFlexorPose : BasePose() {
 
-    // Shared camera (duplicated literal removed). Default pitch raised ~10% (0.22 -> 0.242)
-    // so the view tilts down slightly and the upper body stays comfortably in frame
-    // (yaw/zoom unchanged, no camera redesign).
+    // Shared camera. Default pitch raised ~10% (0.22 -> 0.242) so the view tilts down slightly and
+    // the upper body stays comfortably in frame (yaw/zoom unchanged).
     protected val hipFlexorCamera = CameraDefinition(
         defaultYaw = 1.19f,
         defaultPitch = 0.242f,
@@ -43,7 +33,7 @@ abstract class BaseHipFlexorPose : BasePose() {
     protected val legFBuffer = SkeletonMath.IKResult()
     protected val armABuffer = SkeletonMath.IKResult()
     protected val armPBuffer = SkeletonMath.IKResult()
-    // P12 (§12.4b): scratch for the sanctioned planning solve (front-knee apex → arm targets).
+    // Scratch for the sanctioned planning solve (front-knee apex → arm targets).
     // Composition-only: never written to the carrier, never a realization result.
     private val kneePlanBuffer = SkeletonMath.IKResult()
 
@@ -93,10 +83,6 @@ abstract class BaseHipFlexorPose : BasePose() {
         toeB = nodes.toeB
     }
 
-    /**
-     * Sets the constant upper-body local offsets after the pelvis has been anchored.
-     * Uses the engine head/pelvis construction helpers to avoid duplicated head/pelvis setup.
-     */
     protected fun setUpperBodyLocal(def: SkeletonDefinition) {
         chest!!.localPosition.set(0f, def.torsoLength, 0f)
         buildGaze(neck!!, head!!, def.neckLength, uprightHeadDir)
@@ -104,8 +90,8 @@ abstract class BaseHipFlexorPose : BasePose() {
         buildShoulders(shoulderA!!, shoulderP!!, def.shoulderWidth)
     }
 
-    /** Front-leg intent. P12 (§12.5/B-1): the returned knee apex comes from the sanctioned
-     *  planning solve (§12.4b) — consumed ONLY to compose the arm targets — never from a
+    /** Front-leg intent. The returned knee apex comes from the sanctioned
+     *  planning solve — consumed ONLY to compose the arm targets — never from a
      *  realization result. The front leg itself is declared through the registered bake
      *  (registration + state-gated realization), exactly like every other limb. */
     protected fun planFrontLegKnee(def: SkeletonDefinition): SkeletonMath.IKResult {
@@ -122,9 +108,8 @@ abstract class BaseHipFlexorPose : BasePose() {
 
     /** Both arms rest on the front knee — identical choreography for both variants.
      *
-     *  R2/R4 reach-band authoring (third reach-band cleanup batch): the composed target is passed
-     *  through [projectArmTargetToReach] for EACH arm — after composition, before its bake — so a
-     *  variant whose own root puts the front knee beyond its arm chain's annulus can correct the
+     *  The composed target is projected per arm AFTER composition and BEFORE its bake, so a
+     *  variant whose root puts the front knee beyond its arm chain's annulus can correct the
      *  declaration without re-scoping its sibling. */
     protected fun solveArmsOnKnee(kneeJointWorld: Vector3, def: SkeletonDefinition) {
         // The composed x/y are SHARED intent; each arm's z is its own. `handTarget` is a reused
@@ -141,24 +126,19 @@ abstract class BaseHipFlexorPose : BasePose() {
         projectArmTargetToReach(def, shoulderP!!.worldPosition, handTarget)
         bakeIkLimb(shoulderP!!.worldPosition, handTarget, def.upperArmLength, def.forearmLength, armPPole, def.armIKConstraint, chest!!.worldRotation, elbowP!!, handP!!, armPBuffer)
 
-        // W1: engine now derives hand orientation (removed wrist tilt counter-rotation + 6/6/10 offsets).
+        // The engine now derives hand orientation (removed wrist tilt counter-rotation + 6/6/10 offsets).
     }
 
     /**
-     * R2/R4 reach-band authoring hook for the family's shared arm choreography.
+     * Reach-band hook for the family's shared arm choreography.
      *
      * [solveArmsOnKnee] composes both hands from the front knee's planning apex — `(knee.x − 10,
-     * knee.y + 15, ±0.8 · shoulderWidth)`. Whether that composed target lies inside its own chain's
-     * reachable annulus `[SkeletonMath.minReach, maxReach]` depends on the VARIANT's root: the
-     * half-kneeling variant's pelvis sits at `kneeBY + thighLength` with the torso upright, which
-     * puts the front knee `155.160 … 166.868` u from the shoulder of a `80 + 66` u arm (measured on
-     * the production entry point; the annulus cap is `143.080`), so the solver relocated both hands
-     * along the authored ray instead of publishing them where the pose declared them.
-     *
-     * The default is the family's pre-batch behaviour (declare the composed target verbatim):
-     * `CouchStretchPose` carries a site of the same class through this same helper and is out of
-     * this batch's scope, so the projection is opted into per variant rather than re-scoping both
-     * siblings from the base.
+     * knee.y + 15, ±0.8 · shoulderWidth)`. Whether that lies inside its own chain's annulus depends on
+     * the VARIANT's root: the half-kneeling variant's pelvis sits at `kneeBY + thighLength` with the
+     * torso upright, putting the front knee `155.160 … 166.868` u from the shoulder of a `80 + 66` u arm
+     * (cap `143.080`), so the solver relocated both hands instead of publishing them where declared.
+     * The default is the previous behaviour (declare verbatim): `CouchStretchPose` carries the same
+     * class of site through this helper, so the projection is opted into per variant.
      */
     protected open fun projectArmTargetToReach(
         def: SkeletonDefinition,
@@ -169,7 +149,7 @@ abstract class BaseHipFlexorPose : BasePose() {
 
     /** Front foot flat on the floor. */
     protected fun applyFrontFoot(def: SkeletonDefinition) {
-        // W1: engine now derives heel/toe + foot orientation from the shank + neutral ankle.
+        // The engine now derives heel/toe + foot orientation from the shank + neutral ankle.
     }
 
     /** Back foot orientation. The engine now derives the back foot from the shank + the neutral
@@ -187,19 +167,14 @@ abstract class BaseHipFlexorPose : BasePose() {
 
     companion object {
         /**
-         * The R2/R4 projection margin — a hundredth of a percent of the chain's span.
+         * The projection margin — a hundredth of a percent of the chain's span.
          *
-         * The authored target is placed just INSIDE its annulus, not exactly on the boundary: the
-         * carrier stores coordinates at ~`3e-5` absolute resolution at these radii, so a
-         * boundary-exact target re-fires a float-noise relocation (the reachability stamp reads
-         * `8e-6`), while this margin makes "inside the band" hold by construction and the stamp read
-         * exactly `0`.
-         *
-         * The published geometry cost is bounded by the margin itself (`0.004` u at the arm's
-         * `minReach`), i.e. ~`1/10000` of the athlete's height, because the solver's own relocation
-         * WAS the boundary projection this replaces. The helper's canonical `0.02` is NOT used: on
-         * this family's `143.080` cap it would pull the hands `2.86` u further in than the engine
-         * already publishes them — geometry the reach defect does not require.
+         * The target is placed just INSIDE its annulus, not on the boundary: the carrier stores
+         * coordinates at ~`3e-5` resolution at these radii, so a boundary-exact target re-fires a
+         * float-noise relocation (stamp `8e-6`), while this margin makes "inside the band" hold by
+         * construction (stamp exactly `0`). The published cost is bounded by the margin (`0.004` u at
+         * `minReach`). The helper's canonical `0.02` is NOT used: on this family's `143.080` cap it
+         * would pull the hands `2.86` u further in than the engine already publishes them.
          */
         const val REACH_MARGIN = 1e-4f
     }

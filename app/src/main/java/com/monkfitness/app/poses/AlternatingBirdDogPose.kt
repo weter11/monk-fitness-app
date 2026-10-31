@@ -17,7 +17,7 @@ class AlternatingBirdDogPose : BaseBirdDogPose() {
     override fun onBuild(context: PoseContext): SkeletonPose {
         val def = context.definition
         ensureHierarchy(def)
-        // B3 — every production pose declares its posture intent. This pose authors a
+        // Every production pose declares its posture intent. This pose authors a
         // shape-driven root, so it opts into CUSTOM (the solver leaves the authored root untouched).
         declarePosture(jointsBuffer, PostureIntent.Kind.CUSTOM)
         anchorTabletop(def)
@@ -37,7 +37,6 @@ class AlternatingBirdDogPose : BaseBirdDogPose() {
         val rightExt = MotionDrivers.PositiveHalfSine(context.progress)
         val leftExt = MotionDrivers.NegativeHalfSine(context.progress)
 
-        // Right arm (SHOULDER_P) + Left leg (HIP_F) extend with rightExt
         targetP.set(
             SkeletonMath.lerp(baseHandX, extHandX, rightExt),
             SkeletonMath.lerp(baseHandY, extHandY, rightExt),
@@ -52,7 +51,6 @@ class AlternatingBirdDogPose : BaseBirdDogPose() {
         val armPPoleWorld = SkeletonMath.toWorldDirection(poleP, elbowP!!.parent!!.worldRotation, tempPoleWorld)
         bakeIkLimb(shoulderP!!.worldPosition, targetP, def.upperArmLength, def.forearmLength, armPPoleWorld, def.armIKConstraint, chest!!.worldRotation, elbowP!!, handP!!, armPBuffer)
 
-        // Left arm (SHOULDER_A) + Right leg (HIP_B) extend with leftExt
         targetA.set(
             SkeletonMath.lerp(baseHandX, extHandX, leftExt),
             SkeletonMath.lerp(baseHandY, extHandY, leftExt),

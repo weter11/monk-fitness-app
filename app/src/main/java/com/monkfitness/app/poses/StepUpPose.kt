@@ -4,42 +4,19 @@ import com.monkfitness.app.animation.*
 import kotlin.math.*
 
 /**
- * Step-Up (driven by support-leg extension, a different model from the lunges).
+ * Step-Up — driven by support-leg extension (a different model from the lunges): the lead foot is
+ * planted on the step's tread and stays fixed there while the lead leg extends and the body rises.
  *
- * Biomechanics:
- *  - The LEAD foot is the support: it is placed on the STEP's tread during the ascent and then
- *    stays fixed there while the lead leg extends and the body rises.
- *  - The step the pose declares (`metadata.environment`) is the ONE source of the support geometry:
- *    the tread the planted foot must fit on, the lateral run the athlete's stance must fit inside,
- *    and the top SURFACE the planted foot rides above. `stepTop` is a surface height, never a joint
- *    height — using it as a joint height is what left a foot "on" the step with its contact plane 25
- *    units below the step's top (and the athlete 25 units short of the climb) while the pose still
- *    claimed the step as its support.
- *  - A foot standing on a surface sits `footRestY` above it: that is this family's own floor-contact
- *    height (`footRestY`), the engine's contact-radius convention (`PushUpPlank.ankleHeight =
- *    BASE_ANKLE_HEIGHT + supportElevation`) and the measured relationship on the one other
- *    foot-on-a-prop production pose, `DeclinePushUpPose`, whose foot contacts ride 25 units above its
- *    40-unit box. So a foot planted on the step's top is at `stepTop + footRestY`, and the ascent buys
- *    exactly the step's height.
- *  - The body rises with the lead (support) leg's extension: the pelvis rides `legSpan` above the
- *    lowest supporting foot (pelvisY = min(leadY, trailY) + legSpan), so it can never over-extend
- *    either leg and never floats or teleports.
- *  - The TRAILING (rear) foot starts on the floor and follows the lead's rise immediately, staying on
- *    the floor's side of the tread (it is lifted clear at the top — BPS §7 "the trailing foot is
- *    lifted or following"; it does not stand on the tread in this variant). The lag is deliberately
- *    small: both legs are ~`legSpan` long, so a large ankle-height divergence is exactly what this
- *    pose's own limb-asymmetry acceptance band (`maxLegAsymmetry < 15`) forbids.
- *  - Torso stays upright (minimal lean); arms hold a light symmetric counterbalance.
+ * `stepTop` is a SURFACE height, never a joint height: using it as a joint height is what left a foot
+ * "on" the step with its contact plane 25 units below the tread. A foot standing on a surface sits
+ * `footRestY` above it (the engine's contact-radius convention, as `DeclinePushUpPose` measures), so a
+ * foot planted on the step's top is at `stepTop + footRestY`.
  */
 class StepUpPose : BaseLungePose() {
 
-    // -----------------------------------------------------------------------------------------------
-    // The step — ONE set of numbers, used by BOTH the declared prop and the foot placement.
-    //
-    // The previous authoring derived the feet from `hipWidth * 1.15` (a body-relative stance) while
-    // declaring a prop from independent literals, so neither foot ever landed on the step's footprint
-    // (audit M1: `Z = ∓25.3` against a `Z ∈ [−22, +22]` run).
-    // -----------------------------------------------------------------------------------------------
+    // The step — ONE set of numbers, used by BOTH the declared prop and the foot placement. Deriving the
+    // feet from `hipWidth * 1.15` while declaring the prop from independent literals put neither foot on
+    // the footprint (measured `Z = ∓25.3` against a `Z ∈ [−22, +22]` run).
 
     /** The step's top SURFACE height. The ascent buys exactly this much pelvis rise. */
     private val stepTop = 36f
@@ -93,7 +70,7 @@ class StepUpPose : BaseLungePose() {
     override fun onBuild(context: PoseContext): SkeletonPose {
         val def = context.definition
         ensureHierarchy(def)
-        // B3 — every production pose declares its posture intent. This pose authors a
+        // Every production pose declares its posture intent. This pose authors a
         // shape-driven root, so it opts into CUSTOM (the solver leaves the authored root untouched).
         declarePosture(jointsBuffer, PostureIntent.Kind.CUSTOM)
 
