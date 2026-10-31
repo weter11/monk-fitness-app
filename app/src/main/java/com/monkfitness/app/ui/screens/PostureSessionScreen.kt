@@ -35,30 +35,13 @@ import com.monkfitness.app.ui.components.MonkButton
 import com.monkfitness.app.viewmodel.MainViewModel
 
 /**
- * **The optional posture / mobility session** — the retained daily track's own screen (§4).
+ * **The optional posture / mobility session** — the retained daily track's own screen.
  *
- * ### Why it is separate from the Program session screen
- *
- * A mobility session is not a Program workout and must not pretend to be one. It has no Program, no
- * revision, no opportunity and no plan element, so it has nothing an `IN_PROGRESS` session could be
- * *about*: `SessionRuntime` starts attempts at opportunities (§19), and a mobility routine is not one.
- * Giving it a synthetic opportunity would be the second runtime §30 step 15 forbids, and logging its sets
- * into `program_set_log` would claim it was planned work.
- *
- * So the screen is deliberately small and, on the persistence side, deliberately empty until the end:
- *
- * ```text
- * the routine     generated from the app's own catalogue and the user's settings (a presentation,
- *                 never stored) — the same rules the app has always used for this track
- * the session     in-memory: page through the drills, nothing is written per drill
- * completing it   one row of `posture_session_progress`, keyed by the track's own cycle and day
- * ```
- *
- * That is exactly what this feature did before §30 step 15 — a mobility session recorded as one completed
- * track day — with the per-drill `set_log` rows it also used to write retired along with the shipped
- * program's logging.
- *
- * @param viewModel the retained global state this screen reads: the routine and the track's own settings.
+ * A mobility session is not a Program workout and must not pretend to be one: it has no Program, no
+ * revision, no opportunity and no plan element, so there is nothing an `IN_PROGRESS` session could be
+ * *about*. A synthetic opportunity would be the second runtime, and logging its sets into
+ * `program_set_log` would claim it was planned work. So the routine is generated and never stored, the
+ * session is in-memory, and completing it writes one `posture_session_progress` row.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable

@@ -11,45 +11,22 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 
 /**
- * The application object, and the one owner of the app's composition root (§26).
- *
- * `Application` is the top of the blueprint's wiring diagram, so it is where the container lives and
- * the only place it is created. Nothing else in production acquires a database, a DAO or a Program
- * System repository.
+ * The one owner of the app's composition root: the only place a container is created, so nothing
+ * else in production acquires a database, a DAO or a Program System repository.
  */
 class MonkFitnessApplication : Application() {
 
     /**
-     * The app's composition root: the app's one database, the DAOs taken from it once, and every
-     * Program System repository constructed over them ([AppContainer]).
-     *
-     * It is a stored `val` created on first use, for two reasons. **Stored**, because the process must
-     * hold exactly one container: one place where the clock, the id generator and the transaction
-     * runner are decided, and one database behind every repository (a `get()` accessor would build a
-     * fresh graph — and re-ask for the database — on every read). **On first use**, because acquiring
-     * the database is the one thing this stage must not move: the build that read it from the view
-     * model acquired it when a view model was first constructed, and the container preserves that
-     * moment exactly.
-     *
-     * A ViewModel does not fetch its collaborators from here — §26's composition root hands them to
-     * it, and a view model reaching into the container would be the service locator the same section
-     * forbids. The one thing a view model may take from here is the shared database itself, for the
-     * shipped Stage-1 path that §30 step 15 retires.
+     * Stored, not `get()`: one container and one database per process, lazily created so the database is
+     * acquired on first use rather than in `onCreate`. View models are handed collaborators by injection —
+     * they never reach in here.
      */
     val container: AppContainer by lazy { AppContainer.create(this) }
 
     /**
-     * The app's **one owner of language selection** (localization stage §2).
-     *
-     * It is created here, next to the composition root, because language is an application-level fact:
-     * the manager is what the Settings screen asks to change the language and what the notification
-     * receiver asks for the language to write a notification in. There is no second language state —
-     * the selection itself lives in the platform's application locale, which
-     * [com.monkfitness.app.language.AppCompatAppLocaleStore] is the app's only door to.
-     *
-     * The one-time hand-off of a pre-localization language
-     * ([AppLanguageManager.migrateLegacySelection]) is deliberately *not* run here: the app-locale API
-     * cannot reach the platform before an Activity exists, so `MainActivity` triggers it.
+     * The app's only language state is the platform application locale, reached only through
+     * [com.monkfitness.app.language.AppCompatAppLocaleStore]. The legacy-selection migration is not run
+     * here but from `MainActivity`: the app-locale API cannot reach the platform before an Activity exists.
      */
     val appLanguageManager: AppLanguageManager by lazy {
         AppLanguageManager.create(SettingsLegacyLanguageStore(SettingsManager(this)))
@@ -59,11 +36,9 @@ class MonkFitnessApplication : Application() {
         super.onCreate()
 
         val settingsManager = SettingsManager(this)
-        // P32: the built-in progression catalogue. Seeded here, at application start, and **before any
-        // adaptive pass can run** — an adaptive pass is only reachable once a Session completes, which is
-        // a user action well after start-up. The ordering does not rest on this being fast: the provider
-        // itself never seeds, so a consumer reading early would see an honestly empty catalogue rather
-        // than a race. See `docs/PROGRAM_ADAPTIVE_PROGRESSION_CONTENT.md`.
+        // Seeded at application start, before any adaptive pass can run: one is only reachable once a
+        // Session completes, which is a user action well after start-up. The provider itself never
+        // seeds, so an early consumer sees an honestly empty catalogue rather than a race.
         MainScope().launch {
             container.builtInProgressionCatalogueBootstrap.bootstrap()
         }

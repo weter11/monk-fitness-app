@@ -7,38 +7,22 @@ import com.monkfitness.app.domain.common.SlotId
 import java.time.Instant
 
 /**
- * One run of one slot: a session the user started, with what they were presented and what they
- * confirmed (§19).
+ * One run of one slot: a session the user started, with what they were presented and what they confirmed.
  *
- * A session is created **once**, when it starts, and from that moment it is persisted runtime state —
- * it survives the screen closing, the process being recreated, an app restart and a reboot. Going
- * back does not cancel it; only an explicit cancel ends it that way, and the history stays either
- * way. A slot may be attempted more than once, but no more than one session per slot is
- * `IN_PROGRESS`; that rule spans sessions and belongs to the storage transaction that starts one
- * (§19, §27), not to a single value here.
+ * Created once, when it starts; from then on it is persisted runtime state that survives the screen
+ * closing, the process being recreated and an app restart. Going back does not cancel it — only an
+ * explicit cancel ends it that way — and the history stays either way. A slot may be attempted more than
+ * once, but no more than one session per slot is `IN_PROGRESS`; that rule spans sessions and belongs to
+ * the storage transaction that starts one, not to a single value here.
  *
- * The session is bound to identity and to its snapshot, and the binding is enforced at construction:
+ * The bindings are enforced at construction: [snapshot] must be this session's, for this slot, program and
+ * revision, so a session can never be assembled from a plan never presented to it; every
+ * [SessionExercise] must be an element the snapshot presented, so it cannot record work the user was never
+ * shown; and the status and the finish stamp agree.
  *
- *  * the [snapshot] must be the snapshot of *this* session, for *this* slot, program and revision —
- *    so a session can never be assembled from a plan that was never presented to it;
- *  * every [SessionExercise] must be an element the snapshot presented, with the same exercise, so a
- *    session cannot record work the user was never shown;
- *  * the status and the finish stamp agree: a session still `IN_PROGRESS` has not finished, and a
- *    completed or cancelled one has.
- *
- * Planned and actual time are different facts and are kept apart: the planned date lives in the
- * snapshot's workout, while [startedAt] and [finishedAt] are what actually happened — a session
- * started on one date and completed the next preserves both (§19).
- *
- * @property sessionId identity of this session.
- * @property slotId the opportunity it attempts.
- * @property programId the Program it belongs to.
- * @property revisionId the revision it started under.
- * @property snapshot the frozen record of what was presented.
- * @property status in progress, completed or cancelled.
- * @property startedAt when the user started it.
- * @property finishedAt when it was completed or cancelled, or `null` while it is in progress.
- * @property exercises the occurrences it ran, in presentation order.
+ * Planned and actual time are different facts: the planned date lives in the snapshot's workout, while
+ * [startedAt] and [finishedAt] are what actually happened, so a session started on one date and completed
+ * the next preserves both.
  */
 data class WorkoutSession(
     val sessionId: SessionId,
@@ -82,11 +66,9 @@ data class WorkoutSession(
         }
     }
 
-    /** Whether the session ended as a finished workout. */
     val isCompleted: Boolean
         get() = status.isCompleted
 
-    /** Whether the session is still running. */
     val isInProgress: Boolean
         get() = status == SessionStatus.IN_PROGRESS
 

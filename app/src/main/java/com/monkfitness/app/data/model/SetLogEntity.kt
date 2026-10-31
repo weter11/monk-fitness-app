@@ -6,13 +6,13 @@ import androidx.room.Index
 import androidx.room.PrimaryKey
 
 /**
- * One confirmed set (§19, §23 `SetLog`).
+ * One confirmed set.
  *
  * A row exists because a set was confirmed. That is the whole contract of this table: an exercise that
  * was skipped, a slot that was missed and a session that was cancelled produce **no row at all**, never
- * a row of zeroes, and the construction guard below makes a zero row unrepresentable rather than merely
- * discouraged. It is what keeps "missed" from being read downstream as "performed zero repetitions"
- * (§12) — the row's existence *is* the claim that work happened.
+ * a row of zeroes, and the construction guard makes a zero row unrepresentable rather than merely
+ * discouraged. It is what keeps "missed" from being read downstream as "performed zero repetitions" —
+ * the row's existence *is* the claim that work happened.
  *
  * A set is measured in one unit, exactly as the exercise is prescribed in one unit: a repetition set
  * carries [completedReps] and no seconds, a timed set carries [durationSeconds] and no repetitions.
@@ -20,12 +20,9 @@ import androidx.room.PrimaryKey
  * carry [performedAt] because a confirmed set happened at a time.
  *
  * The table is named `program_set_log` rather than `set_log` because the version-2 database already
- * owns `set_log` for its own logging shape (exercise id, reps, seconds, timestamp, session date). The
- * legacy table is neither repurposed nor renamed here: the two coexist, they mean different things, and
- * the old one is retired by §30 step 15 when its readers are gone.
+ * owns `set_log` for its own logging shape. The legacy table is neither repurposed nor renamed: the two
+ * coexist, they mean different things, and the old one is retired when its readers are gone.
  *
- * @property setLogId identity of this set row.
- * @property sessionExerciseId the occurrence that performed it; cascades with it.
  * @property setIndex 1-based position of the set within its occurrence; unique within that occurrence.
  * @property completedReps repetitions performed; `0` for a timed set.
  * @property durationSeconds seconds performed; `0` for a repetition set.

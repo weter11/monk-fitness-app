@@ -24,18 +24,13 @@ import com.monkfitness.app.ui.programs.ProgramNotice
 import com.monkfitness.app.ui.programs.ProgramsController
 
 /**
- * **Program Detail** — blueprint §22: *current-state management, not full analytics*.
+ * **Program Detail**: *current-state management, not full analytics*.
  *
- * The screen shows what the application layer can already answer: the name, the mode, the source, the
- * lifecycle, the archive state, the plan's shape, the revision the Program's pointer names, the next
- * opportunity the Scheduler would plan, the calendar's own counts and the recent attempts. Fields §22
- * names for which no read use case exists are **left out** rather than reconstructed here — §5 of this
- * stage forbids querying storage to fill a card, and the document records what is deferred and why.
- *
- * Every action is a controller call: select, edit, copy, rename, share, archive/unarchive, delete and the
- * four lifecycle transitions. The rules behind them (Standard-Program protection, the archive-of-selection
- * guard, the `IN_PROGRESS` guard, which transitions are legal) stay in the services, and a refusal is
- * surfaced as the sentence that explains it instead of being ignored.
+ * The screen shows only what the application layer can already answer. Fields for which no read use case
+ * exists are **left out** rather than reconstructed here — querying storage to fill a card is not this
+ * screen's job. Every action is a controller call, and the rules behind them (Standard-Program
+ * protection, the archive-of-selection guard, the `IN_PROGRESS` guard, which transitions are legal) stay
+ * in the services; a refusal is surfaced as the sentence that explains it instead of being ignored.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -152,7 +147,7 @@ fun ProgramDetailScreen(
             Text(
                 text = when {
                     // A failure is not an absence: the schedule could not be read, and that is said instead
-                    // of the ordinary "nothing is planned yet" line (§15, §33).
+                    // of the ordinary "nothing is planned yet" line.
                     current.nextWorkoutUnreadable ->
                         stringResource(R.string.programs_detail_next_workout_unreadable)
 
@@ -298,7 +293,7 @@ fun ProgramDetailScreen(
                         }
                     }
 
-                    // A completed Program cannot be resumed directly (§3): the only offered action is
+                    // A completed Program cannot be resumed directly: the only offered action is
                     // making a copy, which is above.
                     LifecycleStatus.COMPLETED -> Text(
                         text = stringResource(R.string.programs_detail_completed_hint),
@@ -343,10 +338,10 @@ fun ProgramDetailScreen(
                         onClick = {
                             showDeleteDialog = false
                             runAction(scope) {
-                                // Only a completed delete leaves the screen: a refusal (§3's Standard
-                                // Program, §29's IN_PROGRESS session) and a storage failure both keep the
-                                // user here, with the notice the action published. The rule itself stays in
-                                // the lifecycle layer — this branches on §15's classification.
+                                // Only a completed delete leaves the screen: a refusal (Standard Program,
+                                // an IN_PROGRESS session) and a storage failure both keep the user here,
+                                // with the notice the action published. The rule itself stays in the
+                                // lifecycle layer — this branches on the notice's classification.
                                 val outcome = controller.delete(current.row.programId)
                                 if (outcome is ProgramNotice.Done) {
                                     controller.closeDetail()
@@ -371,7 +366,7 @@ fun ProgramDetailScreen(
     }
 }
 
-/** The rename dialog: one text field and two answers. The rename itself is the controller's call. */
+/** The rename dialog; the rename itself is the controller's call. */
 @Composable
 private fun ProgramRenameDialog(
     initialName: String,

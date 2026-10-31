@@ -92,10 +92,9 @@ fun SettingsScreen(
         )
     }
 
-    // C3: every maintenance action reports Success or Failure. A destructive operation must
-    // never end in a state the user cannot distinguish from success — the snackbar is the
-    // "obvious result" the spec asks for on both outcomes. A Failure stays visible until the
-    // user dismisses it, so a failed wipe is never mistaken for a completed one.
+    // Every maintenance action reports Success or Failure: a destructive operation must never end in a
+    // state the user cannot distinguish from success. A Failure stays visible until the user dismisses
+    // it, so a failed wipe is never mistaken for a completed one.
     val snackbarHostState = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
     LaunchedEffect(Unit) {
@@ -161,9 +160,8 @@ fun SettingsScreen(
 
             Text(text = stringResource(R.string.language), style = MaterialTheme.typography.titleLarge)
 
-            // §6: one settings entry for the language, opening a single-choice list — the seven languages
-            // plus "System language". The three buttons this replaces were already one language short of a
-            // row that could hold them all.
+            // One settings entry for the language, opening a single-choice list: the seven languages
+            // plus "System language", which no row of buttons could hold.
             val currentLanguage = viewModel.currentAppLanguage()
             var showLanguagePicker by remember { mutableStateOf(false) }
 
@@ -173,9 +171,9 @@ fun SettingsScreen(
                 onClick = { showLanguagePicker = true }
             )
 
-            // §7: Android's own per-app language screen, offered only where the platform has one. It edits
-            // the same application locale this screen edits — a second way to the one setting, not a second
-            // setting — and the app keeps no state that could disagree with it.
+            // Android's own per-app language screen, offered only where the platform has one. It edits
+            // the same application locale this screen edits — a second way to the one setting, not a
+            // second setting — and the app keeps no state that could disagree with it.
             val systemLanguageIntent = remember(context) { AppLanguageSettings.intentFor(context) }
             if (systemLanguageIntent != null) {
                 TextButton(onClick = { context.startActivity(systemLanguageIntent) }) {
@@ -426,16 +424,8 @@ private fun ProgramControlsSection(
     var showFullResetDialog by remember { mutableStateOf(false) }
 
     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        // §16, after §30 step 15: **only** the one genuinely global maintenance operation is left here.
-        //
-        // "Restart current cycle" is gone — there is no target Program concept of a current cycle — and
-        // "Start revised program" is gone with the legacy implementation it had. Its *intent* is provided
-        // by the target architecture the way §16 requires (`Edit / Copy → a new immutable Revision →
-        // lifecycle Start`, in the Programs section above), and keeping a second way to restart a program
-        // would be exactly the cycle semantics this stage retires.
-        //
-        // What remains is a wipe, and its contract is mapped onto the current schema rather than named
-        // after the retired tables: it clears the user's Programs and every opportunity, attempt,
+        // **Only** the one genuinely global maintenance operation is left here: a wipe whose contract is
+        // mapped onto the current schema — it clears the user's Programs and every opportunity, attempt,
         // snapshot and confirmed set, the pauses and the target adaptive rows, and the retained
         // posture/mobility track and body-weight log — while keeping the built-in Standard Program and
         // the nutrition plans.
@@ -569,7 +559,7 @@ private fun SettingSwitchRow(
 
 /**
  * A settings entry that opens something else, showing the value it currently holds — the shape a settings
- * list needs once a choice no longer fits in the row itself (§6).
+ * list needs once a choice no longer fits in the row itself.
  */
 @Composable
 private fun SettingActionRow(

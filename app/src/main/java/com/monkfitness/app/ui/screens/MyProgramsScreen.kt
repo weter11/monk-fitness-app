@@ -25,16 +25,14 @@ import com.monkfitness.app.ui.programs.ProgramRowUi
 import com.monkfitness.app.ui.programs.ProgramsController
 
 /**
- * **My Programs** (§21) — the management list, and the entry point the Settings screen no longer hides.
+ * **My Programs**: the management list.
  *
- * It renders exactly what [ProgramsController] read from the lifecycle service: every saved Program, which
- * one is selected, where each one came from, where it is in its life, whether it is archived and whether a
- * pause is in effect. It is *not* an analytics screen (§22): no volume, no frequency, no focus
- * distribution — Progress and History own those, and My Programs shows state.
+ * It renders exactly what [ProgramsController] read from the lifecycle service — every saved Program, the
+ * selection, its source and lifecycle, the archive state and whether a pause is in effect. It is *not* an
+ * analytics screen: no volume, no frequency, no focus distribution — Progress and History own those.
  *
- * Every action on this screen is a call on the controller, which calls an application service. The screen
- * decides nothing: it does not select, does not compare a name, does not decide whether a Program may be
- * deleted and does not hold a selection of its own.
+ * Every action is a call on the controller, which calls an application service: the screen does not
+ * select, does not compare a name, does not decide whether a Program may be deleted.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -127,10 +125,8 @@ fun MyProgramsScreen(
 }
 
 /**
- * One saved Program: its name, the three facts the list shows, and the select action.
- *
- * The row is *presented* — the selected state is the service's answer, refreshed by the controller, and
- * the select button is offered only when selecting would change something.
+ * One saved Program. The row is *presented* — the selected state is the service's answer, refreshed by
+ * the controller, and the select button is offered only when selecting would change something.
  */
 @Composable
 private fun ProgramRowCard(row: ProgramRowUi, onOpen: () -> Unit, onSelect: () -> Unit) {

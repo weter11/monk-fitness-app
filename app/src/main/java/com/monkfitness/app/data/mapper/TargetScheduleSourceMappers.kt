@@ -13,20 +13,19 @@ import java.time.LocalDate
 /**
  * The revision-owned target schedule source rows ⇄ their domain value.
  *
- * This file is a **translation**, and the translation is the whole claim of the phase: a
- * [com.monkfitness.app.domain.usecase.TargetScheduleSource] written here comes back out of
- * [toTargetScheduleRule] and [toTargetProgramDayBinding] as an equal one, with every rule's identity,
- * its cadence *form*, its cadence payload and its anchor date, and every binding's two identities,
- * exactly as they went in. Each of the mapper's dullnesses is therefore load-bearing:
+ * This file is a **translation**: a [com.monkfitness.app.domain.usecase.TargetScheduleSource] written
+ * here comes back out of [toTargetScheduleRule] and [toTargetProgramDayBinding] as an equal one, with
+ * every rule's identity, its cadence *form*, its cadence payload and its anchor date, and every
+ * binding's two identities, exactly as they went in. Each of the mapper's dullnesses is load-bearing:
  *
- *  * `ruleId` and `workoutId` are copied verbatim. Neither is derived from a legacy `ProgramSchedule`,
- *    from a `ProgramDay`'s `position` or `name`, from a date, from a weekday, from a list index or
- *    from a `ProgramDayId`'s own text, and no placeholder is ever substituted for a missing one.
+ *  * `ruleId` and `workoutId` are copied verbatim — never derived from a legacy `ProgramSchedule`,
+ *    from a `ProgramDay`'s `position` or `name`, from a date, from a weekday, from a list index or from
+ *    a `ProgramDayId`'s own text, and no placeholder is ever substituted for a missing one.
  *  * The cadence is read **form first**. [storedCadence] switches on the stored discriminator and
  *    reads the one payload column that form owns; it never infers a form from a payload's shape, so
  *    `SessionsPerWeek(3)` cannot come back as a `FixedWeekdays` set of three days and `EveryNDays(3)`
  *    cannot come back as the same thing either. A stored token outside the vocabulary fails loudly
- *    rather than defaulting, which is the same rule `storedValues.kt` states for every other column.
+ *    rather than defaulting, the same rule `storedValues.kt` states for every other column.
  *  * `DerivedExcluding.sourceRuleId` is copied from its own column, so a derived rule reads back
  *    naming the same source rule it was stored naming.
  *  * `anchorDate` goes through [storedDate], so a stored value is either a real date or a loud

@@ -21,30 +21,25 @@ import java.time.LocalDate
 /**
  * The schedule's persistence: the planned opportunities to train and a Program's pause intervals.
  *
- * A slot is an *opportunity*, never an amount of work (§20), and this class keeps it that way: reads
- * return identity, ownership, the planned date, the status, the completion stamp and the sessions that
- * attempted it, and [countSlots] counts rows with a status. There is no query here that could sum a
- * missed opportunity into a zero-valued workout, because the slot has nothing to sum (§12).
+ * A slot is an *opportunity*, never an amount of work, and this class keeps it that way: reads return
+ * identity, ownership, the planned date, the status, the completion stamp and the sessions that attempted
+ * it, and [countSlots] counts rows with a status. No query here could sum a missed opportunity into a
+ * zero-valued workout, because the slot has nothing to sum.
  *
- * What is deliberately absent is the entire set of scheduling decisions: this class does not generate
- * a date, does not decide whether a slot was missed, does not slide a schedule after a missed workout,
- * does not supersede a slot when a revision changes, does not extend an indefinite program's horizon
- * and does not decide how many slots a week holds. Those are the Scheduler's (§20); [addSlots] stores
- * the slots the Scheduler decided on and nothing more, and a status write records the outcome a caller
- * already determined.
+ * The scheduling decisions are deliberately absent: this class generates no date, decides no miss, slides
+ * no schedule after a missed workout, supersedes no slot when a revision changes, extends no indefinite
+ * horizon and decides no weekly count — those are the Scheduler's. [addSlots] stores the slots the
+ * Scheduler decided on, and a status write records an outcome the caller already determined.
  *
- * `attempts` on a slot is assembled from the sessions of that slot rather than read from the slot row,
- * because the schema keeps the link on `workout_session.slotId` and forbids a second copy of it
- * (§23). Pauses map one-to-one; [closePause] records that an interval ended, and whether a pause
- * should start or end is lifecycle (§3).
+ * `attempts` on a slot is assembled from that slot's sessions rather than read from the slot row, because
+ * the schema keeps the link on `workout_session.slotId` and forbids a second copy. [closePause] records
+ * that an interval ended; whether a pause should start or end is lifecycle.
  */
 class ProgramScheduleRepository(
     private val slotDao: ProgramWorkoutSlotDao,
     private val sessionDao: WorkoutSessionDao,
     private val pauseDao: ProgramPauseDao
 ) {
-
-    // --- slots ------------------------------------------------------------------------------------
 
     /** The slot with [slotId] and the sessions attempted for it, or `null` when none is stored. */
     suspend fun slotById(slotId: SlotId): WorkoutSlot? {
@@ -56,7 +51,7 @@ class ProgramScheduleRepository(
     /**
      * The slot persisted for one target occurrence within one Program, or `null`.
      *
-     * This is a storage identity read only. It does not reconcile occurrences, choose a replacement,
+     * This is a storage identity read only: it does not reconcile occurrences, choose a replacement,
      * read the clock, or fall back to a date or plan day.
      */
     suspend fun slotByTargetOccurrenceKey(
@@ -106,8 +101,8 @@ class ProgramScheduleRepository(
     }
 
     /**
-     * Records what happened to one slot. The status and the stamp are the caller's decision: this
-     * method never derives them from the slot's sessions or from the date (§19, §20).
+     * Records what happened to one slot. The status and the stamp are the caller's decision: this method
+     * never derives them from the slot's sessions or from the date.
      */
     suspend fun recordSlotOutcome(slotId: SlotId, status: SlotStatus, completedAt: Instant?) {
         slotDao.updateOutcome(slotId.value, status.name, completedAt?.toEpochMilli())
@@ -117,8 +112,8 @@ class ProgramScheduleRepository(
      * The domain slots of one row set, each with the sessions attempted for it.
      *
      * The attempts arrive as one read for the whole set and are grouped here rather than queried per
-     * slot: the link lives on the session rows (§23), so a slot's attempts are exactly the sessions that
-     * named it, in start order.
+     * slot: the link lives on the session rows, so a slot's attempts are exactly the sessions that named
+     * it, in start order.
      */
     private fun withAttempts(
         slots: List<ProgramWorkoutSlotEntity>,
@@ -130,8 +125,6 @@ class ProgramScheduleRepository(
         return slots.map { it.toDomain(attemptsBySlot[it.slotId].orEmpty()) }
     }
 
-    // --- pauses -----------------------------------------------------------------------------------
-
     /** The pause interval with [pauseId], or `null` when none is stored. */
     suspend fun pauseById(pauseId: PauseId): ProgramPause? = pauseDao.pauseById(pauseId.value)?.toDomain()
 
@@ -139,7 +132,7 @@ class ProgramScheduleRepository(
     suspend fun pausesOfProgram(programId: ProgramId): List<ProgramPause> =
         pauseDao.pausesOfProgram(programId.value).map { it.toDomain() }
 
-    /** Stores one pause interval. Whether a pause should begin is lifecycle (§3), not a choice here. */
+    /** Stores one pause interval. Whether a pause should begin is lifecycle, not a choice here. */
     suspend fun addPause(pause: ProgramPause) {
         pauseDao.insertPause(pause.toEntity())
     }

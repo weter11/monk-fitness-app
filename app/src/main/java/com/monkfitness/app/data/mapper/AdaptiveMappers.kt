@@ -27,40 +27,34 @@ import com.monkfitness.app.domain.workout.EffectiveExercise
  * The Program System's own adaptive rows ⇄ the target adaptive vocabulary: family progression state,
  * decisions and adjustments.
  *
- * These mappers cross the boundary between the target schema and the PR-1 vocabulary, and **not** the
- * boundary to the Stage-1 adaptive tables. `program_family_progression_state`,
- * `program_adaptive_decision_record` and `adaptive_adjustment` are the only tables involved; nothing
- * here reads or writes `family_progression_state` or `adaptive_decision_record`, maps into the
- * pilot's `FamilyAdaptationState`, or carries a hysteresis counter or a policy version across. The
- * two generations coexist until §30 step 15 and stay semantically separate until then (§23).
+ * These mappers cross the boundary between the target schema and that vocabulary, and **not** the
+ * boundary to the Stage-1 adaptive tables: nothing here reads or writes `family_progression_state` or
+ * `adaptive_decision_record`, maps into the pilot's `FamilyAdaptationState`, or carries a hysteresis
+ * counter or a policy version across. The two generations coexist and stay semantically separate.
  *
- * Three links are mapped carefully, because each of them could otherwise duplicate a fact that
- * belongs to exactly one place:
+ * Three links are mapped carefully, because each could otherwise duplicate a fact that belongs to
+ * exactly one place:
  *
  *  * **an applied decision and its adjustment are linked once.** The decision table has no
- *    `adjustmentId` column (§23), so the identity of the adjustment an `APPLIED` decision produced is
- *    read from the adjustment row that names the decision and handed to [AdaptiveDecisionRecordEntity.toDomain].
- *    A decision row whose row is missing while its outcome says `APPLIED` is therefore invalid
- *    persisted data and fails loudly, rather than loading as a decision that claims an adjustment
- *    nobody recorded.
- *  * **an adjustment's Program and revision are the decision's.** The domain adjustment carries
- *    identity, the decision it came from, the slot, the changed element and the supersession chain —
- *    not the owner — while the table stores `programId` and `revisionId` as ownership columns and
- *    deletes by cascade. Writing therefore takes the owner from the context the repository already
- *    has, and reading drops the duplicate copy, which is reconstructible from the decision.
+ *    `adjustmentId` column, so the identity of the adjustment an `APPLIED` decision produced is read
+ *    from the adjustment row that names the decision. A decision row whose adjustment is missing while
+ *    its outcome says `APPLIED` is therefore invalid persisted data and fails loudly, rather than
+ *    loading as a decision that claims an adjustment nobody recorded.
+ *  * **an adjustment's Program and revision are the decision's.** The domain adjustment carries no
+ *    owner, while the table stores `programId`/`revisionId` as ownership columns and deletes by
+ *    cascade: writing takes the owner from the context the repository already has, and reading drops
+ *    the duplicate copy, which is reconstructible from the decision.
  *  * **`NOT_APPLIED` is not absence.** A decision the aggregate load guard filtered out is a stored
- *    row with that outcome and no adjustment; it maps to a `NOT_APPLIED` decision and is never turned
- *    into a missing one, and the absence of an adjustment row means exactly "no change was applied".
+ *    row with that outcome and no adjustment, and it is never turned into a missing one.
  */
 
 /**
  * The domain decision of one stored decision row, with the identity of the adjustment it produced
  * when it applied one.
  *
- * @throws IllegalArgumentException when a stored vocabulary token is not a member of the domain's,
- *   when a target scope and its target id disagree (a `SESSION`-scoped decision with an id, or a
- *   scoped one without), or when the assembled value violates the decision's own rule that an
- *   `APPLIED` decision has exactly one adjustment and a `NOT_APPLIED` one has none.
+ * @throws IllegalArgumentException on an unknown vocabulary token, on a target scope and target id
+ *   that disagree, or when the assembled value violates the rule that an `APPLIED` decision has exactly
+ *   one adjustment and a `NOT_APPLIED` one has none.
  */
 internal fun AdaptiveDecisionRecordEntity.toDomain(adjustmentId: AdjustmentId?): AdaptiveDecision =
     AdaptiveDecision(
@@ -76,7 +70,7 @@ internal fun AdaptiveDecisionRecordEntity.toDomain(adjustmentId: AdjustmentId?):
         recovery = storedToken(recovery, RecoveryContext.entries, "program_adaptive_decision_record.recovery"),
         decidedAt = storedInstant("program_adaptive_decision_record.decidedAt", decidedAt),
         adjustmentId = adjustmentId,
-        // An absent column is an absent reason: a row written before §30 step 12 stored one keeps the
+        // An absent column is an absent reason: a row written before the column existed keeps the
         // answer it was written with — nothing — rather than being guessed at on read.
         reason = reason?.let { stored ->
             storedToken(stored, ProgramAdaptiveReason.entries, "program_adaptive_decision_record.reason")
@@ -85,7 +79,7 @@ internal fun AdaptiveDecisionRecordEntity.toDomain(adjustmentId: AdjustmentId?):
 
 /**
  * The stored row of one decision. The adjustment it applied is deliberately not stored here: the
- * adjustment row owns that link (§23), so the pair cannot disagree.
+ * adjustment row owns that link, so the pair cannot disagree.
  */
 internal fun AdaptiveDecision.toEntity(): AdaptiveDecisionRecordEntity = AdaptiveDecisionRecordEntity(
     decisionId = decisionId.value,
@@ -177,7 +171,7 @@ internal fun AdaptiveAdjustmentEntity.toDomain(): AdaptiveAdjustment = AdaptiveA
  *
  * The owner is an argument rather than a field of the value because the domain adjustment does not
  * carry it: it is the decision's Program and revision, and the table stores them so ownership can
- * cascade (§29).
+ * cascade.
  */
 internal fun AdaptiveAdjustment.toEntity(
     programId: ProgramId,
@@ -203,7 +197,7 @@ internal fun AdaptiveAdjustment.toEntity(
  * One stored family progression state.
  *
  * The stamp is mapped as stored, so an entity → domain → entity round trip is total; the repository
- * is what decides the moment a state is written (§26: a clock is injected, never hidden).
+ * is what decides the moment a state is written (a clock is injected, never hidden).
  */
 internal fun FamilyProgressionStateEntity.toDomain(): FamilyProgressionState = FamilyProgressionState(
     revisionId = RevisionId(revisionId),
@@ -218,7 +212,7 @@ internal fun FamilyProgressionStateEntity.toDomain(): FamilyProgressionState = F
     updatedAt = storedInstant("program_family_progression_state.updatedAt", updatedAt),
     // The four counts read an absent column as the count a family with no preceding window has, and
     // the cooldown position stays absent: "never had a change" is not "0 windows ago" (the entity
-    // states the same distinction). A row written by §30 step 12's integration always states them.
+    // states the same distinction).
     precedingProgressQualifyingWindows = precedingProgressQualifyingWindows ?: 0,
     precedingRegressQualifyingWindows = precedingRegressQualifyingWindows ?: 0,
     precedingRecoveryQualifyingWindows = precedingRecoveryQualifyingWindows ?: 0,

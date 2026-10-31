@@ -19,7 +19,6 @@ import com.monkfitness.app.domain.program.StandardProgram
 import com.monkfitness.app.domain.usecase.ProgramScheduler
 import java.time.ZoneId
 
-/** Production bootstrap for the product-owned Standard Program. */
 class StandardProgramBootstrap(
     private val programRepository: ProgramRepository,
     private val scheduler: ProgramScheduler,

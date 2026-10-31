@@ -51,15 +51,9 @@ import com.monkfitness.app.ui.programs.matchesExerciseQuery
 import com.monkfitness.app.ui.programs.toggledFocus
 
 /**
- * The Program Editor — §7's `Basics / Schedule / Plan / Review` over the target editor, draft-first.
- *
- * The screen edits a **draft** and nothing else: every change is a call on [ProgramsController] that
- * produces the next draft through `ProgramDraftEditor`, and a revision appears only when the user saves
- * (§6, §7). It renders the validation's findings and the review's answer — §7's *"one Save → at most one
- * new Revision, no-op Save → none"* is decided by the editor service and merely *shown* here.
- *
- * What the screen owns is presentation: which section is open, which dialog is up, what the working name
- * is while it is being typed. What it does not own is any rule about Programs.
+ * The Program Editor, draft-first: the screen edits a **draft** and nothing else, and a revision appears
+ * only when the user saves — that rule is the editor service's and is merely *shown* here. What this
+ * screen owns is presentation; it owns no rule about Programs.
  */
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
@@ -76,14 +70,9 @@ fun ProgramEditorScreen(
     var showExercisePicker by remember { mutableStateOf<String?>(null) }
     var showStartDatePicker by remember { mutableStateOf(false) }
 
-    // Which of §7's entry points opened this session. It is a *seed* rather than a decision: the route
-    // says `create MODE`, `edit PROGRAM` or `copy PROGRAM`, and the controller opens the draft.
-    //
-    // The seed runs through the controller's guard because this effect re-runs on every re-composition
-    // of the destination — a rotation or any configuration change re-creates the composition while the
-    // controller (and its working draft) survives — and a bare `seed()` would replace the user's
-    // half-edited draft with a fresh empty one on every such event (P2 `UI-03`). Same flow, draft
-    // present → the guard keeps it; a genuinely new flow → the seed runs.
+    // The seed runs through the controller's guard: this effect re-runs on every re-composition (a
+    // rotation re-creates the composition while the controller's draft survives), and a bare `seed()`
+    // would replace a half-edited draft with a fresh empty one. Draft present -> kept; new flow -> seeded.
     LaunchedEffect(seedKey) { controller.seedEditor(seedKey) { seed() } }
 
     val draft: ProgramDraftUi? = state.draft
@@ -172,12 +161,8 @@ fun ProgramEditorScreen(
                 }
             }
 
-            // §30 step 26's Preview. It is rendered from the controller's presentation of a
-            // generation pass that has NOT been applied: no draft, no focus and no schedule is
-            // changed by this section, and the only thing it can do is offer the two explicit
-            // endings — adopt the plan, or close the preview. Every string it shows is a resource
-            // handed down by the controller, and the localized catalogue name is preferred over a
-            // raw exercise id exactly as the plan below does it.
+            // Rendered from a generation pass that has NOT been applied: this section changes no draft,
+            // focus or schedule — it can only adopt the plan or close the preview.
             state.generationPreview?.let { preview ->
                 GenerationPreviewSection(
                     preview = preview,
@@ -192,9 +177,8 @@ fun ProgramEditorScreen(
                 onFocus = { focus -> controller.setDraftFocus(focus) }
             )
 
-            // §30 step 28: the other generation input the user states. It sits directly under Goals &
-            // Focus for the same reason that section does — both say what the next Generate will be built
-            // with, and neither is part of the plan being shown below.
+            // Sits under Goals & Focus because both state what the next Generate will be built with,
+            // and neither is part of the plan shown below.
             ProgramSection(stringResource(R.string.programs_editor_preferred_exercises))
             PreferredExercisesSection(
                 preference = current.preferredExercises,
@@ -232,12 +216,9 @@ fun ProgramEditorScreen(
                 )
             }
 
-            // §3/§6 and P1: the planned start date is a separate configuration item of a *new*
-            // Program — not a field of the structural draft (choosing it creates no Revision) and not
-            // a start (nothing here moves the lifecycle). It appears on the create and copy entries,
-            // where it is part of the creation request; an existing Program's date has its own owner
-            // — Program Detail/settings through ProgramLifecycleService.setPlannedStartDate — and is
-            // deliberately not duplicated into the edit entry.
+            // The planned start date is a configuration item of a *new* Program, not a field of the
+            // structural draft (choosing it creates no Revision). An existing Program's date has its own
+            // owner (ProgramLifecycleService.setPlannedStartDate), so it is not duplicated into edit.
             if (current.entry != ProgramDraftEntry.EDIT) {
                 ProgramSection(stringResource(R.string.programs_editor_start_date))
                 Text(
@@ -420,8 +401,8 @@ fun ProgramEditorScreen(
             )
         }
 
-        // The creation request's own date choice — the same Material picker the import review uses,
-        // held beside the draft rather than in it (§6: the date is no part of the structure).
+        // The creation request's own date choice — held beside the draft rather than in it, since the
+        // date is no part of the structure.
         if (showStartDatePicker) {
             val datePickerState = rememberDatePickerState(
                 initialSelectedDateMillis = state.draftPlannedStartDate?.toPickerMillis()
@@ -453,36 +434,11 @@ fun ProgramEditorScreen(
 }
 
 /**
- * §30 step 28's **preferred exercises** — the draft's own [ExercisePreference], shown as a ranking and
- * edited by handing each change back to the controller.
- *
- * ### The section holds no ranking of its own
- *
- * [preference] is the draft's value, read from the controller's presentation, and every button here ends
- * in one controller call. There is no `remember`ed copy of the list and no local index, because a local
- * copy would be a second source of truth for exactly the fact that matters here: the order the user is
- * looking at has to be the order the next generation is planned against. Two copies would let the screen
- * show one ranking while the draft carried another, and the user would have no way to see which one the
- * generator used.
- *
- * ### No order is chosen for the user
- *
- * Nothing on this screen ranks anything by itself. A new entry is appended as the **least** preferred
- * (`ExercisePreference.preferring`), which is the only position a screen can add without inventing a
- * judgement; the user then moves it with the two buttons. Nothing is pre-selected, no favourites are
- * suggested, and an empty preference says so in words rather than showing an empty box (§33).
- *
- * The two move buttons are **disabled at the ends of the list** rather than clamped, via
- * [movementEnabled]. A disabled button says "there is nowhere to go"; a tap that did nothing would say
- * "you moved it" and be wrong.
- *
- * ### What the preference cannot do
- *
- * The section says in its own description line that generation reaches for these *before anything else*,
- * and — just as importantly — that it does so **only among the exercises the user's equipment allows**.
- * That boundary lives in `GenerationRequest.isUsable`, above this ranking (§9's hard execution
- * constraints), and stating it here is what stops the screen from implying that preferring an exercise
- * makes it selectable.
+ * The draft's own [ExercisePreference], shown as a ranking. There is no local copy of the list: the
+ * order the user sees has to be the order the next generation is planned against. A new entry is
+ * appended as the **least** preferred, and the move buttons are disabled at the ends rather than
+ * clamped — a tap that did nothing would still say "you moved it". Preferring an exercise does not
+ * make it selectable: that boundary is `GenerationRequest.isUsable`'s.
  */
 @Composable
 private fun PreferredExercisesSection(
@@ -503,7 +459,7 @@ private fun PreferredExercisesSection(
     )
 
     if (preference.isEmpty) {
-        // The absence in words. An empty list would read as a section that failed to load (§33).
+        // The absence in words. An empty list would read as a section that failed to load.
         Text(
             text = stringResource(R.string.programs_editor_preferred_exercises_empty),
             style = MaterialTheme.typography.bodyMedium,
@@ -511,8 +467,7 @@ private fun PreferredExercisesSection(
         )
     }
 
-    // The ranking, in the draft's own order — position 1 is the most preferred, and the number shown is
-    // the position itself so the order is legible as an order rather than as a list of names.
+    // In the draft's own order: the number shown is the position, so the ranking reads as an order.
     preference.exerciseIds.forEachIndexed { index, exerciseId ->
         val position = index + 1
         val movement = movementEnabled(position, preference.size)
@@ -564,36 +519,19 @@ private fun PreferredExercisesSection(
 }
 
 /**
- * The catalogue's own localized name for one entry, or the raw id when the catalogue has no name resource
- * for it.
- *
- * The fallback is the same one the plan below uses, and it exists for the same reason: an id the app does
- * not have a name for must still be *addressable*, because a user who cannot read a row cannot remove it
- * either. Falling back to the id keeps the row usable instead of hiding an entry the draft holds.
+ * The catalogue's localized name for one entry, or the raw id when it has no name resource: an id the
+ * app cannot name must still be *addressable*, or the user cannot remove the row either.
  */
 @Composable
 private fun localizedExerciseName(option: ExerciseOptionUi): String =
     if (option.nameRes != 0) stringResource(option.nameRes) else option.exerciseId
 
 /**
- * §7's **Goals & Focus** — the draft's own [FocusPlan], displayed as it is and edited by handing a
- * new one back.
- *
- * The section keeps no configuration of its own: [focus] is the draft's value, read from the
- * controller's presentation, and every choice here ends in one call to `ProgramsController.setDraftFocus`.
- * There is no second copy that could be edited and disagree with the draft the next generation reads.
- *
- * Which of the three forms is shown follows from the value itself — a `BALANCED` draft shows no
- * focuses and no percentages, a `FOCUSED` draft shows the named ones, a `CUSTOM` draft shows the
- * shares — so the section cannot present a configuration the draft is not in.
- *
- * Both choosable goals are settled by a dialog the user confirms, because each of them needs something
- * only the user can state: which focuses to train, or what share each of them gets. Tapping a goal chip
- * therefore *asks*, and the draft changes only on the confirmation — no focus, no percentage and no
- * share is ever chosen here on the user's behalf.
- *
- * For a `GENERATED` draft this section is what says what the next generation pass will be built for,
- * which is why it sits above the plan rather than after it.
+ * The draft's own [FocusPlan], displayed as it is and edited by handing a new one back — no second copy
+ * that could disagree with the draft the next generation reads. Which form is shown follows from the
+ * value itself, and both choosable goals are settled by a dialog the user confirms, because each needs
+ * something only the user can state: tapping a goal chip *asks*, and the draft changes only on
+ * confirmation.
  */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
@@ -700,8 +638,8 @@ private fun GoalsAndFocusSection(
             onDismiss = { choosingFocuses = false },
             onDone = { focuses ->
                 choosingFocuses = false
-                // §8's canonical semantics decide the resulting configuration, not the order the user
-                // happened to tap in.
+                // The domain's canonical semantics decide the resulting configuration, not the order
+                // the user happened to tap in.
                 onFocus(FocusPlan.focused(focuses))
             }
         )
@@ -723,12 +661,9 @@ private fun GoalsAndFocusSection(
 }
 
 /**
- * The share dialog's starting numbers: the draft's own CUSTOM shares when it already is one, and every
- * focus unallocated otherwise.
- *
- * An unallocated focus is `0`, which is not a share the domain accepts — it is the *absence* of one, and
- * the honest state of a CUSTOM allocation the user has not typed yet. Nothing is pre-filled on their
- * behalf: there is no even split, no 100% for the first focus, no half each.
+ * The share dialog's starting numbers: the draft's own CUSTOM shares, or `0` for a focus it has not
+ * allocated. `0` is the *absence* of a share, not one the domain accepts, and nothing is pre-filled on
+ * the user's behalf — no even split, no 100% for the first focus.
  */
 private fun sharesFrom(focus: FocusPlan): FocusPercentEntry {
     val stated = (focus as? FocusPlan.Custom)?.allocations.orEmpty()
@@ -738,12 +673,9 @@ private fun sharesFrom(focus: FocusPlan): FocusPercentEntry {
 }
 
 /**
- * §7's FOCUSED chooser: any number of the seven focuses, named by the user.
- *
- * `Done` stays disabled while none is chosen, because a FOCUSED plan that names no focus is the
- * BALANCED configuration — a different form, not an empty FOCUSED one. The chips are listed in the
- * vocabulary's own order and the result goes through [FocusPlan.focused], so the order they were
- * tapped in cannot survive as a hidden priority.
+ * The FOCUSED chooser. `Done` stays disabled while none is chosen, because a FOCUSED plan naming no
+ * focus is the BALANCED configuration — a different form, not an empty FOCUSED one — and the result
+ * goes through [FocusPlan.focused], so the tap order cannot survive as a hidden priority.
  */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
@@ -788,11 +720,8 @@ private fun FocusPickerDialog(
 }
 
 /**
- * §7's CUSTOM editor: one whole percent per focus, and what is still unassigned.
- *
- * The shares are the user's own numbers. Nothing here completes an allocation, redistributes a
- * percentage or picks a focus: `Done` hands the typed numbers to [FocusPercentEntry.toFocusPlan],
- * which goes through `FocusPlan.custom`, and a sum the domain refuses leaves the draft untouched.
+ * The CUSTOM editor: one whole percent per focus, and what is still unassigned. Nothing completes an
+ * allocation or redistributes a percentage, and a sum the domain refuses leaves the draft untouched.
  */
 @Composable
 private fun FocusSharesDialog(
@@ -854,7 +783,6 @@ private fun FocusSharesDialog(
     )
 }
 
-/** §7's three goals, named in the domain's own vocabulary (§8). */
 @StringRes
 private fun goalLabelRes(goal: Goal): Int = when (goal) {
     Goal.BALANCED -> R.string.programs_goal_balanced
@@ -863,33 +791,11 @@ private fun goalLabelRes(goal: Goal): Int = when (goal) {
 }
 
 /**
- * §30 step 26's **Preview** — what a generation pass would produce, and what it would do to the draft
- * the user already has, shown before anything is adopted.
- *
- * The section renders a [ProgramGenerationPreviewUi] and nothing else: it receives no `GeneratedPlan`,
- * no `GeneratedSlot`, no `ReconciliationReport` and no `GenerationLimitation`, so there is no
- * generated vocabulary here to make a decision with. What it *can* do is present, in the order the
- * controller handed over (never re-sorted and never re-ranked — the plan's own order is the answer):
- *
- * ```text
- * N days · N exercises
- * Day 1  primary focus, secondaries, each exercise with its prescription
- * …
- * what happens to your current plan: kept / added / removed / days removed
- * your own choices are kept: each conflict, with the reason it is kept
- * what could not be planned: each limitation, as its own sentence
- * [ Use this plan ]   [ Close preview ]
- * ```
- *
- * A conflict is rendered as a fact to be told, never as an error: the pinned or self-authored
- * exercise stays, and the preview says so rather than colouring it as a problem the user must fix.
- * Nothing here pairs a removed exercise with an added one — the reconciliation reports a replacement
- * as its two halves precisely because the planner states no relation between them, and a screen that
- * invented one would be asserting something the domain refused to.
- *
- * The two actions are the only two a preview can end in. Neither saves: after **Use this plan** the
- * draft holds the generated plan and the user still presses Save, which is §7's `Generate`/`Preview`
- * versus `Save` distinction in its most consequential place.
+ * What a generation pass would produce, shown before anything is adopted. It renders only a
+ * [ProgramGenerationPreviewUi] — no generated vocabulary to decide with — in the order the controller
+ * handed over, never re-sorted or re-ranked. A conflict is a fact to be told, not an error, and no
+ * removed exercise is paired with an added one: the domain states no relation between them. Neither
+ * action saves — after **Use this plan** the user still presses Save.
  */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
@@ -1040,22 +946,12 @@ private fun GenerationPreviewSection(
 }
 
 /**
- * One planned exercise as a Preview line: the catalogue's localized name when it has one, the id only
- * when it does not, and the prescription in the element's **own** dimension (§10) — repetitions or
- * seconds, with no formatting invented for the preview.
- *
- * Every per-set target is shown, in the prescription's own order, joined with the localized separator.
- * §10's generated shapes are *unequal* by design (`12 / 10 / 8 / 6` and `30 / 30 / 45`), so a Preview
- * that printed only the first term would state `4 sets of 12 reps` for a plan that drops to 6 — and it
- * would overstate the plan in the one direction a reader is least likely to notice. The join is
- * deliberately un-sorted and un-deduplicated: a repetition prescription is a *progression*, and
- * collapsing it to its largest term would be as much a misstatement as truncating it.
- *
- * The terms are joined with ` / `, which is **notation rather than prose** and is therefore the same
- * in every locale. Declaring it a string resource would invite a translator to "translate" a slash
- * and would put a seventh identical value in seven tables; `ProgramsLocalizationTest` also holds the
- * Program copy to differing from English word for word in Russian and Ukrainian, which a deliberately
- * universal separator cannot satisfy. It is also the separator §10's own two examples are written with.
+ * One planned exercise as a Preview line: the localized name (the id only when there is none) and the
+ * prescription in the element's **own** dimension. Every per-set target is shown, un-sorted and
+ * un-deduplicated: generated shapes are unequal (`12 / 10 / 8 / 6`, `30 / 30 / 45`), so printing one
+ * term would overstate the plan, and a repetition prescription is a *progression* rather than a value
+ * to collapse. The ` / ` separator is **notation, not prose** and stays the same in every locale — a
+ * string resource would invite translating a slash.
  */
 @Composable
 private fun previewElementLabel(element: ProgramGenerationPreviewElementUi): String {
@@ -1072,15 +968,8 @@ private fun previewElementLabel(element: ProgramGenerationPreviewElementUi): Str
     return "$name \\u00b7 $prescription"
 }
 
-/**
- * Joins the per-set terms of a prescription — `12 / 10 / 8 / 6`, `30 / 30 / 45`.
- *
- * §10 writes both of its own prescription examples with exactly this separator, so it is the notation
- * the blueprint already uses rather than one this stage chose.
- */
 private const val PER_SET_TARGET_SEPARATOR = " / "
 
-/** One plan day while editing: its heading, its elements and the three things a day accepts. */
 @Composable
 private fun DraftDayCard(
     day: ProgramDraftDayUi,
@@ -1132,9 +1021,8 @@ private fun DraftDayCard(
 }
 
 /**
- * One plan element: what it is, how much of it the user prescribes, and the three edits a plan element
- * takes. The prescription is edited in the element's **own** dimension (§10): repetitions, or seconds
- * when the catalogue records the exercise as timed.
+ * One plan element. The prescription is edited in the element's **own** dimension: repetitions, or
+ * seconds when the catalogue records the exercise as timed.
  */
 @Composable
 private fun DraftElementRow(
@@ -1198,7 +1086,6 @@ private fun DraftElementRow(
     }
 }
 
-/** A labelled `- value +` control, the smallest honest editor for one integer of a prescription. */
 @Composable
 private fun Stepper(label: String, value: Int, onChange: (Int) -> Unit) {
     Row(verticalAlignment = Alignment.CenterVertically) {
@@ -1213,7 +1100,6 @@ private fun Stepper(label: String, value: Int, onChange: (Int) -> Unit) {
     }
 }
 
-/** §7's plan: the catalogue's own exercises, offered as the elements a day may hold. */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun ExercisePickerDialog(
@@ -1226,9 +1112,8 @@ private fun ExercisePickerDialog(
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        // §30 step 28: the same dialog, a different question. "Choose an exercise" would be wrong above a
-        // preference list — the user is not picking what to plan, they are picking what to rank — so the
-        // caller states the sentence rather than the dialog guessing from its contents.
+        // The caller states the sentence: "Choose an exercise" would be wrong above a preference list,
+        // where the user is picking what to rank, not what to plan.
         title = { Text(title) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -1239,11 +1124,10 @@ private fun ExercisePickerDialog(
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth()
                 )
-                // P3 `UI-04`: the search matches the **user's localized display name** (resolved
-                // here for this locale) *and* the stable id — it used to match the id alone, so
-                // `Flexion` found nothing in Spanish while the Spanish reader saw no other name.
-                // Resolving the labels once outside the filter also means the row the user taps
-                // shows exactly the string the match was made against.
+                // The search matches the **user's localized display name** (resolved here for this
+                // locale) *and* the stable id: matching the id alone finds nothing for a reader who
+                // only ever sees the localized name. Resolving labels once outside the filter also
+                // means the row the user taps shows exactly the string the match was made against.
                 val named = options.map { option ->
                     option to if (option.nameRes != 0) {
                         stringResource(option.nameRes)
@@ -1257,7 +1141,7 @@ private fun ExercisePickerDialog(
                     }
                 }
                 if (filtered.isEmpty()) {
-                    // A search with no results is an explained state, never a blank list (P3).
+                    // A search with no results is an explained state, never a blank list.
                     Text(
                         text = stringResource(R.string.programs_editor_search_no_results),
                         style = MaterialTheme.typography.bodyMedium,
@@ -1286,12 +1170,11 @@ private fun ExercisePickerDialog(
     )
 }
 
-/** The fixed durations the editor offers; §20 lets a duration be anything, and this is what the UI shows. */
+/** The fixed durations the editor offers; the domain allows any duration, the UI shows these. */
 private const val DURATION_DAYS_30 = 30
 
 private const val DURATION_DAYS_56 = 56
 
-/** The weekly frequencies the editor offers. */
 private val SCHEDULE_OPTIONS = listOf(2, 3, 4, 5, 6)
 
 /** The share dialog's percent field, wide enough for three digits and the field's own padding. */

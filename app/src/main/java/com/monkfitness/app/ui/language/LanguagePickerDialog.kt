@@ -22,16 +22,14 @@ import com.monkfitness.app.R
 import com.monkfitness.app.language.AppLanguage
 
 /**
- * The language picker (§6): one single-choice list with one selected value, instead of the row of
- * per-language buttons that could not grow past three.
+ * The language picker: one single-choice list with one selected value, instead of the row of per-language
+ * buttons that could not grow past three.
  *
- * The list is [AppLanguage] itself — the same declaration that defines the supported languages and their
- * order — so a language can never appear here without also existing as resources, as a locale-config
- * entry and in every localization test. `System language` is a row like the others because it is a
- * choice like the others; it is simply the choice that means "no application locale".
- *
- * Choosing a language hands the decision to the platform, which recreates the activity — so this dialog
- * does not close itself gracefully, it disappears with the screen it belongs to.
+ * The list is [AppLanguage] itself — the declaration that defines the supported languages and their order —
+ * so a language can never appear here without also existing as resources, as a locale-config entry and in
+ * every localization test. `System language` is a row like the others: it is the choice that means "no
+ * application locale". Choosing one hands the decision to the platform, which recreates the activity, so
+ * this dialog disappears with the screen it belongs to rather than closing itself.
  */
 @Composable
 fun LanguagePickerDialog(

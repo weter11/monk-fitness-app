@@ -6,8 +6,7 @@ import androidx.room.Query
 import com.monkfitness.app.data.model.SessionSnapshotExerciseEntity
 
 /**
- * Persistence for the `session_snapshot_exercise` table — the elements of a captured presentation
- * (§19).
+ * Persistence for the `session_snapshot_exercise` table — the elements of a captured presentation.
  *
  * Each row is what the user was shown for one plan element, with the prescription **copied** at capture
  * time. The DAO therefore writes at session start and only ever reads: there is no update that could
@@ -20,11 +19,9 @@ import com.monkfitness.app.data.model.SessionSnapshotExerciseEntity
 @Dao
 interface SessionSnapshotExerciseDao {
 
-    /** Stores the elements of one captured presentation. */
     @Insert
     suspend fun insertSnapshotExercises(exercises: List<SessionSnapshotExerciseEntity>)
 
-    /** The captured elements of several sessions, in session identity and then presentation order. */
     @Query("SELECT * FROM `session_snapshot_exercise` WHERE `sessionId` IN (:sessionIds) ORDER BY `sessionId` ASC, `position` ASC")
     suspend fun snapshotExercisesOfSessions(sessionIds: List<String>): List<SessionSnapshotExerciseEntity>
 }

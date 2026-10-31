@@ -89,23 +89,15 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private val workoutGenerator = WorkoutGenerator()
 
     /**
-     * The app's settings store, and the two **retained global** stores the composition root owns.
-     *
-     * §30 step 15 removed this view model's own `WorkoutRepository`, its adaptive reader and its adaptive
-     * recorder — the three objects that made it the shipped 56-day program's persistence layer (§26). What
-     * is left is what has no Program in it: the nutrition tables (meals, shopping, body weight) and the
-     * posture / mobility track. Both reach storage through the composition root's database, never through a
-     * Program repository, and neither is keyed by a cycle or a program day.
+     * The settings store plus the two retained global stores — the nutrition tables and the posture /
+     * mobility track. Both reach storage through the composition root's database, never a Program
+     * repository, and neither is keyed by a cycle or a program day.
      */
     val settingsManager: SettingsManager
 
     /**
-     * The app's **one owner of language selection** (localization stage §2).
-     *
-     * The view model does not keep a language of its own and does not apply a locale: it hands the
-     * user's choice to this object, which writes it as the *application locale*, and it reads the
-     * current choice back from there — so a language picked in Android's own per-app language screen
-     * and a language picked in Settings are the same state, not two.
+     * The app's one owner of language selection: it writes the choice as the *application locale* and
+     * reads it back, so Android's per-app language screen and Settings are the same state, not two.
      */
     private val appLanguageManager: AppLanguageManager =
         (application as MonkFitnessApplication).appLanguageManager
@@ -113,19 +105,19 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     /** The nutrition domain's storage, and the body-weight log its targets are computed from. */
     private val nutritionRepository: NutritionRepository
 
-    /** The retained posture / mobility track: its own rows, on its own 56-day calendar (§4). */
+    /** The retained posture / mobility track: its own rows, on its own 56-day calendar. */
     private val postureRepository: PostureRepository
 
     /** The anchor the retained daily tracks keep their 56-day rhythm from, parsed once. */
     private val trackStartDate: Flow<LocalDate>
 
-    /** Home's Program state: the selection, its next opportunity and its calendar (§30 step 15). */
+    /** Home's Program state: the selection, its next opportunity and its calendar. */
     private val homeProgram: ProgramHomeController
 
-    /** The Progress screen's Program state: §21's measures and history (§30 step 15). */
+    /** The Progress screen's Program state: its measures and history. */
     private val programProgress: ProgramProgressController
 
-    /** The one production workout runtime's UI half (§19, §27, §30 step 15). */
+    /** The one production workout runtime's UI half. */
     val programSession: ProgramSessionController
 
     init {
@@ -173,83 +165,64 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         const val ROUTE_HOME = "home"
 
         /**
-         * One cycle of the retained daily-track calendar, in days (§4).
-         *
-         * It is the posture / mobility track's own rhythm — the same 56 days it has always had — and it is
-         * **not** a length of any Program: the Program System's plans have as many days as their revision
-         * says, and nothing in the target architecture is 56 days long by construction.
+         * One cycle of the retained daily-track calendar, in days — the posture track's own rhythm, **not**
+         * a length of any Program (a Program's plan is as long as its revision says).
          */
         const val POSTURE_TRACK_DAYS = TrackCalendar.TRACK_DAYS
         const val ROUTE_NUTRITION = "nutrition"
 
-        /** The Custom Program editor's destination in the app's single navigation graph. */
         const val ROUTE_CUSTOM_PROGRAM = "custom-program"
 
         /**
-         * The Program System's destinations, in the app's **one** navigation graph (§30 step 14).
-         *
-         * They live here with the app's other routes rather than in the Program UI's own package, for two
-         * reasons: `MainActivity` already declares every destination in one place, and a route is a
-         * *stable identifier* rather than user-visible copy — a screen never builds one from text.
+         * The Program System's destinations. They live here rather than in the Program UI package because
+         * `MainActivity` declares every destination in one place, and a route is a stable identifier,
+         * never user-visible copy a screen builds from text.
          */
         const val ROUTE_PROGRAMS = "programs"
 
-        /** My Programs (§21). */
         const val ROUTE_MY_PROGRAMS = "programs/my-programs"
 
-        /** §22's Program Detail, addressed by the Program's own stable id (§1). */
+        /** Program Detail, addressed by the Program's own stable id. */
         const val ROUTE_PROGRAM_DETAIL = "programs/detail/{programId}"
 
-        /** §7's *Build it myself* / *Build for me*: the destination that offers the two entry paths. */
+        /** The destination offering the two entry paths: build it myself / build for me. */
         const val ROUTE_PROGRAM_CREATE = "programs/create"
 
-        /** An editor session, addressed by which of §7's entry points opened it. */
+        /** An editor session, addressed by which entry point opened it. */
         const val ROUTE_PROGRAM_EDITOR_CREATE = "programs/editor/create/{mode}"
         const val ROUTE_PROGRAM_EDITOR_EDIT = "programs/editor/edit/{programId}"
         const val ROUTE_PROGRAM_EDITOR_COPY = "programs/editor/copy/{programId}"
 
-        /** §5's import flow. */
         const val ROUTE_PROGRAM_IMPORT = "programs/import"
 
         /**
-         * The app's **one workout route**, identified by the opportunity it is for (§30 step 15).
-         *
-         * The retired route was `workout/{day}`, and a day number was never an identity: it said which
-         * calendar date of a 56-day grid the user was on, so two different workouts of two different
-         * programs could not be told apart by it. An opportunity id is the identity the target runtime
-         * starts, restores and completes against (§19, §20).
+         * The app's one workout route, identified by the opportunity it is for: a day number was never an
+         * identity (two programs' workouts could not be told apart by it).
          */
         const val ROUTE_PROGRAM_SESSION = "programs/session/{slotId}"
 
-        /** The concrete route for one opportunity. */
         fun programSessionRoute(slotId: String): String = "programs/session/$slotId"
 
-        /** The detail destination for one Program. */
         fun programDetailRoute(programId: String): String = "programs/detail/$programId"
 
-        /** The create-editor destination for one of §2's two modes. */
         fun programEditorCreateRoute(mode: String): String = "programs/editor/create/$mode"
 
-        /** The edit-editor destination for one Program. */
         fun programEditorEditRoute(programId: String): String = "programs/editor/edit/$programId"
 
-        /** The copy-editor destination for one Program. */
         fun programEditorCopyRoute(programId: String): String = "programs/editor/copy/$programId"
 
         /** The first program day, used only before a session's own day is established. */
         private const val FIRST_PROGRAM_DAY = 1
 
         /**
-         * The program revision of the program as first started, matching the persisted family
-         * progression's revision column and `SettingsManager.PROGRAM_REVISION`: a revision above it is
-         * a C3 "Start Revised Program".
+         * The revision of the program as first started, matching the persisted family progression's
+         * revision column and `SettingsManager.PROGRAM_REVISION`; a revision above it means revised.
          */
         private const val STANDARD_PROGRAM_REVISION = 0
 
         private const val TAG = "MainViewModel"
     }
 
-    // Notification Deep-link State
     private val _notificationDestination = MutableStateFlow<String?>(null)
     val notificationDestination = _notificationDestination.asStateFlow()
 
@@ -270,8 +243,6 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         _notificationDestination.value = null
     }
 
-    // Workout Session State
-    // Timer State
     private val _timeLeft = MutableStateFlow(0)
     val timeLeft = _timeLeft.asStateFlow()
 
@@ -287,11 +258,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     val nutritionMessageEvents = _nutritionMessageEvents.asSharedFlow()
 
     /**
-     * The 1-based day of the retained 56-day daily-track calendar, capped at its length.
-     *
-     * It is the number the nutrition planner phases its meal rotation by and the number the nutrition
-     * screen shows. It is **not** a Program's day: the retired 56-day program had one, the Program System
-     * has none, and this one belongs to the daily tracks ([com.monkfitness.app.domain.track.TrackCalendar]).
+     * The 1-based day of the retained 56-day daily-track calendar, capped at its length. It is the number
+     * the nutrition planner phases its meal rotation by, and **not** a Program's day: it belongs to the
+     * daily tracks ([com.monkfitness.app.domain.track.TrackCalendar]).
      */
     val currentTrackDay = combine(trackStartDate, currentDate) { anchor, today ->
         TrackCalendar.cappedDay(anchor, today)
@@ -301,13 +270,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope, SharingStarted.WhileSubscribed(5000), null
     )
 
-    // Cycle-aware "today": the programme day is a pure function of the calendar — one calendar
-    // date is one programme day (resolveCycleAndDay), so cycle N day 56 is the last date of cycle
-    // N and cycle N+1 day 1 is the next date. The stamped cycle number deliberately does NOT
-    // change the day shown: it only gates the completion dialog below and pre-seeds the next
-    // cycle's grid. (Letting the stamp start the next cycle early would put cycle N+1 day 1 on
-    // two calendar dates — the rollover date and its own — and demote the real day 1 to a
-    // no-credit repeat.)
+    // The programme day is a pure function of the calendar: one calendar date is one programme day. The
+    // stamped cycle number deliberately does NOT move the day shown — letting it start the next cycle
+    // early would put cycle N+1 day 1 on two dates and demote the real day 1 to a no-credit repeat.
     val exerciseDifficultyAdjustments = settingsManager.exerciseDifficultyAdjustmentsFlow.stateIn(
         viewModelScope, SharingStarted.WhileSubscribed(5000), emptyMap()
     )
@@ -352,7 +317,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         .map { history -> history.lastOrNull() }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
 
-    /** The posture / mobility track's rows for its current 56-day cycle (§4). */
+    /** The posture / mobility track's rows for its current 56-day cycle. */
     val postureProgress = postureRepository.progressOfCurrentCycle().stateIn(
         viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList()
     )
@@ -382,30 +347,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope, SharingStarted.WhileSubscribed(5000), ValidationSettings.DEFAULT_ENABLED
     )
 
-    // The Custom Program editor is retired (§30 step 15). It configured which exercises the *shipped*
-    // generator's routine may use, and its only reader was the legacy session's configuration capture,
-    // which this stage deleted — so post-P15 it was a user setting that could not affect anything, and
-    // §16 does not keep one of those for compatibility's sake. The target Program editor is a different
-    // screen with different ownership (§11): it edits a Program's revision through `ProgramEditorService`,
-    // and it is reached from the Programs section, not from here.
-
-    // ---- the Program System's UI (§30 step 14) ---------------------------------------------------
-    // The Program screens' state holder. It is not another pile of flows on this view model: it owns the
-    // Program UI's state and calls the application services, and this view model only *hands it* what the
-    // composition root built (§13, §26). Nothing here decides anything about a Program — no selection is
-    // written, no revision is minted, no date is chosen and no JSON is produced — because the objects below
-    // are the layers that own those decisions, and the Program controller never reaches around them.
-    //
-    // The five things it is given are the composition root's own nodes:
-    //   · lifecycle, editor, importer, exporter, progress, scheduler  — the application services (§24)
-    //   · starter                                                  — §30 step 21's composed Start, which
-    //                                                                  owns the one controlled target
-    //                                                                  invocation and is reached only
-    //                                                                  through the state holder
-    //   · clock, zone                                                — the two §26 ports "today" is read from
-    //   · the catalogue, read through the shipped generator          — the plan editor's exercise choices
-    //   · the share target                                           — §11's platform boundary, and the only
-    //                                                                  `Intent` in the graph
+    // The Program screens' state holder owns the Program UI's state and calls the application services;
+    // this view model only hands it what the composition root built. Nothing here decides anything about
+    // a Program — no selection written, no revision minted, no date chosen, no JSON produced.
     private val programGraph = (application as MonkFitnessApplication).container
 
     /** The Program screens' state holder, rendered by the Program destinations of the one navigation graph. */
@@ -419,10 +363,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         progress = programGraph.programProgressService,
         scheduler = programGraph.programScheduler,
         generation = programGraph.programGenerationService,
-        // §30 step 24: the user's declared equipment, read at the moment of a generation pass and
-        // forwarded verbatim. An empty set means the user declared none — the P24 reading, deliberately
-        // not the legacy "empty means unconstrained" rule, which would offer bar and band exercises to
-        // someone who owns none of either.
+        // The user's declared equipment, read at the moment of a generation pass and forwarded
+        // verbatim. An empty set means the user declared none — deliberately not "unconstrained",
+        // which would offer bar and band exercises to someone who owns none of either.
         availableEquipment = { availableEquipment.value },
         catalogue = {
             workoutGenerator.getExerciseLibrary().map { exercise ->
@@ -462,13 +405,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope, SharingStarted.WhileSubscribed(5000), emptySet()
     )
 
-    // ---- the target Program, as Home renders it (§30 step 15) ----------------------------------
-    // Home used to run the shipped 56-day program: a day number, a `program_day_state` row for today and
-    // a routine generated from the day. All three are gone. What Home shows now is the selected Program
-    // and its next **opportunity**, read through the application services the composition root built —
-    // this view model only hands the state holder over (§13, §26).
+    // Home shows the selected Program and its next **opportunity**, read through the application
+    // services the composition root built; this view model only hands the state holder over.
 
-    /** Home's Program state. */
     val homeProgramState: StateFlow<ProgramHomeUiState> = homeProgram.state
 
     /** Re-reads Home's Program state. Called when the screen appears and after a session completes. */
@@ -476,10 +415,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch { homeProgram.load() }
     }
 
-    /** Clears the sentence Home is showing. */
     fun dismissHomeNotice() = homeProgram.dismissNotice()
 
-    /** §21's measures and history, as the Progress screen renders them. */
+    /** The Progress screen's measures and history, as it renders them. */
     val programProgressState: StateFlow<ProgramProgressUiState> = programProgress.state
 
     /** Re-reads the Progress screen's measures. Called when the screen appears. */
@@ -487,7 +425,6 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch { programProgress.load() }
     }
 
-    /** Clears the sentence the Progress screen is showing. */
     fun dismissProgressNotice() = programProgress.dismissNotice()
 
     val postureUiState = combine(
@@ -534,10 +471,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
         val exercisesByFamily = filteredExercises.groupBy { it.familyId }
 
-        // --- Engineering Validation: parallel subsystem, fully isolated from the catalog. ---
-        // Visible only when the developer setting is ON and not filtered out. The validation
-        // poses are NOT added to `filteredExercises`, so they never reach workouts, statistics
-        // or the normal exercise search indexing.
+        // Visible only when the developer setting is ON and not filtered out. Validation poses are NOT
+        // added to `filteredExercises`, so they never reach workouts, statistics or exercise search.
         val validationCategory: ValidationCategory?
         val validationPoses: List<ValidationPose>
         if (EngineeringValidationFilter.isVisible(engineeringValidationEnabled, filterByCategories, disabledFamilies)) {
@@ -626,11 +561,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     /**
-     * Looks one exercise up in the app's own catalogue, by its library id.
-     *
-     * The `day` parameter this used to take is gone with the shipped generator's per-day variants: the
-     * catalogue is the same list on every day, so a day was never an input to this lookup, and the target
-     * session links to an exercise by the id its plan element stores (§10).
+     * Looks one exercise up in the app's own catalogue by its library id. The catalogue is the same list
+     * on every day, and a session links to an exercise by the id its plan element stores.
      */
     fun findExerciseById(
         exerciseId: String,
@@ -639,18 +571,16 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         availableEquipment: Set<Equipment> = this.availableEquipment.value
     ): Exercise? {
         if (exerciseId.isBlank()) return null
-        // All exercises come from the catalog (allExercises), so we only need to look them up
-        // from getExerciseLibrary, getPostureExercises, and getWarmupExercises.
-        // No inline exercises with unique IDs are created during workout generation.
+        // Every exercise comes from the catalog, so these three sources cover all of them: generation
+        // never creates inline exercises with unique ids.
         return getExerciseLibrary(difficultyAdjustments, availableEquipment).find { it.id == exerciseId }
             ?: getPostureExercises(difficultyAdjustments, focusAreas).find { it.id == exerciseId }
             ?: getWarmupExercises(difficultyAdjustments).find { it.id == exerciseId }
     }
 
     /**
-     * Looks up a validation pose by id. This lives entirely in the validation subsystem and
-     * is deliberately separate from [findExerciseById] (which only searches the exercise catalog).
-     * A validation pose is never treated as an [Exercise].
+     * Deliberately separate from [findExerciseById], which only searches the exercise catalog: a
+     * validation pose is never treated as an [Exercise].
      */
     fun findValidationPoseById(poseId: String): ValidationPose? {
         if (poseId.isBlank()) return null
@@ -658,8 +588,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     /**
-     * Case-insensitive, locale-aware search over validation pose names (en / ru / uk),
-     * mirroring the exercise library search semantics.
+     * Case-insensitive, locale-aware search over validation pose names (en / ru / uk), mirroring the
+     * exercise library search semantics.
      */
     private fun validationPoseMatchesQuery(pose: ValidationPose, query: String): Boolean {
         val q = normalize(query)
@@ -678,17 +608,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     /**
-     * The optional posture / mobility routine for the track's current day (§4).
-     *
-     * It is generated by the same catalogue and the same selection rules the app has always used
-     * (`WorkoutGenerator.generatePostureMobilityWorkout`), constrained by the user's own training type,
-     * focus areas, equipment and disabled families. **Nothing else shapes it**: the Stage-1 adaptive plan
-     * that used to overlay this routine is retired (§9), so what the user sees is the generator's own
-     * answer rather than that answer plus an adaptation no target layer can explain.
-     *
-     * The routine is a *presentation*: it is not stored, it belongs to no Program, and completing the
-     * session writes one row of the track's own table ([completePostureWorkout]) rather than a session,
-     * an opportunity or a set log — a mobility session is not a Program workout (§4, §19).
+     * The optional posture / mobility routine for the track's current day, shaped only by the generator's
+     * own selection rules — no adaptive overlay. It is a presentation: not stored, belonging to no
+     * Program, and completing it writes one row of the track's own table rather than a session or set log.
      */
     fun postureMobilityWorkout(): Workout {
         val workout = workoutGenerator.generatePostureMobilityWorkout(
@@ -704,11 +626,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     /**
-     * Records the posture / mobility track's session for today.
-     *
-     * One row of the track's own table and nothing else — no set log, no session, no opportunity (§4). The
-     * track resolves *which* day this is from its own calendar, so nothing here has to know a day number,
-     * and the retired reward-stamp cycle key that used to gate it is gone with the cycle it named.
+     * One row of the track's own table and nothing else — no set log, no session, no opportunity. The
+     * track resolves *which* day this is from its own calendar.
      */
     fun completePostureWorkout() {
         viewModelScope.launch {
@@ -837,9 +756,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 _timeLeft.value = remaining
                 if (remaining <= 0) {
                     _isTimerRunning.value = false
-                    // The rest/workout distinction this used to make belonged to the retired workout
-                    // session's set machine (§30 step 15). What is left is the standalone exercise
-                    // timer the exercise screen drives: it sounds out and stops.
+
                     playBeep(500)
                     // Auto-advance logic will be handled by UI observing timeLeft and isTimerRunning
                     break
@@ -879,17 +796,14 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun currentAppLanguage(): AppLanguage = appLanguageManager.selection()
 
     /**
-     * Applies [language] as the app's language — including [AppLanguage.SYSTEM_DEFAULT], which clears the
-     * application locale so the app follows the device again. The platform recreates the Activity, which
-     * is what makes every screen follow the change.
+     * [AppLanguage.SYSTEM_DEFAULT] clears the application locale so the app follows the device again; the
+     * platform recreates the Activity, which is what makes every screen follow the change.
      */
     fun selectAppLanguage(language: AppLanguage) = appLanguageManager.select(language)
 
     /**
-     * The one-time hand-off of the language a pre-localization install stored for itself (§5), triggered
-     * by `MainActivity.onCreate` before the first composition. It applies nothing — and writes nothing —
-     * when this install never stored a language, which is what keeps a user who never chose one on the
-     * system language.
+     * Triggered by `MainActivity.onCreate` before the first composition. It applies and writes nothing when
+     * this install never stored a language, which keeps a user who never chose one on the system language.
      */
     suspend fun migrateLanguageSelectionIfNeeded() = appLanguageManager.migrateLegacySelection()
 
@@ -1018,8 +932,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             if (toDisable.isEmpty()) return@launch
 
             if (currentlyEnabled.size - toDisable.size == 0) {
-                // Rule #5 violation: everything would be disabled!
-                // Keep the single last remaining enabled category across the entire app
+                // Everything would be disabled: keep the single last remaining enabled category.
                 val lastEnabled = currentlyEnabled.first()
                 val newDisabled = allKeys - setOf(lastEnabled)
                 settingsManager.setDisabledExerciseFamilies(newDisabled)
@@ -1109,24 +1022,11 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), false)
 
     /**
-     * The startup tick — and it is deliberately the **last** thing in this class's initialisation order.
-     *
-     * Kotlin runs property initializers and `init` blocks strictly top-to-bottom, and `viewModelScope`
-     * dispatches on `Dispatchers.Main.immediate`: a `launch` from the main thread — which is the thread a
-     * view model is constructed on — runs its body **synchronously** up to the first suspension point. So
-     * the first `syncNutritionCycles()` here executes *during construction*, and every property it reads
-     * must already be initialised when it does.
-     *
-     * It reads `nutritionCycleLength` (and through `createOrQueueMealCycle`: `mealCycles`,
-     * `activeMealCycle`, `pendingMealCycle`, `nutritionWeight`, `nutritionHeight`,
-     * `nutritionExcludedFoods`, `nutritionAvailableProducts`) plus `currentDate` and the nutrition
-     * repository. All of those are declared **above this block**, which is why it sits here, below the
-     * nutrition state, rather than beside the other startup wiring near the top of the class. Reading a
-     * `val` before its initializer runs is a null at runtime while the compiler sees nothing wrong — the
-     * lambda hides the read from its flow analysis — so the position is load-bearing, not cosmetic.
-     *
-     * `MainViewModelInitializationOrderTest` asserts it mechanically: no `init` block may call, even
-     * transitively, a member that reads a property declared below it.
+     * Deliberately the **last** thing in this class's initialisation order: `viewModelScope` dispatches on
+     * `Dispatchers.Main.immediate`, so this `launch` runs synchronously during construction up to its first
+     * suspension point, and every property `syncNutritionCycles()` reads must already be initialised.
+     * Reading a `val` before its initializer runs is a silent null — the lambda hides the read from flow
+     * analysis — so the position is load-bearing. `MainViewModelInitializationOrderTest` asserts it.
      */
     init {
         viewModelScope.launch {
@@ -1172,43 +1072,20 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    // --- C3 Manual Controls (Settings): confirmation-guarded maintenance actions --------
-
-    /**
-     * The outcome of a C3 maintenance action. A destructive operation must never end in a
-     * state the user cannot distinguish from success, so every path reports either what it
-     * changed or the failure that stopped it. See [MaintenanceResult] and [runFullReset].
-     */
+    /** Emits every maintenance outcome so the screen can report success or the exact failure. */
     private val _maintenanceEvents = MutableSharedFlow<MaintenanceResult>(extraBufferCapacity = 1)
     val maintenanceEvents = _maintenanceEvents.asSharedFlow()
 
     /**
-     * Settings → **Full reset**: the app's own history and its retained daily-track data, wiped in one
-     * Room transaction, then the preferences.
+     * Settings → **Full reset**: the app's history and retained daily-track data, wiped in one Room
+     * transaction, then the preferences.
      *
-     * ### What it clears, after §30 step 15
+     * Cleared: every user-created Program, opportunity, session, snapshot, confirmed set, pause and target
+     * adaptive row, plus the posture track and body-weight log. Kept: the built-in Standard Program
+     * definition (the lifecycle delete-fallback selects it) and the nutrition plans, whose meal-cycle
+     * calendar is independent of the program calendar.
      *
-     * The three C3 controls this class used to offer are gone: *"Restart current cycle"* and *"Start
-     * revised program"* were operations on a cycle that no longer exists (§16), and the target
-     * architecture already provides their intent through **Edit / Copy → a new immutable Revision →
-     * lifecycle Start**. What remains is the one genuinely global maintenance operation, and its contract
-     * is re-derived for the *current* schema rather than carried over:
-     *
-     * ```text
-     * cleared   every Program the user created, every opportunity, session, snapshot and confirmed set,
-     *           every pause and every target adaptive row, plus the posture/mobility track and the
-     *           body-weight log
-     * kept      the built-in Standard Program's own definition (it is a built-in, §12, and the lifecycle
-     *           layer's delete-fallback selects it), and the nutrition plans (their meal-cycle calendar is
-     *           independent of the program calendar — the same boundary the screen's text states)
-     * ```
-     *
-     * A retired table is **not** named here: the tables this used to clear no longer exist, and naming one
-     * would be a reference to something the schema does not have.
-     *
-     * Reports [MaintenanceResult.Failure] if a phase throws — the transaction rolls back, so no partial
-     * reset is left behind, and the two phases' distinct failure modes are the ones [runFullReset]
-     * documents.
+     * Reports Failure if a phase throws — the transaction rolls back, so no partial reset is left behind.
      */
     fun fullReset() {
         viewModelScope.launch {
@@ -1221,15 +1098,6 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    /**
-     * C3 "Restart Current Cycle": wipes ONLY the active cycle's progress rows in one Room
-     * transaction. Start date, the stored cycle number, settings and prior cycles' history
-     * are untouched; the template grid is re-seeded fresh (nothing completed) by the next
-     * [syncProgramDayStates] tick, which runs here so the screen reflects the reset at once.
-     *
-     * Reports [MaintenanceResult.Failure] if the wipe throws — the transaction rolls back, so
-     * no partial reset is left behind, and the user is told instead of seeing a silent no-op.
-     */
     fun generateNextNutritionCycle() {
         viewModelScope.launch {
             createOrQueueMealCycle(
@@ -1430,7 +1298,6 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     private fun currentSessionDate(): String = LocalDate.now().toString()
-
 
     override fun onCleared() {
         super.onCleared()

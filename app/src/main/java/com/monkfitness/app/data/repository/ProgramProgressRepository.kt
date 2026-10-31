@@ -9,28 +9,15 @@ import com.monkfitness.app.domain.program.SlotStatus
 import com.monkfitness.app.domain.workout.SessionStatus
 
 /**
- * The persistence primitives the Progress/History stage reads: how many of a Program's opportunities
- * ended in each way, how many of its sessions ended in each way, how many sets were confirmed, and
- * which sessions it has in order.
+ * The persistence primitives Progress/History reads: how many of a Program's slots and sessions ended
+ * in each way, how many sets were confirmed, and which sessions it has in order. No measure is computed
+ * here — completed/missed/upcoming, volume, distributions, duration, progression and streaks are
+ * computations over this data, and several need vocabularies this stage does not own.
  *
- * ### What is deliberately absent
- *
- * §21 lists the measures progress will show — completed/missed/upcoming, frequency, volume, focus
- * distribution, family distribution, average session duration, performance progression, PRs, streak —
- * and **none of them is computed here**. They are computations over this data, they belong to §30 step
- * 9, and several of them need vocabularies this stage does not own (focuses, families, progression
- * relations). Computing them in a repository would make the data layer the analytics engine the
- * blueprint forbids (§24).
- *
- * One prohibition shapes what may appear even as a primitive: there is **no scalar amount of work**
- * anywhere in this class. Confirmed repetitions are not comparable across exercises or dimensions, so
- * a "total repetitions" or a "volume" number is exactly the invented metric §17 forbids — the reads
- * count *rows* (sets, sessions, slots), not work, and a missed opportunity is a count of missed slots
- * rather than a workout that scored zero (§12).
- *
- * Every read is scoped by Program, deterministic in its order, and returns either a count per
- * vocabulary value or an ordered identity list, so a later stage can page through the raw facts
- * without this layer having guessed what it wants to show.
+ * One prohibition shapes even the primitives: there is **no scalar amount of work** here. Confirmed
+ * repetitions are not comparable across exercises or dimensions, so a "total repetitions" or "volume"
+ * number would be an invented metric — the reads count *rows* (sets, sessions, slots), and a missed
+ * opportunity is a count of missed slots, not a workout that scored zero.
  */
 class ProgramProgressRepository(
     private val slotDao: ProgramWorkoutSlotDao,
@@ -49,7 +36,7 @@ class ProgramProgressRepository(
 
     /**
      * How many of one Program's sessions hold each [SessionStatus], every status included with a zero
-     * when none does. Cancelled sessions are counted as cancelled, never folded into completed (§19).
+     * when none does. Cancelled sessions are counted as cancelled, never folded into completed.
      */
     suspend fun sessionStatusCounts(programId: ProgramId): Map<SessionStatus, Int> =
         SessionStatus.entries.associateWith { status ->

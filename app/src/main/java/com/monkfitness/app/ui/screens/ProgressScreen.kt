@@ -119,7 +119,7 @@ fun ProgressScreen(viewModel: MainViewModel) {
 
             Spacer(modifier = Modifier.height(8.dp))
 
-            // Which Program these numbers are about, said out loud: one Program's own measures and §21's
+            // Which Program these numbers are about, said out loud: one Program's own measures and the
             // "All Programs" aggregate are different facts, and a screen that showed one as the other
             // would attribute a total to a program that did not earn it.
             Text(
@@ -279,9 +279,9 @@ fun ProgressScreen(viewModel: MainViewModel) {
 
             Spacer(modifier = Modifier.height(24.dp))
 
-            // §21's measures the target facts cannot carry yet, reported as *not computed* rather than as
-            // a zero: "you have no personal records" and "this cannot be measured" are different claims,
-            // and only one of them is true (§12, §17).
+            // Measures the target facts cannot carry yet, reported as *not computed* rather than as a
+            // zero: "you have no personal records" and "this cannot be measured" are different claims,
+            // and only one of them is true.
             ProgressLineCard(
                 title = stringResource(R.string.progress_deferred_title),
                 lines = progressState.deferred.map { measure -> measure.reason },
@@ -400,7 +400,7 @@ private fun sessionStatusLabelRes(status: SessionStatus): Int = when (status) {
     SessionStatus.CANCELLED -> R.string.programs_session_cancelled
 }
 
-/** A measured duration, as `m:ss`; `--` when the layer did not measure one (§21). */
+/** A measured duration, as `m:ss`; `--` when the layer did not measure one. */
 private fun formatDuration(seconds: Double?): String {
     if (seconds == null || !seconds.isFinite() || seconds <= 0.0) return "--"
     val total = seconds.toLong()
@@ -410,9 +410,8 @@ private fun formatDuration(seconds: Double?): String {
 /**
  * A titled card of plain lines, with an optional progress bar.
  *
- * It is the *shape* the target measures need: every one of §21's measures this screen shows is either a
- * number with a sentence around it or a list of rows, and none of them is a per-day series the retired
- * bar charts could plot. The one series that is still plotted — the posture track's own weekly bars — is a
+ * It is the *shape* the target measures need: each one is a number with a sentence around it or a list of
+ * rows, never a per-day series. The one series still plotted — the posture track's own weekly bars — is a
  * retained feature and keeps its chart.
  */
 @Composable

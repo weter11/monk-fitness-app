@@ -6,24 +6,18 @@ import androidx.room.Index
 import androidx.room.PrimaryKey
 
 /**
- * One day of a revision's plan (§23 `ProgramDay`).
+ * One day of a revision's plan.
  *
  * Identity and order are kept apart, which is the whole reason this type has two columns for what
- * looks like one thing: [programDayId] **identifies** the day, and [position] says where it sits in the
- * revision. A day number is not an identity (§1) — the Scheduler decides which calendar date a position
- * eventually lands on, and nothing about that decision is stored here.
+ * looks like one thing: [programDayId] **identifies** the day, and [position] says where it sits in
+ * the revision. A day number is not an identity — the Scheduler decides which calendar date a
+ * position eventually lands on, and nothing about that decision is stored here.
  *
  * The day's plan elements are their own rows ([ProgramExerciseEntity]), so a day with no elements is a
- * legal row: a rest day prescribes nothing (§20).
+ * legal row: a rest day prescribes nothing. A day belongs to exactly one revision and cascades with it,
+ * taking its occurrences along.
  *
- * A day belongs to exactly one revision, and the foreign key cascades: a revision that is deleted takes
- * its days, and its days' occurrences, with it.
- *
- * @property programDayId identity of this plan day.
- * @property revisionId the revision that owns it.
  * @property position 1-based place of this day in the revision; unique within that revision.
- * @property type what the day is for — `TRAINING`, `MOBILITY`, `POSTURE_MOBILITY` or `REST`
- *   (token column).
  * @property name an optional user-facing label; `null` means the day is presented by its position and
  *   type.
  */

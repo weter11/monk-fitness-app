@@ -6,32 +6,19 @@ import kotlin.math.max
 import kotlin.math.min
 
 /**
- * The **daily-track calendar**: a 56-day repeating cadence, owned by the retained daily tracks and by
- * nothing else.
+ * The daily-track calendar: a 56-day repeating cadence owned by the retained daily tracks and by nothing
+ * else — the optional posture/mobility track and the nutrition planner's phase, neither of which is a
+ * Program.
  *
- * Two features of this app are daily practices that run on a 56-day rhythm and are **not** Programs:
+ * The arithmetic is deliberately the shipped one: day 1 is [anchor] itself, day 56 is `anchor + 55`, and
+ * day 1 of the next cycle is `anchor + 56`. Keeping it verbatim makes the migration of the tracked rows
+ * a rename rather than a reinterpretation.
  *
- *  * the optional **posture / mobility** track, whose completed sessions are stored one per track day;
- *  * the **nutrition** planner's phase, which offsets the meal rotation and the training/rest pattern
- *    of a generated meal cycle.
- *
- * Before the Program System was the only program architecture, both read their day out of the shipped
- * 56-day program's calendar (`resolveCycleAndDay` / `calculateProgramDay`). §30 step 15 retired that
- * program — its cycle, its day states and its tables — but the two daily tracks are unrelated global
- * features (§4) and keep the rhythm they always had. What moved is *ownership*: the arithmetic below
- * belongs to the tracks, and the retired program's vocabulary (`cycleNumber`, `programDay` as
- * ownership) does not appear in it at all.
- *
- * The arithmetic is unchanged, deliberately: day 1 is [anchor] itself, day 56 is `anchor + 55`, and day
- * 1 of the next track cycle is `anchor + 56`. Porting it verbatim is what makes the migration of the
- * tracked rows a rename rather than a reinterpretation.
- *
- * It is a **pure calendar**: no clock is read here, no store is touched, and a caller decides which
- * date "today" is. A track's own start date is handed in as a value.
+ * It is a pure calendar: no clock is read, no store is touched, and a track's start date is handed in as
+ * a value.
  */
 object TrackCalendar {
 
-    /** The length of one track cycle, in days. */
     const val TRACK_DAYS: Int = 56
 
     /**

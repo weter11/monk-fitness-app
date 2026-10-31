@@ -7,28 +7,23 @@ import android.os.Build
 import android.provider.Settings
 
 /**
- * Android's **own** per-app language screen, offered next to the app's picker rather than instead of it
- * (§7).
+ * Android's **own** per-app language screen, offered next to the app's picker rather than instead of it.
  *
- * The system screen is not a second mechanism: it edits the same application locale this app's picker
- * edits, so a language chosen there is the language the app shows after it comes back or restarts. The
- * only thing that differs is who draws the list, and the app does not take that choice away from its
- * user.
+ * It edits the same application locale the picker edits, so a language chosen there is the language the
+ * app shows after it comes back or restarts.
  */
 object AppLanguageSettings {
 
     /**
-     * Whether this platform has the per-app language screen at all (Android 13 / API 33).
-     *
-     * The SDK level is a parameter so the rule can be stated — and tested — for versions the machine
-     * running the tests is not.
+     * Whether this platform has the per-app language screen at all (Android 13 / API 33). The SDK level is
+     * a parameter so the rule can be stated — and tested — for versions the test machine is not.
      */
     fun isSystemPickerAvailable(sdkInt: Int = Build.VERSION.SDK_INT): Boolean =
         sdkInt >= Build.VERSION_CODES.TIRAMISU
 
     /**
      * The intent that opens **this app's** language screen in system settings, or `null` on a platform
-     * without one. Callers must offer the entry only when this returns an intent.
+     * without one; callers must offer the entry only when this returns an intent.
      */
     fun intentFor(context: Context): Intent? {
         if (!isSystemPickerAvailable()) return null

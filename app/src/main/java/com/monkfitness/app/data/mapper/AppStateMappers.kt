@@ -7,13 +7,11 @@ import com.monkfitness.app.domain.program.AppState
 /**
  * The `app_state` row ⇄ the application state value.
  *
- * One row, one value, no defaults: the row's key is the single-row id, so the mapper writes that id
- * and refuses to treat a second one as a second state. `null` is mapped as `null` in both directions
- * — "no Program is selected" and "none is chosen to start next" are values, and they must not be
- * silently replaced with a fallback Program: which Program runs when nothing is selected is a
- * lifecycle decision (§3), not a value this layer may invent.
- *
- * The auto-start flag maps as stored, including its off default.
+ * One row, one value: the row's key is the single-row id, so the mapper writes that id and refuses to
+ * treat a second one as a second state. `null` is mapped as `null` in both directions — "no Program is
+ * selected" and "none is chosen to start next" are values, and they must not be silently replaced with
+ * a fallback Program: which Program runs when nothing is selected is a lifecycle decision, not a value
+ * this layer may invent. The auto-start flag maps as stored, including its off default.
  */
 
 /** The application state one row describes. */

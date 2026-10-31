@@ -11,35 +11,22 @@ import com.monkfitness.app.domain.prescription.TimePrescription
 /**
  * The persisted progression-variant rows ⇄ the existing `ProgramProgressionRelation`.
  *
- * This file is a **translation and nothing else**. It creates no second ladder type: the domain value
- * a stored row reconstructs is the very `ProgramProgressionVariant` / `ProgramProgressionRelation`
- * the adaptive engine already resolves against, so a persisted ladder and a caller-supplied one are
- * the same value and nothing downstream can tell which produced it.
+ * This file is a **translation and nothing else**: it creates no second ladder type, so a persisted
+ * ladder and a caller-supplied one are the same value and nothing downstream can tell which produced it.
  *
- * ### The losslessness claim, and why it is written this way
- *
- * A variant's prescription is part of the ladder definition: §15's adaptation is a *presentation*
+ * A variant's prescription is part of the ladder definition: adaptation is a *presentation*
  * (`before` → `after`), so a rung that stored no prescription could not be presented and the engine
- * would have to keep the current one — i.e. claim that a harder variant prescribes exactly what an
- * easier one did. So [storedPrescription] reconstructs the **whole** prescription from the two stored
- * columns, and the per-set list is carried through verbatim in set order:
+ * would have to keep the current one — claiming that a harder variant prescribes exactly what an easier
+ * one did. So the **whole** prescription is reconstructed from the two stored columns, with the per-set
+ * list carried through verbatim in set order. There is deliberately **no branch below that reduces a
+ * target list to a count, a mean or any single scalar**, because `[12, 10, 8, 6]` and
+ * `[10, 10, 10, 10]` are two different prescriptions that happen to share a set count.
  *
- * ```text
- * RepPrescription([12, 10, 8, 6])  ->  REP_BASED   "12,10,8,6"   ->  RepPrescription([12, 10, 8, 6])
- * TimePrescription([30, 30, 45])   ->  TIME_BASED  "30,30,45"    ->  TimePrescription([30, 30, 45])
- * ```
- *
- * There is deliberately **no branch anywhere below that reduces a target list to a count, a mean or
- * any single scalar**, because `[12, 10, 8, 6]` and `[10, 10, 10, 10]` are two different prescriptions
- * that happen to share a set count, and a column able to hold only one of them would be a silent loss.
- * The column is written by the schema's existing `ProgramTypeConverters.toPerSetTargets` pair, which
- * is already lossless for exactly this reason; this mapper introduces no new converter semantics.
- *
- * ### What is refused rather than guessed
+ * What is refused rather than guessed:
  *
  *  * **An unknown dimension token** fails loudly. `PrescriptionDimension` names five members and only
- *    two have a `Prescription` subtype today; a row naming one of the other three, or a token outside
- *    the vocabulary, cannot be turned into a prescription without inventing its algorithm — so the read
+ *    two have a `Prescription` subtype; a row naming one of the other three, or a token outside the
+ *    vocabulary, cannot be turned into a prescription without inventing its algorithm — so the read
  *    fails instead of substituting the closest implemented dimension.
  *  * **Nothing is derived from the exercise id.** No name, category, level or catalogue entry is
  *    consulted, so a stored rung means what its row says and nothing else.
@@ -53,11 +40,6 @@ import com.monkfitness.app.domain.prescription.TimePrescription
  * The stored **dimension decides the subtype**, never the shape of the target list: `REP_BASED` reads
  * back as repetitions and `TIME_BASED` as seconds, so the same four numbers cannot come back as the
  * other dimension's unit. The dimension with no implemented subtype is a refusal, not a default.
- *
- * [ProgressionRelationVariantEntity.perSetTargets] arrives as the whole `List<Int>` because the column
- * is declared as that type and `ProgramTypeConverters` is what turns it into the stored
- * comma-joined form — the schema's own existing, already-lossless converter. This mapper therefore
- * adds no converter semantics of its own and has no parsing step that could drop an element.
  */
 private fun ProgressionRelationVariantEntity.storedPrescription(): Prescription {
     val targets = perSetTargets

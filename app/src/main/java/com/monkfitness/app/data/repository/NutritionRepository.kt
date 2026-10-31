@@ -9,34 +9,17 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.catch
 
 /**
- * The nutrition domain's storage, and the body-weight log its targets are computed from.
+ * The nutrition domain's storage, and the body-weight log its targets are computed from: meal cycles,
+ * their meals, their shopping lists and body-weight entries — and no Program table at all.
  *
- * ### What it is, after the program's retirement
- *
- * It is the **retained** half of the repository that used to be `WorkoutRepository`: meal cycles, their
- * meals, their shopping lists and body-weight entries. That class also carried the shipped 56-day
- * program's progress reads, its day-state grid, its set-log volume history and its streak calculation —
- * §30 step 15 deleted those with the program, and what is left is a repository whose name now says what
- * it holds. The class is renamed rather than kept, because *"Workout"* would be a name about a runtime
- * that no longer exists (§4: **no giant legacy repository containing both**).
- *
- * ### What it deliberately does not do
- *
- * It reads and writes **no Program table**: not a Program, a revision, a day, an opportunity, a session
- * or a set. The meal calendar is its own (`MealCycle.startDate` + `durationDays`), and a body-weight row
- * is a date and a weight. Nothing here is keyed by a cycle or a day number of any program.
- *
- * The reads that were silent-empty on failure keep their existing contract: a chart with no data is a
- * chart, not a broken screen, and each of those methods documents its own fallback. The writes are the
- * ones that surface their failure to the caller.
- *
- * @param dao the nutrition tables and the body-weight log.
+ * The meal calendar is its own (`MealCycle.startDate` + `durationDays`) and a body-weight row is a date
+ * and a weight, so nothing here is keyed by a cycle or a day number of any program. The reads that were
+ * silent-empty on failure keep that contract — a chart with no data is a chart, not a broken screen —
+ * while the writes surface their failure to the caller.
  */
 class NutritionRepository(
     private val dao: NutritionDao
 ) {
-
-    // ---------------------------------------------------------------- the meal-cycle calendar
 
     fun getMealCycles(): Flow<List<MealCycle>> = dao.getMealCycles().catch { emit(emptyList()) }
 
@@ -94,8 +77,6 @@ class NutritionRepository(
         dao.upsertMeal(meal)
     } catch (_: Exception) {
     }
-
-    // ---------------------------------------------------------------- the body-weight log
 
     fun getBodyWeightEntriesSince(cutoff: String): Flow<List<BodyWeightEntry>> =
         dao.getEntriesSince(cutoff).catch { emit(emptyList()) }

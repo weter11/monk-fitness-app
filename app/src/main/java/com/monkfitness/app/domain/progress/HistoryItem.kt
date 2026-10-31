@@ -9,36 +9,21 @@ import java.time.Instant
 import java.time.LocalDate
 
 /**
- * One attempt as history reads it (§19, §21's *recent history*).
+ * One attempt as history reads it.
  *
- * History is a list of **attempts**, not of planned days: an opportunity that was never attempted has no
- * entry (there is no session to describe, and inventing an empty one is the same defect as reading a
- * missed opportunity as a workout), while an opportunity attempted twice has two. What each entry says is
- * what the session's own rows say — its status, its actual timestamps, and its **exposure**:
+ * History is a list of attempts, not of planned days: an opportunity never attempted has no entry,
+ * while one attempted twice has two. Each entry says what the session's own rows say:
  *
- *  * [performedSets] and [exposedExercises] are the recorded sets and the occurrences that hold at least
- *    one — §12's partial exposure. They are reported for **every** status, because exposure is a fact
- *    about work that happened and not a reward for a status: a cancelled attempt that confirmed four sets
- *    keeps those four sets (§12: *"a cancelled Session may still contain partial Exposure"*), and reading
- *    that attempt as "nothing happened" would be exactly the erasure the blueprint forbids;
+ *  * [performedSets] and [exposedExercises] are reported for every status, because exposure is a fact
+ *    about work that happened and not a reward for a status — a cancelled attempt that confirmed four
+ *    sets keeps those four sets, and reading it as "nothing happened" would be that erasure;
  *  * [status] is kept beside them so a reader can tell a completed workout from a cancelled one without
- *    the exposure having been filtered on the way in. `CANCELLED` is not a quiet `COMPLETED` (§19) and
- *    nothing here converts one into the other;
- *  * [skippedExercises] counts the occurrences the user explicitly skipped — they observed nothing, which
- *    is why they are counted separately rather than as zero-valued work (§12).
+ *    the exposure having been filtered on the way in; `CANCELLED` is never converted to `COMPLETED`;
+ *  * [skippedExercises] counts occurrences the user explicitly skipped — they observed nothing, which is
+ *    why they are counted separately rather than as zero-valued work.
  *
- * @property sessionId identity of the attempt.
- * @property programId the Program it belongs to.
- * @property slotId the opportunity it attempts.
- * @property plannedFor the date the opportunity was planned for, read from the attempt's own snapshot —
- *   the presentation it started under, never a live re-reading of the plan (§19).
- * @property status in progress, completed or cancelled.
- * @property startedAt when it actually started.
- * @property finishedAt when it actually ended, or `null` while it is running.
- * @property duration how long it actually took, or `null` while it is running.
- * @property performedSets how many sets it confirmed.
- * @property exposedExercises how many of its occurrences hold at least one confirmed set.
- * @property skippedExercises how many of its occurrences the user explicitly skipped.
+ * `plannedFor` is read from the attempt's own snapshot, never a live re-reading of the plan, and
+ * `finishedAt`/`duration` are `null` only while the attempt is running.
  */
 data class HistoryItem(
     val sessionId: SessionId,
@@ -71,21 +56,17 @@ data class HistoryItem(
         }
     }
 
-    /** Whether the attempt ended as a finished workout. */
     val isCompleted: Boolean
         get() = status.isCompleted
 
-    /** Whether the attempt recorded any work at all, whatever its status (§12's partial exposure). */
+    /** Whether the attempt recorded any work at all, whatever its status. */
     val hasExposure: Boolean
         get() = performedSets > 0
 }
 
 /**
- * One attempt as history reads it, computed from the session's own facts and from nothing else.
- *
- * It exists as a function rather than as a block inside the calculator so that the *only* place a
- * [HistoryItem] is built is the place that says what each of its fields means; a second construction site
- * would be a second definition of exposure.
+ * The only place a [HistoryItem] is built, from the session's own facts and nothing else — a second
+ * construction site would be a second definition of exposure.
  */
 fun historyItemOf(session: WorkoutSession): HistoryItem = HistoryItem(
     sessionId = session.sessionId,

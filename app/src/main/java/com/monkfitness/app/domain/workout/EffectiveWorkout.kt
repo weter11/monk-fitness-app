@@ -11,25 +11,13 @@ import java.time.Instant
 import java.time.LocalDate
 
 /**
- * One element of an effective workout: what the user will actually be presented with.
+ * One element of an effective workout: what the user will actually be presented with. The same shape as a
+ * plan element minus what only matters while the plan is built — no pin, no origin, because presentation
+ * is not authoring.
  *
- * It is the same shape as a plan element, minus everything that only matters while the plan is being
- * *built* — there is no pin and no origin here, because presentation is not authoring. What is left is
- * what the session screen needs: which plan element this is, which exercise, and what to ask for.
- *
- * [focus] is the plan element's own recorded focus, copied through presentation unchanged — including
- * through an adaptive adjustment that swaps the exercise or the prescription for this occurrence. An
- * adjustment changes *what* is shown, not *which focus the element was planned for*, so the assignment
- * survives a superseding adjustment exactly as the prescription's origin does not matter here.
- *
- * It is `null` when the plan element recorded none (§19: an element the generator never assigned, or
- * one written before the field existed), and `null` means absence rather than a default focus.
- *
- * @property programExerciseId the plan element this presentation comes from.
- * @property exerciseId the library key to present.
- * @property prescription what to ask for, per set — the revision's prescription, or the one an
- *   adaptive adjustment put in its place.
- * @property focus the focus of the slot assignment this element serves, as the plan recorded it.
+ * [focus] is the plan element's recorded focus, copied through presentation unchanged even when an
+ * adjustment swaps the exercise or the prescription: an adjustment changes what is shown, not which focus
+ * the element was planned for. `null` means absence, not a default focus.
  */
 data class EffectiveExercise(
     val programExerciseId: ProgramExerciseId,
@@ -44,27 +32,15 @@ data class EffectiveExercise(
 }
 
 /**
- * What should be presented for one slot, right now.
+ * What should be presented for one slot, right now: the composition `revision + adjustments`, where the
+ * immutable revision says what the plan is and the adjustments say what the adaptive stage wants changed.
+ * Adjustments change the presentation, never the revision.
  *
- * This is the composition the architecture names as `ProgramRevision + AdaptiveAdjustment =
- * EffectiveWorkout` (§16): the immutable revision says what the plan is, the adjustments say what the
- * adaptive stage currently wants changed, and this value is the result of applying them. It is a
- * **computed** value — [computedAt] says when it was computed, and computing it again after a new
- * adjustment supersedes an old one legitimately produces a different value.
- *
- * That is precisely what separates it from [WorkoutSessionSnapshot]: an effective workout answers
- * "what should be presented now", and a snapshot is the immutable record of what *was* presented when
- * a session started. Nothing here is a record of anything that happened, and a session never
- * re-derives its plan from a newer effective workout.
- *
- * @property slotId the opportunity this presentation is for.
- * @property programId the Program it belongs to.
- * @property revisionId the revision it was composed from. Adjustments change the presentation, never
- *   the revision.
- * @property plannedFor the date the slot was planned for.
- * @property computedAt when this presentation was computed.
- * @property exercises the presentation, in plan order. Empty for a rest day.
- * @property appliedAdjustmentIds the adjustments that were applied, in application order.
+ * It is a computed value — [computedAt] says when — and computing it again after a new adjustment
+ * supersedes an old one legitimately produces a different value. That is what separates it from
+ * [WorkoutSessionSnapshot]: this answers "what should be presented now", while a snapshot is the immutable
+ * record of what was presented when a session started. Nothing here records anything that happened, and a
+ * session never re-derives its plan from a newer effective workout. [exercises] is empty for a rest day.
  */
 data class EffectiveWorkout(
     val slotId: SlotId,
@@ -85,7 +61,6 @@ data class EffectiveWorkout(
         }
     }
 
-    /** Whether any adaptive adjustment changed this presentation. */
     val isAdjusted: Boolean
         get() = appliedAdjustmentIds.isNotEmpty()
 }

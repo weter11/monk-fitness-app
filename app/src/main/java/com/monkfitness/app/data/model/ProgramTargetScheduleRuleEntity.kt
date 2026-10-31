@@ -9,48 +9,28 @@ import androidx.room.ForeignKey
  * A revision's legacy `ProgramSchedule` states *when its slots fall*. A target rule states something
  * wider — which rule it is, which workout it produces, how often it recurs, the date it is anchored to
  * and, for a derived rule, the rule it derives from — so the two are stored separately and neither is
- * derived from the other. There is no column here that a legacy schedule could be mirrored into, and
- * this entity carries no reference to one.
+ * derived from the other: no column here could mirror a legacy schedule.
  *
- * ### Why the cadence is four columns and not one encoded value
+ * A cadence is a closed choice of five forms and each form has exactly one payload, stored in its own
+ * column so that reconstructing a cadence is a column fetch per field rather than a parse, and so that
+ * a form whose payload is absent cannot be confused with a form whose payload is zero. The init guard
+ * holds the discriminator and its payload consistent — the form that requires a payload requires it,
+ * the forms that have none carry none — exactly as `program_revision`'s guard holds `scheduleType` and
+ * its weekday set.
  *
- * A cadence is a closed choice of five forms, and each form has exactly one payload:
- *
- * ```text
- * cadenceType             DAILY | EVERY_N_DAYS | SESSIONS_PER_WEEK | FIXED_WEEKDAYS | DERIVED_EXCLUDING
- * cadenceDays             the interval, for EVERY_N_DAYS only
- * cadenceSessionsPerWeek  the frequency, for SESSIONS_PER_WEEK only
- * cadenceWeekdays         the named days, for FIXED_WEEKDAYS only
- * cadenceSourceRuleId     the named source, for DERIVED_EXCLUDING only
- * ```
- *
- * Each payload is its own column so that reconstructing a cadence is a column fetch per field rather
- * than a parse, and so that a form whose payload is absent cannot be confused with a form whose
- * payload is zero. [ProgramTargetScheduleRuleEntity]'s own guard holds the discriminator and its
- * payload consistent — the form that requires a payload requires it, and the forms that have none
- * carry none — exactly as `program_revision`'s discriminator guard holds `scheduleType` and its
- * weekday set.
- *
- * ### `cadenceWeekdays` is a deterministic `TEXT` value
- *
- * A `FixedWeekdays` cadence is a `Set<DayOfWeek>`, and a set has no order of its own. The stored
- * order is therefore the canonical one (ascending ISO weekday), so the same set always writes the same
- * bytes and two equal cadences compare equal. This is the schema's existing
- * `program_revision.scheduleWeekdays` convention, not a new one.
- *
- * ### Ownership
+ * `cadenceWeekdays` is a deterministic `TEXT` value in canonical order (ascending ISO weekday), because
+ * a `Set<DayOfWeek>` has no order of its own: the same set always writes the same bytes and two equal
+ * cadences compare equal. This follows the schema's existing `program_revision.scheduleWeekdays`
+ * convention.
  *
  * Membership is `(revisionId, ruleId)` and that pair **is** the primary key: one revision may state a
  * rule once, two revisions may state the same rule identity independently, and a stored rule can never
- * be re-pointed at another revision by a write. The revision's own foreign key cascades, so a rule
- * row cannot outlive the immutable revision that states it (§6, §29).
+ * be re-pointed at another revision by a write. The revision's foreign key cascades, so a rule row
+ * cannot outlive the immutable revision that states it.
  *
  * Nothing here is updated or deleted: a revision's target semantics are written once, and a structural
  * change saves a new revision instead.
  *
- * @property revisionId the immutable revision that states this rule.
- * @property ruleId the rule's own identity, verbatim and opaque.
- * @property workoutId the workout this rule produces, verbatim and opaque.
  * @property cadenceType the cadence form, spelled as the domain subtype's own name in enum convention.
  * @property cadenceDays `EVERY_N_DAYS`' interval, or `null` for every other form.
  * @property cadenceSessionsPerWeek `SESSIONS_PER_WEEK`' frequency, or `null` for every other form.
@@ -113,7 +93,7 @@ data class ProgramTargetScheduleRuleEntity(
                 absent = listOf(cadenceDays, cadenceSessionsPerWeek, cadenceWeekdays)
             )
             // An unknown token is refused by the mapper, which owns the vocabulary — the same rule
-            // `program_revision` follows for `scheduleType` (§25).
+            // `program_revision` follows for `scheduleType`.
             else -> Unit
         }
     }

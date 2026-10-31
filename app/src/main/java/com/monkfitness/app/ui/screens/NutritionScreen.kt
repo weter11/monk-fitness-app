@@ -468,9 +468,9 @@ private fun AvailableProductsDialog(
 }
 
 /**
- * A preview range, in the phrasing the app already uses for a 1/3/7-day plan
- * (`nutrition_plan_days_1/3/7`): the day count belongs to the sentence, so each language supplies its own
- * form of it instead of the screen assembling a number and an English word.
+ * A preview range, in the phrasing the app already uses for a 1/3/7-day plan: the day count belongs to the
+ * sentence, so each language supplies its own form of it instead of the screen assembling a number and an
+ * English word.
  */
 @Composable
 private fun previewRangeLabel(days: Int): String = when (days) {
@@ -520,7 +520,6 @@ fun NutritionPreviewDialog(
                     .verticalScroll(rememberScrollState()),
                 verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
-                // Time Range Toggle
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text(stringResource(R.string.nutrition_preview_duration_title), style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
                     Row(
@@ -538,7 +537,6 @@ fun NutritionPreviewDialog(
                     }
                 }
 
-                // Cycle Summary Card (as requested)
                 val totalRecipes = previewPlan.days.flatMap { it.meals }
                 val uniqueRecipesCount = totalRecipes.map { it.templateId }.distinct().size
                 val repeatedRecipesCount = totalRecipes.size - uniqueRecipesCount
@@ -546,7 +544,6 @@ fun NutritionPreviewDialog(
                 val availableCount = shoppingItems.count { it.ingredient.key in availableProducts }
                 val missingCount = shoppingItems.count { it.ingredient.key !in availableProducts }
 
-                // Variety Score calculation
                 val uniqueRatio = if (totalRecipes.isNotEmpty()) uniqueRecipesCount.toFloat() / totalRecipes.size else 0f
                 val varietyIndicator = when {
                     uniqueRatio >= 0.8f -> stringResource(R.string.nutrition_variety_excellent)
@@ -559,7 +556,6 @@ fun NutritionPreviewDialog(
                     else -> MaterialTheme.colorScheme.error
                 }
 
-                // Shopping Indicator
                 val shoppingIndicator = if (missingCount == 0) stringResource(R.string.nutrition_shopping_ready_to_cook) else stringResource(R.string.nutrition_shopping_needed)
                 val shoppingIndicatorColor = if (missingCount == 0) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error
 
@@ -612,7 +608,6 @@ fun NutritionPreviewDialog(
                             )
                         }
 
-                        // Optional comparison with current cycle
                         if (currentPlan.days.isNotEmpty()) {
                             val currentRecipes = currentPlan.days.flatMap { it.meals }
                             val currentTemplates = currentRecipes.map { it.templateId }.toSet()
@@ -663,7 +658,6 @@ fun NutritionPreviewDialog(
                     }
                 }
 
-                // Daily Menu Section
                 Text(stringResource(R.string.nutrition_preview_daily_menu), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
                 previewPlan.days.forEach { day ->
                     Card(
@@ -692,7 +686,6 @@ fun NutritionPreviewDialog(
                                             color = MaterialTheme.colorScheme.onSurfaceVariant
                                         )
                                     }
-                                    // Recipe / Cooking instructions
                                     Text(stringResource(R.string.nutrition_preview_instructions), style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold)
                                     com.monkfitness.app.data.model.getTodayCookingInstructionResIds(meal).forEachIndexed { i, stepRes ->
                                         Text(stringResource(R.string.nutrition_preview_step, i + 1, stringResource(stepRes)), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.secondary)
@@ -703,7 +696,6 @@ fun NutritionPreviewDialog(
                     }
                 }
 
-                // Required Products Section
                 Text(stringResource(R.string.nutrition_preview_required_products), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
                 NutritionShoppingGroup.entries.forEach { group ->
                     val items = previewPlan.shoppingList[group].orEmpty()

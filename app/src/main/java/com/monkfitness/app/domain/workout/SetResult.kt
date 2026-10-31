@@ -4,24 +4,16 @@ import com.monkfitness.app.domain.common.SetLogId
 import java.time.Instant
 
 /**
- * One confirmed set: what was actually performed, once, for one set of one exercise (§19, §27).
+ * One confirmed set: what was actually performed, once, for one set of one exercise.
  *
- * A set result exists only because a set was confirmed. That is the load-bearing rule of this type:
- * an exercise that was skipped, a slot that was missed and a session that was cancelled produce **no
- * set result at all** — never a row of zeroes. There is consequently no `zero` factory, no `skipped`
- * flag and no default amount: the only states representable are amounts of work that happened, which
- * is why "missed" can never be read downstream as "performed zero repetitions" (§12).
+ * It exists only because a set was confirmed — a skipped exercise, a missed slot and a cancelled session
+ * produce no set result at all, never a row of zeroes. There is consequently no `zero` factory, no
+ * `skipped` flag and no default amount, so "missed" can never be read downstream as "performed zero
+ * repetitions".
  *
- * A set is measured in one unit, exactly as the exercise is prescribed in one unit: a repetition set
- * carries [completedReps] and no seconds, a timed set carries [durationSeconds] and no repetitions.
- * The unit the set was prescribed in is checked against the prescription at [SessionExercise], where
- * the prescription is known.
- *
- * @property setLogId identity of the persisted set row.
- * @property setIndex 1-based position of the set within its exercise occurrence.
- * @property completedReps repetitions performed; `0` for a timed set.
- * @property durationSeconds seconds performed; `0` for a repetition set.
- * @property performedAt when the set was confirmed.
+ * A set is measured in one unit, exactly as the exercise is prescribed in one: a repetition set carries
+ * [completedReps] and `0` seconds, a timed set [durationSeconds] and `0` repetitions. The unit is checked
+ * against the prescription at [SessionExercise], where the prescription is known.
  */
 data class SetResult(
     val setLogId: SetLogId,
@@ -41,7 +33,6 @@ data class SetResult(
         }
     }
 
-    /** Whether this set was measured in repetitions. */
     val isRepetitionSet: Boolean
         get() = durationSeconds == 0
 }
