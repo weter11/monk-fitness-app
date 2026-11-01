@@ -27,6 +27,7 @@ import com.monkfitness.app.domain.adaptive.decision.AdaptiveAdjustment
 import com.monkfitness.app.domain.adaptive.decision.AdaptiveTarget
 import com.monkfitness.app.domain.adaptive.decision.presentedWorkout
 import com.monkfitness.app.domain.adaptive.decision.standingAdjustments
+import com.monkfitness.app.domain.adaptive.engine.ProgramAdaptiveElement
 import com.monkfitness.app.domain.adaptive.engine.ProgramAdaptiveEngine
 import com.monkfitness.app.domain.adaptive.engine.ProgramAdaptiveEvidence
 import com.monkfitness.app.domain.adaptive.engine.ProgramAdaptivePolicy
@@ -37,6 +38,7 @@ import com.monkfitness.app.domain.adaptive.engine.ProgramAdaptiveWindow
 import com.monkfitness.app.domain.adaptive.engine.ProgramGapFacts
 import com.monkfitness.app.domain.adaptive.engine.ProgramElementOwnership
 import com.monkfitness.app.domain.adaptive.engine.ProgramProgressionRelation
+import com.monkfitness.app.domain.adaptive.engine.ProgramProgressionVariant
 import com.monkfitness.app.domain.adaptive.engine.ProgramWindowVerdict
 import com.monkfitness.app.domain.adaptive.integration.AdaptiveInputGap
 import com.monkfitness.app.domain.adaptive.integration.AdaptiveIntegrationOutcome
@@ -86,10 +88,11 @@ import java.time.temporal.ChronoUnit
  * facts**; the **three judgements** (evidence, confidence, recovery), kept separate; and **identity and the
  * moment**, from the injected [IdGenerator] and [Clock].
  *
- * It runs no policy or threshold of its own, invents no ladder, fabricates no judgement, and creates, moves or
- * rewrites nothing. The ladder is the persisted catalogue's, read through [ProgressionRelationProvider]: a
- * family it declares none for stops the pass at `NO_DECLARED_PROGRESSION_RELATION` rather than gaining a
- * fabricated progression. The exercise→family catalogue is the app's own shipped classification.
+ * It runs no policy or threshold of its own, writes no ladder, fabricates no judgement, and creates, moves or
+ * rewrites nothing. The ladder is the persisted catalogue's, read through [ProgressionRelationProvider]; a
+ * family it declares none for is given the one rung the plan already presents, which is a position rather
+ * than authored content, so the exercise climbs its own range and holds at the ceiling. The
+ * exercise→family catalogue is the app's own shipped classification.
  *
  * @param planRepository read for the revision the completed Session names — its target opportunity must belong
  *   to it. Never written.
@@ -228,20 +231,17 @@ class ProgramAdaptiveIntegration(
             // A family the opportunity does not present still has a window: its position is the one it
             // already holds, or the one the ladder declares for the exercise it last performed.
             val lastPerformed = lastPerformedExerciseOf(observations, familyOfExercise, familyId)
-            val element = (choice as? AdaptiveTargetElement.Chosen)?.element
+            val element = when (choice) {
+                is AdaptiveTargetElement.Chosen -> choice.element
+                is AdaptiveTargetElement.NoDeclaredRelation -> choice.element
+                else -> null
+            }
             val relation = (choice as? AdaptiveTargetElement.Chosen)?.relation
+                ?: element?.let { presented -> singleRungOf(presented) }
                 ?: relations.relationOf(familyId)
             val exerciseId = element?.exerciseId ?: lastPerformed
             val level = stored?.progressionLevel
                 ?: exerciseId?.let { id -> relation?.declared(id)?.level }
-
-            // Presented, classified, but no ladder declares it: there is no honest step, so this family's
-            // outcome is that gap and nothing is written for it.
-            if (choice is AdaptiveTargetElement.NoDeclaredRelation) {
-                return@map AdaptiveIntegrationOutcome.CannotBuildAdaptiveRequest(
-                    AdaptiveInputGap.NO_DECLARED_PROGRESSION_RELATION
-                )
-            }
 
             val planWindow = familyPlanWindowOf(
                 revision = revision,
@@ -862,11 +862,38 @@ class ProgramAdaptiveIntegration(
     /** A stored fact that cannot be true, as the pass reports it. */
     private fun invalidData(message: String): Nothing = throw IllegalStateException(message)
 
+    /**
+     * The one rung a family the catalogue declares nothing for is given, taken from the element the plan
+     * already presents: the exercise itself, at the position a family with no hierarchy has. Nothing is
+     * authored — no second exercise, no level above it — so climbing it is the exercise's own range and
+     * the top of that range is the ceiling.
+     */
+    private fun singleRungOf(element: ProgramAdaptiveElement): ProgramProgressionRelation =
+        ProgramProgressionRelation(
+            familyId = element.familyId,
+            variants = listOf(
+                ProgramProgressionVariant(
+                    level = SINGLE_RUNG_LEVEL,
+                    exerciseId = element.presentation.exerciseId,
+                    prescription = element.presentation.prescription
+                )
+            )
+        )
+
     /** An expected absence of a fact, as the pass reports it. */
     private fun gap(gap: AdaptiveInputGap): AdaptiveIntegrationResult =
         AdaptiveIntegrationResult.Success(
             listOf(AdaptiveIntegrationOutcome.CannotBuildAdaptiveRequest(gap))
         )
+
+    private companion object {
+
+        /**
+         * The position a family with no hierarchy has. It is a single ordinal, never a difficulty: the
+         * engine steps off it only to discover the ceiling.
+         */
+        const val SINGLE_RUNG_LEVEL = 0
+    }
 }
 
 // The window's facts about *when*. Stated here, read by the return rule.

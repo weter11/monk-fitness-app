@@ -49,8 +49,9 @@ enum class AdaptiveInputGap {
     NO_EXPOSED_FAMILY_IN_THE_TARGET_SLOT,
 
     /**
-     * The family is trained and presented, but no [ProgressionRelationProvider] declares its ladder, so no
-     * honest step exists — recorded as an explicit gap rather than a fabricated ladder or a default level.
+     * A family is trained, but no [ProgressionRelationProvider] declares its ladder. The pass answers this
+     * by deriving a single rung from the element the plan presents, so it no longer reports this gap: the
+     * value stays because "this caller's ladder source declares nothing" is still a fact a provider states.
      */
     NO_DECLARED_PROGRESSION_RELATION
 }

@@ -41,7 +41,9 @@ fun adaptiveTargetSlotOf(
  *
  * The subject is the family the completion just exposed, looked up in the presentation the user is about
  * to be shown; the presentation's own order decides when a day presents a family twice, so the choice is
- * a property of the plan rather than of a collection order.
+ * a property of the plan rather than of a collection order. A family the catalogue declares no ladder for
+ * is answered with its element rather than with a relation, which is what lets the caller derive the one
+ * rung from what the plan already presents.
  *
  * Ownership is not applied here. A pinned or user-authored element is not adapted **at all**, and
  * skipping it to find the next automatic one would pre-empt the engine's own rule.
@@ -54,28 +56,29 @@ suspend fun adaptiveTargetElementOf(
     relations: ProgressionRelationProvider
 ): AdaptiveTargetElement {
     var classifiedAnElement = false
-    var presentedAnExposedFamily = false
+    var firstDeclaredNowhere: ProgramAdaptiveElement? = null
 
     for (element in presented) {
         val familyId = element.familyOf(classification, plan) ?: continue
         classifiedAnElement = true
         if (familyId !in exposedFamilies) continue
-        presentedAnExposedFamily = true
 
-        val relation = relations.relationOf(familyId) ?: continue
-        return AdaptiveTargetElement.Chosen(
-            element = ProgramAdaptiveElement(
-                presentation = element.presentation,
-                familyId = familyId,
-                ownership = element.ownership
-            ),
-            relation = relation
+        val candidate = ProgramAdaptiveElement(
+            presentation = element.presentation,
+            familyId = familyId,
+            ownership = element.ownership
         )
+        val relation = relations.relationOf(familyId)
+        if (relation == null) {
+            if (firstDeclaredNowhere == null) firstDeclaredNowhere = candidate
+            continue
+        }
+        return AdaptiveTargetElement.Chosen(element = candidate, relation = relation)
     }
 
     return when {
         !classifiedAnElement -> AdaptiveTargetElement.NoFamilyIsClassified
-        presentedAnExposedFamily -> AdaptiveTargetElement.NoDeclaredRelation
+        firstDeclaredNowhere != null -> AdaptiveTargetElement.NoDeclaredRelation(firstDeclaredNowhere)
         else -> AdaptiveTargetElement.NoExposedFamilyIsPresented
     }
 }
@@ -121,7 +124,8 @@ sealed interface AdaptiveTargetElement {
 
     data object NoExposedFamilyIsPresented : AdaptiveTargetElement
 
-    data object NoDeclaredRelation : AdaptiveTargetElement
+    /** The element a family with no ladder is presented as: the pass derives its single rung from it. */
+    data class NoDeclaredRelation(val element: ProgramAdaptiveElement) : AdaptiveTargetElement
 }
 
 fun ProgramExercise.familyOf(classification: ExerciseFamilyClassification): String? =

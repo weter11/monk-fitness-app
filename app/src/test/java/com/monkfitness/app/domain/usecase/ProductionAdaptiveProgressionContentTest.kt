@@ -12,6 +12,7 @@ import com.monkfitness.app.domain.adaptive.engine.ProgramElementOwnership
 import com.monkfitness.app.domain.adaptive.integration.ownership
 import com.monkfitness.app.domain.adaptive.integration.ProgressionRelationProvider
 import com.monkfitness.app.domain.prescription.RepPrescription
+import com.monkfitness.app.domain.workout.AdaptiveCompletion
 import com.monkfitness.app.domain.program.ProgramExerciseOrigin
 import com.monkfitness.app.domain.product.ProductionProgressionRelationDefinitions
 import kotlinx.coroutines.runBlocking
@@ -106,11 +107,12 @@ class ProductionAdaptiveProgressionContentTest {
 
     /**
      * `plank` is a real catalogue family the rig can present and it has no authored ladder — a decision,
-     * not an omission. The pass must report the typed gap, proving absence was preserved rather than
-     * papered over with a default rung.
+     * not an omission. The provider still answers `null` for it; the **pass** gives the presented family
+     * the one rung the plan already describes, so absence is preserved in the catalogue and the family is
+     * adapted from its own element rather than from a ladder somebody wrote.
      */
     @Test
-    fun anUndeclaredFamilyStillStopsAtNoDeclaredProgressionRelation() = runBlocking {
+    fun anEmptiedCatalogueStillAdaptsTheFamilyThePlanPresents() = runBlocking {
         rig.createSingleFamilyGraph()
         val provider = rig.productionProvider()
 
@@ -123,14 +125,20 @@ class ProductionAdaptiveProgressionContentTest {
             provider.relationOf("glute_bridge")
         )
 
-        // Emptied ladder source: the pass reports the typed gap rather than progressing on a fabricated rung.
+        // Emptied ladder source: the pass derives the element's own rung instead of reporting a gap.
         rig.relations = NoDeclaredProgression
         val trigger = rig.seedHistoryAndTrigger()
 
+        val outcome = rig.outcomeOf(rig.adapt(trigger.sessionId))
+
         assertEquals(
-            "a family with no declared relation still stops at the typed gap",
-            AdaptiveInputGap.NO_DECLARED_PROGRESSION_RELATION,
-            rig.gapOf(rig.adapt(trigger.sessionId))
+            "the family the plan presents is adapted on its own rung",
+            "pushups",
+            outcome.familyId
+        )
+        assertTrue(
+            "with a position to store and no decision invented for it: ${outcome.completion}",
+            outcome.completion is AdaptiveCompletion.WindowEvaluated
         )
     }
 
