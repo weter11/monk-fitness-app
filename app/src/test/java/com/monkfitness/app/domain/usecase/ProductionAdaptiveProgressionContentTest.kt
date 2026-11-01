@@ -203,6 +203,9 @@ class ProductionAdaptiveProgressionContentTest {
 
             is AdaptiveIntegrationOutcome.CannotBuildAdaptiveRequest ->
                 fail("an authorised family must not report the missing-relation gap any more: ${outcome.gap}")
+
+            is AdaptiveIntegrationOutcome.WindowOnly ->
+                fail("the day presents this family, so its window is not the whole answer: ${outcome.familyId}")
         }
     }
 
