@@ -140,7 +140,7 @@ class CatalogExerciseFamilyClassificationIntegrationTest {
         val trigger = rig.seedHistoryAndTrigger()
         val before = rig.counts()
 
-        rig.adapt(trigger.sessionId)
+        rig.completeWithAdaptive(trigger.sessionId)
 
         assertEquals("no decision row", 0, rig.database.count("program_adaptive_decision_record"))
         assertEquals("no adjustment", 0, rig.database.count("adaptive_adjustment"))
@@ -185,7 +185,7 @@ class CatalogExerciseFamilyClassificationIntegrationTest {
             requireNotNull(rig.storedFamilyStateOf("pushups")).currentExerciseId
         )
 
-        rig.adapt(trigger.sessionId)
+        rig.completeWithAdaptive(trigger.sessionId)
 
         assertEquals(
             "the rung comes from the plan's first element for the family, not from the state",
@@ -217,7 +217,7 @@ class CatalogExerciseFamilyClassificationIntegrationTest {
             assertEquals(
                 "Program A adapts the family it trained",
                 "pushups",
-                first.outcomeOf(first.adapt(trigger.sessionId)).familyId
+                first.completeWithAdaptive(trigger.sessionId).familyId
             )
             assertEquals(
                 "and writes no decision for a rung nobody authored",
@@ -245,7 +245,7 @@ class CatalogExerciseFamilyClassificationIntegrationTest {
             assertEquals(
                 "Program B adapts the same catalogue family from its own facts",
                 "pushups",
-                second.outcomeOf(second.adapt(trigger.sessionId)).familyId
+                second.completeWithAdaptive(trigger.sessionId).familyId
             )
             assertEquals(
                 "and wrote no decision of its own",

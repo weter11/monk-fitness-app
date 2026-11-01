@@ -31,6 +31,7 @@ import com.monkfitness.app.domain.program.ProgramSource
 import com.monkfitness.app.domain.program.SequentialIds
 import com.monkfitness.app.domain.program.SlotStatus
 import com.monkfitness.app.domain.program.WorkoutSlot
+import com.monkfitness.app.domain.workout.SessionRuntimeResult
 import com.monkfitness.app.domain.workout.WorkoutSession
 import java.time.DayOfWeek
 import java.time.Instant
@@ -372,6 +373,20 @@ internal class CatalogAdaptiveIntegrationRig private constructor(
     enum class SessionEnd { CANCELLED, COMPLETED, IN_PROGRESS }
 
     suspend fun adapt(sessionId: SessionId): AdaptiveIntegrationResult = integration().adaptAfter(sessionId)
+
+    /** The pass, then the completion transaction that carries its outcome — what production writes. */
+    suspend fun completeWithAdaptive(sessionId: SessionId): AdaptiveIntegrationOutcome {
+        val outcome = outcomeOf(adapt(sessionId))
+        when (val completed = runtime.finishSession(sessionId, outcome.completion)) {
+            is SessionRuntimeResult.Success -> Unit
+            is SessionRuntimeResult.Refused ->
+                throw AssertionError("the completion was refused: ${completed.reason}")
+
+            is SessionRuntimeResult.Failure ->
+                throw AssertionError("the completion failed: ${completed.cause}")
+        }
+        return outcome
+    }
 
     fun outcomeOf(result: AdaptiveIntegrationResult): AdaptiveIntegrationOutcome = outcomesOf(result).single()
 
