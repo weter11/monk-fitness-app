@@ -662,20 +662,30 @@ class ProgramAdaptiveIntegrationTest {
         assertEquals("nothing adaptive was written", before, rig.counts())
     }
 
-    /** No declared ladder is a typed no-decision, never a fabricated progression. */
+    /**
+     * No declared ladder is no longer a no-decision: the family is adapted on the one rung the plan
+     * presents. Nothing is authored for it, so the pass invents no decision either — the exercise holds
+     * at the top of its only rung when there is nothing above it.
+     */
     @Test
-    fun noDeclaredProgressionIsATypedNoDecision() = runBlocking {
+    fun anUndeclaredFamilyIsAdaptedOnTheRungThePlanPresents() = runBlocking {
         rig.createGraph()
-        rig.seedFamilyState(level = 1, precedingProgressQualifyingWindows = 1)
+        rig.seedFamilyState(level = 0, precedingProgressQualifyingWindows = 1)
         val trigger = rig.seedHistoryAndTrigger()
         rig.relations = ProgramAdaptiveIntegrationRig.noLadder()
-        val before = rig.counts()
 
-        assertEquals(
-            AdaptiveInputGap.NO_DECLARED_PROGRESSION_RELATION,
-            rig.gapOf(rig.adapt(trigger.sessionId))
+        val outcome = rig.outcomeOf(rig.adapt(trigger.sessionId))
+
+        assertTrue(
+            "the family is adapted from the element the plan presents rather than left undecided: $outcome",
+            outcome !is AdaptiveIntegrationOutcome.CannotBuildAdaptiveRequest
         )
-        assertEquals("nothing was written, and nothing was invented", before, rig.counts())
+        assertEquals("push-family", outcome.familyId)
+        assertEquals(
+            "and no decision is invented for a rung nobody authored",
+            0,
+            rig.database.count("program_adaptive_decision_record")
+        )
     }
 
     /** No family classification is its own typed no-decision — a different gap, for a different fix. */

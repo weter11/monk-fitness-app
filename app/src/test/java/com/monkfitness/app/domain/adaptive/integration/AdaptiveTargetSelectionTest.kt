@@ -190,17 +190,25 @@ class AdaptiveTargetSelectionTest {
         )
     }
 
+    /**
+     * A family the catalogue declares nothing for is answered with the element its single rung is derived
+     * from, so "the catalogue declares no ladder" stays a fact about the catalogue rather than a dead end.
+     */
     @Test
-    fun aKnownFamilyWithNoDeclaredLadderIsItsOwnGap() = runBlocking {
+    fun aKnownFamilyWithNoDeclaredLadderNamesTheElementItsRungIsDerivedFrom() = runBlocking {
+        val choice = adaptiveTargetElementOf(
+            presented = presented("plan-1" to "pushup"),
+            plan = day("plan-1" to "pushup"),
+            exposedFamilies = setOf(PUSH_FAMILY),
+            classification = pushFamilies(),
+            relations = ProgressionRelationProvider { null }
+        )
+
+        assertTrue("the answer is the family's own element: $choice", choice is AdaptiveTargetElement.NoDeclaredRelation)
         assertEquals(
-            AdaptiveTargetElement.NoDeclaredRelation,
-            adaptiveTargetElementOf(
-                presented = presented("plan-1" to "pushup"),
-                plan = day("plan-1" to "pushup"),
-                exposedFamilies = setOf(PUSH_FAMILY),
-                classification = pushFamilies(),
-                relations = ProgressionRelationProvider { null }
-            )
+            "and it is the exercise the plan presents",
+            "pushup",
+            (choice as AdaptiveTargetElement.NoDeclaredRelation).element.presentation.exerciseId
         )
     }
 

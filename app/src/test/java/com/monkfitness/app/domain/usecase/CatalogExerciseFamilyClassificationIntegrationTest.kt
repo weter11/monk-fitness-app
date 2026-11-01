@@ -14,28 +14,23 @@ import org.junit.Test
 
 /**
  * The production claim, measured on a real database with the real repositories and the **production**
- * classification — the one thing a stage about closing a gap must prove is that closing it did not change
- * the answer.
+ * classification, against a ladder source that declares **nothing**.
  *
- * The assertions are ordered by how easily each could pass for the wrong reason: the classification is
- * reached at all (otherwise every later assertion is vacuous), it is reached **before** the
- * progression-relation refusal that moved, the refusal is still made and is the *typed* one, nothing is
- * written (so closing a gap did not become making a decision), and the classification is inert with
- * respect to Program, revision and history.
+ * That emptied source is the case the derived rung exists for: a family the catalogue does not describe is
+ * adapted from the element the plan already presents, so the exercise climbs its own range and holds at
+ * that range's top. The assertions are ordered by how easily each could pass for the wrong reason: the
+ * classification is reached at all, the pass reaches the engine rather than a gap, the classification is
+ * what made that possible, and the only row written is the family's own state.
  */
 class CatalogExerciseFamilyClassificationIntegrationTest {
 
     /**
      * The rig, with the ladder source **explicitly emptied**.
      *
-     * This class measures the *empty-catalogue* claims: classification is reached before the relation
-     * refusal, the refusal is the typed one, and nothing is written. The rig's default is now the
-     * **production** stored provider, under which these passes do not refuse at all — they reach the
-     * engine with a real `pushups` ladder and return its own bounded `AWAITING_CONFIRMATION` hold.
-     *
-     * That is the stage working, not a regression, so the empty case is **stated rather than assumed**:
-     * `.withoutLadder()` is what these assertions require. The positive assertions over the production
-     * provider live in `ProductionAdaptiveProgressionContentTest`, over the same rig.
+     * The rig's default is the **production** stored provider, under which these passes read a real
+     * `pushups` ladder; the empty case is stated rather than assumed, because it is the one in which the
+     * rung has to be derived. The positive assertions over the production provider live in
+     * `ProductionAdaptiveProgressionContentTest`, over the same rig.
      */
     private val rig = CatalogAdaptiveIntegrationRig.of().withoutLadder()
 
@@ -43,31 +38,27 @@ class CatalogExerciseFamilyClassificationIntegrationTest {
     fun close() = rig.close()
 
     /**
-     * **The central assertion.** With the production classification and no declared ladder, an adaptive
-     * pass over a day presenting a family the completion exposed reports
-     * [AdaptiveInputGap.NO_DECLARED_PROGRESSION_RELATION] — *not* `NO_FAMILY_CLASSIFICATION`, where the
-     * same pass stopped while the gap was open.
-     *
-     * The two gaps are asserted to be different values and only the later one is produced, because
-     * "it is a gap" alone would pass under either and prove nothing about which fact is now present.
+     * **The central assertion.** With the production classification and no declared ladder, a pass over a
+     * day presenting a family the completion exposed reaches the engine with the rung the plan presents —
+     * *not* `NO_FAMILY_CLASSIFICATION`, where the same pass stopped while the gap was open, and not
+     * `NO_DECLARED_PROGRESSION_RELATION`, which it used to report.
      */
     @Test
-    fun withClassificationAndNoLadderTheResultIsExactlyTheMissingProgressionRelation() = runBlocking {
+    fun withClassificationAndNoLadderTheFamilyIsAdaptedOnItsOwnRung() = runBlocking {
         rig.createSingleFamilyGraph()
         val trigger = rig.seedHistoryAndTrigger()
 
-        val result = rig.adapt(trigger.sessionId)
+        val outcome = rig.outcomeOf(rig.adapt(trigger.sessionId))
 
-        assertEquals(
-            "production can now classify the exercise, so the refusal is about the missing ladder " +
-                "and not about the missing classification",
-            AdaptiveInputGap.NO_DECLARED_PROGRESSION_RELATION,
-            rig.gapOf(result)
+        assertTrue(
+            "production can classify the exercise, so the pass reaches the engine instead of reporting a " +
+                "gap: $outcome",
+            outcome !is AdaptiveIntegrationOutcome.CannotBuildAdaptiveRequest
         )
-        assertNotEquals(
-            "the classification gap is genuinely a different gap, not the same one renamed",
-            AdaptiveInputGap.NO_FAMILY_CLASSIFICATION,
-            rig.gapOf(result)
+        assertEquals("and it is the family the completion trained", "pushups", outcome.familyId)
+        assertTrue(
+            "with a position to store, so its window was evaluated: ${outcome.completion}",
+            outcome.completion is AdaptiveCompletion.WindowEvaluated
         )
     }
 
@@ -76,8 +67,8 @@ class CatalogExerciseFamilyClassificationIntegrationTest {
      * gap.
      *
      * This is the falsification of the test above: without it, a rig whose day simply presented nothing
-     * classifiable would report `NO_DECLARED_PROGRESSION_RELATION` for the wrong reason and the central
-     * assertion would be decoration.
+     * classifiable would reach the engine for the wrong reason and the central assertion would be
+     * decoration.
      */
     @Test
     fun withoutTheClassificationTheEarlierTypedGapIsRestoredExactly() = runBlocking {
@@ -94,7 +85,7 @@ class CatalogExerciseFamilyClassificationIntegrationTest {
     }
 
     /**
-     * The classification is genuinely **reached**, and it is reached *before* the relation is asked for.
+     * The classification is genuinely **reached**, and it is reached *before* the engine is asked.
      *
      * A counting classification records the ids the pass asks about; with the catalogue source behind it,
      * the pass must ask about real catalogue ids. Asserting the ids — rather than merely that a
@@ -102,7 +93,7 @@ class CatalogExerciseFamilyClassificationIntegrationTest {
      * happened to present nothing the classification knows".
      */
     @Test
-    fun theClassificationIsConsultedAboutRealCatalogueIdsBeforeTheRelationRefusal() = runBlocking {
+    fun theClassificationIsConsultedAboutRealCatalogueIdsBeforeTheEngineDecides() = runBlocking {
         rig.createSingleFamilyGraph()
         val trigger = rig.seedHistoryAndTrigger()
 
@@ -113,12 +104,12 @@ class CatalogExerciseFamilyClassificationIntegrationTest {
             production.familyOf(exerciseId)
         }
 
-        val gap = rig.gapOf(rig.adapt(trigger.sessionId))
+        val outcome = rig.outcomeOf(rig.adapt(trigger.sessionId))
 
         assertEquals(
-            "and the pass still refuses for want of a relation",
-            AdaptiveInputGap.NO_DECLARED_PROGRESSION_RELATION,
-            gap
+            "the pass reached the engine on the family the classification named",
+            "pushups",
+            outcome.familyId
         )
         assertTrue(
             "the classification was consulted at all (asked: $asked)",
@@ -127,7 +118,7 @@ class CatalogExerciseFamilyClassificationIntegrationTest {
         CatalogAdaptiveIntegrationRig.DAY_EXERCISES.forEach { exerciseId ->
             assertTrue(
                 "the pass asked about the day's own exercise '$exerciseId', so the classification ran " +
-                    "before the relation refusal rather than being skipped (asked: $asked)",
+                    "before the engine rather than being skipped (asked: $asked)",
                 exerciseId in asked
             )
             assertNotEquals(
@@ -139,85 +130,103 @@ class CatalogExerciseFamilyClassificationIntegrationTest {
     }
 
     /**
-     * **Nothing is written.** Closing a gap must not become making a decision: no decision row, no
-     * adjustment, no family state, and the whole-database census is unchanged across the pass.
+     * **Only the family's state is written.** Being adapted without a ladder must not become making a
+     * decision: the state leg is the single row, and no decision or adjustment is invented for a rung the
+     * catalogue does not describe.
      */
     @Test
-    fun nothingIsWrittenAndNoFamilyStateIsInvented() = runBlocking {
+    fun onlyTheFamilyStateIsWritten() = runBlocking {
         rig.createSingleFamilyGraph()
         val trigger = rig.seedHistoryAndTrigger()
         val before = rig.counts()
 
         rig.adapt(trigger.sessionId)
 
-        assertEquals("no row anywhere changed", before, rig.counts())
         assertEquals("no decision row", 0, rig.database.count("program_adaptive_decision_record"))
         assertEquals("no adjustment", 0, rig.database.count("adaptive_adjustment"))
+        val state = requireNotNull(rig.storedFamilyStateOf("pushups")) {
+            "the window was evaluated, so the family's state is stored"
+        }
         assertEquals(
-            "and no family state was fabricated for the family the pass could now name",
-            null,
-            rig.storedFamilyStateOf("pushups")
+            "at the only position a family with no hierarchy has",
+            0,
+            state.progressionLevel
+        )
+        assertEquals(
+            "naming the exercise the plan presents, not a variant nobody authored",
+            "pushups",
+            state.currentExerciseId
+        )
+        assertEquals(
+            "and no other table moved: ${before.keys}",
+            before.filterKeys { table -> table != "program_family_progression_state" },
+            rig.counts().filterKeys { table -> table != "program_family_progression_state" }
         )
     }
 
     /**
-     * **No static or default ladder appears.** `PilotProgressionProfiles` is not consulted, and the
-     * pass does not proceed past the refusal even though the family's state could have been seeded —
-     * the family state is set up here to prove the refusal is not merely *absence of data*.
+     * **The stored state is not a ladder.** A family state naming a *variant* is a fact about the family,
+     * not a hierarchy: the rung is read from the presentation, so the window that follows names the
+     * exercise the plan presents.
      */
     @Test
-    fun noLadderIsInventedEvenWithFamilyStatePresent() = runBlocking {
+    fun aStoredStateDoesNotStandInForTheRung() = runBlocking {
         rig.createSingleFamilyGraph()
         val trigger = rig.seedHistoryAndTrigger()
-        // The family state says level 1 with `currentExerciseId` set. It is a *stored fact about the
-        // family*, not a ladder: it must not be read as a generation preference, nor stand in for a
-        // relation that does not exist.
-        assertNull(
-            "the rig stores no family state for this family yet",
-            rig.storedFamilyStateOf("pushups")
-        )
-
-        val gap = rig.gapOf(rig.adapt(trigger.sessionId))
-
-        assertEquals(
-            "a stored family state is not a declared ladder, so the refusal stands",
-            AdaptiveInputGap.NO_DECLARED_PROGRESSION_RELATION,
-            gap
+        rig.database.exec(
+            "INSERT INTO `program_family_progression_state` " +
+                "(`revisionId`, `familyId`, `progressionLevel`, `adaptationState`, `currentExerciseId`, " +
+                "`updatedAt`) VALUES (?, 'pushups', 0, 'HOLD', 'pushups_wide', 0)",
+            trigger.revisionId.value
         )
         assertEquals(
-            "and still nothing was written",
+            "the seeded state names the variant the plan presents second",
+            "pushups_wide",
+            requireNotNull(rig.storedFamilyStateOf("pushups")).currentExerciseId
+        )
+
+        rig.adapt(trigger.sessionId)
+
+        assertEquals(
+            "the rung comes from the plan's first element for the family, not from the state",
+            "pushups",
+            requireNotNull(rig.storedFamilyStateOf("pushups")).currentExerciseId
+        )
+        assertEquals(
+            "and the state's own level is the rung's, not a level nobody declared",
             0,
-            rig.database.count("program_adaptive_decision_record")
+            requireNotNull(rig.storedFamilyStateOf("pushups")).progressionLevel
         )
     }
 
     /**
      * **No cross-Program behaviour.** Two Programs, two databases, two histories — and Program B's pass
-     * reports the same typed gap from its own facts alone, with nothing of Program A's reaching it.
+     * answers from its own facts alone, with nothing of Program A's reaching it.
      *
      * The falsification is on the *family*: both Programs exercise the same catalogue family, so if the
      * classification carried any accumulated per-Program state, B's answer would be the only way to see
-     * it. What is asserted is that neither pass writes state and both read the same catalogue fact.
+     * it. What is asserted is that each pass writes only its own family's state and no decision.
      */
     @Test
     fun programAHistoryNeverEntersProgramB() = runBlocking {
-        // Both rigs take the empty ladder explicitly, as the class-level rig does: the claim is about
-        // *Program scope* and is measured on the empty-catalogue refusal. Under the production provider
-        // neither pass would refuse, and the two Programs would be compared on a decision rather than on
-        // the typed gap this test is about.
         val first = CatalogAdaptiveIntegrationRig.of().withoutLadder()
         try {
             first.createSingleFamilyGraph()
             val trigger = first.seedHistoryAndTrigger()
+
             assertEquals(
-                "Program A takes its own typed gap",
-                AdaptiveInputGap.NO_DECLARED_PROGRESSION_RELATION,
-                first.gapOf(first.adapt(trigger.sessionId))
+                "Program A adapts the family it trained",
+                "pushups",
+                first.outcomeOf(first.adapt(trigger.sessionId)).familyId
             )
             assertEquals(
-                "and writes nothing",
+                "and writes no decision for a rung nobody authored",
                 0,
                 first.database.count("program_adaptive_decision_record")
+            )
+            assertTrue(
+                "with its own state row",
+                first.storedFamilyStateOf("pushups") != null
             )
         } finally {
             first.close()
@@ -234,19 +243,18 @@ class CatalogExerciseFamilyClassificationIntegrationTest {
                 second.programId.value
             )
             assertEquals(
-                "Program B takes the same typed gap from its own facts",
-                AdaptiveInputGap.NO_DECLARED_PROGRESSION_RELATION,
-                second.gapOf(second.adapt(trigger.sessionId))
+                "Program B adapts the same catalogue family from its own facts",
+                "pushups",
+                second.outcomeOf(second.adapt(trigger.sessionId)).familyId
             )
             assertEquals(
-                "and Program B wrote nothing of its own",
+                "and wrote no decision of its own",
                 0,
                 second.database.count("program_adaptive_decision_record")
             )
-            assertEquals(
-                "and holds no family state for either Program's family",
-                null,
-                second.storedFamilyStateOf("pushups")
+            assertNull(
+                "and nothing of Program A's is in Program B's database",
+                second.storedFamilyStateOf("squats")
             )
         } finally {
             second.close()
@@ -256,8 +264,9 @@ class CatalogExerciseFamilyClassificationIntegrationTest {
     /**
      * **A day presenting only an unexposed family still reads that family's window.** The completion
      * exposed `pushups`; the next opportunity presents only `squats`, so there is no element to attach an
-     * adjustment to. The family's bookkeeping advances, nothing is attached and nothing is decided — and
-     * the pass names the family rather than collapsing into a gap that names none.
+     * adjustment to — and nothing to derive a rung from. The family's bookkeeping advances, nothing is
+     * attached and nothing is decided, and the pass names the family rather than collapsing into a gap
+     * that names none.
      */
     @Test
     fun aDayPresentingOnlyAnUnexposedFamilyAdvancesThatFamilysWindow() = runBlocking {
@@ -306,27 +315,5 @@ class CatalogExerciseFamilyClassificationIntegrationTest {
             "and the completion carries both as legs of one unit: $completion",
             completion is AdaptiveCompletion.Completions && completion.legs.size == 2
         )
-    }
-
-    /**
-     * **The focus-history signals are unchanged.** The classification is on the adaptive pass only; a day
-     * presenting no exposed family reaches its gap through the same family history, and the whole census
-     * of the tables behind it is untouched by a pass that classifies.
-     *
-     * The claim is narrow and is why the suite is worth having: the temptation is to fill
-     * `adaptivePreferredExerciseIds` with the family it can now name, and the assertion that nothing is
-     * written anywhere is what says it did not.
-     */
-    @Test
-    fun theAdaptiveAndRecoverySignalsRemainNeutralExactlyAsP29Concluded() = runBlocking {
-        rig.createSingleFamilyGraph()
-        val trigger = rig.seedHistoryAndTrigger()
-        val before = rig.counts()
-
-        rig.adapt(trigger.sessionId)
-
-        rig.counts().forEach { (table, count) ->
-            assertEquals("table '$table' is untouched by a classifying pass", before.getValue(table), count)
-        }
     }
 }
