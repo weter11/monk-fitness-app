@@ -165,15 +165,15 @@ class AdaptivePersistenceSchemaTest {
             "the database version moves with the schema: 13 is Phase 8's additive target-occurrence " +
                 "identity seam, 14 is §30 step 14's target-occurrence semantic payload, 15 is " +
                 "Stage 18's explicit target schedule source, 16 is §30 step 28's exercise " +
-                "preference column, 17 is P29's historical focus and 18 is P31's persisted " +
-                "progression relation catalogue",
-            source.contains("version = 18")
+                "preference column, 17 is P29's historical focus, 18 is P31's persisted " +
+                "progression relation catalogue and 19 is the per-set rest column",
+            source.contains("version = 19")
         )
         assertTrue(
             "and the step that reaches it is declared, and registered in the builder's chain right " +
                 "after the step it follows",
-            source.contains("MIGRATION_17_18 = object : Migration(17, 18)") &&
-                Regex("MIGRATION_16_17,\\s*MIGRATION_17_18").containsMatchIn(source)
+            source.contains("MIGRATION_18_19 = object : Migration(18, 19)") &&
+                Regex("MIGRATION_17_18,\\s*MIGRATION_18_19").containsMatchIn(source)
         )
 
         val registered = Regex("entities = \\[(.*?)]", RegexOption.DOT_MATCHES_ALL)

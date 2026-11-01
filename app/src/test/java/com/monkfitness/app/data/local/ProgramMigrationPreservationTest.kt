@@ -469,8 +469,17 @@ class ProgramMigrationPreservationTest {
             database.scalar("SELECT sessionExerciseId FROM `program_set_log`")
         )
         assertEquals(
-            "the target table's columns are exactly the owned ones",
-            listOf("setLogId", "sessionExerciseId", "setIndex", "completedReps", "durationSeconds", "performedAt"),
+            "the target table's columns are exactly the owned ones, with the rest column the upgrade " +
+                "appends last",
+            listOf(
+                "setLogId",
+                "sessionExerciseId",
+                "setIndex",
+                "completedReps",
+                "durationSeconds",
+                "performedAt",
+                "restSeconds"
+            ),
             database.columnNames("program_set_log")
         )
     }
@@ -617,6 +626,8 @@ class ProgramMigrationPreservationTest {
         assertEquals(16, AppDatabase.MIGRATION_15_16.endVersion)
         assertEquals(17, AppDatabase.MIGRATION_17_18.startVersion)
         assertEquals(18, AppDatabase.MIGRATION_17_18.endVersion)
+        assertEquals(18, AppDatabase.MIGRATION_18_19.startVersion)
+        assertEquals(19, AppDatabase.MIGRATION_18_19.endVersion)
 
         val database = SqliteTestDatabase.inMemory()
         database.execAll(LegacyV7Schema.TABLE_STATEMENTS)
@@ -632,6 +643,7 @@ class ProgramMigrationPreservationTest {
             database.migrate(AppDatabase.MIGRATION_15_16)
         database.migrate(AppDatabase.MIGRATION_16_17)
         database.migrate(AppDatabase.MIGRATION_17_18)
+        database.migrate(AppDatabase.MIGRATION_18_19)
         } catch (failure: SQLException) {
             throw AssertionError("the migration failed on a real engine: ${failure.message}")
         }
