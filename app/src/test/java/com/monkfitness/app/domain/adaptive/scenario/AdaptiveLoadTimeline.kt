@@ -308,7 +308,7 @@ internal class AdaptiveLoadTimeline(
         regressWindows = if (verdict.regressQualifying) regressWindows + 1 else 0
         recoveryWindows = if (result.state == AdaptiveState.RECOVERY) recoveryWindows + 1 else 0
 
-        val levelChange = result.isApplied && result.decision.action != AdaptiveAction.CHANGE_VARIANT
+        val levelChange = result.spendsTheCooldown
         windowsSinceLastChange = when {
             levelChange -> 0
             windowsSinceLastChange == null -> null

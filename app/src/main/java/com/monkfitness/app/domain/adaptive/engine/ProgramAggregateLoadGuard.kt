@@ -172,9 +172,14 @@ object ProgramAggregateLoadGuard {
         ProgramLoadChannel.INTENSITY_LEVEL ->
             compared.increases && compared.delta > policy.guardAllowedLevelSteps
 
-        ProgramLoadChannel.DENSITY_WORKING_SECONDS -> compared.increases && exceedsIncrease(
-            compared, policy.guardAllowedWorkIncreaseNumerator, policy.guardAllowedWorkIncreaseDenominator
-        )
+        ProgramLoadChannel.DENSITY_WORKING_SECONDS -> compared.increases && (
+            ceilingOf(compared.channel, authoredCeiling)?.let { ceiling -> compared.candidate > ceiling }
+                ?: exceedsIncrease(
+                    compared,
+                    policy.guardAllowedWorkIncreaseNumerator,
+                    policy.guardAllowedWorkIncreaseDenominator
+                )
+            )
 
         // Rest may not shorten below the policy's own floor. A rest that stayed equal or grew is never
         // a violation, and a change that lengthens rest is not this stage's to make.

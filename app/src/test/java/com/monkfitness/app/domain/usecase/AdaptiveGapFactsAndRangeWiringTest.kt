@@ -422,7 +422,7 @@ class AdaptiveGapFactsAndRangeWiringTest {
      * One or two missed sessions are **not** a return: they are what the rhythm already contains, and
      * lightening the week of somebody who missed a session would make the rule noise. At twice a week one
      * missed is 7 d and two is 10-11 d against a 12 d threshold (3 · 4); at four times a week 4 d and 6 d
-     * against 6 d (3 · 2), plus the 10-day floor.
+     * against 6 d (3 · 2), plus the 14-day floor.
      */
     @Test
     fun oneOrTwoMissedSessionsAreNotAReturn() {
@@ -444,12 +444,23 @@ class AdaptiveGapFactsAndRangeWiringTest {
             "two missed sessions at four times a week",
             policy.returnAfterGapHolds(gap(daysAway = 6, usualInterval = Duration.ofHours(42)))
         )
-        assertTrue(
-            "while a third week away is a return ...",
+        assertFalse(
+            "and thirteen days is under the floor even where it is more than three usual intervals",
             policy.returnAfterGapHolds(gap(daysAway = 13, usualInterval = Duration.ofHours(84)))
         )
+        assertTrue(
+            "while a fortnight away is a return ...",
+            policy.returnAfterGapHolds(gap(daysAway = 14, usualInterval = Duration.ofHours(84)))
+        )
 
-        val missedTwo = decideAfterGap(usualInterval = Duration.ofHours(84), daysAway = 10)
+        // Performed exactly as prescribed, so the only fact under test is the gap: a session that logged
+        // less would be corrected on its own account and would say nothing about the return rule.
+        val missedTwo = decideAfterGap(
+            usualInterval = Duration.ofHours(84),
+            daysAway = 10,
+            element = ProgramAdaptiveRig.element(prescription = RepPrescription.uniform(3, 12)),
+            performed = 12
+        )
         assertFalse(
             "and a window that is not a return decides exactly as it did before the rule existed",
             missedTwo.reason == ProgramAdaptiveReason.RETURN_AFTER_GAP

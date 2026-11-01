@@ -1,6 +1,5 @@
 package com.monkfitness.app.domain.usecase
 
-import com.monkfitness.app.domain.adaptive.decision.AdaptiveAction
 import com.monkfitness.app.data.repository.ProgramAdaptiveRepository
 import com.monkfitness.app.data.repository.ProgramPlanRepository
 import com.monkfitness.app.data.repository.ProgramScheduleRepository
@@ -84,11 +83,9 @@ import java.time.temporal.ChronoUnit
  * from the injected [IdGenerator] and [Clock], read once per pass.
  *
  * It runs no policy or threshold of its own, invents no ladder, fabricates no judgement, and creates, moves or
- * rewrites nothing. One fact production does not have is recorded rather than hidden: the target schema stores
- * no family ladder, so the composition root wires `NoDeclaredProgression` and **no family is adapted in
- * production today** — every pass stops at `NO_DECLARED_PROGRESSION_RELATION` rather than fabricating a
- * progression. The exercise→family catalogue is supplied from the app's own shipped catalogue, which moved
- * production from `NO_FAMILY_CLASSIFICATION` to that later gap and nothing further.
+ * rewrites nothing. The ladder is the persisted catalogue's, read through [ProgressionRelationProvider]: a
+ * family it declares none for stops the pass at `NO_DECLARED_PROGRESSION_RELATION` rather than gaining a
+ * fabricated progression. The exercise→family catalogue is the app's own shipped classification.
  *
  * @param planRepository read for the revision the completed Session names — its target opportunity must belong
  *   to it. Never written.
@@ -383,7 +380,7 @@ class ProgramAdaptiveIntegration(
             ?: return null
 
         val verdict = result.verdict
-        val levelChange = result.isApplied && result.decision.action != AdaptiveAction.CHANGE_VARIANT
+        val levelChange = result.spendsTheCooldown
         val familyId = when (val target = result.decision.target) {
             is AdaptiveTarget.Family -> target.familyId
             else -> relation.familyId
