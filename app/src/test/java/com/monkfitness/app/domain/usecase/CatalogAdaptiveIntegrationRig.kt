@@ -143,6 +143,15 @@ internal class CatalogAdaptiveIntegrationRig private constructor(
     }
 
     /**
+     * A one-day graph presenting an element of **two** families, so one session exposes both and a single
+     * completion has two legs. The smallest graph on which "one leg per family" is observable.
+     */
+    suspend fun createTwoFamilyGraph() {
+        seedBuiltInProgressionCatalogue()
+        data.programRepository.createProgram(program(), twoFamilyRevision(), singleFamilySlots())
+    }
+
+    /**
      * The catalogue repository itself — the one writer production has for ladder content. Exposed so a
      * test can **replace** a stored ladder and observe the provider's answer follow storage: with a static
      * definitions object, rewriting the stored rows would change nothing.
@@ -227,6 +236,29 @@ internal class CatalogAdaptiveIntegrationRig private constructor(
 
     private fun singleFamilyRevision(): ProgramRevision =
         programRevision().copy(days = listOf(pushDay()))
+
+    private fun twoFamilyRevision(): ProgramRevision =
+        programRevision().copy(days = listOf(twoFamilyDay()))
+
+    /**
+     * The push day plus one `squats` element: both families are classified and both have a stored ladder,
+     * so a completion over this day has two families to decide rather than one to pick.
+     */
+    fun twoFamilyDay(): ProgramDay = ProgramDay(
+        programDayId = day,
+        position = 1,
+        type = ProgramDayType.TRAINING,
+        name = "Push and squat day",
+        exercises = listOf(DAY_EXERCISES.first(), OTHER_FAMILY_EXERCISES.first())
+            .mapIndexed { index, exerciseId ->
+                ProgramExercise(
+                    programExerciseId = ProgramExerciseId("plan-ex-p30-$programTag-1-${index + 1}"),
+                    exerciseId = exerciseId,
+                    prescription = RepPrescription(listOf(8, 8)),
+                    origin = ProgramExerciseOrigin.GENERATED
+                )
+            }
+    )
 
     private fun singleFamilySlots(): List<WorkoutSlot> = SLOT_DATES.mapIndexed { index, date ->
         WorkoutSlot(
@@ -341,8 +373,11 @@ internal class CatalogAdaptiveIntegrationRig private constructor(
 
     suspend fun adapt(sessionId: SessionId): AdaptiveIntegrationResult = integration().adaptAfter(sessionId)
 
-    fun outcomeOf(result: AdaptiveIntegrationResult): AdaptiveIntegrationOutcome = when (result) {
-        is AdaptiveIntegrationResult.Success -> result.outcome
+    fun outcomeOf(result: AdaptiveIntegrationResult): AdaptiveIntegrationOutcome = outcomesOf(result).single()
+
+    /** Every outcome a pass produced, one per family the completion exposed. */
+    fun outcomesOf(result: AdaptiveIntegrationResult): List<AdaptiveIntegrationOutcome> = when (result) {
+        is AdaptiveIntegrationResult.Success -> result.outcomes
         is AdaptiveIntegrationResult.InvalidData ->
             throw AssertionError("expected an outcome, got invalid data: ${result.cause.message}")
 

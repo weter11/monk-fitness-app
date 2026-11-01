@@ -355,7 +355,10 @@ class ProgramSessionController(
 
     private suspend fun adaptiveHalfFor(session: WorkoutSession): AdaptiveHalf =
         when (val pass = adaptive.adaptAfter(session.sessionId)) {
-            is AdaptiveIntegrationResult.Success -> AdaptiveHalf(pass.outcome.completion, evaluated = true)
+            is AdaptiveIntegrationResult.Success -> AdaptiveHalf(
+                AdaptiveCompletion.of(pass.outcomes.map { outcome -> outcome.completion }),
+                evaluated = true
+            )
             is AdaptiveIntegrationResult.InvalidData ->
                 AdaptiveHalf(AdaptiveCompletion.NothingDecided, evaluated = false)
 

@@ -305,14 +305,20 @@ class ProgramAdaptiveIntegrationArchitectureTest {
         )
     }
 
-    /** The four outcomes and the three failure classes are exactly the shapes the stage reports. */
+    /** The outcomes, the per-family reading and the three failure classes are exactly the shapes the stage reports. */
     @Test
     fun theOutcomeAndResultVocabulariesAreTheOnesTheStageStates() {
         assertEquals(
             "one shape per materially different answer, and none of them is null, an empty list or " +
-                "false: a change was applied, a change was refused, nothing was adapted, or no window " +
-                "could be built",
-            listOf("AdaptiveApplied", "AdaptiveFiltered", "CannotBuildAdaptiveRequest", "NothingToAdapt"),
+                "false: a change was applied, a change was refused, nothing was adapted, a family the " +
+                "opportunity does not present had only its window read, or no window could be built",
+            listOf(
+                "AdaptiveApplied",
+                "AdaptiveFiltered",
+                "CannotBuildAdaptiveRequest",
+                "NothingToAdapt",
+                "WindowOnly"
+            ),
             shapesOf(AdaptiveIntegrationOutcome::class.java)
         )
         assertEquals(

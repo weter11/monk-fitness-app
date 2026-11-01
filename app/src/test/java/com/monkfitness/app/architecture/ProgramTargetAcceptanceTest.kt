@@ -192,7 +192,7 @@ class ProgramTargetAcceptanceTest {
 
             val adaptive = integration.adaptAfter(sessionId)
             assertTrue("the pass produced an outcome", adaptive is AdaptiveIntegrationResult.Success)
-            val outcome = (adaptive as AdaptiveIntegrationResult.Success).outcome
+            val outcome = (adaptive as AdaptiveIntegrationResult.Success).outcomes.single()
             assertTrue(
                 "with no declared progression relation and no exercise→family classification the " +
                     "integration says so rather than inventing an adaptation, got $outcome",

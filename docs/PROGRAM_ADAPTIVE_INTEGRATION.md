@@ -141,13 +141,13 @@ ordinary end of a program and an expected result, not an exception and not a fab
 ### Which element, and whose it is
 
 The subject of a decision is the family the completion just trained — that is what its window, evidence
-and signals are about — so the element is the first element **of the target opportunity's presentation**,
-in the presentation's own order, whose family is one the completion exposed and for which a ladder is
-declared. The presentation is composed by the domain's own `presentedWorkout` (the revision's plan day
-plus the adjustments still standing for the opportunity), so an element that already carries an
-adjustment is decided about **as the user would see it**, and the adjustment a new decision supersedes is
-the one that stands for that very element. A day that trains no exposed family is not adapted *now*: the
-family's window opens again when its own next appearance is completed.
+and signals are about — and the pass decides **one leg per exposed family**, against the first element
+**of the target opportunity's presentation** for that family, in the presentation's own order. The
+presentation is composed by the domain's own `presentedWorkout` (the revision's plan day plus the
+adjustments still standing for the opportunity), so an element that already carries an adjustment is
+decided about **as the user would see it**, and the adjustment a new decision supersedes is the one that
+stands for that very element. A family the opportunity does not present has no element to change: its
+window is read, its bookkeeping advances and no adjustment is written.
 
 Ownership is **not** decided here. The element carries what the plan says about it — `isPinned` and
 `origin`, in that order of precedence — and the engine's own rule holds on a user-authored or pinned

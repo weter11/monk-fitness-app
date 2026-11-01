@@ -1,7 +1,9 @@
 package com.monkfitness.app.domain.usecase
 
 import com.monkfitness.app.domain.adaptive.integration.AdaptiveInputGap
+import com.monkfitness.app.domain.adaptive.integration.AdaptiveIntegrationOutcome
 import com.monkfitness.app.domain.adaptive.integration.ExerciseFamilyClassification
+import com.monkfitness.app.domain.workout.AdaptiveCompletion
 import kotlinx.coroutines.runBlocking
 import org.junit.After
 import org.junit.Assert.assertEquals
@@ -252,24 +254,54 @@ class CatalogExerciseFamilyClassificationIntegrationTest {
     }
 
     /**
-     * **A day presenting only an unexposed family is a different gap, and stays one.** The completion
-     * exposed `pushups`; a target day presenting only `squats` presents none of them. That is
-     * `NO_EXPOSED_FAMILY_IN_THE_TARGET_SLOT` — and asserting it is what proves the central assertion is
-     * about the *push* day specifically, not about any gap the pass can reach.
+     * **A day presenting only an unexposed family still reads that family's window.** The completion
+     * exposed `pushups`; the next opportunity presents only `squats`, so there is no element to attach an
+     * adjustment to. The family's bookkeeping advances, nothing is attached and nothing is decided — and
+     * the pass names the family rather than collapsing into a gap that names none.
      */
     @Test
-    fun aDayPresentingOnlyAnUnexposedFamilyReportsThatGapNotTheRelationGap() = runBlocking {
+    fun aDayPresentingOnlyAnUnexposedFamilyAdvancesThatFamilysWindow() = runBlocking {
         // The rig's own default graph is already the two-day plan: the past opportunities present the
-        // push day and the next future one presents the leg day. So this is the *same* pass as the
-        // central assertion with the target on the other family, and the two must come out different.
+        // push day and the next future one presents the leg day.
         rig.createGraph()
         val trigger = rig.seedHistoryAndTrigger()
+        val before = rig.counts()
+
+        val outcome = rig.outcomeOf(rig.adapt(trigger.sessionId))
+
+        assertTrue(
+            "the completion exposed 'pushups' and the next opportunity presents only 'squats', so the " +
+                "family's window is read and nothing is attached to the opportunity: $outcome",
+            outcome is AdaptiveIntegrationOutcome.WindowOnly
+        )
+        assertEquals("pushups", outcome.familyId)
+        assertEquals(
+            "and with no position to store, nothing adaptive was written",
+            before,
+            rig.counts()
+        )
+    }
+
+    /**
+     * **One leg per family.** A day presenting `pushups` and `squats` exposes both families in one
+     * completion, and both are decided in the same pass: the pass stops choosing one.
+     */
+    @Test
+    fun aCompletionOverTwoFamiliesCarriesOneLegForEach() = runBlocking {
+        rig.createTwoFamilyGraph()
+        val trigger = rig.seedHistoryAndTrigger()
+
+        val outcomes = rig.outcomesOf(rig.adapt(trigger.sessionId))
 
         assertEquals(
-            "the completion exposed 'pushups' and the next opportunity presents only 'squats', so the " +
-                "family the decision is about is not presented at all",
-            AdaptiveInputGap.NO_EXPOSED_FAMILY_IN_THE_TARGET_SLOT,
-            rig.gapOf(rig.adapt(trigger.sessionId))
+            "one outcome per family the completion exposed, in the order the session presents them",
+            listOf("pushups", "squats"),
+            outcomes.map { outcome -> outcome.familyId }
+        )
+        val completion = AdaptiveCompletion.of(outcomes.map { outcome -> outcome.completion })
+        assertTrue(
+            "and the completion carries both as legs of one unit: $completion",
+            completion is AdaptiveCompletion.Completions && completion.legs.size == 2
         )
     }
 

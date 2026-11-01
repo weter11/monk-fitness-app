@@ -1158,6 +1158,65 @@ class SessionRuntimeTest {
     }
 
     /**
+     * A completion that carries one leg per family writes every leg in the same unit of work, and reports
+     * one entry per family — including the family that stored no decision of its own.
+     */
+    @Test
+    fun aCompletionOfTwoFamiliesWritesOneLegPerFamilyAndReportsEach() = runBlocking {
+        val session = started()
+        val target = rig.slotId(3)
+        val push = decisionAbout(session, target, "decision-push")
+        val leg = push.copy(
+            decisionId = DecisionId("decision-leg"),
+            target = AdaptiveTarget.Family("leg-family")
+        )
+        val pushState = stateOf(session, "push-family")
+        val legState = stateOf(session, "leg-family")
+
+        val completion = SessionFixture.valueOf(
+            rig.runtime.finishSession(
+                session.sessionId,
+                AdaptiveCompletion.Completions(
+                    listOf(
+                        AdaptiveCompletion.Decided(push, familyState = pushState),
+                        AdaptiveCompletion.WindowEvaluated(legState)
+                    )
+                )
+            )
+        )
+
+        assertEquals(
+            "one entry per family, naming the decision only where one was stored",
+            AdaptiveOutcome.PerFamily(
+                listOf(
+                    AdaptiveOutcome.Family("push-family", DecisionId("decision-push"), null),
+                    AdaptiveOutcome.Family("leg-family", null, null)
+                )
+            ),
+            completion.adaptive
+        )
+        assertEquals(
+            "both decision rows landed in the same transaction",
+            "2",
+            rig.database.scalar("SELECT COUNT(*) FROM `program_adaptive_decision_record`")
+        )
+        assertEquals(
+            "and both families' states did too",
+            "2",
+            rig.database.scalar("SELECT COUNT(*) FROM `program_family_progression_state`")
+        )
+    }
+
+    /** One family's stored state, at the revision the session ran under. */
+    private fun stateOf(session: WorkoutSession, familyId: String) = FamilyProgressionState(
+        revisionId = session.revisionId,
+        familyId = familyId,
+        progressionLevel = 1,
+        adaptationState = AdaptiveState.HOLD,
+        updatedAt = SessionFixture.FINISHED
+    )
+
+    /**
      * One decision about [target] with the completion's Program and revision, and a slot that is still
      * ahead of the user.
      */

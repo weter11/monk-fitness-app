@@ -266,25 +266,34 @@ class SessionRuntime(
             return@sessionOutcome refused(SessionRefusal.SlotIsAlreadyCompleted(slot.slotId))
         }
 
-        val decided: AdaptiveCompletion.Decided? = when (adaptive) {
-            AdaptiveCompletion.NothingDecided, is AdaptiveCompletion.WindowEvaluated -> null
-            is AdaptiveCompletion.Decided -> {
-                val refusedTarget = adaptiveTargetRefusalOf(session, adaptive.decision)
-                if (refusedTarget != null) return@sessionOutcome refused(refusedTarget)
-                adaptive
+        val legs: List<AdaptiveCompletion> = when (adaptive) {
+            AdaptiveCompletion.NothingDecided -> emptyList()
+            is AdaptiveCompletion.WindowEvaluated, is AdaptiveCompletion.Decided,
+            is AdaptiveCompletion.NothingToAdapt -> listOf(adaptive)
+
+            is AdaptiveCompletion.Completions -> adaptive.legs
+        }
+
+        val decided = mutableListOf<AdaptiveCompletion.Decided>()
+        for (leg in legs) {
+            if (leg !is AdaptiveCompletion.Decided) continue
+            val refusedTarget = adaptiveTargetRefusalOf(session, leg.decision)
+            if (refusedTarget != null) return@sessionOutcome refused(refusedTarget)
+            decided += leg
+        }
+        // The family states this completion writes, one per family: a window that only advanced
+        // bookkeeping carries one too, which is why every leg that has one is saved.
+        val familyStates = legs.mapNotNull { leg ->
+            val familyState = when (leg) {
+                is AdaptiveCompletion.WindowEvaluated -> leg.familyState
+                is AdaptiveCompletion.Decided -> leg.familyState
+                else -> null
             }
-        }
-        // The family's state after the window this completion evaluated; it travels with both shapes
-        // that evaluated one.
-        val familyState = when (adaptive) {
-            AdaptiveCompletion.NothingDecided -> null
-            is AdaptiveCompletion.WindowEvaluated -> adaptive.familyState
-            is AdaptiveCompletion.Decided -> adaptive.familyState
-        }
-        if (familyState != null) {
-            require(familyState.revisionId == session.revisionId) {
-                "the adaptive state a completion writes is state of the revision the workout ran under: " +
-                    "state=${familyState.revisionId.value} session=${session.revisionId.value}"
+            familyState?.also { state ->
+                require(state.revisionId == session.revisionId) {
+                    "the adaptive state a completion writes is state of the revision the workout ran under: " +
+                        "state=${state.revisionId.value} session=${session.revisionId.value}"
+                }
             }
         }
 
@@ -296,8 +305,8 @@ class SessionRuntime(
 
         inTransaction {
             sessionRepository.finishSession(completed, completedSlot)
-            decided?.let { adaptiveRepository.persistDecision(it.decision, it.adjustment) }
-            familyState?.let { adaptiveRepository.saveFamilyState(it) }
+            decided.forEach { leg -> adaptiveRepository.persistDecision(leg.decision, leg.adjustment) }
+            familyStates.forEach { state -> adaptiveRepository.saveFamilyState(state) }
         }
 
         success(
@@ -305,10 +314,37 @@ class SessionRuntime(
                 session = requireStored(sessionId),
                 slot = scheduleRepository.slotById(session.slotId)
                     ?: error("the completed opportunity '${session.slotId.value}' is not readable"),
-                adaptive = decided?.let {
-                    AdaptiveOutcome.Stored(it.decision.decisionId, it.decision.adjustmentId)
-                } ?: AdaptiveOutcome.NothingDecided
+                adaptive = reportOf(legs)
             )
+        )
+    }
+
+    /**
+     * What the unit of work wrote, per family. A completion that carried one leg reports that leg's own
+     * shape; several report one entry each, including the families that stored nothing.
+     */
+    private fun reportOf(legs: List<AdaptiveCompletion>): AdaptiveOutcome = when {
+        legs.isEmpty() -> AdaptiveOutcome.NothingDecided
+        legs.size == 1 -> {
+            val leg = legs.single()
+            if (leg is AdaptiveCompletion.Decided) {
+                AdaptiveOutcome.Stored(leg.decision.decisionId, leg.decision.adjustmentId)
+            } else {
+                AdaptiveOutcome.NothingDecided
+            }
+        }
+
+        else -> AdaptiveOutcome.PerFamily(
+            legs.map { leg ->
+                val decision = (leg as? AdaptiveCompletion.Decided)?.decision
+                AdaptiveOutcome.Family(
+                    familyId = requireNotNull(leg.familyId) {
+                        "every leg of a completion names its family: $leg"
+                    },
+                    decisionId = decision?.decisionId,
+                    adjustmentId = decision?.adjustmentId
+                )
+            }
         )
     }
 
