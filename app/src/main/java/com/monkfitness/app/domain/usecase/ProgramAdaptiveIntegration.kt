@@ -23,6 +23,7 @@ import com.monkfitness.app.domain.adaptive.LoadProfile
 import com.monkfitness.app.domain.adaptive.PerformedSetAmount
 import com.monkfitness.app.domain.adaptive.RecoveryContext
 import com.monkfitness.app.domain.adaptive.VolumeLoad
+import com.monkfitness.app.domain.adaptive.medianKnownRestSeconds
 import com.monkfitness.app.domain.adaptive.decision.AdaptiveAdjustment
 import com.monkfitness.app.domain.adaptive.decision.AdaptiveTarget
 import com.monkfitness.app.domain.adaptive.decision.presentedWorkout
@@ -541,8 +542,8 @@ class ProgramAdaptiveIntegration(
         qualifyingWindowsSinceLastChange = stored?.qualifyingWindowsSinceLastChange,
         recoveryQualifyingWindows = stored?.recoveryQualifyingWindows ?: 0,
         // The target tree has no source for a rest request: `REST_BASED` has no subtype, no plan element
-        // prescribes rest and no screen can ask for one, so a window never *asks*. The policy's
-        // unsupported-rest path stays reachable only from a caller that states it.
+        // prescribes rest and no screen asks for one to be *changed*, so a window never requests one. The
+        // policy's unsupported-rest path stays reachable only from a caller that states it.
         restChangeRequested = false,
         // The timing facts, from the stored history. The return rule reads two of them — the stretch before
         // this window and how often the user usually trains — and no other rule consults the rest: a window
@@ -580,11 +581,12 @@ class ProgramAdaptiveIntegration(
                     completedSets = completed,
                     prescribedSets = prescribed,
                     // The per-set amounts are carried, not interpreted: the counts above say how many sets
-                    // happened, and nothing reads these yet.
+                    // happened, and the family's rest reading is taken from the same sets.
                     performedAmounts = occurrence.results.map { result ->
                         PerformedSetAmount(
                             completedReps = result.completedReps,
-                            durationSeconds = result.durationSeconds
+                            durationSeconds = result.durationSeconds,
+                            restSeconds = result.restSeconds
                         )
                     },
                     startedAt = session.startedAt,
@@ -721,8 +723,8 @@ class ProgramAdaptiveIntegration(
         ),
         density = DensityLoad(
             workingSeconds = plan.prescribedSeconds,
-            // Rest is recorded nowhere in the target tree: a prescription has no rest field and there is no
-            // rest subtype. The channel carries the working time that *is* recorded and a zero rest, which a
+            // The plan side records no rest: a prescription has no rest field and there is no rest
+            // subtype. The channel carries the working time that *is* recorded and a zero rest, which a
             // comparison reads as "nothing recorded" — a bound that blocks nothing, never a rest proposal.
             restSeconds = 0
         ),
@@ -756,6 +758,12 @@ class ProgramAdaptiveIntegration(
         val sets = performed.sumOf { (_, occurrence) -> occurrence.results.size }
         val repetitions = performed.sumOf { (_, occurrence) -> occurrence.results.sumOf { it.completedReps } }
         val seconds = performed.sumOf { (_, occurrence) -> occurrence.results.sumOf { it.durationSeconds } }
+        // Only the sets whose rest was recorded count. A window in which none was answers `0`, which is
+        // the density channel's existing "nothing recorded" reading — the same behaviour a window had
+        // before rest was stored, never a claim that the user rested for no seconds.
+        val restSeconds = medianKnownRestSeconds(
+            performed.flatMap { (_, occurrence) -> occurrence.results.map { result -> result.restSeconds } }
+        ) ?: 0
 
         return LoadProfile(
             scope = AdaptiveScope.FAMILY,
@@ -765,7 +773,7 @@ class ProgramAdaptiveIntegration(
             // level here would claim a historical position nobody recorded, so the channel reads "not covered"
             // and blocks nothing.
             intensity = IntensityLoad(),
-            density = DensityLoad(workingSeconds = seconds, restSeconds = 0),
+            density = DensityLoad(workingSeconds = seconds, restSeconds = restSeconds),
             // The exposure channel is the *plan's* opportunity record on both sides, because an opportunity is
             // the plan's and the calendar's, and the recent past has no second one to state. What it carries is
             // the pair the recent-context rule reads — how many opportunities the family had, and how many

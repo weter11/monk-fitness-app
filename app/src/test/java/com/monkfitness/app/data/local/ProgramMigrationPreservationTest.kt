@@ -81,8 +81,14 @@ class ProgramMigrationPreservationTest {
         return database
     }
 
-    private fun migratedDatabase(): SqliteTestDatabase = versionNineDatabase().also { database ->
+    private fun migratedDatabase(): SqliteTestDatabase = versionEighteenDatabase().also { database ->
         // The deployed chain, in the order a device runs it.
+        // The per-set rest column — nullable, additive, and no backfill of the sets already stored.
+        database.migrate(AppDatabase.MIGRATION_18_19)
+    }
+
+    /** A populated **version-18** database: every step before the per-set rest column. */
+    private fun versionEighteenDatabase(): SqliteTestDatabase = versionNineDatabase().also { database ->
         database.migrate(AppDatabase.MIGRATION_9_10)
         database.migrate(AppDatabase.MIGRATION_10_11)
         // The retirement step.
@@ -792,6 +798,86 @@ class ProgramMigrationPreservationTest {
             "the legacy rows the database held before the correction are untouched too",
             "pushup",
             database.scalar("SELECT currentExerciseId FROM `family_progression_state`")
+        )
+    }
+
+    /**
+     * The rest column is added to the sets a device already holds **without rewriting one**: a row
+     * written before the column existed keeps every value it held, and its rest reads `NULL`.
+     *
+     * `NULL` is the point of the step. A backfill of `0` would turn every historical set into the claim
+     * that it was performed with no rest at all, and the adaptive stage would then read a measurement
+     * where there is none; the schema says *not recorded* instead.
+     */
+    @Test
+    fun theRestUpgradeKeepsStoredSetsAndLeavesTheirRestUnknown() {
+        val database = versionEighteenDatabase()
+        database.exec(
+            "INSERT INTO `program` (`programId`, `name`, `description`, `source`, `lifecycleStatus`, " +
+                "`currentRevisionId`, `createdAt`, `updatedAt`) VALUES ('program-1', 'Program', '', " +
+                "'USER', 'RUNNING', 'revision-1', 1700000000000, 1700000000000)"
+        )
+        database.exec(
+            "INSERT INTO `program_revision` (`revisionId`, `programId`, `revisionNumber`, `mode`, " +
+                "`durationType`, `scheduleType`, `createdAt`) VALUES ('revision-1', 'program-1', 1, " +
+                "'MANUAL', 'INDEFINITE', 'FLEXIBLE_PER_WEEK', 1700000000000)"
+        )
+        database.exec(
+            "INSERT INTO `program_day` (`programDayId`, `revisionId`, `position`, `type`) " +
+                "VALUES ('day-1', 'revision-1', 1, 'TRAINING')"
+        )
+        database.exec(
+            "INSERT INTO `program_workout_slot` (`slotId`, `programId`, `revisionId`, `programDayId`, " +
+                "`plannedFor`, `status`) VALUES ('slot-1', 'program-1', 'revision-1', 'day-1', " +
+                "'2026-10-01', 'COMPLETED')"
+        )
+        database.exec(
+            "INSERT INTO `workout_session` (`sessionId`, `slotId`, `programId`, `revisionId`, " +
+                "`status`, `startedAt`) VALUES ('session-1', 'slot-1', 'program-1', 'revision-1', " +
+                "'COMPLETED', 1700000000000)"
+        )
+        database.exec(
+            "INSERT INTO `session_snapshot` (`sessionId`, `capturedAt`, `plannedFor`, `computedAt`, " +
+                "`appliedAdjustmentIds`) VALUES ('session-1', 1700000000000, '2026-10-01', " +
+                "1700000000000, '')"
+        )
+        database.exec(
+            "INSERT INTO `session_exercise` (`sessionExerciseId`, `sessionId`, `position`, " +
+                "`programExerciseId`, `exerciseId`, `prescriptionDimension`, `perSetTargets`, " +
+                "`skipped`) VALUES ('exercise-1', 'session-1', 1, 'element-1', 'pushup', " +
+                "'REP_BASED', '10', 0)"
+        )
+        database.exec(
+            "INSERT INTO `program_set_log` (`setLogId`, `sessionExerciseId`, `setIndex`, " +
+                "`completedReps`, `durationSeconds`, `performedAt`) VALUES ('set-1', 'exercise-1', 1, " +
+                "10, 0, 1700000005000)"
+        )
+        val before = database.rows("SELECT * FROM `program_set_log`").single()
+        val schemaBefore = database.masterSql()
+
+        database.migrate(AppDatabase.MIGRATION_18_19)
+
+        val after = database.rows("SELECT * FROM `program_set_log`").single()
+        assertEquals(
+            "the set the version-18 database held keeps every value it held",
+            before,
+            after.filterKeys { key -> key in before.keys }
+        )
+        assertEquals(
+            "and its rest is absent rather than zero: no rest was recorded for a set performed before " +
+                "the screen could measure one",
+            listOf(null),
+            listOf(after["restSeconds"])
+        )
+        assertEquals(
+            "the column is appended to the row's existing columns, in the order the entity declares them",
+            ProgramSchemaFixture.columnsNow("program_set_log").map { it.name },
+            database.columnNames("program_set_log")
+        )
+        assertEquals(
+            "no other table, index or bookkeeping entry is rewritten",
+            schemaBefore.filterKeys { table -> table != "program_set_log" },
+            database.masterSql().filterKeys { table -> table != "program_set_log" }
         )
     }
 }
