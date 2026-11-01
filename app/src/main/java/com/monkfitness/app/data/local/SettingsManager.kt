@@ -72,6 +72,15 @@ class SettingsManager(private val context: Context) {
         val REWARDS_GRANTED_DAYS = stringSetPreferencesKey("rewards_granted_days")
         val FILTER_LIBRARY_BY_CATEGORIES = booleanPreferencesKey("filter_library_by_categories")
         val SHOW_ENGINEERING_VALIDATION = booleanPreferencesKey("show_engineering_validation")
+
+        /**
+         * The rest the user last chose for a set interval, in seconds.
+         *
+         * Read as `null` when the user never chose one: the fallback is the session screen's own
+         * documented default, and a value stamped here would make the preference claim a choice nobody
+         * made.
+         */
+        val SESSION_REST_SECONDS = intPreferencesKey("session_rest_seconds")
     }
 
     val filterLibraryByCategoriesFlow: Flow<Boolean> = context.dataStore.data.map { preferences ->
@@ -87,6 +96,17 @@ class SettingsManager(private val context: Context) {
     val showEngineeringValidationFlow: Flow<Boolean> = context.dataStore.data.map { preferences ->
         // Hidden developer tool: OFF by default on every build.
         preferences[SHOW_ENGINEERING_VALIDATION] ?: false
+    }
+
+    /** The rest the user last chose, or `null` when they never chose one. */
+    val sessionRestSecondsFlow: Flow<Int?> = context.dataStore.data.map { preferences ->
+        preferences[SESSION_REST_SECONDS]
+    }
+
+    suspend fun setSessionRestSeconds(seconds: Int) {
+        context.dataStore.edit { preferences ->
+            preferences[SESSION_REST_SECONDS] = seconds.coerceAtLeast(0)
+        }
     }
 
     suspend fun setShowEngineeringValidation(enabled: Boolean) {

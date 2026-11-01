@@ -19,15 +19,22 @@ enum class ExposureLevel {
 /**
  * What one completed set amounted to. A set is measured in one unit, exactly as it was prescribed in one:
  * a repetition set carries [completedReps] and no seconds, a timed set the reverse.
+ *
+ * [restSeconds] is the rest taken before this set and is part of what was observed: `null` when none was
+ * recorded, which is an absence rather than a rest of zero seconds.
  */
 data class PerformedSetAmount(
     val completedReps: Int,
-    val durationSeconds: Int
+    val durationSeconds: Int,
+    val restSeconds: Int? = null
 ) {
 
     init {
         require(completedReps >= 0) { "completedReps must be >= 0, was $completedReps" }
         require(durationSeconds >= 0) { "durationSeconds must be >= 0, was $durationSeconds" }
+        require(restSeconds == null || restSeconds >= 0) {
+            "restSeconds must be absent or >= 0, was $restSeconds"
+        }
         require((completedReps > 0) != (durationSeconds > 0)) {
             "a set is measured in repetitions or in time, and a set that was not performed is " +
                 "absent rather than recorded as zero: reps=$completedReps seconds=$durationSeconds"

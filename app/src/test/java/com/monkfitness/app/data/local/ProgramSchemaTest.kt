@@ -157,6 +157,13 @@ class ProgramSchemaTest {
     private fun progressionRelationStatements(): List<String> =
         recordStatements(AppDatabase.MIGRATION_17_18)
 
+    /**
+     * The one exact statement the **per-set rest** step (18 -> 19) executes: the nullable column, with no
+     * default and no backfill of the rows a device already holds.
+     */
+    private fun restStatements(): List<String> =
+        recordStatements(AppDatabase.MIGRATION_18_19)
+
     private fun allAdditiveStatements(): List<String> =
         additiveStatements() + focusStatements() + windowStatements()
 
@@ -423,8 +430,14 @@ class ProgramSchemaTest {
         )
         assertEquals(18, AppDatabase.MIGRATION_17_18.endVersion)
         assertEquals(
+            "the per-set rest column is the additive step after the catalogue one",
+            18,
+            AppDatabase.MIGRATION_18_19.startVersion
+        )
+        assertEquals(19, AppDatabase.MIGRATION_18_19.endVersion)
+        assertEquals(
             "and the declared version is where the chain ends",
-            AppDatabase.MIGRATION_17_18.endVersion,
+            AppDatabase.MIGRATION_18_19.endVersion,
             currentVersion()
         )
     }
@@ -494,6 +507,45 @@ class ProgramSchemaTest {
                 Regex("\\b(INSERT|UPDATE|CREATE TABLE|DROP)\\b", RegexOption.IGNORE_CASE)
                     .containsMatchIn(statement)
             }
+        )
+    }
+
+    /**
+     * The rest step adds exactly one nullable column on the confirmed set, with **no `DEFAULT`**.
+     *
+     * `null` is the whole claim: it is what every set stored before this step holds, and it means *no
+     * rest was recorded* rather than *a rest of zero seconds*. A default would turn every historical set
+     * into a measurement nobody took, and a backfill would rewrite rows the device already holds.
+     */
+    @Test
+    fun theRestMigrationAddsOneNullableColumnAndNoDefault() {
+        val statements = restStatements()
+
+        assertEquals(
+            "18 -> 19 executes exactly one statement: the column on the row a confirmed set owns",
+            1,
+            statements.size
+        )
+        assertEquals(
+            "ALTER TABLE `program_set_log` ADD COLUMN `restSeconds` INTEGER",
+            ProgramSchemaFixture.normalized(statements.single())
+        )
+        assertEquals(
+            "and it is nullable, so absence is stored as itself rather than as a zero rest",
+            listOf(true),
+            ProgramSchemaFixture.columnsAddedBy("MIGRATION_18_19", "program_set_log").map { it.nullable }
+        )
+        assertTrue(
+            "no statement writes a row: a backfill would invent a rest for every set a device already " +
+                "recorded",
+            statements.none { statement ->
+                Regex("\\b(INSERT|UPDATE|DELETE|DROP|RENAME)\\b", RegexOption.IGNORE_CASE)
+                    .containsMatchIn(statement)
+            }
+        )
+        assertTrue(
+            "and no default is stated, because `0` would claim a measurement for a rest nobody recorded",
+            statements.none { statement -> statement.contains("DEFAULT", ignoreCase = true) }
         )
     }
 
@@ -1417,6 +1469,8 @@ class ProgramSchemaTest {
         upgraded.migrate(AppDatabase.MIGRATION_16_17)
         // The ladder catalogue's table, so the chain lands on the declared version.
         upgraded.migrate(AppDatabase.MIGRATION_17_18)
+        // The per-set rest column, so the chain lands on the declared version.
+        upgraded.migrate(AppDatabase.MIGRATION_18_19)
 
         assertEquals(
             "the revision table the chain leaves behind is the one the contract describes: the " +
@@ -1985,7 +2039,7 @@ class ProgramSchemaTest {
         // list is the set of steps being audited, not a sample of them.
         val added = ProgramSchemaFixture.normalized(
             (allAdditiveStatements() + targetOccurrenceStatements() + preferenceStatements() +
-                historicalFocusStatements()).joinToString(" ")
+                historicalFocusStatements() + restStatements()).joinToString(" ")
         )
         // The two target-occurrence tables are created outright rather than appended to, so their columns
         // are checked against their own `CREATE TABLE` — what [statementFor] returns for them. No column

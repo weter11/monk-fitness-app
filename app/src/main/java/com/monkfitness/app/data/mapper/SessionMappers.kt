@@ -152,7 +152,8 @@ internal fun SetLogEntity.toDomain(): SetResult = SetResult(
     setIndex = setIndex,
     completedReps = completedReps,
     durationSeconds = durationSeconds,
-    performedAt = storedInstant("program_set_log.performedAt", performedAt)
+    performedAt = storedInstant("program_set_log.performedAt", performedAt),
+    restSeconds = restSeconds
 )
 
 /** One session's row, as the session value stores it. */
@@ -215,5 +216,6 @@ internal fun SetResult.toEntity(sessionExerciseId: SessionExerciseId): SetLogEnt
     setIndex = setIndex,
     completedReps = completedReps,
     durationSeconds = durationSeconds,
-    performedAt = storedMilliseconds(performedAt)
+    performedAt = storedMilliseconds(performedAt),
+    restSeconds = restSeconds
 )

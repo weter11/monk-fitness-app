@@ -62,4 +62,44 @@ class ExposureObservationPerformedAmountsTest {
         assertEquals(listOf(0), observation.performedAmounts?.map { it.durationSeconds })
         assertEquals(8, prescribed.perSetReps.single())
     }
+
+    @Test
+    fun aMeasuredRestRidesAlongAndAnUnrecordedOneStaysAbsent() {
+        val logged = listOf(
+            SetResult(
+                setLogId = SetLogId("set-1"),
+                setIndex = 1,
+                completedReps = 8,
+                durationSeconds = 0,
+                performedAt = startedAt
+            ),
+            SetResult(
+                setLogId = SetLogId("set-2"),
+                setIndex = 2,
+                completedReps = 8,
+                durationSeconds = 0,
+                performedAt = startedAt.plusSeconds(150),
+                restSeconds = 90
+            )
+        )
+
+        val amounts = logged.map { result ->
+            PerformedSetAmount(
+                completedReps = result.completedReps,
+                durationSeconds = result.durationSeconds,
+                restSeconds = result.restSeconds
+            )
+        }
+
+        assertEquals(
+            "the rest the user took before a set is part of what the observation records",
+            listOf(null, 90),
+            amounts.map { it.restSeconds }
+        )
+        assertEquals(
+            "and the unmeasured set stays absent rather than being filled in with zero",
+            null,
+            amounts.first().restSeconds
+        )
+    }
 }
