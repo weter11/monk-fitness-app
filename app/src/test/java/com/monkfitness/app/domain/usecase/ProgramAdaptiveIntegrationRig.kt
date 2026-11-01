@@ -357,8 +357,11 @@ internal class ProgramAdaptiveIntegrationRig private constructor(
     }
 
     /** The outcome a result carries, failing the test with the reason when it carries none. */
-    fun outcomeOf(result: AdaptiveIntegrationResult): AdaptiveIntegrationOutcome = when (result) {
-        is AdaptiveIntegrationResult.Success -> result.outcome
+    fun outcomeOf(result: AdaptiveIntegrationResult): AdaptiveIntegrationOutcome = outcomesOf(result).single()
+
+    /** Every outcome a pass produced, one per family the completion exposed. */
+    fun outcomesOf(result: AdaptiveIntegrationResult): List<AdaptiveIntegrationOutcome> = when (result) {
+        is AdaptiveIntegrationResult.Success -> result.outcomes
         is AdaptiveIntegrationResult.InvalidData ->
             throw AssertionError("expected an outcome, got invalid data: ${result.cause.message}")
 

@@ -112,15 +112,17 @@ class SessionRuntimeResultTest {
     }
 
     @Test
-    fun theAdaptiveHalfOfACompletionHasExactlyThreeShapesAndNoneInventsADecision() {
+    fun theAdaptiveHalfOfACompletionHasOneShapePerFamilyAndNoneInventsADecision() {
         assertEquals(
-            "the adaptive stage evaluated no window, evaluated one and held, or decided something — " +
-                "three shapes and no fourth: a completion is not evidence for a decision, so nothing " +
-                "lets the runtime make one up, and \"a window that decided nothing\" is told apart " +
-                "from \"no window at all\" because only the first advances a family's bookkeeping " +
-                "(§11, §30 step 12)",
-            listOf("Decided", "NothingDecided", "WindowEvaluated"),
-            AdaptiveCompletion::class.java.declaredClasses.filterNot { it.isInterface }.map { it.simpleName }.sorted()
+            "the adaptive stage evaluated no window, held for one family, decided something, or carried " +
+                "one leg per family — and nothing lets the runtime make a decision up, so \"a window " +
+                "that decided nothing\" is told apart from \"no window at all\" because only the first " +
+                "advances a family's bookkeeping",
+            listOf("Completions", "Decided", "NothingDecided", "NothingToAdapt", "WindowEvaluated"),
+            AdaptiveCompletion::class.java.declaredClasses
+                .filter { AdaptiveCompletion::class.java.isAssignableFrom(it) }
+                .map { it.simpleName }
+                .sorted()
         )
         assertEquals(
             "every shape that evaluated a window carries the family's state leg §27 writes, so the " +
@@ -132,9 +134,12 @@ class SessionRuntimeResultTest {
         )
         assertEquals(
             "and what the completion reports mirrors that: one decision was stored, with or without the " +
-                "adjustment it applied, or nothing was",
-            listOf("NothingDecided", "Stored"),
-            AdaptiveOutcome::class.java.declaredClasses.filterNot { it.isInterface }.map { it.simpleName }.sorted()
+                "adjustment it applied, nothing was, or one entry per family",
+            listOf("NothingDecided", "PerFamily", "Stored"),
+            AdaptiveOutcome::class.java.declaredClasses
+                .filter { AdaptiveOutcome::class.java.isAssignableFrom(it) }
+                .map { it.simpleName }
+                .sorted()
         )
         assertEquals(
             "which is why the two cases of what is *stored* are told apart by values — the decision and " +
@@ -143,6 +148,69 @@ class SessionRuntimeResultTest {
             AdaptiveOutcome.Stored::class.java.declaredFields
                 .filterNot { Modifier.isStatic(it.modifiers) || it.name.startsWith("$") }
                 .map { it.name }
+        )
+        assertEquals(
+            "one family's share of a completion names the family and what it stored, so a family that " +
+                "stored nothing is still an entry of its own",
+            listOf("familyId", "decisionId", "adjustmentId"),
+            AdaptiveOutcome.Family::class.java.declaredFields
+                .filterNot { Modifier.isStatic(it.modifiers) || it.name.startsWith("$") }
+                .map { it.name }
+        )
+    }
+
+    @Test
+    fun aCompletionsLegsAreOnePerFamilyAndNeverWrapASingleLeg() {
+        val one = AdaptiveCompletion.NothingToAdapt("pushups")
+        val another = AdaptiveCompletion.NothingToAdapt("plank")
+
+        assertEquals(
+            "a completion that carried one family is that leg, not a list of one",
+            one,
+            AdaptiveCompletion.of(listOf(one))
+        )
+        assertEquals(
+            "and a completion that carried none is the explicit absence",
+            AdaptiveCompletion.NothingDecided,
+            AdaptiveCompletion.of(emptyList())
+        )
+        assertEquals(
+            "several families are one leg each",
+            listOf<AdaptiveCompletion>(one, another),
+            (AdaptiveCompletion.of(listOf(one, another)) as AdaptiveCompletion.Completions).legs
+        )
+
+        val twice = runCatching { AdaptiveCompletion.Completions(listOf(one, one)) }
+        assertTrue(
+            "a family cannot have two windows in one completion: ${twice.exceptionOrNull()?.message}",
+            twice.isFailure
+        )
+    }
+
+    @Test
+    fun aPerFamilyReportSaysWhetherAnyFamilyStoredADecision() {
+        val completion = SessionCompletion(
+            session = completedSession(),
+            slot = completedSlot(),
+            adaptive = AdaptiveOutcome.PerFamily(
+                listOf(
+                    AdaptiveOutcome.Family("pushups", DecisionId("decision-1"), AdjustmentId("adjustment-1")),
+                    AdaptiveOutcome.Family("plank", decisionId = null, adjustmentId = null)
+                )
+            )
+        )
+
+        assertTrue(
+            "a completion that stored a decision for one of its families says so",
+            completion.recordedAnAdaptiveDecision
+        )
+        assertFalse(
+            "and one that only read windows for every family does not",
+            completion.copy(
+                adaptive = AdaptiveOutcome.PerFamily(
+                    listOf(AdaptiveOutcome.Family("pushups", decisionId = null, adjustmentId = null))
+                )
+            ).recordedAnAdaptiveDecision
         )
     }
 

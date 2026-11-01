@@ -27,15 +27,17 @@ import com.monkfitness.app.domain.adaptive.decision.AdaptiveAdjustment
 import com.monkfitness.app.domain.adaptive.decision.AdaptiveTarget
 import com.monkfitness.app.domain.adaptive.decision.presentedWorkout
 import com.monkfitness.app.domain.adaptive.decision.standingAdjustments
-import com.monkfitness.app.domain.adaptive.engine.ProgramAdaptiveElement
 import com.monkfitness.app.domain.adaptive.engine.ProgramAdaptiveEngine
+import com.monkfitness.app.domain.adaptive.engine.ProgramAdaptiveEvidence
 import com.monkfitness.app.domain.adaptive.engine.ProgramAdaptivePolicy
 import com.monkfitness.app.domain.adaptive.engine.ProgramAdaptiveRequest
 import com.monkfitness.app.domain.adaptive.engine.ProgramAdaptiveResult
+import com.monkfitness.app.domain.adaptive.engine.ProgramAdaptiveSignalCalculator
 import com.monkfitness.app.domain.adaptive.engine.ProgramAdaptiveWindow
 import com.monkfitness.app.domain.adaptive.engine.ProgramGapFacts
 import com.monkfitness.app.domain.adaptive.engine.ProgramElementOwnership
 import com.monkfitness.app.domain.adaptive.engine.ProgramProgressionRelation
+import com.monkfitness.app.domain.adaptive.engine.ProgramWindowVerdict
 import com.monkfitness.app.domain.adaptive.integration.AdaptiveInputGap
 import com.monkfitness.app.domain.adaptive.integration.AdaptiveIntegrationOutcome
 import com.monkfitness.app.domain.adaptive.integration.AdaptiveIntegrationResult
@@ -50,6 +52,7 @@ import com.monkfitness.app.domain.adaptive.integration.adaptiveTargetSlotOf
 import com.monkfitness.app.domain.adaptive.integration.ownership
 import com.monkfitness.app.domain.common.AdjustmentId
 import com.monkfitness.app.domain.common.DecisionId
+import com.monkfitness.app.domain.common.RevisionId
 import com.monkfitness.app.domain.common.SessionId
 import com.monkfitness.app.domain.prescription.PrescriptionDimension
 import com.monkfitness.app.domain.program.ProgramDay
@@ -76,11 +79,12 @@ import java.time.temporal.ChronoUnit
  *
  * What it decides: the **target opportunity** (the next not-yet-started, still-startable one of the same
  * Program under the same revision — no other opportunity, no other revision, and none created here, so when
- * none is eligible the answer is `NO_FUTURE_SLOT`); the **subject** (the first element of that opportunity's
- * presentation whose family the completion exposed and for which a ladder is declared — ownership is *not*
- * decided here, an authored or pinned element is handed to the engine as what it is); the **window's facts**;
- * the **three judgements** (evidence, confidence, recovery), kept separate; and **identity and the moment**,
- * from the injected [IdGenerator] and [Clock], read once per pass.
+ * none is eligible the answer is `NO_FUTURE_SLOT`); one **leg per family** the completion exposed, each
+ * against the first element of that opportunity's presentation for its family (ownership is *not* decided
+ * here, an authored or pinned element is handed to the engine as what it is, and a family the opportunity
+ * does not present gets its window read and its bookkeeping advanced with no adjustment); the **window's
+ * facts**; the **three judgements** (evidence, confidence, recovery), kept separate; and **identity and the
+ * moment**, from the injected [IdGenerator] and [Clock].
  *
  * It runs no policy or threshold of its own, invents no ladder, fabricates no judgement, and creates, moves or
  * rewrites nothing. The ladder is the persisted catalogue's, read through [ProgressionRelationProvider]: a
@@ -177,7 +181,7 @@ class ProgramAdaptiveIntegration(
         val observations = observationsOf(history, session.sessionId, windowStart, capturedAt)
         val exposed = exposedFamiliesOf(session)
 
-        // The presentation plus the standing adjustments that make it effective: the element the decision is
+        // The presentation plus the standing adjustments that make it effective: the element a decision is
         // about is the one the user would actually be shown, and a decision about it supersedes the standing
         // adjustment — by reference, never by rewriting it.
         val standing = standingAdjustments(adaptiveRepository.adjustmentsOf(targetSlot.slotId))
@@ -189,72 +193,110 @@ class ProgramAdaptiveIntegration(
                 ownership = ownership.getValue(exercise.programExerciseId.value)
             )
         }
+        val familyOfExercise = classifiedExercisesOf(observations, day)
+        val today = LocalDate.ofInstant(capturedAt, zone)
 
-        val chosen = when (
+        // Nothing was trained, so there is no window to read for any family. Which gap names it depends on
+        // whether the day can be read at all — a different fix for a different missing fact.
+        if (exposed.isEmpty()) {
+            val readable = adaptiveTargetElementOf(
+                presented = elements,
+                plan = day,
+                exposedFamilies = emptySet(),
+                classification = classification,
+                relations = relations
+            ) !is AdaptiveTargetElement.NoFamilyIsClassified
+
+            return gap(
+                if (readable) {
+                    AdaptiveInputGap.NO_EXPOSED_FAMILY_IN_THE_TARGET_SLOT
+                } else {
+                    AdaptiveInputGap.NO_FAMILY_CLASSIFICATION
+                }
+            )
+        }
+
+        val outcomes = exposed.map { familyId ->
+            val stored = adaptiveRepository.familyState(session.revisionId, familyId)
             val choice = adaptiveTargetElementOf(
                 presented = elements,
                 plan = day,
-                exposedFamilies = exposed,
+                exposedFamilies = setOf(familyId),
                 classification = classification,
                 relations = relations
             )
-        ) {
-            is AdaptiveTargetElement.Chosen -> choice
-            AdaptiveTargetElement.NoFamilyIsClassified ->
-                return gap(AdaptiveInputGap.NO_FAMILY_CLASSIFICATION)
+            // A family the opportunity does not present still has a window: its position is the one it
+            // already holds, or the one the ladder declares for the exercise it last performed.
+            val lastPerformed = lastPerformedExerciseOf(observations, familyOfExercise, familyId)
+            val element = (choice as? AdaptiveTargetElement.Chosen)?.element
+            val relation = (choice as? AdaptiveTargetElement.Chosen)?.relation
+                ?: relations.relationOf(familyId)
+            val exerciseId = element?.exerciseId ?: lastPerformed
+            val level = stored?.progressionLevel
+                ?: exerciseId?.let { id -> relation?.declared(id)?.level }
 
-            AdaptiveTargetElement.NoExposedFamilyIsPresented ->
-                return gap(AdaptiveInputGap.NO_EXPOSED_FAMILY_IN_THE_TARGET_SLOT)
+            // Presented, classified, but no ladder declares it: there is no honest step, so this family's
+            // outcome is that gap and nothing is written for it.
+            if (choice is AdaptiveTargetElement.NoDeclaredRelation) {
+                return@map AdaptiveIntegrationOutcome.CannotBuildAdaptiveRequest(
+                    AdaptiveInputGap.NO_DECLARED_PROGRESSION_RELATION
+                )
+            }
 
-            AdaptiveTargetElement.NoDeclaredRelation ->
-                return gap(AdaptiveInputGap.NO_DECLARED_PROGRESSION_RELATION)
-        }
-
-        val element: ProgramAdaptiveElement = chosen.element
-        val relation: ProgramProgressionRelation = chosen.relation
-        val familyId = element.familyId
-
-        val stored = adaptiveRepository.familyState(session.revisionId, familyId)
-        val level = stored?.progressionLevel ?: relation.declared(element.exerciseId)?.level
-        val planWindow = familyPlanWindowOf(
-            revision = revision,
-            slots = slots,
-            sessions = history,
-            completion = session.sessionId,
-            familyId = familyId,
-            windowStart = windowStart,
-            capturedAt = capturedAt
-        )
-        val baselineLoad = planLoadOf(level, familyId, planWindow)
-        val recentLoad = performedLoadOf(
-            sessions = history,
-            completion = session.sessionId,
-            familyId = familyId,
-            windowStart = windowStart,
-            capturedAt = capturedAt,
-            exposure = ExposureLoad(
-                opportunities = planWindow.opportunities,
-                completedOpportunities = planWindow.completedOpportunities
+            val planWindow = familyPlanWindowOf(
+                revision = revision,
+                slots = slots,
+                sessions = history,
+                completion = session.sessionId,
+                familyId = familyId,
+                windowStart = windowStart,
+                capturedAt = capturedAt
             )
-        )
-        val familyOfExercise = classifiedExercisesOf(observations, day)
+            val baselineLoad = planLoadOf(level, familyId, planWindow)
+            val recentLoad = performedLoadOf(
+                sessions = history,
+                completion = session.sessionId,
+                familyId = familyId,
+                windowStart = windowStart,
+                capturedAt = capturedAt,
+                exposure = ExposureLoad(
+                    opportunities = planWindow.opportunities,
+                    completedOpportunities = planWindow.completedOpportunities
+                )
+            )
+            // The facts about *when*, from history the pass already holds: the last confirmed set anywhere
+            // in it (never narrowed to the window — a set older than the window is exactly the fact a gap
+            // rule needs), the stretch before this window's own session, and the user's usual interval from
+            // the family's last few sessions wherever they fall. The return rule reads the last two.
+            val gapFacts = programGapFactsOf(
+                sessions = history,
+                completion = session.sessionId,
+                familyOf = { exerciseId -> classification.familyOf(exerciseId) },
+                familyId = familyId,
+                zone = zone,
+                statedOn = today,
+                policy = policy
+            )
+            val window = windowOf(familyId, exerciseId, stored, relation, gapFacts)
 
-        // The facts about *when*, from history the pass already holds: the last confirmed set anywhere in it
-        // (never narrowed to the window — a set older than the window is exactly the fact a gap rule needs),
-        // the stretch before this window's own session, and the user's usual interval from the family's last
-        // few sessions wherever they fall. The return rule reads the last two.
-        val gapFacts = programGapFactsOf(
-            sessions = history,
-            completion = session.sessionId,
-            familyOf = { exerciseId -> classification.familyOf(exerciseId) },
-            familyId = familyId,
-            zone = zone,
-            statedOn = LocalDate.ofInstant(capturedAt, zone),
-            policy = policy
-        )
-
-        val judgement = AdaptiveJudgementRule.of(
-            snapshot = snapshotOf(
+            val judgement = AdaptiveJudgementRule.of(
+                snapshot = snapshotOf(
+                    session = session,
+                    targetSlot = targetSlot,
+                    windowStart = windowStart,
+                    capturedAt = capturedAt,
+                    observations = observations,
+                    baselineLoad = baselineLoad,
+                    recentLoad = recentLoad,
+                    evidence = EvidenceLevel.INSUFFICIENT,
+                    confidence = ConfidenceLevel.LOW,
+                    recovery = RecoveryContext.UNKNOWN
+                ),
+                familyOfExercise = familyOfExercise,
+                familyId = familyId,
+                policy = policy
+            )
+            val snapshot = snapshotOf(
                 session = session,
                 targetSlot = targetSlot,
                 windowStart = windowStart,
@@ -262,47 +304,70 @@ class ProgramAdaptiveIntegration(
                 observations = observations,
                 baselineLoad = baselineLoad,
                 recentLoad = recentLoad,
-                evidence = EvidenceLevel.INSUFFICIENT,
-                confidence = ConfidenceLevel.LOW,
-                recovery = RecoveryContext.UNKNOWN
-            ),
-            familyOfExercise = familyOfExercise,
-            familyId = familyId,
-            policy = policy
-        )
-        val snapshot = snapshotOf(
-            session = session,
-            targetSlot = targetSlot,
-            windowStart = windowStart,
-            capturedAt = capturedAt,
-            observations = observations,
-            baselineLoad = baselineLoad,
-            recentLoad = recentLoad,
-            evidence = judgement.evidence,
-            confidence = judgement.confidence,
-            recovery = judgement.recovery
-        )
-
-        val result = ProgramAdaptiveEngine.decide(
-            ProgramAdaptiveRequest(
-                decisionId = DecisionId(idGenerator.newId()),
-                adjustmentId = AdjustmentId(idGenerator.newId()),
-                decidedAt = capturedAt,
-                snapshot = snapshot,
-                element = element,
-                relation = relation,
-                window = windowOf(familyId, element.exerciseId, stored, relation, gapFacts),
-                availableExerciseIds = availableExerciseIdsOf(revision),
-                familyOfExercise = familyOfExercise,
-                range = exerciseRanges.rangeOf(element.exerciseId),
-                supersedesAdjustmentId = supersededBy(standing, element.presentation.programExerciseId.value),
-                policy = policy
+                evidence = judgement.evidence,
+                confidence = judgement.confidence,
+                recovery = judgement.recovery
             )
-        )
 
-        return AdaptiveIntegrationResult.Success(
+            if (element == null || relation == null) {
+                // Nothing to attach a change to: read the window, advance the family's bookkeeping, write
+                // no adjustment. A family the day does not present cannot be re-prescribed.
+                val signals = ProgramAdaptiveSignalCalculator.calculate(
+                    snapshot = snapshot,
+                    familyOfExercise = familyOfExercise,
+                    familyId = familyId,
+                    policy = policy
+                )
+                val decision = policy.evaluate(
+                    ProgramAdaptiveEvidence(
+                        window = window,
+                        signals = signals,
+                        evidence = snapshot.evidence,
+                        confidence = snapshot.confidence,
+                        recovery = snapshot.recovery
+                    )
+                )
+                return@map AdaptiveIntegrationOutcome.WindowOnly(
+                    familyId = familyId,
+                    familyState = stateOf(
+                        revisionId = session.revisionId,
+                        familyId = familyId,
+                        stored = stored,
+                        level = level,
+                        currentExerciseId = stored?.currentExerciseId ?: exerciseId,
+                        state = decision.state,
+                        verdict = decision.verdict,
+                        spendsTheCooldown = false,
+                        decidedAt = capturedAt
+                    ),
+                    reason = decision.reason
+                )
+            }
+
+            val result = ProgramAdaptiveEngine.decide(
+                ProgramAdaptiveRequest(
+                    decisionId = DecisionId(idGenerator.newId()),
+                    adjustmentId = AdjustmentId(idGenerator.newId()),
+                    decidedAt = capturedAt,
+                    snapshot = snapshot,
+                    element = element,
+                    relation = relation,
+                    window = window,
+                    availableExerciseIds = availableExerciseIdsOf(revision),
+                    familyOfExercise = familyOfExercise,
+                    range = exerciseRanges.rangeOf(element.exerciseId),
+                    supersedesAdjustmentId = supersededBy(
+                        standing,
+                        element.presentation.programExerciseId.value
+                    ),
+                    policy = policy
+                )
+            )
+
             outcomeOf(result, stored, relation, element.exerciseId, capturedAt)
-        )
+        }
+
+        return AdaptiveIntegrationResult.Success(outcomes)
     }
 
     // The four outcome shapes, from the engine's own result.
@@ -378,22 +443,49 @@ class ProgramAdaptiveIntegration(
             ?: stored?.progressionLevel
             ?: relation.declared(presentedExerciseId)?.level
             ?: return null
-
-        val verdict = result.verdict
-        val levelChange = result.spendsTheCooldown
         val familyId = when (val target = result.decision.target) {
             is AdaptiveTarget.Family -> target.familyId
             else -> relation.familyId
         }
 
-        return FamilyProgressionState(
+        return stateOf(
             revisionId = result.decision.revisionId,
             familyId = familyId,
-            progressionLevel = level,
-            adaptationState = result.state,
+            stored = stored,
+            level = level,
             currentExerciseId = movedTo
                 ?: relation.declared(presentedExerciseId)?.exerciseId
                 ?: stored?.currentExerciseId,
+            state = result.state,
+            verdict = result.verdict,
+            spendsTheCooldown = result.spendsTheCooldown,
+            decidedAt = decidedAt
+        )
+    }
+
+    /**
+     * One window's advance of a family's stored facts, whichever path read the window: the engine's answer
+     * and a family the opportunity does not present differ only in whether anything was decided.
+     */
+    private fun stateOf(
+        revisionId: RevisionId,
+        familyId: String,
+        stored: FamilyProgressionState?,
+        level: Int?,
+        currentExerciseId: String?,
+        state: AdaptiveState,
+        verdict: ProgramWindowVerdict,
+        spendsTheCooldown: Boolean,
+        decidedAt: Instant
+    ): FamilyProgressionState? {
+        if (level == null) return null
+
+        return FamilyProgressionState(
+            revisionId = revisionId,
+            familyId = familyId,
+            progressionLevel = level,
+            adaptationState = state,
+            currentExerciseId = currentExerciseId,
             updatedAt = decidedAt,
             precedingProgressQualifyingWindows =
                 advanced(stored?.precedingProgressQualifyingWindows, verdict.progressQualifying),
@@ -408,12 +500,12 @@ class ProgramAdaptiveIntegration(
             // recovery holds the count: charging a family for weeks it could not use would make the cooldown
             // elapse on its behalf.
             qualifyingWindowsSinceLastChange = when {
-                levelChange -> 0
+                spendsTheCooldown -> 0
                 stored?.qualifyingWindowsSinceLastChange == null -> null
-                result.state == AdaptiveState.RECOVERY -> stored.qualifyingWindowsSinceLastChange
+                state == AdaptiveState.RECOVERY -> stored.qualifyingWindowsSinceLastChange
                 else -> stored.qualifyingWindowsSinceLastChange + 1
             },
-            recoveryQualifyingWindows = if (result.state == AdaptiveState.RECOVERY) {
+            recoveryQualifyingWindows = if (state == AdaptiveState.RECOVERY) {
                 (stored?.recoveryQualifyingWindows ?: 0) + 1
             } else {
                 0
@@ -434,13 +526,14 @@ class ProgramAdaptiveIntegration(
      */
     private fun windowOf(
         familyId: String,
-        presentedExerciseId: String,
+        presentedExerciseId: String?,
         stored: FamilyProgressionState?,
-        relation: ProgramProgressionRelation,
+        relation: ProgramProgressionRelation?,
         gap: ProgramGapFacts
     ): ProgramAdaptiveWindow = ProgramAdaptiveWindow(
         familyId = familyId,
-        level = stored?.progressionLevel ?: relation.declared(presentedExerciseId)?.level,
+        level = stored?.progressionLevel
+            ?: presentedExerciseId?.let { id -> relation?.declared(id)?.level },
         state = stored?.adaptationState ?: AdaptiveState.HOLD,
         precedingProgressQualifyingWindows = stored?.precedingProgressQualifyingWindows ?: 0,
         precedingRegressQualifyingWindows = stored?.precedingRegressQualifyingWindows ?: 0,
@@ -502,7 +595,8 @@ class ProgramAdaptiveIntegration(
         .sortedWith(compareBy({ it.startedAt }, { it.sessionExerciseId.value }))
 
     /**
-     * The families the completed session **exposed**: those of the occurrences it confirmed work for.
+     * The families the completed session **exposed**: those of the occurrences it confirmed work for, in
+     * the order the session first presents them, one entry each.
      *
      * A skipped occurrence, or one with no confirmed set, exposed nothing, and the completion's own snapshot
      * decides — which makes the subject a fact rather than a reading of today's plan. An exercise the
@@ -511,11 +605,22 @@ class ProgramAdaptiveIntegration(
      * [adaptiveTargetElementOf] applies the same rule to the target's elements, so the two sides cannot
      * disagree about what a family is.
      */
-    private fun exposedFamiliesOf(session: WorkoutSession): Set<String> =
+    private fun exposedFamiliesOf(session: WorkoutSession): List<String> =
         session.exercises
             .filter { it.results.isNotEmpty() }
             .mapNotNull { classification.familyOf(it.exerciseId) }
-            .toSet()
+            .distinct()
+
+    /** The exercise the family most recently performed, which is the position it holds when it is absent. */
+    private fun lastPerformedExerciseOf(
+        observations: List<ExposureObservation>,
+        familyOfExercise: Map<String, String>,
+        familyId: String
+    ): String? = observations
+        .lastOrNull { observation ->
+            (familyOfExercise[observation.exerciseId] ?: observation.exerciseId) == familyId
+        }
+        ?.exerciseId
 
     private fun classifiedExercisesOf(
         observations: List<ExposureObservation>,
@@ -759,7 +864,9 @@ class ProgramAdaptiveIntegration(
 
     /** An expected absence of a fact, as the pass reports it. */
     private fun gap(gap: AdaptiveInputGap): AdaptiveIntegrationResult =
-        AdaptiveIntegrationResult.Success(AdaptiveIntegrationOutcome.CannotBuildAdaptiveRequest(gap))
+        AdaptiveIntegrationResult.Success(
+            listOf(AdaptiveIntegrationOutcome.CannotBuildAdaptiveRequest(gap))
+        )
 }
 
 // The window's facts about *when*. Stated here, read by the return rule.
