@@ -207,7 +207,7 @@ class ProgramSessionController(
     private val adaptive: ProgramAdaptiveIntegration,
     private val lifecycle: ProgramLifecycleService,
     private val catalogue: ExerciseCatalogue,
-    private val families: FamilyCatalogue,
+    private val familyCatalogue: FamilyCatalogue,
     private val restPreference: SessionRestPreference,
     private val defaultRestSeconds: Int = DEFAULT_REST_SECONDS
 ) {
@@ -540,7 +540,7 @@ class ProgramSessionController(
     private suspend fun familyNames(): Map<String, Int> {
         nameByFamilyId?.let { cached -> return cached }
         val loaded = try {
-            families.names()
+            familyCatalogue.names()
         } catch (failure: Throwable) {
             emptyMap()
         }

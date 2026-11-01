@@ -79,7 +79,7 @@ class ProgramTargetAcceptanceTest {
                 adaptive = integration,
                 lifecycle = rig.transfer.lifecycleService,
                 catalogue = { rig.catalogueOptions },
-                families = { emptyMap() },
+                familyCatalogue = { emptyMap() },
                 restPreference = InMemoryRestPreference()
             )
 
@@ -177,7 +177,7 @@ class ProgramTargetAcceptanceTest {
                 adaptive = integration,
                 lifecycle = rig.transfer.lifecycleService,
                 catalogue = { rig.catalogueOptions },
-                families = { emptyMap() },
+                familyCatalogue = { emptyMap() },
                 restPreference = InMemoryRestPreference()
             )
             reopened.open(slotId.value)

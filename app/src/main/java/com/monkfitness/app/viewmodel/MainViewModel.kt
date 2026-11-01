@@ -159,9 +159,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     )
                 }
             },
-            families = FamilyCatalogue {
-                workoutGenerator.families.associate { family -> family.id to family.nameRes }
-            },
+            familyCatalogue = FamilyCatalogue { workoutGenerator.getFamilyNames() },
             restPreference = object : SessionRestPreference {
                 override suspend fun read(): Int? = settings.sessionRestSecondsFlow.first()
 

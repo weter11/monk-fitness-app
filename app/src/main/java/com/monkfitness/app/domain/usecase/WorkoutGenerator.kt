@@ -757,6 +757,10 @@ class WorkoutGenerator {
         return allExercises.filter { it.isAccessibleWith(normalizedEquipment) }
     }
 
+    /** The catalogue's families as display-name resources, keyed by the id a plan stores. */
+    fun getFamilyNames(): Map<String, Int> =
+        families.associate { family -> family.id to family.nameRes }
+
     private fun filterExercisesForAvailableEquipment(
         exercises: List<Exercise>,
         availableEquipment: Set<Equipment>,
