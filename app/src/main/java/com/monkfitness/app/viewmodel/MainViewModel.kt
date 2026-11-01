@@ -46,12 +46,14 @@ import com.monkfitness.app.platform.ProgramShareSheet
 import com.monkfitness.app.domain.track.TrackCalendar
 import com.monkfitness.app.domain.program.StandardProgram
 import com.monkfitness.app.ui.programs.ExerciseOptionUi
+import com.monkfitness.app.ui.programs.FamilyCatalogue
 import com.monkfitness.app.ui.programs.ProgramHomeController
 import com.monkfitness.app.ui.programs.ProgramHomeUiState
 import com.monkfitness.app.ui.programs.ProgramProgressController
 import com.monkfitness.app.ui.programs.ProgramProgressUiState
 import com.monkfitness.app.ui.programs.ProgramSessionController
 import com.monkfitness.app.ui.programs.ProgramsController
+import com.monkfitness.app.ui.programs.SessionRestPreference
 import com.monkfitness.app.validation.EngineeringValidationFilter
 import com.monkfitness.app.validation.ValidationCategory
 import com.monkfitness.app.validation.ValidationPose
@@ -156,6 +158,14 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                         isTimerBased = exercise.isTimerBased
                     )
                 }
+            },
+            families = FamilyCatalogue {
+                workoutGenerator.families.associate { family -> family.id to family.nameRes }
+            },
+            restPreference = object : SessionRestPreference {
+                override suspend fun read(): Int? = settings.sessionRestSecondsFlow.first()
+
+                override suspend fun remember(seconds: Int) = settings.setSessionRestSeconds(seconds)
             }
         )
         viewModelScope.launch { settings.ensureTrackStartDate() }
