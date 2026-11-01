@@ -1196,8 +1196,8 @@ class SessionRuntimeTest {
             completion.adaptive
         )
         assertEquals(
-            "both decision rows landed in the same transaction",
-            "2",
+            "the one leg that decided something stored its decision in that transaction",
+            "1",
             rig.database.scalar("SELECT COUNT(*) FROM `program_adaptive_decision_record`")
         )
         assertEquals(

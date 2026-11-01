@@ -289,6 +289,9 @@ class CatalogExerciseFamilyClassificationIntegrationTest {
     @Test
     fun aCompletionOverTwoFamiliesCarriesOneLegForEach() = runBlocking {
         rig.createTwoFamilyGraph()
+        // The class's rig is the empty catalogue; this claim is about two ladders being decided, so it
+        // reads the production source.
+        rig.relations = rig.productionProvider()
         val trigger = rig.seedHistoryAndTrigger()
 
         val outcomes = rig.outcomesOf(rig.adapt(trigger.sessionId))
