@@ -79,6 +79,43 @@ class SessionOutcomeTextTest {
     }
 
     @Test
+    fun aFamilyWithNoFurtherAppearanceSaysThePlanEnded() {
+        assertEquals(
+            "the plan's end is a different sentence from \"not in your next workout\": one comes back",
+            R.string.programs_session_outcome_no_further_appearance,
+            SessionOutcomeText.windowText(ProgramAdaptiveReason.NO_FURTHER_APPEARANCE.name)
+        )
+        assertEquals(
+            "and a window read for any other reason keeps the earlier sentence",
+            R.string.programs_session_outcome_window_only,
+            SessionOutcomeText.windowText(ProgramAdaptiveReason.STABLE_PLATEAU.name)
+        )
+    }
+
+    @Test
+    fun aManualProgrammeSaysWhyNothingIsAdapted() {
+        val lines = SessionOutcomeText.linesOf(
+            outcomes = listOf(
+                AdaptiveIntegrationOutcome.CannotBuildAdaptiveRequest(
+                    AdaptiveInputGap.PROGRAM_MODE_IS_MANUAL
+                )
+            ),
+            familyNames = mapOf("pushups" to R.string.family_pushups)
+        )
+
+        assertEquals(
+            "one plain line, and it names no family because a manual Program is nobody's window",
+            1,
+            lines.size
+        )
+        assertEquals(null, lines.single().familyNameRes)
+        assertEquals(
+            R.string.programs_session_outcome_manual_programme,
+            lines.single().messageRes
+        )
+    }
+
+    @Test
     fun oneLinePerFamilyInThePassesOrderAndNoneForAGap() {
         val lines = SessionOutcomeText.linesOf(
             outcomes = listOf(

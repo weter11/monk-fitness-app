@@ -254,8 +254,12 @@ class ProgramAdaptiveIntegrationArchitectureTest {
             Regex(Regex.escape("zone = zone")).findAll(container).count()
         )
         assertTrue(
-            "the producer reads the instant it captured the window at",
-            integration.contains("notBefore = LocalDate.ofInstant(capturedAt, zone)")
+            "the producer converts the instant it captured the window at, in the zone it was handed",
+            integration.contains("val today = LocalDate.ofInstant(capturedAt, zone)")
+        )
+        assertTrue(
+            "and chooses every family's target opportunity against that one day",
+            integration.contains("notBefore = today")
         )
         assertTrue(
             "the consumer reads the moment the decision was taken on — not a fresh clock reading",

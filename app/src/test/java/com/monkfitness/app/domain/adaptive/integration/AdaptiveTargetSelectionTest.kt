@@ -150,6 +150,111 @@ class AdaptiveTargetSelectionTest {
         )
     }
 
+    /**
+     * A rotation presents each family on its own days, so the plan's next workout is usually a day a
+     * given family is absent from. The family's target is its **own** next appearance.
+     */
+    @Test
+    fun aFamilysTargetIsItsOwnNextAppearanceNotThePlansNextWorkout() {
+        val days = listOf(
+            dayOf("push-day", "plan-1" to "pushup"),
+            dayOf("core-day", "plan-2" to "plank")
+        )
+        val slots = listOf(
+            slot("core-next", "2026-09-22", SlotStatus.PLANNED, day = "core-day"),
+            slot("push-later", "2026-09-24", SlotStatus.PLANNED, day = "push-day"),
+            slot("core-later", "2026-09-26", SlotStatus.PLANNED, day = "core-day")
+        )
+
+        assertEquals(
+            "the next workout presents another family, so this one's target is its own later " +
+                "appearance — writing onto the next workout would never show the change",
+            "push-later",
+            adaptiveTargetSlotOf(slots, days, SlotId("completed"), today, PUSH_FAMILY, pushFamilies())
+                ?.slotId?.value
+        )
+        assertEquals(
+            "and the same answer comes out of the reversed input",
+            "push-later",
+            adaptiveTargetSlotOf(
+                slots.reversed(),
+                days,
+                SlotId("completed"),
+                today,
+                PUSH_FAMILY,
+                pushFamilies()
+            )?.slotId?.value
+        )
+    }
+
+    /** Nothing ahead presents the family: there is nowhere to write a change. */
+    @Test
+    fun aFamilyTheRestOfTheRevisionNeverPresentsHasNoTarget() {
+        val days = listOf(
+            dayOf("push-day", "plan-1" to "pushup"),
+            dayOf("core-day", "plan-2" to "plank")
+        )
+        val slots = listOf(
+            slot("core-next", "2026-09-22", SlotStatus.PLANNED, day = "core-day"),
+            slot("core-later", "2026-09-26", SlotStatus.PLANNED, day = "core-day")
+        )
+
+        assertNull(
+            "the plan continues, but never with this family",
+            adaptiveTargetSlotOf(slots, days, SlotId("completed"), today, PUSH_FAMILY, pushFamilies())
+        )
+    }
+
+    /** The family's own appearance is subject to the temporal and startability clauses too. */
+    @Test
+    fun aFamilysOwnAppearanceObeysTheSameDateAndStartabilityClauses() {
+        val days = listOf(
+            dayOf("push-day", "plan-1" to "pushup"),
+            dayOf("core-day", "plan-2" to "plank")
+        )
+        val slots = listOf(
+            slot("push-past", "2026-09-18", SlotStatus.MISSED, day = "push-day"),
+            slot(
+                "push-started",
+                "2026-09-22",
+                SlotStatus.PLANNED,
+                day = "push-day",
+                attempts = listOf(SessionId("s"))
+            ),
+            slot("push-open", "2026-09-24", SlotStatus.PLANNED, day = "push-day"),
+            slot("core-open", "2026-09-23", SlotStatus.PLANNED, day = "core-day")
+        )
+
+        assertEquals(
+            "a past appearance is excluded and a started one cannot consume a change",
+            "push-open",
+            adaptiveTargetSlotOf(slots, days, SlotId("completed"), today, PUSH_FAMILY, pushFamilies())
+                ?.slotId?.value
+        )
+    }
+
+    /**
+     * A day that presents the family only through a pinned or user-authored element still counts: which
+     * element may change is the engine's rule, and choosing here would pre-empt it.
+     */
+    @Test
+    fun aDayPresentingTheFamilyOnlyThroughAPinnedElementIsStillItsAppearance() {
+        val days = listOf(
+            dayOf("push-day", "plan-1" to "pushup"),
+            dayOf("pinned-push", "plan-2" to "pushup")
+        )
+        val slots = listOf(
+            slot("pinned-next", "2026-09-22", SlotStatus.PLANNED, day = "pinned-push")
+        )
+
+        assertEquals(
+            "the family appears on that day, so the engine is asked about it and says whose it is",
+            "pinned-next",
+            adaptiveTargetSlotOf(slots, days, SlotId("completed"), today, PUSH_FAMILY, pushFamilies())
+                ?.slotId?.value
+        )
+    }
+
     @Test
     fun theElementIsTheFirstExposedFamilyTheLadderCanResolve() = runBlocking {
         val choice = adaptiveTargetElementOf(
@@ -369,17 +474,22 @@ class AdaptiveTargetSelectionTest {
         id: String,
         date: String,
         status: SlotStatus,
-        attempts: List<SessionId> = emptyList()
+        attempts: List<SessionId> = emptyList(),
+        day: String = "day-1"
     ): WorkoutSlot = WorkoutSlot(
         slotId = SlotId(id),
         programId = ProgramId("program-1"),
         revisionId = RevisionId("revision-1"),
-        programDayId = ProgramDayId("day-1"),
+        programDayId = ProgramDayId(day),
         plannedFor = LocalDate.parse(date),
         status = status,
         attempts = attempts,
         completedAt = if (status == SlotStatus.COMPLETED) Instant.parse("2026-09-01T08:00:00Z") else null
     )
+
+    /** A plan day of the same revision, by identity, with its own elements. */
+    private fun dayOf(id: String, vararg elements: Pair<String, String>): ProgramDay =
+        day(*elements).copy(programDayId = ProgramDayId(id))
 
     private fun element(
         exerciseId: String,

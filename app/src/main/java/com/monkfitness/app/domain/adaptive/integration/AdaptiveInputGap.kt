@@ -43,8 +43,9 @@ enum class AdaptiveInputGap {
     NO_FAMILY_CLASSIFICATION,
 
     /**
-     * A day that trains other families is not adapted *now*: the family's own window opens when its next
-     * appearance is completed, which is when its evidence has moved on.
+     * A completion that confirmed no set exposed no family, so there is no window to read and nothing to
+     * decide. It is a separate gap from [NO_FAMILY_CLASSIFICATION] because here the day *can* be read: the
+     * missing fact is the work, not the classification.
      */
     NO_EXPOSED_FAMILY_IN_THE_TARGET_SLOT,
 

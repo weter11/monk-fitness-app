@@ -69,7 +69,14 @@ enum class ProgramAdaptiveReason {
      */
     BELOW_TARGET_CORRECTION,
 
-    VARIANT_REALIGNED;
+    VARIANT_REALIGNED,
+
+    /**
+     * The revision schedules no further opportunity that presents this family, so there is nowhere to
+     * write a change: the family's window is read and its bookkeeping advances, as for any other family
+     * the plan does not present again.
+     */
+    NO_FURTHER_APPEARANCE;
 
     val isHold: Boolean
         get() = this in holdingReasons
@@ -107,7 +114,8 @@ enum class ProgramAdaptiveReason {
             AGGREGATE_LOAD_GUARD,
             RECOVERY_ENTERED,
             RECOVERY_HELD,
-            RECOVERY_EXITED
+            RECOVERY_EXITED,
+            NO_FURTHER_APPEARANCE
         )
 
         val changeReasons: List<ProgramAdaptiveReason> = listOf(
