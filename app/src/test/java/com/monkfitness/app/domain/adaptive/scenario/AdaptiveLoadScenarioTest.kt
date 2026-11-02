@@ -12,6 +12,8 @@ import com.monkfitness.app.domain.adaptive.decision.AdaptiveAction
 import com.monkfitness.app.domain.adaptive.toExerciseRange
 import com.monkfitness.app.domain.prescription.PrescriptionDimension
 import com.monkfitness.app.domain.prescription.TimePrescription
+import com.monkfitness.app.domain.adaptive.engine.FamilyProgression
+import com.monkfitness.app.domain.product.ProductionFamilyProgression
 import com.monkfitness.app.domain.product.ProductionProgressionRelationDefinitions
 import com.monkfitness.app.domain.program.Focus
 import com.monkfitness.app.domain.program.ProgramDuration
@@ -372,8 +374,9 @@ class AdaptiveLoadScenarioTest {
         )
         val atTheTop = rows.last()
         assertEquals(
-            "at the top of the range it holds, and says so with a reason the UI can show",
-            ProgramAdaptiveReason.CEILING_REACHED.name,
+            "at the top of the range it holds, and the reason is the range's ceiling rather than a " +
+                "ladder's: this family declares no level above the exercise it presents",
+            ProgramAdaptiveReason.HELD_AT_UPPER_BOUND.name,
             atTheTop.reason
         )
         assertEquals(AdaptiveAction.HOLD.name, atTheTop.action?.name)
@@ -579,6 +582,62 @@ class AdaptiveLoadScenarioTest {
         )
     }
 
+    // ---- i. a floor the range cannot go below -----------------------------------------------------
+
+    /**
+     * The escalation is about what the user did, not about whose element it is: the element here is the
+     * plan's own automatic content, the shape a generated plan produces, and it escalates the same way a
+     * semi-automatic one does.
+     */
+    @Test
+    fun i1AGeneratedElementThatKeepsMissingTheFloorEscalates() {
+        val trend = pushupTimeline()
+        var date = dates.first()
+        val belowTheFloor = listOf(4, 4, 4)
+        val rows = (1..2).map { index ->
+            trend.runSession(date, belowTheFloor).also { date = next(date) }
+        }
+        printTable("i1. a generated push-up element performed below the range's floor twice", rows)
+
+        assertEquals(
+            "one bad appearance is held as it is: ${rows.first().reason}",
+            ProgramAdaptiveReason.HELD_AT_LOWER_BOUND.name,
+            rows.first().reason
+        )
+        assertEquals(
+            "the second consecutive one escalates, and the family declares a rung below",
+            ProgramAdaptiveReason.EASIER_VARIANT_SUGGESTED.name,
+            rows.last().reason
+        )
+        assertTrue(
+            "neither one writes a target below the floor: ${rows.map { row -> row.nextPlanned }}",
+            rows.all { row -> row.nextPlanned.all { amount -> amount >= PUSHUP_RANGE.first } }
+        )
+        assertTrue(
+            "and the suggestion moves nothing by itself",
+            rows.all { row -> row.nextPlanned == row.planned }
+        )
+    }
+
+    @Test
+    fun i2AGeneratedLadderlessFamilyThatKeepsMissingTheFloorIsCalledTooHeavy() {
+        val trend = plankTrend(plankSingleRung())
+        val first = trend.runSession(dates.first(), listOf(10, 10, 10))
+        val second = trend.runSession(next(first.date), listOf(10, 10, 10))
+        printTable("i2. a ladderless plank hold performed below its range's floor twice", listOf(first, second))
+
+        assertEquals(ProgramAdaptiveReason.HELD_AT_LOWER_BOUND.name, first.reason)
+        assertEquals(
+            "with no rung below, the escalation says the exercise is too heavy for the range instead",
+            ProgramAdaptiveReason.TOO_HEAVY_FOR_THE_RANGE.name,
+            second.reason
+        )
+        assertTrue(
+            "and the range's floor is never written below: ${second.nextPlanned}",
+            second.nextPlanned.all { amount -> amount >= PLANK_RANGE.first }
+        )
+    }
+
     // ---- fixtures --------------------------------------------------------------------------------
 
     private val dates = AdaptiveLoadTimeline.SESSION_DATES
@@ -604,6 +663,12 @@ class AdaptiveLoadScenarioTest {
     private fun pushupLadder(): ProgramProgressionRelation =
         ProductionProgressionRelationDefinitions.pushups
 
+    /** The app's own classification of a family it ships — what the adaptive layer is handed in production. */
+    private fun productionProgressionOf(familyId: String): FamilyProgression =
+        requireNotNull(ProductionFamilyProgression.of(familyId)) {
+            "the app classifies every family it ships: '$familyId'"
+        }
+
     private fun pushupTimeline(
         availableExerciseIds: Set<String> = setOf(PUSHUP),
         ownership: ProgramElementOwnership = ProgramElementOwnership.AUTOMATIC,
@@ -613,6 +678,7 @@ class AdaptiveLoadScenarioTest {
         dimension = PrescriptionDimension.REP_BASED,
         rangeOf = { exerciseId -> pushupRanges[exerciseId] },
         relation = pushupLadder(),
+        progression = productionProgressionOf(PUSHUP_FAMILY),
         availableExerciseIds = availableExerciseIds,
         subjectExerciseId = PUSHUP,
         subjectAmounts = amounts,
@@ -643,19 +709,23 @@ class AdaptiveLoadScenarioTest {
         return BreakPoint(trend, dates.last { it < date })
     }
 
-    private fun plankTimeline(
-        sessions: Int,
-        relation: ProgramProgressionRelation? = null
-    ): List<ScenarioRow> {
-        val trend = AdaptiveLoadTimeline(
+    private fun plankTrend(relation: ProgramProgressionRelation?): AdaptiveLoadTimeline =
+        AdaptiveLoadTimeline(
             familyId = PLANK_FAMILY,
             dimension = PrescriptionDimension.TIME_BASED,
             rangeOf = { ExerciseRange(timeRange = PLANK_RANGE) },
             relation = relation,
+            progression = productionProgressionOf(PLANK_FAMILY),
             availableExerciseIds = setOf(PLANK),
             subjectExerciseId = PLANK,
             subjectAmounts = listOf(20, 20, 20)
         )
+
+    private fun plankTimeline(
+        sessions: Int,
+        relation: ProgramProgressionRelation? = null
+    ): List<ScenarioRow> {
+        val trend = plankTrend(relation)
         var date = dates.first()
         return (1..sessions).map {
             trend.runSession(date, trend.nextPlanned).also { date = next(date) }
