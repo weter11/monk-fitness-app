@@ -110,8 +110,10 @@ sealed interface AdaptiveIntegrationOutcome {
     }
 
     /**
-     * The window was read for a family the target opportunity does not present: there is no element to
-     * attach an adjustment to, so the bookkeeping advances and nothing else is written.
+     * The window was read for a family the rest of the revision never presents again: there is no element
+     * to attach an adjustment to, so the bookkeeping advances and nothing else is written. [reason] is
+     * `NO_FURTHER_APPEARANCE` for that case, and the policy's own hold reason when the plan does present
+     * the family but nothing could be decided for it.
      */
     data class WindowOnly(
         override val familyId: String,

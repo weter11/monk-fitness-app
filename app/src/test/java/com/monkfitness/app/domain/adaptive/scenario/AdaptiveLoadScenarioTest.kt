@@ -27,6 +27,7 @@ import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.time.LocalDate
+import java.time.temporal.ChronoUnit
 
 /**
  * The adaptive load engine, driven end to end over multi-week timelines: a plan from [GeneratedPlanner]
@@ -419,9 +420,179 @@ class AdaptiveLoadScenarioTest {
         )
     }
 
+    // ---- h. a rotation: each family appears on its own days --------------------------------------
+
+    /**
+     * Rule 2 on a rotation. The family is trained once every sixth day, so the window holds four
+     * comparable exposures only from its fifth appearance: growth is measured in the family's own
+     * occurrences, not in the plan's workouts.
+     */
+    @Test
+    fun h1AGrowthStepOnARotationArrivesOnTheFifthAppearance() {
+        val trend = pushupTimeline()
+        val rows = rotationDates(RECURRENCE_SIX, 6).map { date -> trend.runSession(date, full(trend.nextPlanned)) }
+        printTable("h1. a family the plan presents every sixth day, every set completed", rows)
+
+        assertTrue(
+            "four comparable exposures are in the window only from the fifth appearance on, so the " +
+                "first four cannot raise anything: ${rows.take(4).map { row -> row.reason }}",
+            rows.take(4).none { row -> row.rose }
+        )
+        assertTrue(
+            "and the fifth does: ${rows.map { row -> row.nextPlanned }}",
+            rows[4].rose
+        )
+        assertEquals(
+            "twenty-four calendar days after the first appearance, not the two sessions a three-a-week " +
+                "rhythm needs",
+            24L,
+            ChronoUnit.DAYS.between(rows.first().date, rows[4].date)
+        )
+    }
+
+    /**
+     * The window measures **occurrences**, and a four-week lookback holds three of a family's
+     * twelve-day appearances — one fewer than the evidence gate requires. On this rotation growth is
+     * therefore not late, it is unreachable, and the family is told it is plateaued.
+     */
+    @Test
+    fun h2ATwelveDayRotationNeverConfirmsGrowth() {
+        val trend = pushupTimeline()
+        val rows = rotationDates(RECURRENCE_TWELVE, 12).map { date -> trend.runSession(date, full(trend.nextPlanned)) }
+        printTable("h2. a family the plan presents every twelfth day, every set completed", rows)
+
+        assertEquals(
+            "twelve appearances over 132 days and not one rise: the window holds at most three of them " +
+                "and four are required",
+            0,
+            rows.count { row -> row.rose }
+        )
+        assertEquals(
+            "and the answer names a plateau rather than the appearances the plan does not schedule",
+            ProgramAdaptiveReason.STABLE_PLATEAU.name,
+            rows.last().reason
+        )
+    }
+
+    /** Rule 3 on a rotation: one missed appearance is one missed appearance, not a break. */
+    @Test
+    fun h3AMissedAppearanceOnARotationIsNotAReturn() {
+        val trend = pushupTimeline()
+        val dates = rotationDates(RECURRENCE_TWELVE, 6)
+        val rows = dates.take(5).map { date -> trend.runSession(date, full(trend.nextPlanned)) }
+        val beforeSkip = trend.nextPlanned
+
+        trend.recordSkip(dates[5])
+        val back = trend.runSession(dates[5].plusDays(RECURRENCE_TWELVE), full(trend.nextPlanned))
+        printTable("h3. a skipped appearance at a twelve-day rhythm", rows + back)
+
+        assertEquals(
+            "a missed appearance neither grows nor lowers the next one: $beforeSkip -> ${back.nextPlanned}",
+            beforeSkip,
+            back.nextPlanned
+        )
+        assertNotEquals(
+            "and two of its own intervals away is not a return: ${back.reason}",
+            ProgramAdaptiveReason.RETURN_AFTER_GAP.name,
+            back.reason
+        )
+    }
+
+    /**
+     * Rule 4 on a rotation: the return floor is stated in the family's own intervals, so the same
+     * absence reads differently on a twelve-day rhythm than on a three-a-week one.
+     */
+    @Test
+    fun h4AReturnOnARotationIsMeasuredInItsOwnIntervals() {
+        // The plan presents more than the range floor: at the floor a return has nothing to take away
+        // and the engine answers FLOOR_REACHED instead of a lighter prescription.
+        val aboveTheFloor = listOf(8, 8, 8)
+        val shortBreak = rotationTimelineAfterThreeAppearances(aboveTheFloor)
+        val beforeShort = shortBreak.trend.nextPlanned
+        val afterThirty = shortBreak.trend.runSession(
+            shortBreak.lastDate.plusDays(30),
+            full(shortBreak.trend.nextPlanned)
+        )
+        assertNotEquals(
+            "thirty days is two and a half of this family's own intervals, under the multiple the " +
+                "return rule needs: ${afterThirty.reason}",
+            ProgramAdaptiveReason.RETURN_AFTER_GAP.name,
+            afterThirty.reason
+        )
+        assertTrue(
+            "so the next appearance is not lightened: $beforeShort -> ${afterThirty.nextPlanned}",
+            afterThirty.nextPlanned.sum() >= beforeShort.sum()
+        )
+        printTable("h4. thirty days away", listOf(afterThirty))
+
+        val longBreak = rotationTimelineAfterThreeAppearances(aboveTheFloor)
+        val beforeLong = longBreak.trend.nextPlanned
+        val afterSixty = longBreak.trend.runSession(
+            longBreak.lastDate.plusDays(60),
+            full(longBreak.trend.nextPlanned)
+        )
+        assertEquals(
+            "while sixty days — five of them — is a return",
+            ProgramAdaptiveReason.RETURN_AFTER_GAP.name,
+            afterSixty.reason
+        )
+        assertTrue(
+            "and it comes back lighter: $beforeLong -> ${afterSixty.nextPlanned}",
+            afterSixty.nextPlanned.sum() < beforeLong.sum()
+        )
+        printTable("h4. sixty days away", listOf(afterSixty))
+    }
+
+    /**
+     * Rule 5 on a rotation: the correction needs one occurrence, not a confirmed direction, and it is
+     * written onto the family's **next** appearance — which on this rotation is twelve days away.
+     */
+    @Test
+    fun h5ABelowTargetSetOnARotationSettlesTheNextAppearance() {
+        // A correction can only be expressed above the range floor: six is this exercise's floor, so a
+        // plan presenting six has nothing to take away.
+        val trend = pushupTimeline(amounts = listOf(8, 8, 8))
+        val first = trend.runSession(rotationDates(RECURRENCE_TWELVE, 1).single(), full(trend.nextPlanned))
+        val asked = trend.nextPlanned
+        val underTarget = asked.dropLast(1) + (asked.last() - 2)
+
+        val corrective = trend.runSession(first.date.plusDays(RECURRENCE_TWELVE), underTarget)
+        printTable("h5. one set below its target on a twelve-day rotation", listOf(first, corrective))
+
+        assertEquals(
+            "the family's next appearance is asked for what was actually performed, set by set: " +
+                "$asked -> ${corrective.nextPlanned}",
+            underTarget,
+            corrective.nextPlanned
+        )
+        assertEquals(
+            "one occurrence is enough: the correction is not a direction the confirmation rule reads",
+            ProgramAdaptiveReason.BELOW_TARGET_CORRECTION.name,
+            corrective.reason
+        )
+        assertEquals(
+            "and it lands on that appearance, twelve days after the short one",
+            RECURRENCE_TWELVE,
+            ChronoUnit.DAYS.between(first.date, corrective.date)
+        )
+    }
+
     // ---- fixtures --------------------------------------------------------------------------------
 
     private val dates = AdaptiveLoadTimeline.SESSION_DATES
+
+    /** [count] appearances of one family, the plan presenting it once every [days] days. */
+    private fun rotationDates(days: Long, count: Int): List<LocalDate> =
+        (0 until count).map { index -> ROTATION_START.plusDays(index * days) }
+
+    private fun rotationTimelineAfterThreeAppearances(
+        amounts: List<Int> = repPrescriptionOf(PUSHUP)
+    ): BreakPoint {
+        val trend = pushupTimeline(amounts = amounts)
+        val appearances = rotationDates(RECURRENCE_TWELVE, 3)
+        appearances.forEach { date -> trend.runSession(date, full(trend.nextPlanned)) }
+        return BreakPoint(trend, appearances.last())
+    }
 
     private fun next(date: LocalDate): LocalDate =
         requireNotNull(dates.firstOrNull { it.isAfter(date) }) { "the scenario's calendar ran out" }
@@ -433,7 +604,8 @@ class AdaptiveLoadScenarioTest {
 
     private fun pushupTimeline(
         availableExerciseIds: Set<String> = setOf(PUSHUP),
-        ownership: ProgramElementOwnership = ProgramElementOwnership.AUTOMATIC
+        ownership: ProgramElementOwnership = ProgramElementOwnership.AUTOMATIC,
+        amounts: List<Int> = repPrescriptionOf(PUSHUP)
     ): AdaptiveLoadTimeline = AdaptiveLoadTimeline(
         familyId = PUSHUP_FAMILY,
         dimension = PrescriptionDimension.REP_BASED,
@@ -441,7 +613,7 @@ class AdaptiveLoadScenarioTest {
         relation = pushupLadder(),
         availableExerciseIds = availableExerciseIds,
         subjectExerciseId = PUSHUP,
-        subjectAmounts = repPrescriptionOf(PUSHUP),
+        subjectAmounts = amounts,
         ownership = ownership
     )
 
@@ -584,5 +756,12 @@ class AdaptiveLoadScenarioTest {
         const val TOTAL = 12
 
         const val PLANK_SESSIONS = 20
+
+        /** The first appearance of a family a generated rotation presents on its own days. */
+        val ROTATION_START: LocalDate = LocalDate.parse("2026-01-05")
+
+        /** A family the plan presents every sixth day, and one it presents every twelfth. */
+        const val RECURRENCE_SIX: Long = 6L
+        const val RECURRENCE_TWELVE: Long = 12L
     }
 }

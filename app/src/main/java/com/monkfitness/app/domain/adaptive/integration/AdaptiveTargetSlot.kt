@@ -20,6 +20,9 @@ import java.time.LocalDate
  * startable, so status alone would let the stage target a past day the user has already lived through.
  * Nothing here moves a date or creates a slot; a past-but-startable opportunity is excluded, never
  * rescheduled.
+ *
+ * This is the plan's next workout, which a family's own [adaptiveTargetSlotOf] is not: a rotating plan
+ * presents a given family once every few days, and a family is adapted at *its* next appearance.
  */
 fun adaptiveTargetSlotOf(
     slots: List<WorkoutSlot>,
@@ -34,6 +37,46 @@ fun adaptiveTargetSlotOf(
                 slot.plannedFor.isAfter(notBefore)
         }
         .minWithOrNull(compareBy({ it.plannedFor }, { it.slotId.value }))
+
+/**
+ * One family's own next opportunity: the earliest opportunity that is still ahead **and whose plan day
+ * presents that family**.
+ *
+ * A rotation presents each family on its own days, so the plan's next workout is usually a day this
+ * family does not appear on. Targeting it would attach the adjustment to a workout that never shows the
+ * family — it would sit unconsumed and every decision would be a read window.
+ *
+ * A day presenting the family only through a pinned or user-authored element still counts: ownership is
+ * the engine's rule, and skipping such a day here would pre-empt it.
+ *
+ * @return `null` when the revision holds no further appearance of [familyId].
+ */
+fun adaptiveTargetSlotOf(
+    slots: List<WorkoutSlot>,
+    days: List<ProgramDay>,
+    completedSlotId: SlotId,
+    notBefore: LocalDate,
+    familyId: String,
+    classification: ExerciseFamilyClassification
+): WorkoutSlot? =
+    slots
+        .filter { slot ->
+            slot.slotId != completedSlotId &&
+                slot.attempts.isEmpty() &&
+                slot.isStartable &&
+                slot.plannedFor.isAfter(notBefore)
+        }
+        .filter { slot -> slot.presents(days, familyId, classification) }
+        .minWithOrNull(compareBy({ it.plannedFor }, { it.slotId.value }))
+
+private fun WorkoutSlot.presents(
+    days: List<ProgramDay>,
+    familyId: String,
+    classification: ExerciseFamilyClassification
+): Boolean = days
+    .firstOrNull { day -> day.programDayId == programDayId }
+    ?.exercises
+    ?.any { exercise -> classification.familyOf(exercise.exerciseId) == familyId } == true
 
 /**
  * The element of the target opportunity's presentation one decision is about, and the ladder it resolves

@@ -273,10 +273,11 @@ internal class CatalogAdaptiveIntegrationRig private constructor(
     }
 
     /**
-     * A second day presenting a family the push day never presents, so the two gaps can be told apart on
-     * the **same** plan: the completion trains `pushups` and the next opportunity presents only `squats`,
-     * which is `NO_EXPOSED_FAMILY_IN_THE_TARGET_SLOT`. Both families in one day would not do it — the
-     * completion would have exposed the very family the target presents.
+     * A second day presenting a family the push day never presents, so the two readings can be told apart
+     * on the **same** plan: the completion trains `pushups`, the remaining opportunities present the leg
+     * day, and a family with no further appearance is `WindowOnly` with `NO_FURTHER_APPEARANCE`. Both
+     * families in one day would not do it — the completion would have exposed the very family the target
+     * presents.
      */
     fun otherFamilyDay(): ProgramDay = ProgramDay(
         programDayId = otherDay,

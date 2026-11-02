@@ -32,6 +32,7 @@ import com.monkfitness.app.domain.adaptive.engine.ProgramAdaptiveElement
 import com.monkfitness.app.domain.adaptive.engine.ProgramAdaptiveEngine
 import com.monkfitness.app.domain.adaptive.engine.ProgramAdaptiveEvidence
 import com.monkfitness.app.domain.adaptive.engine.ProgramAdaptivePolicy
+import com.monkfitness.app.domain.adaptive.engine.ProgramAdaptiveReason
 import com.monkfitness.app.domain.adaptive.engine.ProgramAdaptiveRequest
 import com.monkfitness.app.domain.adaptive.engine.ProgramAdaptiveResult
 import com.monkfitness.app.domain.adaptive.engine.ProgramAdaptiveSignalCalculator
@@ -80,14 +81,16 @@ import java.time.temporal.ChronoUnit
  * the runtime hands it to [ProgramAdaptiveRepository] inside that transaction. The runtime composes and never
  * calculates a signal, resolves a progression or runs a policy.
  *
- * What it decides: the **target opportunity** (the next not-yet-started, still-startable one of the same
- * Program under the same revision — no other opportunity, no other revision, and none created here, so when
- * none is eligible the answer is `NO_FUTURE_SLOT`); one **leg per family** the completion exposed, each
- * against the first element of that opportunity's presentation for its family (ownership is *not* decided
- * here, an authored or pinned element is handed to the engine as what it is, and a family the opportunity
- * does not present gets its window read and its bookkeeping advanced with no adjustment); the **window's
- * facts**; the **three judgements** (evidence, confidence, recovery), kept separate; and **identity and the
- * moment**, from the injected [IdGenerator] and [Clock].
+ * What it decides: each performed family's **own target opportunity** — the next not-yet-started,
+ * still-startable opportunity of the same Program under the same revision whose plan day presents that
+ * family, so a rotating plan adapts a family at its own next appearance rather than at the plan's next
+ * workout, which usually does not present it. No other opportunity, no other revision, and none created
+ * here: when the revision has nothing ahead the answer is `NO_FUTURE_SLOT`, and a family the rest of the
+ * revision never presents again keeps `WindowOnly` with the reason that says so. One **leg per family** the
+ * completion exposed, each against the first element of that opportunity's presentation for its family
+ * (ownership is *not* decided here, an authored or pinned element is handed to the engine as what it is);
+ * the **window's facts**; the **three judgements** (evidence, confidence, recovery), kept separate; and
+ * **identity and the moment**, from the injected [IdGenerator] and [Clock].
  *
  * It runs no policy or threshold of its own, writes no ladder, fabricates no judgement, and creates, moves or
  * rewrites nothing. The ladder is the persisted catalogue's, read through [ProgressionRelationProvider]; a
@@ -161,51 +164,42 @@ class ProgramAdaptiveIntegration(
             )
         if (revision.mode == ProgramMode.MANUAL) return gap(AdaptiveInputGap.PROGRAM_MODE_IS_MANUAL)
 
-        // One moment for the whole pass: the window is captured at it, the target opportunity is chosen
-        // against its calendar day, and every row this produces is stamped with it.
+        // One moment for the whole pass: the window is captured at it, each family's own target opportunity
+        // is chosen against its calendar day, and every row this produces is stamped with it.
         val capturedAt = clock.now()
         val windowStart = window.windowStart(capturedAt)
+        val today = LocalDate.ofInstant(capturedAt, zone)
 
         val slots = scheduleRepository.slotsOfRevision(session.revisionId)
-        val targetSlot = adaptiveTargetSlotOf(
+        // The plan's next workout, which is needed for the two facts that are about the plan rather than
+        // about a family: whether anything is still ahead at all, and which day a completion that trained
+        // nothing is measured against.
+        val nextSlot = adaptiveTargetSlotOf(
             slots = slots,
             completedSlotId = session.slotId,
-            notBefore = LocalDate.ofInstant(capturedAt, zone)
+            notBefore = today
         ) ?: return gap(AdaptiveInputGap.NO_FUTURE_SLOT)
 
-        val day = revision.days.firstOrNull { it.programDayId == targetSlot.programDayId }
+        val nextDay = revision.days.firstOrNull { it.programDayId == nextSlot.programDayId }
             ?: invalidData(
-                "the opportunity '${targetSlot.slotId.value}' names plan day " +
-                    "'${targetSlot.programDayId.value}', which revision " +
+                "the opportunity '${nextSlot.slotId.value}' names plan day " +
+                    "'${nextSlot.programDayId.value}', which revision " +
                     "'${session.revisionId.value}' does not present"
             )
-        if (day.exercises.isEmpty()) return gap(AdaptiveInputGap.PLAN_DAY_PRESENTS_NOTHING)
 
         val history = sessionRepository.sessionsOfProgram(session.programId)
         val observations = observationsOf(history, session.sessionId, windowStart, capturedAt)
         val exposed = exposedFamiliesOf(session)
-
-        // The presentation plus the standing adjustments that make it effective: the element a decision is
-        // about is the one the user would actually be shown, and a decision about it supersedes the standing
-        // adjustment — by reference, never by rewriting it.
-        val standing = standingAdjustments(adaptiveRepository.adjustmentsOf(targetSlot.slotId))
-        val presented = presentedWorkout(day, targetSlot, standing, capturedAt)
-        val ownership = day.exercises.associate { it.programExerciseId.value to it.ownership }
-        val elements = presented.exercises.map { exercise ->
-            PresentedElement(
-                presentation = exercise,
-                ownership = ownership.getValue(exercise.programExerciseId.value)
-            )
-        }
-        val familyOfExercise = classifiedExercisesOf(observations, day)
-        val today = LocalDate.ofInstant(capturedAt, zone)
+        val familyOfExercise = classifiedExercisesOf(observations, revision)
 
         // Nothing was trained, so there is no window to read for any family. Which gap names it depends on
         // whether the day can be read at all — a different fix for a different missing fact.
         if (exposed.isEmpty()) {
+            if (nextDay.exercises.isEmpty()) return gap(AdaptiveInputGap.PLAN_DAY_PRESENTS_NOTHING)
+
             val readable = adaptiveTargetElementOf(
-                presented = elements,
-                plan = day,
+                presented = presentationOf(nextSlot, nextDay, standingOf(nextSlot), capturedAt),
+                plan = nextDay,
                 exposedFamilies = emptySet(),
                 classification = classification,
                 relations = relations
@@ -222,14 +216,41 @@ class ProgramAdaptiveIntegration(
 
         val outcomes = exposed.map { familyId ->
             val stored = adaptiveRepository.familyState(session.revisionId, familyId)
-            val choice = adaptiveTargetElementOf(
-                presented = elements,
-                plan = day,
-                exposedFamilies = setOf(familyId),
-                classification = classification,
-                relations = relations
+            // The family's own next appearance rather than the plan's next workout: a rotation presents each
+            // family on its own days, so the next workout is usually a day this family is absent from, and a
+            // change written onto it would sit unconsumed and never be shown.
+            val targetSlot = adaptiveTargetSlotOf(
+                slots = slots,
+                days = revision.days,
+                completedSlotId = session.slotId,
+                notBefore = today,
+                familyId = familyId,
+                classification = classification
             )
-            // A family the opportunity does not present still has a window: its position is the one it
+            val targetDay = targetSlot?.let { slot ->
+                revision.days.firstOrNull { it.programDayId == slot.programDayId }
+                    ?: invalidData(
+                        "the opportunity '${slot.slotId.value}' names plan day " +
+                            "'${slot.programDayId.value}', which revision " +
+                            "'${session.revisionId.value}' does not present"
+                    )
+            }
+            // The presentation plus the standing adjustments that make it effective: the element a decision
+            // is about is the one the user would actually be shown, and a decision about it supersedes the
+            // standing adjustment — by reference, never by rewriting it.
+            val standing = targetSlot?.let { slot -> standingOf(slot) } ?: emptyList()
+            val choice = if (targetSlot != null && targetDay != null) {
+                adaptiveTargetElementOf(
+                    presented = presentationOf(targetSlot, targetDay, standing, capturedAt),
+                    plan = targetDay,
+                    exposedFamilies = setOf(familyId),
+                    classification = classification,
+                    relations = relations
+                )
+            } else {
+                null
+            }
+            // A family the revision does not present again still has a window: its position is the one it
             // already holds, or the one the ladder declares for the exercise it last performed.
             val lastPerformed = lastPerformedExerciseOf(observations, familyOfExercise, familyId)
             val element = when (choice) {
@@ -283,7 +304,7 @@ class ProgramAdaptiveIntegration(
             val judgement = AdaptiveJudgementRule.of(
                 snapshot = snapshotOf(
                     session = session,
-                    targetSlot = targetSlot,
+                    targetSlot = targetSlot ?: nextSlot,
                     windowStart = windowStart,
                     capturedAt = capturedAt,
                     observations = observations,
@@ -299,7 +320,7 @@ class ProgramAdaptiveIntegration(
             )
             val snapshot = snapshotOf(
                 session = session,
-                targetSlot = targetSlot,
+                targetSlot = targetSlot ?: nextSlot,
                 windowStart = windowStart,
                 capturedAt = capturedAt,
                 observations = observations,
@@ -312,7 +333,8 @@ class ProgramAdaptiveIntegration(
 
             if (element == null || relation == null) {
                 // Nothing to attach a change to: read the window, advance the family's bookkeeping, write
-                // no adjustment. A family the day does not present cannot be re-prescribed.
+                // no adjustment. Nowhere in the revision presents the family again, so there is no element
+                // a future opportunity could present.
                 val signals = ProgramAdaptiveSignalCalculator.calculate(
                     snapshot = snapshot,
                     familyOfExercise = familyOfExercise,
@@ -341,7 +363,11 @@ class ProgramAdaptiveIntegration(
                         spendsTheCooldown = false,
                         decidedAt = capturedAt
                     ),
-                    reason = decision.reason
+                    reason = if (targetSlot == null) {
+                        ProgramAdaptiveReason.NO_FURTHER_APPEARANCE
+                    } else {
+                        decision.reason
+                    }
                 )
             }
 
@@ -626,12 +652,35 @@ class ProgramAdaptiveIntegration(
 
     private fun classifiedExercisesOf(
         observations: List<ExposureObservation>,
-        day: ProgramDay
+        revision: ProgramRevision
     ): Map<String, String> =
-        (observations.map { it.exerciseId } + day.exercises.map { it.exerciseId })
+        (observations.map { it.exerciseId } + revision.days.flatMap { day -> day.exercises.map { it.exerciseId } })
             .distinct()
             .mapNotNull { exerciseId -> classification.familyOf(exerciseId)?.let { exerciseId to it } }
             .toMap()
+
+    /** The adjustments still standing for one opportunity — read, never rewritten. */
+    private suspend fun standingOf(slot: WorkoutSlot): List<AdaptiveAdjustment> =
+        standingAdjustments(adaptiveRepository.adjustmentsOf(slot.slotId))
+
+    /**
+     * What one opportunity would present: its plan day's elements in the plan's own order, each replaced by
+     * the standing adjustment that changes it, with the ownership a presentation does not state.
+     */
+    private fun presentationOf(
+        slot: WorkoutSlot,
+        day: ProgramDay,
+        standing: List<AdaptiveAdjustment>,
+        capturedAt: Instant
+    ): List<PresentedElement> {
+        val ownership = day.exercises.associate { it.programExerciseId.value to it.ownership }
+        return presentedWorkout(day, slot, standing, capturedAt).exercises.map { exercise ->
+            PresentedElement(
+                presentation = exercise,
+                ownership = ownership.getValue(exercise.programExerciseId.value)
+            )
+        }
+    }
 
     /**
      * The plan's own opportunities for one family **inside the window**, and what they prescribed.

@@ -1,5 +1,6 @@
 package com.monkfitness.app.domain.usecase
 
+import com.monkfitness.app.domain.adaptive.engine.ProgramAdaptiveReason
 import com.monkfitness.app.domain.adaptive.integration.AdaptiveInputGap
 import com.monkfitness.app.domain.adaptive.integration.AdaptiveIntegrationOutcome
 import com.monkfitness.app.domain.adaptive.integration.ExerciseFamilyClassification
@@ -262,11 +263,12 @@ class CatalogExerciseFamilyClassificationIntegrationTest {
     }
 
     /**
-     * **A day presenting only an unexposed family still reads that family's window.** The completion
-     * exposed `pushups`; the next opportunity presents only `squats`, so there is no element to attach an
-     * adjustment to — and nothing to derive a rung from. The family's bookkeeping advances, nothing is
-     * attached and nothing is decided, and the pass names the family rather than collapsing into a gap
-     * that names none.
+     * **A family the rest of the revision never presents again keeps its window.** The completion
+     * exposed `pushups`; both future opportunities present only the leg day, so nowhere ahead presents
+     * the family — there is no element to attach an adjustment to, and nothing to derive a rung from. The
+     * family's bookkeeping advances, nothing is attached and nothing is decided, and the pass names the
+     * family with the reason that says the plan has ended for it rather than collapsing into a gap that
+     * names none.
      */
     @Test
     fun aDayPresentingOnlyAnUnexposedFamilyAdvancesThatFamilysWindow() = runBlocking {
@@ -279,11 +281,16 @@ class CatalogExerciseFamilyClassificationIntegrationTest {
         val outcome = rig.outcomeOf(rig.adapt(trigger.sessionId))
 
         assertTrue(
-            "the completion exposed 'pushups' and the next opportunity presents only 'squats', so the " +
-                "family's window is read and nothing is attached to the opportunity: $outcome",
+            "the completion exposed 'pushups' and no future opportunity presents it again, so the " +
+                "family's window is read and nothing is attached: $outcome",
             outcome is AdaptiveIntegrationOutcome.WindowOnly
         )
         assertEquals("pushups", outcome.familyId)
+        assertEquals(
+            "and the reason says the plan has no further appearance of it",
+            ProgramAdaptiveReason.NO_FURTHER_APPEARANCE,
+            (outcome as AdaptiveIntegrationOutcome.WindowOnly).reason
+        )
         assertEquals(
             "and with no position to store, nothing adaptive was written",
             before,

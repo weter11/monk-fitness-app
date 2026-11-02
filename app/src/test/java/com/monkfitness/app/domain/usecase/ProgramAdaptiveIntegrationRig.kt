@@ -153,6 +153,46 @@ internal class ProgramAdaptiveIntegrationRig private constructor(
     /** Persists the Program, its `GENERATED` revision and the five opportunities, atomically. */
     suspend fun createGraph() = data.programRepository.createProgram(program(), revision(1), slots())
 
+    /**
+     * The same Program with a **rotation**: a second plan day presenting an unrelated exercise, and
+     * opportunities bound so that the push family is absent from the plan's next workout (09-22) and
+     * appears again on 09-23.
+     */
+    suspend fun createRotationGraph() =
+        data.programRepository.createProgram(program(), rotationRevision(), rotationSlots())
+
+    /** The rotation's revision: the push day, plus a day the push family is absent from. */
+    fun rotationRevision(): ProgramRevision = ProgramRevision(
+        revisionId = RevisionId(revisionId(1)),
+        programId = ProgramId(PROGRAM),
+        revisionNumber = 1,
+        mode = ProgramMode.GENERATED,
+        duration = ProgramDuration.FixedDays(30),
+        schedule = ProgramSchedule.FixedWeekdays(setOf(DayOfWeek.MONDAY, DayOfWeek.WEDNESDAY, DayOfWeek.FRIDAY)),
+        days = listOf(pushDay(1), otherDay(1)),
+        createdAt = CREATED
+    )
+
+    /** A plan day the push family is absent from — the family has no element to adapt on it. */
+    fun otherDay(number: Int): ProgramDay = ProgramDay(
+        programDayId = ProgramDayId(dayId(number + 1)),
+        position = 2,
+        type = ProgramDayType.TRAINING,
+        name = "Pull day",
+        exercises = listOf(element(number, ROTATION_OTHER_POSITION, ROTATION_OTHER_EXERCISE))
+    )
+
+    private fun rotationSlots(): List<WorkoutSlot> = SLOT_DATES.mapIndexed { index, date ->
+        WorkoutSlot(
+            slotId = SlotId(slotId(index + 1)),
+            programId = ProgramId(PROGRAM),
+            revisionId = RevisionId(revisionId(1)),
+            programDayId = ProgramDayId(dayId(ROTATION_DAY_OF_SLOT[index])),
+            plannedFor = date,
+            status = SlotStatus.PLANNED
+        )
+    }
+
     /** The Program, whose current revision is the one [createGraph] saved. */
     fun program(): Program = Program(
         programId = ProgramId(PROGRAM),
@@ -450,6 +490,19 @@ internal class ProgramAdaptiveIntegrationRig private constructor(
             LocalDate.parse("2026-09-22"),
             LocalDate.parse("2026-09-23")
         )
+
+        /**
+         * Which plan day each opportunity of the rotation presents (1 = push, 2 = the other day), so the
+         * push family keeps three appearances in the window while the plan's next workout is not one of
+         * them.
+         */
+        val ROTATION_DAY_OF_SLOT: List<Int> = listOf(1, 1, 2, 1, 2, 1)
+
+        /** An exercise the push classification does not know, so its day presents no adapt-able family. */
+        const val ROTATION_OTHER_EXERCISE = "row"
+
+        /** Its element position inside the plan day, distinct from the push day's three. */
+        const val ROTATION_OTHER_POSITION = 4
 
         /** Every table the flow can write, plus the shipped Stage-1 adaptive pair. */
         val TABLES: List<String> = listOf(

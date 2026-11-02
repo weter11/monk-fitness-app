@@ -99,17 +99,24 @@ The refusal vocabulary was renamed with the rule: `AdaptiveDecisionIsOfAnotherOp
 tests over the new invariant, three of which assert that the *whole database* is unchanged when the
 completion is refused.
 
-## 3. Which future Slot, and why only that one
+## 3. Which future Slot, and why that one
 
 ```text
-the next not-yet-started, still-startable opportunity
+the family's own next not-yet-started, still-startable opportunity
 of the same Program
 under the same Revision the completed Session belonged to
-whose planned day is strictly after the decision's own day
+whose plan day presents that family
+and whose planned day is strictly after the decision's own day
 ```
 
 Every clause is load-bearing, and the last one is the one that keeps the rule *temporal*:
 
+* **the family's own appearance.** A rotation presents a family on its own days, so the plan's next workout
+  is usually a day that family is absent from. A change written onto it would sit unconsumed and never be
+  shown — every family would come back as a read window. Each performed family is decided against the
+  first opportunity, by date then identity, **whose plan day presents it**. A day presenting the family
+  only through a pinned or user-authored element still counts: which element may change is the engine's
+  rule, and skipping such a day here would pre-empt it;
 * **same Revision.** Adaptive state is revision-scoped (§4, §18): a newly saved revision starts from its
   own baseline, and an edit must not let a session that ran under an old plan adapt a different one. The
   revision is also what makes the adjustment *applicable* — `before`/`after` are elements of a plan day,
@@ -134,20 +141,26 @@ Every clause is load-bearing, and the last one is the one that keeps the rule *t
 It creates no slot, moves no date, renumbers no plan day and reschedules nothing (§25): a past-but-
 startable opportunity is *excluded*, never slid — sliding a missed workout is the Scheduler's business.
 
-**When nothing is eligible** the answer is `AdaptiveInputGap.NO_FUTURE_SLOT`, and *nothing* adaptive is
-written: no decision row, no adjustment and no state row, because no window was evaluated. That is the
-ordinary end of a program and an expected result, not an exception and not a fabricated `NOT_APPLIED`.
+**When nothing is eligible** there are two different facts, and they are not folded into one:
+
+* the **revision** holds no opportunity ahead at all — `AdaptiveInputGap.NO_FUTURE_SLOT`, and *nothing*
+  adaptive is written: no decision row, no adjustment and no state row, because no window was evaluated.
+  That is the ordinary end of a program and an expected result, not an exception and not a fabricated
+  `NOT_APPLIED`;
+* this **family** has no further appearance in the revision while the plan continues — `WindowOnly` with
+  `NO_FURTHER_APPEARANCE`. Its window is read, its bookkeeping advances and no adjustment is written, and
+  the reason is distinct from `NO_EXPOSED_FAMILY_IN_THE_TARGET_SLOT` precisely so the completion screen can
+  say the plan has ended for that family instead of "not in your next workout".
 
 ### Which element, and whose it is
 
 The subject of a decision is the family the completion just trained — that is what its window, evidence
 and signals are about — and the pass decides **one leg per exposed family**, against the first element
-**of the target opportunity's presentation** for that family, in the presentation's own order. The
-presentation is composed by the domain's own `presentedWorkout` (the revision's plan day plus the
-adjustments still standing for the opportunity), so an element that already carries an adjustment is
+**of that family's own target opportunity's presentation** for that family, in the presentation's own
+order. The presentation is composed by the domain's own `presentedWorkout` (the revision's plan day plus
+the adjustments still standing for the opportunity), so an element that already carries an adjustment is
 decided about **as the user would see it**, and the adjustment a new decision supersedes is the one that
-stands for that very element. A family the opportunity does not present has no element to change: its
-window is read, its bookkeeping advances and no adjustment is written.
+stands for that very element.
 
 Ownership is **not** decided here. The element carries what the plan says about it — `isPinned` and
 `origin`, in that order of precedence — and the engine's own rule holds on a user-authored or pinned
@@ -453,6 +466,10 @@ can distinguish proves nothing, and pretending it does would be a row that lies.
 
 | claim | suite |
 | --- | --- |
+| the target is the **family's own** next appearance, never the plan's next workout | `ProgramAdaptiveRotationTest.aFamilyIsAdaptedAtItsOwnNextAppearanceNotAtThePlansNextWorkout`, `AdaptiveTargetSelectionTest.aFamilysTargetIsItsOwnNextAppearanceNotThePlansNextWorkout` |
+| a family the revision never presents again keeps `WindowOnly` with the end-of-plan reason | `ProgramAdaptiveRotationTest.aFamilyTheRevisionNeverPresentsAgainKeepsItsWindowAndSaysThePlanEnded` |
+| the end of the plan reads as a different sentence from "not in your next workout" | `SessionOutcomeTextTest.aFamilyWithNoFurtherAppearanceSaysThePlanEnded` |
+| a manual Program says why its load is not adapted | `SessionOutcomeTextTest.aManualProgrammeSaysWhyNothingIsAdapted` |
 | the target is the next future opportunity, never the completed or a past one | `ProgramAdaptiveIntegrationTest.theDecisionsTargetIsNeverAPastOpportunityOfTheSameRevision` |
 | the temporal boundary is exclusive on the decision's own day | `AdaptiveTargetSelectionTest.anOpportunityPlannedForTheDecisionsOwnDayOrEarlierIsNotAFutureOpportunity` |
 | a past `MISSED` opportunity is startable and still never the target | `AdaptiveTargetSelectionTest.aPastStartableOpportunityIsNeverTheTarget` |
