@@ -16,6 +16,7 @@ import com.monkfitness.app.domain.usecase.SessionRuntime
 import com.monkfitness.app.domain.workout.SessionRuntimeResult
 import com.monkfitness.app.domain.workout.SessionStatus
 import com.monkfitness.app.ui.programs.ProgramSessionController
+import com.monkfitness.app.ui.programs.SessionRestPreference
 import com.monkfitness.app.ui.programs.SessionStage
 import com.monkfitness.app.ui.programs.ProgramsRig
 import kotlinx.coroutines.runBlocking
@@ -77,7 +78,9 @@ class ProgramTargetAcceptanceTest {
                 runtime = runtime,
                 adaptive = integration,
                 lifecycle = rig.transfer.lifecycleService,
-                catalogue = { rig.catalogueOptions }
+                catalogue = { rig.catalogueOptions },
+                familyCatalogue = { emptyMap() },
+                restPreference = InMemoryRestPreference()
             )
 
             val createdId = rig.createProgramThroughTheUi("Acceptance Program")
@@ -173,7 +176,9 @@ class ProgramTargetAcceptanceTest {
                 runtime = runtime,
                 adaptive = integration,
                 lifecycle = rig.transfer.lifecycleService,
-                catalogue = { rig.catalogueOptions }
+                catalogue = { rig.catalogueOptions },
+                familyCatalogue = { emptyMap() },
+                restPreference = InMemoryRestPreference()
             )
             reopened.open(slotId.value)
             assertEquals(SessionStage.PRESENTING, reopened.state.value.stage)
@@ -303,6 +308,18 @@ class ProgramTargetAcceptanceTest {
             assertTrue("and the target set log is", rig.database.tableNames().contains("program_set_log"))
         } finally {
             rig.close()
+        }
+    }
+
+    /** The rest preference a test device holds: nothing chosen, and a write it can read back. */
+    private class InMemoryRestPreference : SessionRestPreference {
+
+        private var seconds: Int? = null
+
+        override suspend fun read(): Int? = seconds
+
+        override suspend fun remember(seconds: Int) {
+            this.seconds = seconds
         }
     }
 

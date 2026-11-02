@@ -360,39 +360,33 @@ class BuiltInProgressionCatalogueBootstrapTest {
     }
 
     /**
-     * **The database is still schema 18, and the creating migration still seeds no rows.**
+     * **The catalogue's creating migration still seeds no rows, whatever step is currently last.**
      *
-     * This stage adds content and **no migration**. If a future edit added one, this gate is what says
-     * the stage quietly stopped being a data bootstrap and started being a schema change.
+     * This stage adds content and **no migration**. The declared version is read from the production
+     * source rather than restated, because a later additive step legitimately moves it; what this gate
+     * holds is that the catalogue's own table was created by P31's step, that the chain still ends where
+     * the schema says it does, and that the schema itself writes none of the catalogue's rows.
      */
     @Test
-    fun theSchemaIsUnchangedAndTheCreatingMigrationStillSeedsNothing() {
+    fun theCatalogueMigrationStillSeedsNothing() {
         val rig = newRig("p32-schema")
         val ddl = rig.database.masterSql()
 
-        // Read the declared version from the production source rather than restating it. Room's
-        // `@Database` is a SOURCE-retention annotation, so there is nothing to reflect on at runtime —
-        // hence the file read. If a future stage bumps the schema to ship *content*, this fails.
+        // Room's `@Database` is a SOURCE-retention annotation, so there is nothing to reflect on at
+        // runtime — hence the file read.
         val databaseSource = java.io.File("src/main/java/com/monkfitness/app/data/local/AppDatabase.kt")
             .readText()
-        assertEquals(
-            "the production database still declares schema version 18 — P32 adds content, not schema, " +
-                "so it adds no migration",
-            1,
-            Regex("""version\s*=\s*18""").findAll(databaseSource).count()
-        )
-        // Matched on the *declaration* (`internal val MIGRATION_n_m`) rather than the bare name: the
-        // builder's `addMigrations(...)` list mentions MIGRATION_17_18 a second time, and counting names
-        // would test how often the identifier is typed rather than how many migrations exist.
-        assertEquals(
-            "and the migration chain still ends at P31's 17->18 — this stage adds no migration, because " +
-                "it adds content and not schema",
-            listOf("MIGRATION_17_18"),
-            Regex("""internal val (MIGRATION_\d+_\d+)""")
-                .findAll(databaseSource)
-                .map { it.groupValues[1] }
-                .toList()
-                .takeLast(1)
+        val declaredVersions = Regex("""version\s*=\s*(\d+)""").findAll(databaseSource).toList()
+        assertEquals("the database declares its version exactly once", 1, declaredVersions.size)
+        val declared = declaredVersions.single().groupValues[1].toInt()
+        val chain = Regex("""internal val MIGRATION_(\d+)_(\d+) = object : Migration\((\d+), (\d+)\)""")
+            .findAll(databaseSource)
+            .map { match -> match.groupValues[4].toInt() }
+            .toList()
+        assertEquals("and the chain ends at the version it declares", declared, chain.last())
+        assertTrue(
+            "the catalogue's table is still created by P31's 17->18 step, the step this stage is about",
+            databaseSource.contains("MIGRATION_17_18 = object : Migration(17, 18)")
         )
         assertTrue(
             "the table still exists under its own name, created by P31's migration",

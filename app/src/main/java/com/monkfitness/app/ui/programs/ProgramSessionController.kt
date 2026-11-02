@@ -1,6 +1,7 @@
 package com.monkfitness.app.ui.programs
 
 import com.monkfitness.app.R
+import com.monkfitness.app.domain.adaptive.integration.AdaptiveIntegrationOutcome
 import com.monkfitness.app.domain.adaptive.integration.AdaptiveIntegrationResult
 import com.monkfitness.app.domain.common.SessionExerciseId
 import com.monkfitness.app.domain.common.SessionId
@@ -85,6 +86,10 @@ data class ProgramSessionUiState(
     val exercises: List<SessionExerciseUi> = emptyList(),
     /** What the user is asked to do next, or `null` when there is nothing left. */
     val currentExercise: SessionExerciseUi? = null,
+    /** The rest a new interval starts from, in seconds: the user's current choice. */
+    val restSeconds: Int = 0,
+    /** One line per family the completion's adaptive half read, in the pass's own order. */
+    val outcomes: List<SessionOutcomeUi> = emptyList(),
     /** The sentence explaining a refusal, a failure or a reported non-fatal problem. */
     val notice: ProgramSessionNotice? = null
 ) {
@@ -144,6 +149,36 @@ sealed interface ProgramSessionNotice {
 }
 
 /**
+ * The rest a new interval starts from when neither the plan element nor the user states one, in seconds.
+ *
+ * A documented parameter of the controller rather than a number inside the screen: the screen renders a
+ * countdown and owns no default of its own, so the value can be changed in one place and replaced by a
+ * test.
+ */
+private const val DEFAULT_REST_SECONDS = 60
+
+/** Where the session screen's family display names come from: the app's own catalogue, read through a port. */
+fun interface FamilyCatalogue {
+
+    /** Every family the catalogue names, keyed by the family id the adaptive stage uses. */
+    suspend fun names(): Map<String, Int>
+}
+
+/**
+ * The rest the user last chose, kept across sessions so a new workout starts from it.
+ *
+ * A port rather than a `SettingsManager` call, because the controller is plain Kotlin that runs on a JVM
+ * and a test states the remembered value without an Android `Context`.
+ */
+interface SessionRestPreference {
+
+    /** The last chosen rest in seconds, or `null` when the user never chose one. */
+    suspend fun read(): Int?
+
+    suspend fun remember(seconds: Int)
+}
+
+/**
  * The workout session screen's state holder — the target runtime's UI half.
  *
  * It owns **nothing** about starting, confirming, cancelling or finishing a workout: every one of those is
@@ -171,7 +206,10 @@ class ProgramSessionController(
     private val runtime: SessionRuntime,
     private val adaptive: ProgramAdaptiveIntegration,
     private val lifecycle: ProgramLifecycleService,
-    private val catalogue: ExerciseCatalogue
+    private val catalogue: ExerciseCatalogue,
+    private val familyCatalogue: FamilyCatalogue,
+    private val restPreference: SessionRestPreference,
+    private val defaultRestSeconds: Int = DEFAULT_REST_SECONDS
 ) {
 
     private val mutableState = MutableStateFlow(ProgramSessionUiState())
@@ -184,6 +222,12 @@ class ProgramSessionController(
     /** Names resolved once from the catalogue, because the catalogue is a compile-time list. */
     private var nameByExerciseId: Map<String, Int>? = null
 
+    /** Family display names, resolved once for the same reason as [nameByExerciseId]. */
+    private var nameByFamilyId: Map<String, Int>? = null
+
+    /** The rest the user last chose, read once when the attempt opens. */
+    private var rememberedRestSeconds: Int? = null
+
     /**
      * Opens the attempt for [slotId]: restores the one already in progress, or starts a new one.
      *
@@ -193,6 +237,7 @@ class ProgramSessionController(
      */
     suspend fun open(slotId: String) {
         session = null
+        rememberedRestSeconds = restPreference.read()
         mutableState.value = ProgramSessionUiState(stage = SessionStage.LOADING, slotId = slotId)
         when (val started = runtime.startSession(SlotId(slotId))) {
             is SessionRuntimeResult.Success -> present(started.value)
@@ -222,9 +267,23 @@ class ProgramSessionController(
         }
     }
 
-    suspend fun confirmSet(completedReps: Int = 0, durationSeconds: Int = 0) {
-        val stored = confirmSetInternal(completedReps, durationSeconds)
+    suspend fun confirmSet(completedReps: Int = 0, durationSeconds: Int = 0, restSeconds: Int? = null) {
+        val stored = confirmSetInternal(completedReps, durationSeconds, restSeconds)
         if (!stored) return
+    }
+
+    /**
+     * Sets the rest the next interval counts down from, and remembers it as the default of later workouts.
+     *
+     * The value is a countdown length, not a measurement: the rest a confirmed set stores is the time that
+     * actually elapsed, which is this length unless the user skipped the interval early. Zero is legal and
+     * means "no rest".
+     */
+    suspend fun setRestSeconds(seconds: Int) {
+        val bounded = seconds.coerceAtLeast(0)
+        rememberedRestSeconds = bounded
+        mutableState.update { state -> state.copy(restSeconds = bounded) }
+        restPreference.remember(bounded)
     }
 
     /**
@@ -234,18 +293,23 @@ class ProgramSessionController(
      * The prescribed target is never used as a fallback: it remains presentation only until the user
      * explicitly confirms a valid actual result.
      */
-    suspend fun confirmActualSet(rawValue: String): Boolean {
+    suspend fun confirmActualSet(rawValue: String, restSeconds: Int? = null): Boolean {
         val value = rawValue.trim().toIntOrNull() ?: return false
         if (value <= 0) return false
         val current = currentAttempt() ?: return false
         val occurrence = occurrenceToPerform(current) ?: return false
         return confirmSetInternal(
             completedReps = if (occurrence.dimension == PrescriptionDimension.TIME_BASED) 0 else value,
-            durationSeconds = if (occurrence.dimension == PrescriptionDimension.TIME_BASED) value else 0
+            durationSeconds = if (occurrence.dimension == PrescriptionDimension.TIME_BASED) value else 0,
+            restSeconds = restSeconds
         )
     }
 
-    private suspend fun confirmSetInternal(completedReps: Int, durationSeconds: Int): Boolean {
+    private suspend fun confirmSetInternal(
+        completedReps: Int,
+        durationSeconds: Int,
+        restSeconds: Int?
+    ): Boolean {
         val current = currentAttempt() ?: return false
         val occurrence = occurrenceToPerform(current) ?: return false
         return when (
@@ -253,7 +317,8 @@ class ProgramSessionController(
                 sessionId = current.sessionId,
                 sessionExerciseId = SessionExerciseId(occurrence.sessionExerciseId),
                 completedReps = completedReps,
-                durationSeconds = durationSeconds
+                durationSeconds = durationSeconds,
+                restSeconds = restSeconds
             )
         ) {
             is SessionRuntimeResult.Success -> {
@@ -309,8 +374,13 @@ class ProgramSessionController(
                 } else {
                     ProgramSessionNotice.COMPLETED_ADAPTIVE_UNAVAILABLE
                 }
+                val outcomes = if (adaptiveHalf.evaluated) {
+                    SessionOutcomeText.linesOf(adaptiveHalf.outcomes, familyNames())
+                } else {
+                    emptyList()
+                }
                 mutableState.update { state ->
-                    state.copy(stage = SessionStage.COMPLETED, notice = notice)
+                    state.copy(stage = SessionStage.COMPLETED, notice = notice, outcomes = outcomes)
                 }
             }
 
@@ -357,7 +427,8 @@ class ProgramSessionController(
         when (val pass = adaptive.adaptAfter(session.sessionId)) {
             is AdaptiveIntegrationResult.Success -> AdaptiveHalf(
                 AdaptiveCompletion.of(pass.outcomes.map { outcome -> outcome.completion }),
-                evaluated = true
+                evaluated = true,
+                outcomes = pass.outcomes
             )
             is AdaptiveIntegrationResult.InvalidData ->
                 AdaptiveHalf(AdaptiveCompletion.NothingDecided, evaluated = false)
@@ -366,7 +437,17 @@ class ProgramSessionController(
                 AdaptiveHalf(AdaptiveCompletion.NothingDecided, evaluated = false)
         }
 
-    private data class AdaptiveHalf(val completion: AdaptiveCompletion, val evaluated: Boolean)
+    /**
+     * What the completion's adaptive half came to, as the runtime takes it and as the screen reports it.
+     *
+     * [outcomes] is the pass's per-family result, kept because the completion's own value says what was
+     * *written* while a family that only advanced its bookkeeping wrote nothing and still has a line.
+     */
+    private data class AdaptiveHalf(
+        val completion: AdaptiveCompletion,
+        val evaluated: Boolean,
+        val outcomes: List<AdaptiveIntegrationOutcome> = emptyList()
+    )
 
     private suspend fun present(session: WorkoutSession) {
         this.session = session
@@ -400,10 +481,17 @@ class ProgramSessionController(
                 plannedFor = workout.plannedFor,
                 exercises = exercises,
                 currentExercise = exercises.firstOrNull { exercise -> exercise.isCurrent },
+                // The prescription vocabulary has no rest dimension, so a presented element states no
+                // rest and the interval starts from the user's remembered choice or the documented default.
+                restSeconds = restSecondsFor(prescribedRestSeconds = null),
                 notice = null
             )
         }
     }
+
+    /** The rest a new interval starts from: the element's own rest when it states one, else the user's, else the default. */
+    private fun restSecondsFor(prescribedRestSeconds: Int?): Int =
+        prescribedRestSeconds ?: rememberedRestSeconds ?: defaultRestSeconds
 
     /** The Program's name, or `null` when the lifecycle layer cannot read it. A label, never a rule. */
     private suspend fun programNameOf(session: WorkoutSession): String? =
@@ -440,6 +528,23 @@ class ProgramSessionController(
             emptyMap()
         }
         nameByExerciseId = loaded
+        return loaded
+    }
+
+    /**
+     * The catalogue's family display names, read once.
+     *
+     * A family this build cannot name is still reported: its line is rendered without a name rather than
+     * being dropped or shown under its raw id.
+     */
+    private suspend fun familyNames(): Map<String, Int> {
+        nameByFamilyId?.let { cached -> return cached }
+        val loaded = try {
+            familyCatalogue.names()
+        } catch (failure: Throwable) {
+            emptyMap()
+        }
+        nameByFamilyId = loaded
         return loaded
     }
 }

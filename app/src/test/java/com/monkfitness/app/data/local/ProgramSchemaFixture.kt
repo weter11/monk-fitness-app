@@ -669,6 +669,13 @@ internal object ProgramSchemaFixture {
         "MIGRATION_16_17" to mapOf(
             "program_exercise" to listOf(Column("focus", TEXT, nullable = true)),
             "session_snapshot_exercise" to listOf(Column("focus", TEXT, nullable = true))
+        ),
+        // The rest a set was preceded by: nullable with no default, because `null` is what every row
+        // written before the column existed holds and what a set with no measured rest holds (`0` would
+        // claim the set was performed with no rest at all). An upgraded device therefore keeps its set
+        // rows unchanged, and the engine reads them exactly as it did before this step.
+        "MIGRATION_18_19" to mapOf(
+            "program_set_log" to listOf(Column("restSeconds", INTEGER, nullable = true))
         )
     )
 

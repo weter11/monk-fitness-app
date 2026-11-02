@@ -27,6 +27,10 @@ import androidx.room.PrimaryKey
  * @property completedReps repetitions performed; `0` for a timed set.
  * @property durationSeconds seconds performed; `0` for a repetition set.
  * @property performedAt when the set was confirmed, in epoch milliseconds.
+ * @property restSeconds seconds rested before this set; `null` when no rest was recorded — which is
+ *   every row written before the column existed, and the first set of an occurrence. `null` is not
+ *   zero: no rest observed and a rest of no seconds are different facts, and only the second one is a
+ *   measurement.
  */
 @Entity(
     tableName = "program_set_log",
@@ -46,13 +50,17 @@ data class SetLogEntity(
     val setIndex: Int,
     val completedReps: Int,
     val durationSeconds: Int,
-    val performedAt: Long
+    val performedAt: Long,
+    val restSeconds: Int? = null
 ) {
 
     init {
         require(setIndex >= 1) { "sets are numbered from 1, was $setIndex" }
         require(completedReps >= 0) { "completedReps must be >= 0, was $completedReps" }
         require(durationSeconds >= 0) { "durationSeconds must be >= 0, was $durationSeconds" }
+        require(restSeconds == null || restSeconds >= 0) {
+            "restSeconds must be absent or >= 0, was $restSeconds"
+        }
         require((completedReps > 0) != (durationSeconds > 0)) {
             "a set is measured in repetitions or in time, and a set that was not performed is " +
                 "absent rather than stored as zero: reps=$completedReps seconds=$durationSeconds"

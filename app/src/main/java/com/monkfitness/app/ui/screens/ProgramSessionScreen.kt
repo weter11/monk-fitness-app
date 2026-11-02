@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -56,8 +57,6 @@ import com.monkfitness.app.ui.programs.SessionStage
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
-private const val REST_SECONDS = 60
-
 /**
  * **The workout session screen** — the one production workout runtime.
  *
@@ -68,7 +67,8 @@ private const val REST_SECONDS = 60
  *
  * The attempt's identity is the **slot** it is opened for, and it is restored by what is stored — which is
  * what makes "close the app mid-workout and come back" work without a second model. The rest countdown is
- * the screen's own affordance and the only state it owns; every set is confirmed explicitly.
+ * the screen's own affordance and the only state it owns; every set is confirmed explicitly, and the rest
+ * the user actually took is what the next confirmation hands to the runtime.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -90,6 +90,9 @@ fun ProgramSessionScreen(
     LaunchedEffect(state.isPresenting) { view.keepScreenOn = state.isPresenting }
 
     var restSecondsLeft by remember { mutableIntStateOf(0) }
+    var restSecondsElapsed by remember { mutableIntStateOf(0) }
+    var restStarted by remember { mutableStateOf(false) }
+    var restInput by remember { mutableStateOf("") }
     var showFinishDialog by remember { mutableStateOf(false) }
     var showCancelDialog by remember { mutableStateOf(false) }
     var showNotice by remember { mutableStateOf(false) }
@@ -99,10 +102,19 @@ fun ProgramSessionScreen(
     val notice = state.notice
     LaunchedEffect(notice) { showNotice = notice != null }
 
+    LaunchedEffect(state.restSeconds) { restInput = state.restSeconds.toString() }
+
+    // Editing the rest while an interval is running takes effect on that interval, which is what makes it
+    // adjustable rather than a value the next interval inherits.
+    LaunchedEffect(state.restSeconds) {
+        if (restStarted) restSecondsLeft = state.restSeconds
+    }
+
     restSecondsLeft.coerceAtLeast(0).takeIf { it > 0 }?.let { remaining ->
         LaunchedEffect(remaining, state.confirmedSetCount) {
             delay(1_000)
             restSecondsLeft = remaining - 1
+            restSecondsElapsed += 1
             if (remaining - 1 == 0 && vibrationEnabled) VibrationFeedback.buzz(context)
         }
     }
@@ -182,6 +194,26 @@ fun ProgramSessionScreen(
                         ),
                         style = MaterialTheme.typography.bodyLarge
                     )
+                    if (state.outcomes.isNotEmpty()) {
+                        Spacer(modifier = Modifier.height(16.dp))
+                        Text(
+                            text = stringResource(R.string.programs_session_outcomes_title),
+                            style = MaterialTheme.typography.titleMedium
+                        )
+                        for (outcome in state.outcomes) {
+                            val sentence = stringResource(outcome.messageRes)
+                            Text(
+                                text = outcome.familyNameRes?.let { nameRes ->
+                                    stringResource(
+                                        R.string.programs_session_outcome_line,
+                                        stringResource(nameRes),
+                                        sentence
+                                    )
+                                } ?: sentence,
+                                style = MaterialTheme.typography.bodyMedium
+                            )
+                        }
+                    }
                     state.notice?.let { completedNotice ->
                         Spacer(modifier = Modifier.height(8.dp))
                         Text(
@@ -226,6 +258,30 @@ fun ProgramSessionScreen(
                     }
 
                     Spacer(modifier = Modifier.height(8.dp))
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = stringResource(R.string.programs_session_rest_value),
+                            style = MaterialTheme.typography.bodyMedium,
+                            modifier = Modifier.weight(1f)
+                        )
+                        OutlinedTextField(
+                            value = restInput,
+                            onValueChange = { value ->
+                                val digits = value.filter(Char::isDigit)
+                                restInput = digits
+                                digits.toIntOrNull()?.let { seconds ->
+                                    scope.launch { controller.setRestSeconds(seconds) }
+                                }
+                            },
+                            singleLine = true,
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                            modifier = Modifier.width(96.dp)
+                        )
+                    }
 
                     if (restSecondsLeft > 0) {
                         Text(
@@ -275,7 +331,10 @@ fun ProgramSessionScreen(
                             text = stringResource(R.string.programs_session_confirm_set),
                             onClick = {
                                 scope.launch {
-                                    val stored = controller.confirmActualSet(actualValue)
+                                    val stored = controller.confirmActualSet(
+                                        actualValue,
+                                        restSeconds = if (restStarted) restSecondsElapsed else null
+                                    )
                                     actualInputInvalid = !stored
                                     if (stored) {
                                         actualValue = state.currentExercise
@@ -283,11 +342,10 @@ fun ProgramSessionScreen(
                                             ?.nextTarget
                                             ?.toString()
                                             .orEmpty()
-                                        restSecondsLeft = if (current.completedSets + 1 < current.setCount) {
-                                            REST_SECONDS
-                                        } else {
-                                            0
-                                        }
+                                        val moreSets = current.completedSets + 1 < current.setCount
+                                        restStarted = moreSets
+                                        restSecondsElapsed = 0
+                                        restSecondsLeft = if (moreSets) state.restSeconds else 0
                                         if (vibrationEnabled) VibrationFeedback.buzz(context)
                                     }
                                 }

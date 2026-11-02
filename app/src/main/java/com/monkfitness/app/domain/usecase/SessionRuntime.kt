@@ -177,12 +177,15 @@ class SessionRuntime(
      * The position is not a parameter: it is the stored sets of this occurrence + 1, so rows are
      * `1..n` with no gap by construction. A set is logged in the unit its prescription was written in
      * ([completedReps] for repetitions, [durationSeconds] for time); a set not performed has no row.
+     * [restSeconds] is the rest the user took before this set, or `null` when the screen measured none —
+     * the runtime stores the reading and never invents one.
      */
     suspend fun confirmSet(
         sessionId: SessionId,
         sessionExerciseId: SessionExerciseId,
         completedReps: Int = 0,
-        durationSeconds: Int = 0
+        durationSeconds: Int = 0,
+        restSeconds: Int? = null
     ): SessionRuntimeResult<WorkoutSession> = sessionOutcome {
         val session = sessionRepository.sessionById(sessionId)
             ?: return@sessionOutcome refused(SessionRefusal.SessionNotFound(sessionId))
@@ -214,7 +217,8 @@ class SessionRuntime(
                 setIndex = occurrence.completedSetCount + 1,
                 completedReps = completedReps,
                 durationSeconds = durationSeconds,
-                performedAt = clock.now()
+                performedAt = clock.now(),
+                restSeconds = restSeconds
             )
         )
         success(requireStored(sessionId))

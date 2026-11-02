@@ -246,6 +246,9 @@ internal class ProgramDataAccessRig(key: String = "a", supplied: SqliteTestDatab
             // fail every repository test with one honest message.
             database.migrate(AppDatabase.MIGRATION_16_17)
             database.migrate(AppDatabase.MIGRATION_17_18)
+            // The per-set rest column: without it every repository suite would compare the entity's
+            // `restSeconds` against a table one version behind and fail on the rig's own guard.
+            database.migrate(AppDatabase.MIGRATION_18_19)
         }
     }
 }

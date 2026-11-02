@@ -84,7 +84,7 @@ import com.monkfitness.app.data.model.WorkoutSessionEntity
         AdaptiveDecisionRecordEntity::class,
         AdaptiveAdjustmentEntity::class
     ],
-    version = 18,
+    version = 19,
     exportSchema = false
 )
 @TypeConverters(AdaptiveTypeConverters::class, ProgramTypeConverters::class)
@@ -1184,6 +1184,27 @@ abstract class AppDatabase : RoomDatabase() {
             }
         }
 
+        /**
+         * Version 18 -> version 19: the **rest a set was preceded by** becomes a stored fact.
+         *
+         * One nullable column and nothing else. Until this step the rest between two sets existed only in
+         * the screen's countdown: it was a constant, it was never asked for, and no row could carry it —
+         * so the adaptive stage's density channel had nothing to read and recorded a zero rest.
+         *
+         * There is deliberately **no `DEFAULT` and no backfill**. `NULL` means *no rest was recorded*,
+         * which is exactly what every row written before this column existed holds and what the first set
+         * of an occurrence holds; writing `0` would claim every historical set was performed with no rest
+         * at all. The engine reads a window with no known rest as it read it before this step — no rest
+         * signal — so an upgraded database behaves identically until the screen records one.
+         */
+        internal val MIGRATION_18_19 = object : Migration(18, 19) {
+            override fun migrate(database: SupportSQLiteDatabase) {
+                database.execSQL(
+                    "ALTER TABLE `program_set_log` ADD COLUMN `restSeconds` INTEGER"
+                )
+            }
+        }
+
         fun getDatabase(context: Context): AppDatabase {
             return INSTANCE ?: synchronized(this) {
                 val instance = Room.databaseBuilder(
@@ -1208,7 +1229,8 @@ abstract class AppDatabase : RoomDatabase() {
                         MIGRATION_14_15,
                         MIGRATION_15_16,
                         MIGRATION_16_17,
-                        MIGRATION_17_18
+                        MIGRATION_17_18,
+                        MIGRATION_18_19
                     )
                     .build()
                 INSTANCE = instance
