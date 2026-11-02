@@ -193,6 +193,18 @@ object ProgramAdaptiveRig {
     )
 
     /**
+     * A relation read as the classification it is: one level cannot step, so a single-rung relation is a
+     * family with no ladder. A suite that models a ladderless family over a multi-level relation states the
+     * classification it means instead of relying on this.
+     */
+    private val ProgramProgressionRelation.progressionKind: FamilyProgression
+        get() = if (lowestLevel == highestLevel) {
+            FamilyProgression.WITHIN_EXERCISE
+        } else {
+            FamilyProgression.VARIANT_LADDER
+        }
+
+    /**
      * The family's declared ladder: `pushups_knee` 3×8, `pushups` 3×10, and a third level that is
      * `pushups_wide` at [topReps] repetitions — which is how a suite asks for a step the load guard
      * should refuse, without inventing a second relation.
@@ -256,7 +268,7 @@ object ProgramAdaptiveRig {
         ),
         supersedesAdjustmentId: AdjustmentId? = null,
         range: ExerciseRange? = null,
-        progression: FamilyProgression = FamilyProgression.VARIANT_LADDER,
+        progression: FamilyProgression = relation.progressionKind,
         familyPeers: List<ProgramFamilyPeer> = emptyList(),
         policy: ProgramAdaptivePolicy = ProgramAdaptivePolicy.V1,
         decisionId: DecisionId = DECISION_ID,

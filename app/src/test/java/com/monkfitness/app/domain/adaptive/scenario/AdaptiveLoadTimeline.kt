@@ -17,6 +17,7 @@ import com.monkfitness.app.domain.adaptive.PerformedSetAmount
 import com.monkfitness.app.domain.adaptive.RecoveryContext
 import com.monkfitness.app.domain.adaptive.VolumeLoad
 import com.monkfitness.app.domain.adaptive.decision.AdaptiveAction
+import com.monkfitness.app.domain.adaptive.engine.FamilyProgression
 import com.monkfitness.app.domain.adaptive.engine.ProgramAdaptiveElement
 import com.monkfitness.app.domain.adaptive.engine.ProgramAdaptiveEngine
 import com.monkfitness.app.domain.adaptive.engine.ProgramAdaptivePolicy
@@ -97,6 +98,7 @@ internal class AdaptiveLoadTimeline(
     private val dimension: PrescriptionDimension,
     private val rangeOf: (String) -> ExerciseRange?,
     private val relation: ProgramProgressionRelation?,
+    private val progression: FamilyProgression,
     private val availableExerciseIds: Set<String>,
     private val subjectExerciseId: String,
     private val subjectAmounts: List<Int>,
@@ -283,6 +285,7 @@ internal class AdaptiveLoadTimeline(
                 snapshot = snapshot,
                 element = element,
                 relation = relation!!,
+                progression = progression,
                 window = ProgramAdaptiveWindow(
                     familyId = familyId,
                     level = level,
