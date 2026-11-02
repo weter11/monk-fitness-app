@@ -17,7 +17,6 @@ import com.monkfitness.app.domain.adaptive.ExposureLevel
 import com.monkfitness.app.domain.adaptive.ExposureLoad
 import com.monkfitness.app.domain.adaptive.ExposureObservation
 import com.monkfitness.app.domain.adaptive.FamilyProgressionState
-import com.monkfitness.app.domain.adaptive.engine.FamilyProgression
 import com.monkfitness.app.domain.adaptive.IntensityEntry
 import com.monkfitness.app.domain.adaptive.IntensityLoad
 import com.monkfitness.app.domain.adaptive.LoadProfile
@@ -266,7 +265,7 @@ class ProgramAdaptiveIntegration(
                 else -> null
             }
             val relation = (choice as? AdaptiveTargetElement.Chosen)?.relation
-                ?: element?.takeIf { chosen -> progressesWithinItsRange(chosen.familyId) }
+                ?: element?.takeIf { chosen -> isClassified(chosen.familyId) }
                     ?.let { chosen -> singleRungOf(chosen) }
                 ?: relations.relationOf(familyId)
             val exerciseId = element?.exerciseId ?: lastPerformed
@@ -370,8 +369,8 @@ class ProgramAdaptiveIntegration(
                     spendsTheCooldown = false,
                     decidedAt = capturedAt
                 )
-                // The opportunity presents the family, but the app classifies it as a ladder family and
-                // no ladder is loaded: the gap is reported, never adapted on a rung nobody declared.
+                // The opportunity presents the family, but no classification describes it: the gap is
+                // reported, never adapted on a rung nobody declared.
                 if (element != null) {
                     return@map AdaptiveIntegrationOutcome.NothingToAdapt(
                         reason = ProgramAdaptiveReason.PROGRESSION_UNAVAILABLE,
@@ -962,12 +961,12 @@ class ProgramAdaptiveIntegration(
         )
 
     /**
-     * Whether the app classifies this family as one that only advances inside its exercises' own ranges.
-     * A ladder family with no ladder loaded, and a family the app does not classify, are answered `false`
-     * so the pass reports them instead of inventing the rung above.
+     * Whether the app classifies this family at all. A family it does not describe is reported instead of
+     * being adapted on a rung nobody declared, which is what makes the classification something the engine
+     * asks rather than something it can proceed without.
      */
-    private fun progressesWithinItsRange(familyId: String): Boolean =
-        classification.progressionOf(familyId) == FamilyProgression.WITHIN_EXERCISE
+    private fun isClassified(familyId: String): Boolean =
+        classification.progressionOf(familyId) != null
 
     /**
      * The target day's other rows of the same family, each with the identity of its own adjustment: an
