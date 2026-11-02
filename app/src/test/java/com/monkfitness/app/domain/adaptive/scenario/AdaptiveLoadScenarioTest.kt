@@ -430,7 +430,8 @@ class AdaptiveLoadScenarioTest {
     @Test
     fun h1AGrowthStepOnARotationArrivesOnTheFifthAppearance() {
         val trend = pushupTimeline()
-        val rows = rotationDates(RECURRENCE_SIX, 6).map { date -> trend.runSession(date, full(trend.nextPlanned)) }
+        val rows = rotationDates(RECURRENCE_SIX, 6)
+            .map { date -> trend.runSession(date, full(trend.nextPlanned)) }
         printTable("h1. a family the plan presents every sixth day, every set completed", rows)
 
         assertTrue(
@@ -458,7 +459,8 @@ class AdaptiveLoadScenarioTest {
     @Test
     fun h2ATwelveDayRotationNeverConfirmsGrowth() {
         val trend = pushupTimeline()
-        val rows = rotationDates(RECURRENCE_TWELVE, 12).map { date -> trend.runSession(date, full(trend.nextPlanned)) }
+        val rows = rotationDates(RECURRENCE_TWELVE, 12)
+            .map { date -> trend.runSession(date, full(trend.nextPlanned)) }
         printTable("h2. a family the plan presents every twelfth day, every set completed", rows)
 
         assertEquals(

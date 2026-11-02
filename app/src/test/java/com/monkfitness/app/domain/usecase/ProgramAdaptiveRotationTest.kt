@@ -42,7 +42,10 @@ class ProgramAdaptiveRotationTest {
 
         val (outcome, completion) = rig.completeWithAdaptive(trigger.sessionId)
 
-        assertTrue("the window earned a progression: $outcome", outcome is AdaptiveIntegrationOutcome.AdaptiveApplied)
+        assertTrue(
+            "the window earned a progression: $outcome",
+            outcome is AdaptiveIntegrationOutcome.AdaptiveApplied
+        )
         val applied = outcome as AdaptiveIntegrationOutcome.AdaptiveApplied
 
         assertEquals(

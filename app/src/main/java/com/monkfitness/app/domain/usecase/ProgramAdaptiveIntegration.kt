@@ -653,11 +653,14 @@ class ProgramAdaptiveIntegration(
     private fun classifiedExercisesOf(
         observations: List<ExposureObservation>,
         revision: ProgramRevision
-    ): Map<String, String> =
-        (observations.map { it.exerciseId } + revision.days.flatMap { day -> day.exercises.map { it.exerciseId } })
+    ): Map<String, String> {
+        val exerciseIds = observations.map { it.exerciseId } +
+            revision.days.flatMap { day -> day.exercises.map { it.exerciseId } }
+        return exerciseIds
             .distinct()
             .mapNotNull { exerciseId -> classification.familyOf(exerciseId)?.let { exerciseId to it } }
             .toMap()
+    }
 
     /** The adjustments still standing for one opportunity — read, never rewritten. */
     private suspend fun standingOf(slot: WorkoutSlot): List<AdaptiveAdjustment> =

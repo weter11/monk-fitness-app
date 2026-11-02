@@ -214,7 +214,13 @@ class AdaptiveTargetSelectionTest {
         )
         val slots = listOf(
             slot("push-past", "2026-09-18", SlotStatus.MISSED, day = "push-day"),
-            slot("push-started", "2026-09-22", SlotStatus.PLANNED, day = "push-day", attempts = listOf(SessionId("s"))),
+            slot(
+                "push-started",
+                "2026-09-22",
+                SlotStatus.PLANNED,
+                day = "push-day",
+                attempts = listOf(SessionId("s"))
+            ),
             slot("push-open", "2026-09-24", SlotStatus.PLANNED, day = "push-day"),
             slot("core-open", "2026-09-23", SlotStatus.PLANNED, day = "core-day")
         )
