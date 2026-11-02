@@ -14,14 +14,25 @@ import com.monkfitness.app.domain.prescription.Prescription
  * [ProgramExercise.isPinned]: a generated element the user then edited is [USER_AUTHORED], and
  * "compatible" versus "conflicting" is a comparison the editor makes when it reconciles, not a property
  * frozen here.
+ *
+ * [SEMI_AUTOMATIC] is the same authorship as [USER_AUTHORED] for regeneration — the user chose the
+ * exercise — and differs only in who owns the amount: the adaptive stage may re-prescribe it. That is why
+ * [isAuthoredByTheUser] is asked instead of comparing against one value.
  */
 enum class ProgramExerciseOrigin {
 
     /** The generator produced this element; a regenerate pass may replace it. */
     GENERATED,
 
-    /** The user authored or edited this element; regeneration keeps it. */
-    USER_AUTHORED
+    /** The user authored or edited this element and owns its amount; regeneration keeps it. */
+    USER_AUTHORED,
+
+    /** The user chose the exercise and its range; the adaptive stage owns the amount inside it. */
+    SEMI_AUTOMATIC;
+
+    /** Whether the user put this element in the plan, whatever they decided about its load. */
+    val isAuthoredByTheUser: Boolean
+        get() = this != GENERATED
 }
 
 /**

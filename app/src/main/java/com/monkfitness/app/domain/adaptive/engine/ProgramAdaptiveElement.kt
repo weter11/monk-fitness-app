@@ -8,6 +8,10 @@ import com.monkfitness.app.domain.workout.EffectiveExercise
  * **not adapted at all** — no adaptive rule runs against it, so no path exists by which adaptive logic
  * can change, block or reinterpret a user's own choice. The engine's reason for holding can still tell
  * the two apart for an audit.
+ *
+ * The user can hand the amount over while keeping the exercise (`SEMI_AUTOMATIC` in the plan), and that
+ * element is [AUTOMATIC] here: the ownership this stage asks about is the load's, and the user has said
+ * the engine may change it.
  */
 enum class ProgramElementOwnership {
 

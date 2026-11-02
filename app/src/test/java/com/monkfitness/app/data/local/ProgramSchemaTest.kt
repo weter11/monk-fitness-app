@@ -2078,7 +2078,10 @@ class ProgramSchemaTest {
         assertEquals(listOf("TRAINING", "MOBILITY", "POSTURE_MOBILITY", "REST"), ProgramDayType.entries.map { it.name })
         assertEquals(listOf("PLANNED", "COMPLETED", "MISSED", "SUPERSEDED"), SlotStatus.entries.map { it.name })
         assertEquals(listOf("IN_PROGRESS", "COMPLETED", "CANCELLED"), SessionStatus.entries.map { it.name })
-        assertEquals(listOf("GENERATED", "USER_AUTHORED"), ProgramExerciseOrigin.entries.map { it.name })
+        assertEquals(
+            listOf("GENERATED", "USER_AUTHORED", "SEMI_AUTOMATIC"),
+            ProgramExerciseOrigin.entries.map { it.name }
+        )
         assertEquals(
             "the five dimensions, including the three this stage deliberately does not implement (§10)",
             listOf("REP_BASED", "TIME_BASED", "SET_BASED", "DIFFICULTY_BASED", "REST_BASED"),

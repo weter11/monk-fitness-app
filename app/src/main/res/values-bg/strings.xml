@@ -893,6 +893,8 @@
     <string name="programs_editor_target_seconds">Секунди</string>
     <string name="programs_editor_pin">Закачи</string>
     <string name="programs_editor_unpin">Откачи</string>
+    <string name="programs_editor_adapt_load">Адаптирай натоварването</string>
+    <string name="programs_editor_adapt_requires_catalogue">Липсва в каталога с упражнения, затова натоварването не може да се адаптира</string>
     <string name="programs_editor_duplicate">Повтори</string>
     <string name="programs_editor_remove_element">Премахни</string>
     <string name="programs_editor_sets_total">Общо серии</string>
@@ -1011,6 +1013,10 @@
     <string name="programs_session_outcome_ceiling">вече е в горния край на диапазона</string>
     <string name="programs_session_outcome_floor">вече е на най-леката стъпка</string>
     <string name="programs_session_outcome_lower_bound">остава на долната граница: направи по-малко, отколкото иска</string>
+    <string name="programs_session_outcome_upper_bound">задържано в горния край на обхвата: няма по-тежко, към което да се премине</string>
+    <string name="programs_session_outcome_easier_variant">два пъти задържано в долния край на обхвата: опитайте по-лесен вариант на това семейство</string>
+    <string name="programs_session_outcome_too_heavy">два пъти задържано в долния край на обхвата: това упражнение изглежда твърде тежко за зададения обхват</string>
+    <string name="programs_session_outcome_row_limited">втори ред от това семейство беше задържан в собствения си обхват</string>
     <string name="programs_session_outcome_user_authored">запазено както го написа</string>
     <string name="programs_session_outcome_window_only">не е в следващата тренировка, затова без промяна</string>
     <string name="programs_session_outcome_no_further_appearance">не се появява повече в този план, затова без промяна</string>

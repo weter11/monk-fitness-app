@@ -290,13 +290,14 @@ class ProgramAdaptiveArchitectureTest {
         assertEquals(
             "a result carries the decision, the adjustments (one per row of the family's appearance), " +
                 "the family's next state, the reason, what was asked for, the signals, the guard's " +
-                "verdict and the window's own verdict — and nothing to persist through. The window's " +
-                "verdict was added by §30 step 12: the caller maintains the family's confirmation " +
-                "counts, cooldown position and recovery exit count from the policy's per-window " +
-                "answers, and a window cannot count itself",
+                "verdict, the window's own verdict and the rows a shared target had to be clamped into " +
+                "their own range for — and nothing to persist through. The window's verdict was added " +
+                "by §30 step 12: the caller maintains the family's confirmation counts, cooldown " +
+                "position and recovery exit count from the policy's per-window answers, and a window " +
+                "cannot count itself",
             listOf(
                 "decision", "adjustments", "state", "reason", "requestedAction", "signals", "guard",
-                "verdict"
+                "verdict", "clampedRows"
             ),
             resultFields
         )

@@ -347,6 +347,17 @@ class AdaptiveTargetSelectionTest {
             element("pushup", ProgramExerciseOrigin.USER_AUTHORED).ownership
         )
         assertEquals(
+            "an element whose load the user handed to the engine is adaptable, and the exercise stays " +
+                "the user's own choice",
+            ProgramElementOwnership.AUTOMATIC,
+            element("pushup", ProgramExerciseOrigin.SEMI_AUTOMATIC).ownership
+        )
+        assertEquals(
+            "handing the load over does not outrank a pin",
+            ProgramElementOwnership.PINNED,
+            element("pushup", ProgramExerciseOrigin.SEMI_AUTOMATIC, pinned = true).ownership
+        )
+        assertEquals(
             ProgramElementOwnership.PINNED,
             element("pushup", ProgramExerciseOrigin.GENERATED, pinned = true).ownership
         )

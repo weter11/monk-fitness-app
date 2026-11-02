@@ -41,7 +41,8 @@ sealed interface AdaptiveIntegrationOutcome {
         val adjustment: AdaptiveAdjustment,
         val familyState: FamilyProgressionState,
         val reason: ProgramAdaptiveReason,
-        val additionalAdjustments: List<AdaptiveAdjustment> = emptyList()
+        val additionalAdjustments: List<AdaptiveAdjustment> = emptyList(),
+        val clampedRows: List<String> = emptyList()
     ) : AdaptiveIntegrationOutcome {
 
         init {

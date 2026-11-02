@@ -27,15 +27,19 @@ import java.time.Instant
 
 /**
  * One row of the family's appearance in the target workout, other than the element the decision is about:
- * the row, the identity its own adjustment takes, and the standing adjustment it replaces.
+ * the row, the identity its own adjustment takes, the standing adjustment it replaces, and the range that
+ * row's own exercise states.
  *
  * An appearance is adapted as **one** family target, so every automatic row of the family carries the
- * same target and no workout presents two. A row the user pinned or authored is never one of these.
+ * same target and no workout presents two. A row the user pinned or authored is never one of these. The
+ * range is per row because a semi-automatic plan lets the user give two rows of one family different
+ * ranges: the shared target is clamped into each row's own span instead of being written past it.
  */
 data class ProgramFamilyPeer(
     val presentation: EffectiveExercise,
     val adjustmentId: AdjustmentId,
-    val supersedesAdjustmentId: AdjustmentId? = null
+    val supersedesAdjustmentId: AdjustmentId? = null,
+    val range: ExerciseRange? = null
 )
 
 /**
@@ -43,6 +47,9 @@ data class ProgramFamilyPeer(
  * clock and no lookup, so a decision is reproducible from this value alone. [availableExerciseIds] is
  * the user's own selection, read for a same-level realignment; a ladder step is answered by the family's
  * hierarchy, not by the plan's content.
+ *
+ * [progression] is the caller's classification of the family: whether a level above this one exists at
+ * all, which is what tells "the range is spent" from "the ladder has a rung above".
  */
 data class ProgramAdaptiveRequest(
     val decisionId: DecisionId,
@@ -55,6 +62,7 @@ data class ProgramAdaptiveRequest(
     val availableExerciseIds: Set<String>,
     val familyOfExercise: Map<String, String> = emptyMap(),
     val range: ExerciseRange? = null,
+    val progression: FamilyProgression = FamilyProgression.VARIANT_LADDER,
     val prescriptionStep: ProgramPrescriptionStep? = null,
     val supersedesAdjustmentId: AdjustmentId? = null,
     val familyPeers: List<ProgramFamilyPeer> = emptyList(),
@@ -100,6 +108,11 @@ data class ProgramPrescriptionStep(
  * [adjustments] holds one row per element of the family's appearance: the element the decision was
  * resolved against, and every other automatic row of the same family that the target changes. They are
  * one change about one appearance, written together; [adjustment] is the one the decision names.
+ *
+ * [clampedRows] names the rows whose own range would not hold the shared target: each was written inside
+ * its own span, or left where it is when its span ends at the value it already presents. It is a list
+ * rather than a flag because the caller says which row it was, and because a row that is clamped and a
+ * row that is merely unchanged are not the same fact.
  */
 data class ProgramAdaptiveResult(
     val decision: AdaptiveDecision,
@@ -109,7 +122,8 @@ data class ProgramAdaptiveResult(
     val requestedAction: AdaptiveAction,
     val signals: ProgramAdaptiveSignals,
     val guard: ProgramGuardVerdict,
-    val verdict: ProgramWindowVerdict = ProgramWindowVerdict()
+    val verdict: ProgramWindowVerdict = ProgramWindowVerdict(),
+    val clampedRows: List<String> = emptyList()
 ) {
 
     init {
@@ -210,7 +224,8 @@ object ProgramAdaptiveEngine {
                 supersedesAdjustmentId = request.supersedesAdjustmentId
             )
         }
-        val adjustments = listOfNotNull(adjustment) + (change?.let { resolved -> peersOf(request, resolved) } ?: emptyList())
+        val peerChanges = change?.let { resolved -> peersOf(request, resolved) } ?: PeerChanges.NONE
+        val adjustments = listOfNotNull(adjustment) + peerChanges.adjustments
 
         val decision = AdaptiveDecision(
             decisionId = request.decisionId,
@@ -238,7 +253,8 @@ object ProgramAdaptiveEngine {
             requestedAction = requestedAction,
             signals = signals,
             guard = guardVerdict,
-            verdict = policyDecision.verdict
+            verdict = policyDecision.verdict,
+            clampedRows = peerChanges.clampedRows
         )
     }
 
@@ -312,6 +328,12 @@ object ProgramAdaptiveEngine {
         // the answer once the whole span of this one has been used.
         withinRangeStep(request, up)?.let { within -> return within }
 
+        // A family with no ladder has nothing above its own range: the top of the span is the whole of what
+        // this family can be, so the ceiling is the range's own and a different answer from a ladder's.
+        if (up && request.progression == FamilyProgression.WITHIN_EXERCISE && rangeIsSpent(request)) {
+            return Resolution.None(ProgramAdaptiveReason.HELD_AT_UPPER_BOUND)
+        }
+
         // A generated plan's content is the planner's choice, not the user's veto: the next rung is
         // introduced even when the plan does not present it. An authored element never reaches here —
         // ownership settled it before the policy ran.
@@ -337,6 +359,17 @@ object ProgramAdaptiveEngine {
             after = presentationOf(request.element.presentation, variant),
             reason = if (up) ProgramAdaptiveReason.SUSTAINED_POSITIVE else ProgramAdaptiveReason.SUSTAINED_NEGATIVE
         )
+    }
+
+    /**
+     * Whether the element presents the last amount its own range allows. False when the exercise states no
+     * span in the presented dimension, where there is no top to be at.
+     */
+    private fun rangeIsSpent(request: ProgramAdaptiveRequest): Boolean {
+        val before = request.element.presentation
+        val amounts = request.range?.amountsFor(before.prescription.dimension) ?: return false
+        val presented = before.prescription.perSetTargets
+        return presented.isNotEmpty() && presented.max() >= amounts.last
     }
 
     /**
@@ -386,7 +419,10 @@ object ProgramAdaptiveEngine {
      * span in its own dimension to keep the correction inside.
      *
      * A shortfall the range's floor cannot express is [ProgramAdaptiveReason.HELD_AT_LOWER_BOUND], never
-     * the presented values again: the user did less than the range allows, and that is a result.
+     * the presented values again: the user did less than the range allows, and that is a result. When the
+     * floor has been missed on consecutive appearances the hold is escalated — to a suggestion of an easier
+     * variant where the family declares one, and to a statement that the exercise is too heavy for the
+     * range where it does not. The engine still writes nothing below the floor: the range is the user's.
      */
     private fun belowTargetCorrection(request: ProgramAdaptiveRequest): Resolution? {
         val before = request.element.presentation
@@ -405,7 +441,7 @@ object ProgramAdaptiveEngine {
             amount.coerceIn(amounts.first, amounts.last).coerceAtMost(presented[index])
         }
         if (target.indices.none { index -> target[index] < presented[index] }) {
-            return Resolution.None(ProgramAdaptiveReason.HELD_AT_LOWER_BOUND)
+            return Resolution.None(belowTheFloorReason(request, amounts.first, dimension))
         }
 
         return Resolution.Change(
@@ -420,6 +456,55 @@ object ProgramAdaptiveEngine {
             reason = ProgramAdaptiveReason.BELOW_TARGET_CORRECTION
         )
     }
+
+    /**
+     * What a shortfall the range's floor cannot express is answered with: the plain hold for one
+     * appearance, and the escalation once the floor has been missed the policy's stated number of
+     * consecutive times. Which escalation depends on whether the family declares a rung below — the engine
+     * may not widen the range downward, so the way out is another exercise or a lighter range.
+     */
+    private fun belowTheFloorReason(
+        request: ProgramAdaptiveRequest,
+        floor: Int,
+        dimension: PrescriptionDimension
+    ): ProgramAdaptiveReason {
+        if (consecutiveMissesOfTheFloor(request, floor, dimension) <
+            request.policy.lowerBoundEscalationAppearances
+        ) {
+            return ProgramAdaptiveReason.HELD_AT_LOWER_BOUND
+        }
+        return if (request.progression == FamilyProgression.VARIANT_LADDER) {
+            ProgramAdaptiveReason.EASIER_VARIANT_SUGGESTED
+        } else {
+            ProgramAdaptiveReason.TOO_HEAVY_FOR_THE_RANGE
+        }
+    }
+
+    /**
+     * How many of the family's appearances at the recent end of the window failed to reach [floor] at all.
+     *
+     * Read from the exposures the window already carries, the same stored sessions every other amount fact
+     * is read from: "consecutive appearances" is a fact about what the user did, not a counter the engine
+     * would have to keep.
+     */
+    private fun consecutiveMissesOfTheFloor(
+        request: ProgramAdaptiveRequest,
+        floor: Int,
+        dimension: PrescriptionDimension
+    ): Int = request.snapshot.exposures
+        .filter { exposure ->
+            exposure.performedAmounts != null &&
+                familyOf(exposure.exerciseId, request) == request.element.familyId
+        }
+        .sortedWith(compareBy({ it.startedAt }, { it.sessionExerciseId.value }))
+        .asReversed()
+        .takeWhile { exposure ->
+            exposure.performedAmounts.orEmpty().let { performed ->
+                performed.isNotEmpty() &&
+                    performed.maxOf { amount -> amountIn(amount, dimension) } < floor
+            }
+        }
+        .count()
 
     /**
      * The amounts the next session should ask for after a shortfall: what was performed, in the shape the
@@ -692,33 +777,73 @@ object ProgramAdaptiveEngine {
         focus = presentation.focus
     )
 
+    /** The rows of one appearance this change wrote, and the rows its own range would not hold unchanged. */
+    private data class PeerChanges(
+        val adjustments: List<AdaptiveAdjustment>,
+        val clampedRows: List<String>
+    ) {
+
+        companion object {
+
+            val NONE: PeerChanges = PeerChanges(emptyList(), emptyList())
+        }
+    }
+
     /**
      * The appearance's other rows: each is given the resolved change's target in its own set shape, and
      * keeps its own exercise. A row whose shape cannot express the target — a different dimension, or a
      * target it already states — is left as the plan has it and carries no adjustment.
+     *
+     * A row whose **own** range cannot hold the shared target is clamped into that range rather than written
+     * past it: two rows of one family may be given different ranges, and the smaller span is the one that
+     * binds. The row is named in the result either way, so a row at the top of its own range is stated
+     * instead of the two rows silently disagreeing.
      */
     private fun peersOf(
         request: ProgramAdaptiveRequest,
         change: Resolution.Change
-    ): List<AdaptiveAdjustment> = request.familyPeers.mapNotNull { peer ->
-        val target = change.after.prescription.inTheShapeOf(peer.presentation.prescription)
-            ?: return@mapNotNull null
-        if (target == peer.presentation.prescription) return@mapNotNull null
+    ): PeerChanges {
+        val clamped = request.familyPeers.mapNotNull { peer ->
+            val shared = change.after.prescription.inTheShapeOf(peer.presentation.prescription)
+            val bounded = shared?.let { target -> peer.clamped(target) }
+            if (shared == null || bounded == null) null else peer.presentation.programExerciseId.value
+        }
+        val adjustments = request.familyPeers.mapNotNull { peer ->
+            val shared = change.after.prescription.inTheShapeOf(peer.presentation.prescription)
+                ?: return@mapNotNull null
+            val target = peer.clamped(shared) ?: shared
+            if (target == peer.presentation.prescription) return@mapNotNull null
 
-        AdaptiveAdjustment(
-            adjustmentId = peer.adjustmentId,
-            decisionId = request.decisionId,
-            slotId = request.snapshot.slotId,
-            before = peer.presentation,
-            after = EffectiveExercise(
-                programExerciseId = peer.presentation.programExerciseId,
-                exerciseId = peer.presentation.exerciseId,
-                prescription = target,
-                focus = peer.presentation.focus
-            ),
-            createdAt = request.decidedAt,
-            supersedesAdjustmentId = peer.supersedesAdjustmentId
-        )
+            AdaptiveAdjustment(
+                adjustmentId = peer.adjustmentId,
+                decisionId = request.decisionId,
+                slotId = request.snapshot.slotId,
+                before = peer.presentation,
+                after = EffectiveExercise(
+                    programExerciseId = peer.presentation.programExerciseId,
+                    exerciseId = peer.presentation.exerciseId,
+                    prescription = target,
+                    focus = peer.presentation.focus
+                ),
+                createdAt = request.decidedAt,
+                supersedesAdjustmentId = peer.supersedesAdjustmentId
+            )
+        }
+        return PeerChanges(adjustments, clamped)
+    }
+
+    /**
+     * [target] inside the row's own span, or `null` when the row states no span in the target's dimension —
+     * a row whose range the caller did not state is left to the shared target, exactly as before.
+     */
+    private fun ProgramFamilyPeer.clamped(target: Prescription): Prescription? {
+        val amounts = range?.amountsFor(target.dimension) ?: return null
+        val bounded = target.perSetTargets.map { amount -> amount.coerceIn(amounts.first, amounts.last) }
+        if (bounded == target.perSetTargets) return null
+        return when (target) {
+            is RepPrescription -> RepPrescription(bounded)
+            is TimePrescription -> TimePrescription(bounded)
+        }
     }
 
     /**

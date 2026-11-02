@@ -891,6 +891,8 @@
     <string name="programs_editor_target_seconds">Секунди</string>
     <string name="programs_editor_pin">Закріпити</string>
     <string name="programs_editor_unpin">Відкріпити</string>
+    <string name="programs_editor_adapt_load">Адаптувати навантаження</string>
+    <string name="programs_editor_adapt_requires_catalogue">Немає в каталозі вправ, тому навантаження не може адаптуватися</string>
     <string name="programs_editor_duplicate">Повторити</string>
     <string name="programs_editor_remove_element">Видалити</string>
     <string name="programs_editor_sets_total">Усього підходів</string>
@@ -1009,6 +1011,10 @@
     <string name="programs_session_outcome_ceiling">уже на верхній межі діапазону</string>
     <string name="programs_session_outcome_floor">уже на найлегшому кроці</string>
     <string name="programs_session_outcome_lower_bound">лишилося на нижній межі: зроблено менше, ніж потрібно</string>
+    <string name="programs_session_outcome_upper_bound">утримується на верхній межі діапазону: переходити нікуди, далі лише важче</string>
+    <string name="programs_session_outcome_easier_variant">двічі утримано на нижній межі діапазону: спробуйте простіший варіант цієї родини</string>
+    <string name="programs_session_outcome_too_heavy">двічі утримано на нижній межі діапазону: ця вправа заважка для заданого діапазону</string>
+    <string name="programs_session_outcome_row_limited">другий рядок цієї родини залишено в її власному діапазоні</string>
     <string name="programs_session_outcome_user_authored">залишено як ви написали</string>
     <string name="programs_session_outcome_window_only">цього немає в наступному тренуванні, тому без змін</string>
     <string name="programs_session_outcome_no_further_appearance">більше не зустрічається в цьому плані, тому без змін</string>

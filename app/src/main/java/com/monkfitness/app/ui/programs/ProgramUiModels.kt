@@ -1,5 +1,6 @@
 package com.monkfitness.app.ui.programs
 
+import com.monkfitness.app.domain.adaptive.ExerciseRange
 import com.monkfitness.app.domain.program.LifecycleStatus
 import com.monkfitness.app.domain.program.ProgramDuration
 import com.monkfitness.app.domain.program.ProgramMode
@@ -59,7 +60,9 @@ data class ExerciseOptionUi(
     /** The catalogue's own family id, carried for grouping rather than for a plan decision. */
     val familyId: String,
     /** Whether the catalogue records this exercise as timed, which decides its prescription dimension. */
-    val isTimerBased: Boolean
+    val isTimerBased: Boolean,
+    /** The span the catalogue states for this exercise, or `null` when it states none. */
+    val range: ExerciseRange? = null
 )
 
 /** One row of My Programs: a saved Program with the state the list shows. */
@@ -148,7 +151,11 @@ data class ProgramDraftElementUi(
     val dimension: PrescriptionDimension,
     val sets: Int,
     val targetPerSet: Int,
-    val isPinned: Boolean
+    val isPinned: Boolean,
+    /** Whether the adaptive stage owns this element's amount. */
+    val loadAdapted: Boolean,
+    /** Why the toggle is unavailable, or `null` when it can be used. */
+    val adaptBlockedReasonRes: Int? = null
 )
 
 /**

@@ -2,11 +2,26 @@ package com.monkfitness.app.ui.programs
 
 import com.monkfitness.app.R
 import com.monkfitness.app.domain.adaptive.AdaptiveState
+import com.monkfitness.app.domain.adaptive.ConfidenceLevel
+import com.monkfitness.app.domain.adaptive.EvidenceLevel
 import com.monkfitness.app.domain.adaptive.FamilyProgressionState
+import com.monkfitness.app.domain.adaptive.RecoveryContext
+import com.monkfitness.app.domain.adaptive.decision.AdaptiveAction
+import com.monkfitness.app.domain.adaptive.decision.AdaptiveAdjustment
+import com.monkfitness.app.domain.adaptive.decision.AdaptiveDecision
+import com.monkfitness.app.domain.adaptive.decision.AdaptiveTarget
+import com.monkfitness.app.domain.adaptive.decision.DecisionOutcome
 import com.monkfitness.app.domain.adaptive.engine.ProgramAdaptiveReason
 import com.monkfitness.app.domain.adaptive.integration.AdaptiveInputGap
 import com.monkfitness.app.domain.adaptive.integration.AdaptiveIntegrationOutcome
+import com.monkfitness.app.domain.common.AdjustmentId
+import com.monkfitness.app.domain.common.DecisionId
+import com.monkfitness.app.domain.common.ProgramExerciseId
+import com.monkfitness.app.domain.common.ProgramId
 import com.monkfitness.app.domain.common.RevisionId
+import com.monkfitness.app.domain.common.SlotId
+import com.monkfitness.app.domain.prescription.RepPrescription
+import com.monkfitness.app.domain.workout.EffectiveExercise
 import org.junit.Assert.assertEquals
 import org.junit.Test
 import java.time.Instant
@@ -18,6 +33,15 @@ import java.time.Instant
  * later engine must read as the neutral sentence, not as `SOME_NEW_CODE` on a finished workout's screen.
  */
 class SessionOutcomeTextTest {
+
+    private val plank = FamilyProgressionState(
+        revisionId = RevisionId("revision-1"),
+        familyId = "plank",
+        progressionLevel = 1,
+        adaptationState = AdaptiveState.HOLD,
+        currentExerciseId = "plank",
+        updatedAt = Instant.parse("2026-10-01T10:00:00Z")
+    )
 
     private val pushups = FamilyProgressionState(
         revisionId = RevisionId("revision-1"),
@@ -116,6 +140,60 @@ class SessionOutcomeTextTest {
     }
 
     @Test
+    fun aPlanWithBothKindsOfElementReadsEachOneByItsOwnOutcome() {
+        val lines = SessionOutcomeText.linesOf(
+            outcomes = listOf(
+                appliedChange(),
+                AdaptiveIntegrationOutcome.NothingToAdapt(
+                    reason = ProgramAdaptiveReason.USER_AUTHORED_ELEMENT,
+                    familyState = plank
+                )
+            ),
+            familyNames = mapOf("pushups" to R.string.family_pushups, "plank" to R.string.family_plank)
+        )
+
+        assertEquals(2, lines.size)
+        assertEquals(
+            "the adaptable family reports the change the engine made",
+            R.string.programs_session_outcome_progressed,
+            lines[0].messageRes
+        )
+        assertEquals(
+            "and the one the user kept reports that it was kept, in the same list",
+            R.string.programs_session_outcome_user_authored,
+            lines[1].messageRes
+        )
+        assertEquals(null, lines[0].noteRes)
+    }
+
+    @Test
+    fun aRowHeldInsideItsOwnRangeSaysSoBesideTheChange() {
+        val line = SessionOutcomeText.linesOf(
+            outcomes = listOf(appliedChange(clampedRows = listOf("element-2"))),
+            familyNames = mapOf("pushups" to R.string.family_pushups)
+        ).single()
+
+        assertEquals(R.string.programs_session_outcome_progressed, line.messageRes)
+        assertEquals(R.string.programs_session_outcome_row_limited, line.noteRes)
+    }
+
+    @Test
+    fun theRangeCeilingAndTheRepeatedLowerBoundEachReadAsTheirOwnSentence() {
+        assertEquals(
+            R.string.programs_session_outcome_upper_bound,
+            SessionOutcomeText.holdText(ProgramAdaptiveReason.HELD_AT_UPPER_BOUND.name)
+        )
+        assertEquals(
+            R.string.programs_session_outcome_easier_variant,
+            SessionOutcomeText.holdText(ProgramAdaptiveReason.EASIER_VARIANT_SUGGESTED.name)
+        )
+        assertEquals(
+            R.string.programs_session_outcome_too_heavy,
+            SessionOutcomeText.holdText(ProgramAdaptiveReason.TOO_HEAVY_FOR_THE_RANGE.name)
+        )
+    }
+
+    @Test
     fun oneLinePerFamilyInThePassesOrderAndNoneForAGap() {
         val lines = SessionOutcomeText.linesOf(
             outcomes = listOf(
@@ -155,5 +233,44 @@ class SessionOutcomeTextTest {
             lines.single().familyNameRes
         )
         assertEquals(R.string.programs_session_outcome_ceiling, lines.single().messageRes)
+    }
+
+    /** An applied change of the pushups family, with the rows it had to keep inside their own ranges. */
+    private fun appliedChange(
+        clampedRows: List<String> = emptyList()
+    ): AdaptiveIntegrationOutcome.AdaptiveApplied = AdaptiveIntegrationOutcome.AdaptiveApplied(
+        decision = AdaptiveDecision(
+            decisionId = DECISION_ID,
+            programId = ProgramId("program-1"),
+            revisionId = RevisionId("revision-1"),
+            slotId = SlotId("slot-1"),
+            target = AdaptiveTarget.Exercise("pushup"),
+            action = AdaptiveAction.PROGRESS,
+            outcome = DecisionOutcome.APPLIED,
+            evidence = EvidenceLevel.STRONG,
+            confidence = ConfidenceLevel.HIGH,
+            recovery = RecoveryContext.FAVORABLE,
+            decidedAt = Instant.parse("2026-10-01T10:00:00Z"),
+            adjustmentId = ADJUSTMENT_ID,
+            reason = ProgramAdaptiveReason.SUSTAINED_POSITIVE
+        ),
+        adjustment = AdaptiveAdjustment(
+            adjustmentId = ADJUSTMENT_ID,
+            decisionId = DECISION_ID,
+            slotId = SlotId("slot-1"),
+            before = EffectiveExercise(ProgramExerciseId("element-1"), "pushup", RepPrescription.uniform(3, 8)),
+            after = EffectiveExercise(ProgramExerciseId("element-1"), "pushup", RepPrescription.uniform(3, 10)),
+            createdAt = Instant.parse("2026-10-01T10:00:00Z")
+        ),
+        familyState = pushups,
+        reason = ProgramAdaptiveReason.SUSTAINED_POSITIVE,
+        clampedRows = clampedRows
+    )
+
+    private companion object {
+
+        val DECISION_ID: DecisionId = DecisionId("decision-1")
+
+        val ADJUSTMENT_ID: AdjustmentId = AdjustmentId("adjustment-1")
     }
 }

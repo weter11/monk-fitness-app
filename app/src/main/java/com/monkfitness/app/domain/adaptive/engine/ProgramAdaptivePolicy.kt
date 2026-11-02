@@ -164,6 +164,13 @@ data class ProgramAdaptivePolicy(
     val rangeStepDenominator: Int = 4,
 
     /**
+     * How many consecutive appearances must miss the bottom of the exercise's range before the shortfall
+     * is escalated from a held target to a suggestion. Two, because one appearance is a bad day and the
+     * range's floor is the only thing the engine may not go below.
+     */
+    val lowerBoundEscalationAppearances: Int = 2,
+
+    /**
      * How many comparable sessions must exist before a confidence above `LOW` may be stated. Two sessions are
      * the first history there is: one occasion is not a pattern.
      */
@@ -525,6 +532,9 @@ data class ProgramAdaptivePolicy(
         require(rangeStepNumerator >= 0 && rangeStepDenominator >= 1) {
             "a within-range step is a non-negative share of the range width, was " +
                 "$rangeStepNumerator/$rangeStepDenominator"
+        }
+        require(lowerBoundEscalationAppearances >= 1) {
+            "an escalation counts at least one appearance, was $lowerBoundEscalationAppearances"
         }
         require(confidenceMinimumDistinctSessions >= 1) {
             "a confidence needs at least one session behind it, was $confidenceMinimumDistinctSessions"

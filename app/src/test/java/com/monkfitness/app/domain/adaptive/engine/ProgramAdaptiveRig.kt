@@ -12,6 +12,7 @@ import com.monkfitness.app.domain.adaptive.ExposureLoad
 import com.monkfitness.app.domain.adaptive.ExposureObservation
 import com.monkfitness.app.domain.adaptive.IntensityEntry
 import com.monkfitness.app.domain.adaptive.IntensityLoad
+import com.monkfitness.app.domain.adaptive.PerformedSetAmount
 import com.monkfitness.app.domain.adaptive.LoadProfile
 import com.monkfitness.app.domain.adaptive.RecoveryContext
 import com.monkfitness.app.domain.adaptive.VolumeLoad
@@ -100,13 +101,15 @@ object ProgramAdaptiveRig {
 
     /**
      * One observed occurrence. [index] gives it its own occurrence identity and its own place in the
-     * window, so a list of observations is chronological by construction.
+     * window, so a list of observations is chronological by construction. [reps] records what each
+     * completed set amounted to, which is the fact a shortfall is measured from.
      */
     fun observation(
         index: Int,
         prescribed: Int = 3,
         completed: Int = 3,
-        exerciseId: String = PRESENTED
+        exerciseId: String = PRESENTED,
+        reps: Int? = null
     ): ExposureObservation {
         val startedAt = WINDOW_START.plusSeconds((index + 1) * 3_600L)
         return ExposureObservation(
@@ -116,6 +119,9 @@ object ProgramAdaptiveRig {
             level = if (completed >= prescribed) ExposureLevel.FULL else ExposureLevel.PARTIAL,
             completedSets = completed,
             prescribedSets = prescribed,
+            performedAmounts = reps?.let { amount ->
+                List(completed) { PerformedSetAmount(completedReps = amount, durationSeconds = 0) }
+            },
             startedAt = startedAt,
             finishedAt = startedAt.plusSeconds(600)
         )
@@ -250,6 +256,8 @@ object ProgramAdaptiveRig {
         ),
         supersedesAdjustmentId: AdjustmentId? = null,
         range: ExerciseRange? = null,
+        progression: FamilyProgression = FamilyProgression.VARIANT_LADDER,
+        familyPeers: List<ProgramFamilyPeer> = emptyList(),
         policy: ProgramAdaptivePolicy = ProgramAdaptivePolicy.V1,
         decisionId: DecisionId = DECISION_ID,
         adjustmentId: AdjustmentId = ADJUSTMENT_ID,
@@ -266,6 +274,8 @@ object ProgramAdaptiveRig {
         familyOfExercise = familyOfExercise,
         supersedesAdjustmentId = supersedesAdjustmentId,
         range = range,
+        progression = progression,
+        familyPeers = familyPeers,
         policy = policy
     )
 

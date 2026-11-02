@@ -15,6 +15,7 @@ import com.monkfitness.app.domain.program.ProgramDraftReview
 import com.monkfitness.app.domain.program.ProgramEditorDraft
 import com.monkfitness.app.domain.program.ProgramEditorRejection
 import com.monkfitness.app.domain.program.ProgramEditorResult
+import com.monkfitness.app.domain.program.ProgramExerciseOrigin
 import com.monkfitness.app.domain.program.ExercisePreference
 import com.monkfitness.app.domain.program.FocusPlan
 import com.monkfitness.app.domain.program.ProgramMode
@@ -808,20 +809,49 @@ class ProgramsController(
      * Adds one occurrence of [exerciseId] to a day, prescribed in the catalogue's own dimension: a timed
      * exercise in seconds and every other one in repetitions.
      *
-     * The element's origin is the editor's own default (`USER_AUTHORED`), because the user is who put it
-     * there — the UI does not decide origins and has no vocabulary for the other one.
+     * An element added to an automatic program starts at the **bottom** of the span the catalogue states for
+     * it and is semi-automatic, so the adaptive stage owns the amount from the first session: starting it
+     * anywhere else would either spend the range before the engine is told about it, or begin at a load the
+     * engine may only reduce. A manual program is authored whole, so it keeps the editor's own default and
+     * its element is the user's.
      */
     fun addDraftElement(programDayId: String, exerciseId: String) = editDraft { draft ->
         val option = mutableState.value.exerciseOptions.firstOrNull { it.exerciseId == exerciseId }
+        val adaptive = draft.mode != ProgramMode.MANUAL && option != null
+        val floor = option?.takeIf { adaptive }?.let { described ->
+            val range = described.range
+            if (described.isTimerBased) range?.timeRange?.first else range?.repRange?.first
+        }
         val prescription = if (option?.isTimerBased == true) {
-            TimePrescription.uniform(DEFAULT_SETS, DEFAULT_SECONDS_PER_SET)
+            TimePrescription.uniform(DEFAULT_SETS, floor ?: DEFAULT_SECONDS_PER_SET)
         } else {
-            RepPrescription.uniform(DEFAULT_SETS, DEFAULT_REPS_PER_SET)
+            RepPrescription.uniform(DEFAULT_SETS, floor ?: DEFAULT_REPS_PER_SET)
         }
         editor.editor(draft)
-            .addingExercise(ProgramDayId(programDayId), exerciseId, prescription)
+            .addingExercise(
+                ProgramDayId(programDayId),
+                exerciseId,
+                prescription,
+                origin = if (adaptive) {
+                    ProgramExerciseOrigin.SEMI_AUTOMATIC
+                } else {
+                    ProgramExerciseOrigin.USER_AUTHORED
+                }
+            )
             .draft
     }
+
+    /** Hands one element's amount to the adaptive stage, or takes it back. */
+    fun setDraftLoadAdapted(programDayId: String, programExerciseId: String, adapted: Boolean) =
+        editDraft { draft ->
+            editor.editor(draft)
+                .settingLoadAdapted(
+                    ProgramDayId(programDayId),
+                    ProgramExerciseId(programExerciseId),
+                    adapted
+                )
+                .draft
+        }
 
     fun removeDraftElement(programDayId: String, programExerciseId: String) = editDraft { draft ->
         editor.editor(draft)
@@ -1219,7 +1249,13 @@ class ProgramsController(
                             dimension = element.prescription.dimension,
                             sets = element.prescription.setCount,
                             targetPerSet = element.prescription.perSetTargets.firstOrNull() ?: 0,
-                            isPinned = element.isPinned
+                            isPinned = element.isPinned,
+                            loadAdapted = element.origin != ProgramExerciseOrigin.USER_AUTHORED,
+                            adaptBlockedReasonRes = if (names[element.exerciseId] == null) {
+                                R.string.programs_editor_adapt_requires_catalogue
+                            } else {
+                                null
+                            }
                         )
                     }
                 )
