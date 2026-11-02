@@ -177,6 +177,9 @@ fun ProgramExercise.familyOf(classification: ExerciseFamilyClassification): Stri
 /**
  * An element the user pinned is exempt from automatic change whether or not they also edited it, so
  * `pinned` outranks `user-authored`.
+ *
+ * The origin decides only who owns the *amount*: an element whose load the user handed to the engine is
+ * the plan's automatic content to the adaptive stage, which is the whole point of the toggle.
  */
 val ProgramExercise.ownership: ProgramElementOwnership
     get() = when {

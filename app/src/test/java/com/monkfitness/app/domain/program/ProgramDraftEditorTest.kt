@@ -223,6 +223,38 @@ class ProgramDraftEditorTest {
     }
 
     @Test
+    fun handingTheLoadOverChangesOnlyWhoOwnsIt() {
+        val plan = plan()
+        val day = plan.first()
+        val element = day.exercises[0]
+        val ids = TestIds()
+
+        val adapted = editor(ProgramEditorDraft(name = "My program", days = plan), ids)
+            .settingLoadAdapted(day.programDayId, element.programExerciseId, adapted = true)
+            .draft
+        val taken = editor(adapted, ids)
+            .settingLoadAdapted(day.programDayId, element.programExerciseId, adapted = false)
+            .draft
+
+        assertEquals(
+            "on, the exercise and its prescription stay the user's and only the amount is handed over",
+            ProgramExerciseOrigin.SEMI_AUTOMATIC,
+            adapted.days.first().exercises[0].origin
+        )
+        assertEquals(element.prescription, adapted.days.first().exercises[0].prescription)
+        assertEquals(
+            "off is the value every manual element had before the toggle existed",
+            ProgramExerciseOrigin.USER_AUTHORED,
+            taken.days.first().exercises[0].origin
+        )
+        assertEquals(
+            "the other day's element is not the one addressed",
+            ProgramExerciseOrigin.USER_AUTHORED,
+            taken.days[1].exercises[0].origin
+        )
+    }
+
+    @Test
     fun aRestDayCannotBeMadeOutOfADayThatStillPlansWork() {
         val plan = planWithTwoOccurrences()
         val day = plan.first()

@@ -28,6 +28,7 @@ import com.monkfitness.app.domain.adaptive.decision.AdaptiveAdjustment
 import com.monkfitness.app.domain.adaptive.decision.AdaptiveTarget
 import com.monkfitness.app.domain.adaptive.decision.presentedWorkout
 import com.monkfitness.app.domain.adaptive.decision.standingAdjustments
+import com.monkfitness.app.domain.adaptive.engine.FamilyProgression
 import com.monkfitness.app.domain.adaptive.engine.ProgramAdaptiveElement
 import com.monkfitness.app.domain.adaptive.engine.ProgramAdaptiveEngine
 import com.monkfitness.app.domain.adaptive.engine.ProgramAdaptiveEvidence
@@ -401,6 +402,8 @@ class ProgramAdaptiveIntegration(
                     availableExerciseIds = availableExerciseIdsOf(revision),
                     familyOfExercise = familyOfExercise,
                     range = exerciseRanges.rangeOf(element.exerciseId),
+                    progression = classification.progressionOf(familyId)
+                        ?: FamilyProgression.WITHIN_EXERCISE,
                     supersedesAdjustmentId = supersededBy(
                         standing,
                         element.presentation.programExerciseId.value
@@ -444,7 +447,8 @@ class ProgramAdaptiveIntegration(
                 adjustment = adjustment,
                 familyState = state,
                 reason = result.reason,
-                additionalAdjustments = result.adjustments.drop(1)
+                additionalAdjustments = result.adjustments.drop(1),
+                clampedRows = result.clampedRows
             )
 
             adjustment != null -> invalidData(
@@ -992,7 +996,8 @@ class ProgramAdaptiveIntegration(
             // The appearance's other rows share the primary's identity, so which row the decision names is
             // a read of the ids rather than of an insertion order.
             adjustmentId = AdjustmentId("${adjustmentId.value}~${row.presentation.programExerciseId.value}"),
-            supersedesAdjustmentId = supersededBy(standing, row.presentation.programExerciseId.value)
+            supersedesAdjustmentId = supersededBy(standing, row.presentation.programExerciseId.value),
+            range = exerciseRanges.rangeOf(row.presentation.exerciseId)
         )
     }
 

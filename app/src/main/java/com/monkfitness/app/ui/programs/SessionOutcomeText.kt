@@ -7,11 +7,13 @@ import com.monkfitness.app.domain.adaptive.integration.AdaptiveIntegrationOutcom
 
 /**
  * One family's line after a completion: the display name the catalogue gave it (or `null` when the
- * catalogue does not know the family) and the sentence the screen renders.
+ * catalogue does not know the family), the sentence the screen renders, and a second sentence when the
+ * outcome has a fact the first one does not carry.
  */
 data class SessionOutcomeUi(
     val familyNameRes: Int?,
-    val messageRes: Int
+    val messageRes: Int,
+    val noteRes: Int? = null
 )
 
 /**
@@ -43,7 +45,13 @@ internal object SessionOutcomeText {
         val familyId = outcome.familyId ?: return@mapNotNull null
         SessionOutcomeUi(
             familyNameRes = familyNames[familyId],
-            messageRes = messageResOf(outcome)
+            messageRes = messageResOf(outcome),
+            // A change that had to keep one of the family's other rows inside its own range says so beside
+            // the change: the two rows carry different targets, and that is the user's decision, not a
+            // contradiction the screen should hide.
+            noteRes = (outcome as? AdaptiveIntegrationOutcome.AdaptiveApplied)
+                ?.takeIf { applied -> applied.clampedRows.isNotEmpty() }
+                ?.let { R.string.programs_session_outcome_row_limited }
         )
     }
 
@@ -68,6 +76,13 @@ internal object SessionOutcomeText {
         ProgramAdaptiveReason.CEILING_REACHED.name -> R.string.programs_session_outcome_ceiling
         ProgramAdaptiveReason.FLOOR_REACHED.name -> R.string.programs_session_outcome_floor
         ProgramAdaptiveReason.HELD_AT_LOWER_BOUND.name -> R.string.programs_session_outcome_lower_bound
+        ProgramAdaptiveReason.HELD_AT_UPPER_BOUND.name -> R.string.programs_session_outcome_upper_bound
+        ProgramAdaptiveReason.EASIER_VARIANT_SUGGESTED.name ->
+            R.string.programs_session_outcome_easier_variant
+
+        ProgramAdaptiveReason.TOO_HEAVY_FOR_THE_RANGE.name ->
+            R.string.programs_session_outcome_too_heavy
+
         ProgramAdaptiveReason.USER_AUTHORED_ELEMENT.name -> R.string.programs_session_outcome_user_authored
         else -> NEUTRAL
     }

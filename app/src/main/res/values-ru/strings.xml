@@ -891,6 +891,8 @@
     <string name="programs_editor_target_seconds">Секунды</string>
     <string name="programs_editor_pin">Закрепить</string>
     <string name="programs_editor_unpin">Открепить</string>
+    <string name="programs_editor_adapt_load">Адаптировать нагрузку</string>
+    <string name="programs_editor_adapt_requires_catalogue">Нет в каталоге упражнений, поэтому нагрузка не может адаптироваться</string>
     <string name="programs_editor_duplicate">Повторить</string>
     <string name="programs_editor_remove_element">Удалить</string>
     <string name="programs_editor_sets_total">Всего подходов</string>
@@ -1009,6 +1011,10 @@
     <string name="programs_session_outcome_ceiling">уже на верхней границе диапазона</string>
     <string name="programs_session_outcome_floor">уже на самом лёгком шаге</string>
     <string name="programs_session_outcome_lower_bound">осталось на нижней границе: сделано меньше, чем требуется</string>
+    <string name="programs_session_outcome_upper_bound">удерживается на верхней границе диапазона: переходить некуда, дальше только тяжелее</string>
+    <string name="programs_session_outcome_easier_variant">дважды удержано на нижней границе диапазона: попробуйте более простой вариант этого семейства</string>
+    <string name="programs_session_outcome_too_heavy">дважды удержано на нижней границе диапазона: это упражнение слишком тяжёлое для заданного диапазона</string>
+    <string name="programs_session_outcome_row_limited">вторая строка этого семейства оставлена в своём диапазоне</string>
     <string name="programs_session_outcome_user_authored">оставлено как вы написали</string>
     <string name="programs_session_outcome_window_only">этого нет в следующей тренировке, поэтому без изменений</string>
     <string name="programs_session_outcome_no_further_appearance">больше не встречается в этом плане, поэтому без изменений</string>

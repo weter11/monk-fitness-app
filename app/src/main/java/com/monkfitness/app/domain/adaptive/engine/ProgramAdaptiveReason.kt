@@ -48,6 +48,18 @@ enum class ProgramAdaptiveReason {
      */
     HELD_AT_LOWER_BOUND,
 
+    /**
+     * The span of the exercise's own range is spent and the family declares no further level, so there
+     * is nothing heavier to move to: the family holds at the top of the range it was given.
+     */
+    HELD_AT_UPPER_BOUND,
+
+    /** The bottom of the range was missed on consecutive appearances, and the family has a rung below. */
+    EASIER_VARIANT_SUGGESTED,
+
+    /** The bottom of the range was missed on consecutive appearances and the family has no ladder. */
+    TOO_HEAVY_FOR_THE_RANGE,
+
     AGGREGATE_LOAD_GUARD,
 
     RECOVERY_ENTERED,
@@ -118,6 +130,9 @@ enum class ProgramAdaptiveReason {
             REST_CHANGE_UNSUPPORTED,
             USER_AUTHORED_ELEMENT,
             HELD_AT_LOWER_BOUND,
+            HELD_AT_UPPER_BOUND,
+            EASIER_VARIANT_SUGGESTED,
+            TOO_HEAVY_FOR_THE_RANGE,
             AGGREGATE_LOAD_GUARD,
             RECOVERY_ENTERED,
             RECOVERY_HELD,

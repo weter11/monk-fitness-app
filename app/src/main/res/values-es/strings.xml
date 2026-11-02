@@ -893,6 +893,8 @@
     <string name="programs_editor_target_seconds">Segundos</string>
     <string name="programs_editor_pin">Fijar</string>
     <string name="programs_editor_unpin">Quitar fijación</string>
+    <string name="programs_editor_adapt_load">Adaptar la carga</string>
+    <string name="programs_editor_adapt_requires_catalogue">No está en el catálogo de ejercicios, así que su carga no puede adaptarse</string>
     <string name="programs_editor_duplicate">Repetir</string>
     <string name="programs_editor_remove_element">Quitar</string>
     <string name="programs_editor_sets_total">Series en total</string>
@@ -1011,6 +1013,10 @@
     <string name="programs_session_outcome_ceiling">ya está en lo más alto de su rango</string>
     <string name="programs_session_outcome_floor">ya está en el paso más fácil</string>
     <string name="programs_session_outcome_lower_bound">se queda en el límite inferior: hiciste menos de lo que pide</string>
+    <string name="programs_session_outcome_upper_bound">mantenido en el límite superior de su rango: no hay nada más exigente a lo que pasar</string>
+    <string name="programs_session_outcome_easier_variant">mantenido dos veces en el límite inferior de su rango: prueba una variante más fácil de esta familia</string>
+    <string name="programs_session_outcome_too_heavy">mantenido dos veces en el límite inferior de su rango: este ejercicio parece demasiado pesado para el rango que fijaste</string>
+    <string name="programs_session_outcome_row_limited">una segunda fila de esta familia se mantuvo dentro de su propio rango</string>
     <string name="programs_session_outcome_user_authored">se mantiene como lo escribiste</string>
     <string name="programs_session_outcome_window_only">no está en tu próximo entrenamiento, así que sin cambios</string>
     <string name="programs_session_outcome_no_further_appearance">no vuelve a aparecer en este plan, así que sin cambios</string>

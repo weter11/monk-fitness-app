@@ -292,6 +292,9 @@ fun ProgramEditorScreen(
                     onPin = { element, pinned ->
                         controller.setDraftPinned(day.programDayId, element.programExerciseId, pinned)
                     },
+                    onLoadAdapted = { element, adapted ->
+                        controller.setDraftLoadAdapted(day.programDayId, element.programExerciseId, adapted)
+                    },
                     onPrescription = { element, sets, target ->
                         controller.setDraftPrescription(
                             day.programDayId,
@@ -978,6 +981,7 @@ private fun DraftDayCard(
     onRemoveElement: (ProgramDraftElementUi) -> Unit,
     onDuplicateElement: (ProgramDraftElementUi) -> Unit,
     onPin: (ProgramDraftElementUi, Boolean) -> Unit,
+    onLoadAdapted: (ProgramDraftElementUi, Boolean) -> Unit,
     onPrescription: (ProgramDraftElementUi, Int, Int) -> Unit
 ) {
     Card(modifier = Modifier.fillMaxWidth()) {
@@ -1009,6 +1013,7 @@ private fun DraftDayCard(
                     onRemove = { onRemoveElement(element) },
                     onDuplicate = { onDuplicateElement(element) },
                     onPin = { pinned -> onPin(element, pinned) },
+                    onLoadAdapted = { adapted -> onLoadAdapted(element, adapted) },
                     onPrescription = { sets, target -> onPrescription(element, sets, target) }
                 )
             }
@@ -1030,6 +1035,7 @@ private fun DraftElementRow(
     onRemove: () -> Unit,
     onDuplicate: () -> Unit,
     onPin: (Boolean) -> Unit,
+    onLoadAdapted: (Boolean) -> Unit,
     onPrescription: (Int, Int) -> Unit
 ) {
     val name = if (element.nameRes != 0) {
@@ -1061,6 +1067,28 @@ private fun DraftElementRow(
                 label = targetLabel,
                 value = element.targetPerSet,
                 onChange = { onPrescription(element.sets, it) }
+            )
+        }
+
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = stringResource(R.string.programs_editor_adapt_load),
+                style = MaterialTheme.typography.bodySmall
+            )
+            Switch(
+                checked = element.loadAdapted,
+                onCheckedChange = onLoadAdapted,
+                enabled = element.adaptBlockedReasonRes == null
+            )
+        }
+        element.adaptBlockedReasonRes?.let { reason ->
+            Text(
+                text = stringResource(reason),
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.secondary
             )
         }
 

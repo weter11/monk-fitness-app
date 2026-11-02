@@ -212,6 +212,13 @@ fun ProgramSessionScreen(
                                 } ?: sentence,
                                 style = MaterialTheme.typography.bodyMedium
                             )
+                            outcome.noteRes?.let { noteRes ->
+                                Text(
+                                    text = stringResource(noteRes),
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.secondary
+                                )
+                            }
                         }
                     }
                     state.notice?.let { completedNotice ->

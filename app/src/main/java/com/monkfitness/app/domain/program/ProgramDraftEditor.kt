@@ -284,6 +284,39 @@ class ProgramDraftEditor(val draft: ProgramEditorDraft, private val ids: DraftId
         )
     }
 
+    /**
+     * Hands one occurrence's amount to the adaptive stage, or takes it back. The pin is untouched: a pinned
+     * element is exempt whether or not its load adapts, and off is the [ProgramExerciseOrigin.USER_AUTHORED]
+     * every manual element already had.
+     */
+    fun settingLoadAdapted(
+        programDayId: ProgramDayId,
+        programExerciseId: ProgramExerciseId,
+        adapted: Boolean
+    ): ProgramDraftEditor {
+        planElementOrFail(programDayId, programExerciseId)
+        val origin = if (adapted) {
+            ProgramExerciseOrigin.SEMI_AUTOMATIC
+        } else {
+            ProgramExerciseOrigin.USER_AUTHORED
+        }
+        return next(
+            draft.copy(
+                days = draft.days.mappingDay(programDayId) {
+                    it.copy(
+                        exercises = it.exercises.map { element ->
+                            if (element.programExerciseId == programExerciseId) {
+                                element.copy(origin = origin)
+                            } else {
+                                element
+                            }
+                        }
+                    )
+                }
+            )
+        )
+    }
+
     private fun next(draft: ProgramEditorDraft): ProgramDraftEditor = ProgramDraftEditor(draft, ids)
 
     private fun planDayOrFail(programDayId: ProgramDayId): ProgramDay =

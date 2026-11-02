@@ -381,7 +381,11 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     exerciseId = exercise.id,
                     nameRes = exercise.nameRes,
                     familyId = exercise.familyId,
-                    isTimerBased = exercise.isTimerBased
+                    isTimerBased = exercise.isTimerBased,
+                    // The span the catalogue already states, read through the same source the adaptive
+                    // integration clamps with: a new element starts at its bottom, and the editor offers no
+                    // second copy of the bound.
+                    range = programGraph.catalogExerciseRangeSource.rangeOf(exercise.id)
                 )
             }
         },

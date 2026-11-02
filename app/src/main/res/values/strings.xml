@@ -893,6 +893,8 @@
     <string name="programs_editor_target_seconds">Seconds</string>
     <string name="programs_editor_pin">Pin</string>
     <string name="programs_editor_unpin">Unpin</string>
+    <string name="programs_editor_adapt_load">Adapt the load</string>
+    <string name="programs_editor_adapt_requires_catalogue">Not in the exercise catalogue, so its load cannot adapt</string>
     <string name="programs_editor_duplicate">Repeat</string>
     <string name="programs_editor_remove_element">Remove</string>
     <string name="programs_editor_sets_total">Sets in total</string>
@@ -1012,6 +1014,10 @@
     <string name="programs_session_outcome_ceiling">already at the top of its range</string>
     <string name="programs_session_outcome_floor">already at the easiest step</string>
     <string name="programs_session_outcome_lower_bound">held at the bottom of its range: you did less than it asks</string>
+    <string name="programs_session_outcome_upper_bound">held at the top of its range: there is nothing heavier to move to</string>
+    <string name="programs_session_outcome_easier_variant">held at the bottom of its range twice: try an easier variant of this family</string>
+    <string name="programs_session_outcome_too_heavy">held at the bottom of its range twice: this exercise looks too heavy for the range you set</string>
+    <string name="programs_session_outcome_row_limited">a second row of this family was kept inside its own range</string>
     <string name="programs_session_outcome_user_authored">kept as you wrote it</string>
     <string name="programs_session_outcome_window_only">not in your next workout, so unchanged</string>
     <string name="programs_session_outcome_no_further_appearance">no further appearance in this plan, so unchanged</string>

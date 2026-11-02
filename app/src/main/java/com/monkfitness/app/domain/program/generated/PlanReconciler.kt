@@ -354,7 +354,7 @@ object PlanReconciler {
      * "may the plan change this?" and [preservationLevel] answers "under which level?".
      */
     private val ProgramExercise.isOwnedByTheUser: Boolean
-        get() = isPinned || origin == ProgramExerciseOrigin.USER_AUTHORED
+        get() = isPinned || origin.isAuthoredByTheUser
 
     /** The level for an element the user owns: a pin outranks authorship. */
     private fun ProgramExercise.preservationLevel(agreesWithPlan: Boolean): PreservationLevel = when {
