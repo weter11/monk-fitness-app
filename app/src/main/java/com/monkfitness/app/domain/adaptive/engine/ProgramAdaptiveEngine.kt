@@ -803,12 +803,15 @@ object ProgramAdaptiveEngine {
         request: ProgramAdaptiveRequest,
         change: Resolution.Change
     ): PeerChanges {
-        val clamped = mutableListOf<String>()
+        val clamped = request.familyPeers.mapNotNull { peer ->
+            val shared = change.after.prescription.inTheShapeOf(peer.presentation.prescription)
+            val bounded = shared?.let { target -> peer.clamped(target) }
+            if (shared == null || bounded == null) null else peer.presentation.programExerciseId.value
+        }
         val adjustments = request.familyPeers.mapNotNull { peer ->
             val shared = change.after.prescription.inTheShapeOf(peer.presentation.prescription)
                 ?: return@mapNotNull null
             val target = peer.clamped(shared) ?: shared
-            if (target != shared) clamped += peer.presentation.programExerciseId.value
             if (target == peer.presentation.prescription) return@mapNotNull null
 
             AdaptiveAdjustment(
