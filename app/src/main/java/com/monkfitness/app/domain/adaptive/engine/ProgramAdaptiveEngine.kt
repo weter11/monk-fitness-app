@@ -62,7 +62,7 @@ data class ProgramAdaptiveRequest(
     val availableExerciseIds: Set<String>,
     val familyOfExercise: Map<String, String> = emptyMap(),
     val range: ExerciseRange? = null,
-    val progression: FamilyProgression = FamilyProgression.VARIANT_LADDER,
+    val progression: FamilyProgression,
     val prescriptionStep: ProgramPrescriptionStep? = null,
     val supersedesAdjustmentId: AdjustmentId? = null,
     val familyPeers: List<ProgramFamilyPeer> = emptyList(),
