@@ -563,7 +563,7 @@ class AdaptiveGapFactsAndRangeWiringTest {
         assertEquals(
             "nine performed, less the two the policy's share of the range takes away",
             listOf(7, 7, 7),
-            result.adjustment.after.prescription.perSetTargets
+            result.adjustments.first().after.prescription.perSetTargets
         )
     }
 

@@ -223,7 +223,7 @@ class ProgramAdaptiveEngineTest {
         assertEquals(
             "and it is the same exercise at a lower amount, not a rung",
             PRESENTED,
-            result.adjustment.after.exerciseId
+            result.adjustments.first().after.exerciseId
         )
         assertFalse(
             "a correction to what was done is not an adjustment of the programme, so it must not push the " +
@@ -411,7 +411,7 @@ class ProgramAdaptiveEngineTest {
         assertEquals(SAME_LEVEL_ALTERNATIVE, result.adjustment!!.before.exerciseId)
         assertEquals(
             "the two ends of a variant change are both declared at the family's own level (§15)",
-            PRESENTED, result.adjustment.after.exerciseId
+            PRESENTED, result.adjustments.first().after.exerciseId
         )
     }
 
