@@ -1012,6 +1012,8 @@
     <string name="programs_session_outcome_floor">вече е на най-леката стъпка</string>
     <string name="programs_session_outcome_user_authored">запазено както го написа</string>
     <string name="programs_session_outcome_window_only">не е в следващата тренировка, затова без промяна</string>
+    <string name="programs_session_outcome_no_further_appearance">не се появява повече в този план, затова без промяна</string>
+    <string name="programs_session_outcome_manual_programme">Това е ръчна програма: натоварването не се адаптира автоматично.</string>
     <string name="programs_session_outcome_held_back">запазено както е: общото натоварване е високо</string>
     <string name="programs_session_outcome_neutral">без промяна този път</string>
     <string name="programs_session_skip_rest">Пропусни почивката</string>

@@ -1010,6 +1010,8 @@
     <string name="programs_session_outcome_floor">уже на самом лёгком шаге</string>
     <string name="programs_session_outcome_user_authored">оставлено как вы написали</string>
     <string name="programs_session_outcome_window_only">этого нет в следующей тренировке, поэтому без изменений</string>
+    <string name="programs_session_outcome_no_further_appearance">больше не встречается в этом плане, поэтому без изменений</string>
+    <string name="programs_session_outcome_manual_programme">Это ручная программа: нагрузка не адаптируется автоматически.</string>
     <string name="programs_session_outcome_held_back">оставлено как есть: общая нагрузка высокая</string>
     <string name="programs_session_outcome_neutral">на этот раз без изменений</string>
     <string name="programs_session_skip_rest">Пропустить отдых</string>

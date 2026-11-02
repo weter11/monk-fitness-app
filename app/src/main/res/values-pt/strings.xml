@@ -1012,6 +1012,8 @@
     <string name="programs_session_outcome_floor">já está no passo mais fácil</string>
     <string name="programs_session_outcome_user_authored">mantido como você escreveu</string>
     <string name="programs_session_outcome_window_only">não está no seu próximo treino, então sem mudança</string>
+    <string name="programs_session_outcome_no_further_appearance">não aparece mais neste plano, então sem mudança</string>
+    <string name="programs_session_outcome_manual_programme">Este é um programa manual: a carga não é adaptada automaticamente.</string>
     <string name="programs_session_outcome_held_back">mantido: a carga total está alta</string>
     <string name="programs_session_outcome_neutral">sem mudança desta vez</string>
     <string name="programs_session_skip_rest">Pular descanso</string>

@@ -2,6 +2,7 @@ package com.monkfitness.app.ui.programs
 
 import com.monkfitness.app.R
 import com.monkfitness.app.domain.adaptive.engine.ProgramAdaptiveReason
+import com.monkfitness.app.domain.adaptive.integration.AdaptiveInputGap
 import com.monkfitness.app.domain.adaptive.integration.AdaptiveIntegrationOutcome
 
 /**
@@ -29,6 +30,16 @@ internal object SessionOutcomeText {
         outcomes: List<AdaptiveIntegrationOutcome>,
         familyNames: Map<String, Int>
     ): List<SessionOutcomeUi> = outcomes.mapNotNull { outcome ->
+        // A manual Program is not adapted at all, and its gap names no family: the line it earns is the
+        // one that says so, rather than silence on a finished workout.
+        if (outcome is AdaptiveIntegrationOutcome.CannotBuildAdaptiveRequest &&
+            outcome.gap == AdaptiveInputGap.PROGRAM_MODE_IS_MANUAL
+        ) {
+            return@mapNotNull SessionOutcomeUi(
+                familyNameRes = null,
+                messageRes = R.string.programs_session_outcome_manual_programme
+            )
+        }
         val familyId = outcome.familyId ?: return@mapNotNull null
         SessionOutcomeUi(
             familyNameRes = familyNames[familyId],
@@ -40,7 +51,7 @@ internal object SessionOutcomeText {
         is AdaptiveIntegrationOutcome.AdaptiveApplied -> changeText(outcome.reason.name)
         is AdaptiveIntegrationOutcome.AdaptiveFiltered -> R.string.programs_session_outcome_held_back
         is AdaptiveIntegrationOutcome.NothingToAdapt -> holdText(outcome.reason.name)
-        is AdaptiveIntegrationOutcome.WindowOnly -> R.string.programs_session_outcome_window_only
+        is AdaptiveIntegrationOutcome.WindowOnly -> windowText(outcome.reason.name)
         is AdaptiveIntegrationOutcome.CannotBuildAdaptiveRequest -> NEUTRAL
     }
 
@@ -58,6 +69,18 @@ internal object SessionOutcomeText {
         ProgramAdaptiveReason.FLOOR_REACHED.name -> R.string.programs_session_outcome_floor
         ProgramAdaptiveReason.USER_AUTHORED_ELEMENT.name -> R.string.programs_session_outcome_user_authored
         else -> NEUTRAL
+    }
+
+    /**
+     * A family whose window was read with nothing to attach a change to. The plan's end is worth saying
+     * differently from "not in your next workout": the second one comes back next week, the first never
+     * does.
+     */
+    fun windowText(reasonCode: String): Int = when (reasonCode) {
+        ProgramAdaptiveReason.NO_FURTHER_APPEARANCE.name ->
+            R.string.programs_session_outcome_no_further_appearance
+
+        else -> R.string.programs_session_outcome_window_only
     }
 
     private val NEUTRAL = R.string.programs_session_outcome_neutral

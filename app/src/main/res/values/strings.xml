@@ -1013,6 +1013,8 @@
     <string name="programs_session_outcome_floor">already at the easiest step</string>
     <string name="programs_session_outcome_user_authored">kept as you wrote it</string>
     <string name="programs_session_outcome_window_only">not in your next workout, so unchanged</string>
+    <string name="programs_session_outcome_no_further_appearance">no further appearance in this plan, so unchanged</string>
+    <string name="programs_session_outcome_manual_programme">This is a manual program: the load is not adapted automatically.</string>
     <string name="programs_session_outcome_held_back">kept as it is: the overall load is high</string>
     <string name="programs_session_outcome_neutral">unchanged this time</string>
     <string name="programs_session_finish">Finish workout</string>
