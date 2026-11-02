@@ -194,9 +194,10 @@ internal class AdaptiveLoadTimeline(
         val noLadder = relation == null
         val result = if (noLadder) null else decide(startedAt.plusSeconds(HOURS_TO_DECIDE))
 
-        if (result != null && result.adjustment != null) {
-            presentedExerciseId = result.adjustment.after.exerciseId
-            presentedAmounts = result.adjustment.after.prescription.perSetTargets
+        val applied = result?.adjustments?.firstOrNull()
+        if (applied != null) {
+            presentedExerciseId = applied.after.exerciseId
+            presentedAmounts = applied.after.prescription.perSetTargets
         }
         if (result != null) advance(result)
 

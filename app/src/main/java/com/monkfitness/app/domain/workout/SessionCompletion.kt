@@ -64,11 +64,15 @@ sealed interface AdaptiveCompletion {
      * opportunity of this completion's Program and revision: the target is where the adjustment is
      * consumed, and filing a change against the just-completed opportunity would file it under a history
      * nothing can apply it to.
+     *
+     * [additionalAdjustments] are the same change written for the family's other rows in that workout, so
+     * one appearance carries one target.
      */
     data class Decided(
         val decision: AdaptiveDecision,
         val adjustment: AdaptiveAdjustment? = null,
-        val familyState: FamilyProgressionState? = null
+        val familyState: FamilyProgressionState? = null,
+        val additionalAdjustments: List<AdaptiveAdjustment> = emptyList()
     ) : AdaptiveCompletion {
 
         init {
@@ -80,13 +84,20 @@ sealed interface AdaptiveCompletion {
                 "an applied change travels with the family's state after the window (§27's 'adaptive " +
                     "state' leg): decision='${decision.decisionId.value}'"
             }
-            require(adjustment == null || adjustment.decisionId == decision.decisionId) {
+            require(
+                listOfNotNull(adjustment).plus(additionalAdjustments)
+                    .all { it.decisionId == decision.decisionId }
+            ) {
                 "an adjustment belongs to the decision that produced it"
             }
             require(familyState == null || familyState.familyId.isNotBlank()) {
                 "the state leg names the family it is about"
             }
         }
+
+        /** Every row of the appearance this decision changed. */
+        val adjustments: List<AdaptiveAdjustment>
+            get() = listOfNotNull(adjustment) + additionalAdjustments
 
         override val familyId: String?
             get() = familyState?.familyId

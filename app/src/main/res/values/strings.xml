@@ -1011,6 +1011,7 @@
     <string name="programs_session_outcome_below_target">reset to what you actually did</string>
     <string name="programs_session_outcome_ceiling">already at the top of its range</string>
     <string name="programs_session_outcome_floor">already at the easiest step</string>
+    <string name="programs_session_outcome_lower_bound">held at the bottom of its range: you did less than it asks</string>
     <string name="programs_session_outcome_user_authored">kept as you wrote it</string>
     <string name="programs_session_outcome_window_only">not in your next workout, so unchanged</string>
     <string name="programs_session_outcome_no_further_appearance">no further appearance in this plan, so unchanged</string>

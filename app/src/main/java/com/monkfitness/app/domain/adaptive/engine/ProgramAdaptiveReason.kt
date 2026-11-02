@@ -42,6 +42,12 @@ enum class ProgramAdaptiveReason {
 
     USER_AUTHORED_ELEMENT,
 
+    /**
+     * The next appearance stands at the bottom of its own range, so a shortfall cannot be expressed as
+     * a lower target: the correction is reported instead of silently leaving the presented values.
+     */
+    HELD_AT_LOWER_BOUND,
+
     AGGREGATE_LOAD_GUARD,
 
     RECOVERY_ENTERED,
@@ -111,6 +117,7 @@ enum class ProgramAdaptiveReason {
             PROGRESSION_UNAVAILABLE,
             REST_CHANGE_UNSUPPORTED,
             USER_AUTHORED_ELEMENT,
+            HELD_AT_LOWER_BOUND,
             AGGREGATE_LOAD_GUARD,
             RECOVERY_ENTERED,
             RECOVERY_HELD,

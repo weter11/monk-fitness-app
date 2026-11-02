@@ -37,6 +37,7 @@ import com.monkfitness.app.domain.adaptive.engine.ProgramAdaptiveRequest
 import com.monkfitness.app.domain.adaptive.engine.ProgramAdaptiveResult
 import com.monkfitness.app.domain.adaptive.engine.ProgramAdaptiveSignalCalculator
 import com.monkfitness.app.domain.adaptive.engine.ProgramAdaptiveWindow
+import com.monkfitness.app.domain.adaptive.engine.ProgramFamilyPeer
 import com.monkfitness.app.domain.adaptive.engine.ProgramGapFacts
 import com.monkfitness.app.domain.adaptive.engine.ProgramElementOwnership
 import com.monkfitness.app.domain.adaptive.engine.ProgramProgressionRelation
@@ -239,9 +240,14 @@ class ProgramAdaptiveIntegration(
             // is about is the one the user would actually be shown, and a decision about it supersedes the
             // standing adjustment — by reference, never by rewriting it.
             val standing = targetSlot?.let { slot -> standingOf(slot) } ?: emptyList()
+            val presented = if (targetSlot != null && targetDay != null) {
+                presentationOf(targetSlot, targetDay, standing, capturedAt)
+            } else {
+                emptyList()
+            }
             val choice = if (targetSlot != null && targetDay != null) {
                 adaptiveTargetElementOf(
-                    presented = presentationOf(targetSlot, targetDay, standing, capturedAt),
+                    presented = presented,
                     plan = targetDay,
                     exposedFamilies = setOf(familyId),
                     classification = classification,
@@ -259,7 +265,8 @@ class ProgramAdaptiveIntegration(
                 else -> null
             }
             val relation = (choice as? AdaptiveTargetElement.Chosen)?.relation
-                ?: element?.let { presented -> singleRungOf(presented) }
+                ?: element?.takeIf { chosen -> isClassified(chosen.familyId) }
+                    ?.let { chosen -> singleRungOf(chosen) }
                 ?: relations.relationOf(familyId)
             val exerciseId = element?.exerciseId ?: lastPerformed
             val level = stored?.progressionLevel
@@ -297,7 +304,8 @@ class ProgramAdaptiveIntegration(
                 familyId = familyId,
                 zone = zone,
                 statedOn = today,
-                policy = policy
+                policy = policy,
+                planInterval = planAppearanceIntervalOf(revision, slots, familyId, classification, zone)
             )
             val window = windowOf(familyId, exerciseId, stored, relation, gapFacts)
 
@@ -350,19 +358,28 @@ class ProgramAdaptiveIntegration(
                         recovery = snapshot.recovery
                     )
                 )
+                val state = stateOf(
+                    revisionId = session.revisionId,
+                    familyId = familyId,
+                    stored = stored,
+                    level = level,
+                    currentExerciseId = stored?.currentExerciseId ?: exerciseId,
+                    state = decision.state,
+                    verdict = decision.verdict,
+                    spendsTheCooldown = false,
+                    decidedAt = capturedAt
+                )
+                // The opportunity presents the family, but no classification describes it: the gap is
+                // reported, never adapted on a rung nobody declared.
+                if (element != null) {
+                    return@map AdaptiveIntegrationOutcome.NothingToAdapt(
+                        reason = ProgramAdaptiveReason.PROGRESSION_UNAVAILABLE,
+                        familyState = state
+                    )
+                }
                 return@map AdaptiveIntegrationOutcome.WindowOnly(
                     familyId = familyId,
-                    familyState = stateOf(
-                        revisionId = session.revisionId,
-                        familyId = familyId,
-                        stored = stored,
-                        level = level,
-                        currentExerciseId = stored?.currentExerciseId ?: exerciseId,
-                        state = decision.state,
-                        verdict = decision.verdict,
-                        spendsTheCooldown = false,
-                        decidedAt = capturedAt
-                    ),
+                    familyState = state,
                     reason = if (targetSlot == null) {
                         ProgramAdaptiveReason.NO_FURTHER_APPEARANCE
                     } else {
@@ -371,10 +388,11 @@ class ProgramAdaptiveIntegration(
                 )
             }
 
+            val adjustmentId = AdjustmentId(idGenerator.newId())
             val result = ProgramAdaptiveEngine.decide(
                 ProgramAdaptiveRequest(
                     decisionId = DecisionId(idGenerator.newId()),
-                    adjustmentId = AdjustmentId(idGenerator.newId()),
+                    adjustmentId = adjustmentId,
                     decidedAt = capturedAt,
                     snapshot = snapshot,
                     element = element,
@@ -387,6 +405,7 @@ class ProgramAdaptiveIntegration(
                         standing,
                         element.presentation.programExerciseId.value
                     ),
+                    familyPeers = peersOf(presented, element, familyId, standing, adjustmentId),
                     policy = policy
                 )
             )
@@ -424,7 +443,8 @@ class ProgramAdaptiveIntegration(
                 decision = result.decision,
                 adjustment = adjustment,
                 familyState = state,
-                reason = result.reason
+                reason = result.reason,
+                additionalAdjustments = result.adjustments.drop(1)
             )
 
             adjustment != null -> invalidData(
@@ -940,6 +960,42 @@ class ProgramAdaptiveIntegration(
             )
         )
 
+    /**
+     * Whether the app classifies this family at all. A family it does not describe is reported instead of
+     * being adapted on a rung nobody declared, which is what makes the classification something the engine
+     * asks rather than something it can proceed without.
+     */
+    private fun isClassified(familyId: String): Boolean =
+        classification.progressionOf(familyId) != null
+
+    /**
+     * The target day's other rows of the same family, each with the identity of its own adjustment: an
+     * appearance is one family target, so its rows cannot be handed different ones. A row the user pinned
+     * or authored is not among them — it is kept as written — and a family this revision presents once has
+     * none at all.
+     */
+    private fun peersOf(
+        presented: List<PresentedElement>,
+        subject: ProgramAdaptiveElement,
+        familyId: String,
+        standing: List<AdaptiveAdjustment>,
+        adjustmentId: AdjustmentId
+    ): List<ProgramFamilyPeer> = presented.mapNotNull { row ->
+        if (row.presentation.programExerciseId == subject.presentation.programExerciseId) {
+            return@mapNotNull null
+        }
+        if (row.ownership != ProgramElementOwnership.AUTOMATIC) return@mapNotNull null
+        if (classification.familyOf(row.presentation.exerciseId) != familyId) return@mapNotNull null
+
+        ProgramFamilyPeer(
+            presentation = row.presentation,
+            // The appearance's other rows share the primary's identity, so which row the decision names is
+            // a read of the ids rather than of an insertion order.
+            adjustmentId = AdjustmentId("${adjustmentId.value}~${row.presentation.programExerciseId.value}"),
+            supersedesAdjustmentId = supersededBy(standing, row.presentation.programExerciseId.value)
+        )
+    }
+
     /** An expected absence of a fact, as the pass reports it. */
     private fun gap(gap: AdaptiveInputGap): AdaptiveIntegrationResult =
         AdaptiveIntegrationResult.Success(
@@ -966,7 +1022,10 @@ class ProgramAdaptiveIntegration(
  * narrowed to the window, because a family untouched for six weeks has its last set *outside* every window and
  * "how long has this been?" needs that date. [daysAway] excludes the completing session, so a return measures
  * the stretch they came back *from* rather than zero. [usualInterval] reads the family's recent sessions in the
- * whole history, not the window's exposures, which hold nothing after a gap.
+ * whole history, not the window's exposures, which hold nothing after a gap, and falls back to
+ * [planInterval] — the family's own rhythm in the plan — before the policy's calendar fallback, because an
+ * absence is measured against how often *this family* normally comes round, not against a fixed number of
+ * days.
  */
 internal fun programGapFactsOf(
     sessions: List<WorkoutSession>,
@@ -975,7 +1034,8 @@ internal fun programGapFactsOf(
     familyId: String,
     zone: ZoneId,
     statedOn: LocalDate,
-    policy: ProgramAdaptivePolicy
+    policy: ProgramAdaptivePolicy,
+    planInterval: Duration? = null
 ): ProgramGapFacts = ProgramGapFacts(
     lastConfirmedSetOn = lastConfirmedSetOn(sessions, completion, familyOf, familyId, zone),
     daysAway = daysAwayFromFamily(sessions, completion, familyOf, familyId, statedOn, zone),
@@ -986,8 +1046,44 @@ internal fun programGapFactsOf(
         familyId,
         sessionsToConsider = policy.usualIntervalSessions,
         minimumSessions = policy.sessionsBeforeAnIntervalIsUsual
-    )
+    ) ?: planInterval
 )
+
+/**
+ * How often the revision presents one family: the median stretch between the planned dates of the
+ * opportunities whose plan day presents it.
+ *
+ * Every slot of the revision is read, past or future, because the rhythm is a property of the plan rather
+ * than of what is left of it. `null` when the plan presents the family fewer than twice, which is the one
+ * case in which no rhythm can be stated and the policy's own fallback applies.
+ */
+internal fun planAppearanceIntervalOf(
+    revision: ProgramRevision,
+    slots: List<WorkoutSlot>,
+    familyId: String,
+    classification: ExerciseFamilyClassification,
+    zone: ZoneId
+): Duration? {
+    val days = revision.days.associateBy { it.programDayId }
+    val appearances = slots
+        .filter { slot ->
+            days[slot.programDayId]?.exercises?.any { exercise ->
+                classification.familyOf(exercise.exerciseId) == familyId
+            } == true
+        }
+        .map { slot -> slot.plannedFor.atStartOfDay(zone).toInstant() }
+        .distinct()
+        .sorted()
+    if (appearances.size < 2) return null
+
+    val intervals = appearances.zipWithNext { earlier, later -> Duration.between(earlier, later) }.sorted()
+    val middle = intervals.size / 2
+    return if (intervals.size % 2 == 1) {
+        intervals[middle]
+    } else {
+        Duration.ofSeconds((intervals[middle - 1].seconds + intervals[middle].seconds) / 2)
+    }
+}
 
 /**
  * The calendar date of the family's most recent confirmed set, or `null` when it has never had one.

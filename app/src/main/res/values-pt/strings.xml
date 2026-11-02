@@ -1010,6 +1010,7 @@
     <string name="programs_session_outcome_below_target">ajustado ao que você fez</string>
     <string name="programs_session_outcome_ceiling">já está no topo do intervalo</string>
     <string name="programs_session_outcome_floor">já está no passo mais fácil</string>
+    <string name="programs_session_outcome_lower_bound">mantido no limite inferior: você fez menos do que ele pede</string>
     <string name="programs_session_outcome_user_authored">mantido como você escreveu</string>
     <string name="programs_session_outcome_window_only">não está no seu próximo treino, então sem mudança</string>
     <string name="programs_session_outcome_no_further_appearance">não aparece mais neste plano, então sem mudança</string>

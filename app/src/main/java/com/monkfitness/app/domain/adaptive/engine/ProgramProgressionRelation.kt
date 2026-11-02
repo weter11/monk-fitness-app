@@ -104,3 +104,17 @@ data class ProgramProgressionRelation(
             variants.sortedWith(compareBy({ it.level }, { it.exerciseId }))
     }
 }
+
+/**
+ * How a family's load is declared to progress, so every family the app ships is a fact the engine can
+ * read rather than a ladder it has to infer from an absence.
+ */
+enum class FamilyProgression {
+
+    /** An authored variant ladder; a step up or down is another exercise of the same family. */
+    VARIANT_LADDER,
+
+    /** No ordered variants: the family advances inside each exercise's own range and no further. */
+    WITHIN_EXERCISE
+}
+

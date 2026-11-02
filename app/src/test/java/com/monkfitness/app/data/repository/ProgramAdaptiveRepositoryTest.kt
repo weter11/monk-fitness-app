@@ -229,7 +229,7 @@ class ProgramAdaptiveRepositoryTest {
             )
         }
 
-        assertTrue(withoutAdjustment.message!!.contains("APPLIED decision produced exactly one"))
+        assertTrue(withoutAdjustment.message!!.contains("APPLIED decision produced at least one"))
         assertTrue(wrongDecision.message!!.contains("belongs to the decision that produced it"))
         assertTrue(wrongSlot.message!!.contains("applies to the slot of its decision"))
         assertEquals("nothing was written", "0", rig.database.scalar("SELECT COUNT(*) FROM `program_adaptive_decision_record`"))

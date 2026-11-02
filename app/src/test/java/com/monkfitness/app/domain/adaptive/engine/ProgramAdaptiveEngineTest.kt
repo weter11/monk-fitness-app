@@ -24,7 +24,9 @@ import com.monkfitness.app.domain.adaptive.decision.AdaptiveAction
 import com.monkfitness.app.domain.adaptive.decision.AdaptiveTarget
 import com.monkfitness.app.domain.adaptive.decision.DecisionOutcome
 import com.monkfitness.app.domain.common.AdjustmentId
+import com.monkfitness.app.domain.common.ProgramExerciseId
 import com.monkfitness.app.domain.prescription.RepPrescription
+import com.monkfitness.app.domain.workout.EffectiveExercise
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotEquals
@@ -221,7 +223,7 @@ class ProgramAdaptiveEngineTest {
         assertEquals(
             "and it is the same exercise at a lower amount, not a rung",
             PRESENTED,
-            result.adjustment.after.exerciseId
+            result.adjustments.first().after.exerciseId
         )
         assertFalse(
             "a correction to what was done is not an adjustment of the programme, so it must not push the " +
@@ -257,6 +259,117 @@ class ProgramAdaptiveEngineTest {
             "a session that met its presentation is the policy's business, not a correction's",
             ProgramAdaptiveReason.BELOW_TARGET_CORRECTION,
             result.reason
+        )
+    }
+
+    /**
+     * A shortfall the range's floor cannot express is a result of its own: the next appearance stands at
+     * the bottom of its range, so the engine says *held at the lower bound* instead of quietly presenting
+     * the same targets again.
+     */
+    @Test
+    fun aShortfallBelowTheRangeFloorIsHeldAtTheLowerBound() {
+        val presented = RepPrescription.uniform(3, 6)
+        val observed = plateau()
+        val tooLight = observed.mapIndexed { index, exposure ->
+            if (index == observed.lastIndex) {
+                exposure.copy(
+                    performedAmounts = listOf(4, 5, 6).map { amount -> PerformedSetAmount(amount, 0) }
+                )
+            } else {
+                exposure
+            }
+        }
+
+        val result = engine.decide(
+            request(
+                snapshot = snapshot(exposures = tooLight),
+                element = element(prescription = presented),
+                window = window(level = 2),
+                range = ExerciseRange(repRange = 6..15)
+            )
+        )
+
+        assertEquals(
+            "the user did less than the range allows, and that is stated rather than swallowed",
+            ProgramAdaptiveReason.HELD_AT_LOWER_BOUND,
+            result.reason
+        )
+        assertEquals(AdaptiveAction.HOLD, result.decision.action)
+        assertNull("nothing lower exists to write, so no adjustment is produced", result.adjustment)
+    }
+
+    /** The floor is where a shortfall below it lands: the correction is clamped, never dropped. */
+    @Test
+    fun aShortfallBelowTheFloorIsCorrectedToTheFloor() {
+        val observed = plateau()
+        val tooLight = observed.mapIndexed { index, exposure ->
+            if (index == observed.lastIndex) {
+                exposure.copy(
+                    performedAmounts = listOf(4, 4, 4).map { amount -> PerformedSetAmount(amount, 0) }
+                )
+            } else {
+                exposure
+            }
+        }
+
+        val result = engine.decide(
+            request(
+                snapshot = snapshot(exposures = tooLight),
+                element = element(prescription = RepPrescription.uniform(3, 10)),
+                window = window(level = 2),
+                range = ExerciseRange(repRange = 6..15)
+            )
+        )
+
+        assertEquals(ProgramAdaptiveReason.BELOW_TARGET_CORRECTION, result.reason)
+        assertEquals(
+            "six is this exercise's floor, so the next session asks for six rather than four",
+            listOf(6, 6, 6),
+            result.adjustment!!.after.prescription.perSetTargets
+        )
+    }
+
+    /**
+     * One family, two rows in the same workout: the change is written for the **appearance**, so the other
+     * row is given the same target in its own set shape and keeps its own exercise — no workout presents
+     * two targets for one family.
+     */
+    @Test
+    fun everyRowOfTheFamilysAppearanceIsGivenTheSameTarget() {
+        val peer = ProgramFamilyPeer(
+            presentation = EffectiveExercise(
+                programExerciseId = ProgramExerciseId("plan-element-2"),
+                exerciseId = "decline_pushups",
+                prescription = RepPrescription.uniform(2, 6)
+            ),
+            adjustmentId = AdjustmentId("adjustment-1~plan-element-2")
+        )
+
+        val result = engine.decide(
+            request(
+                snapshot = snapshot(exposures = improvement()),
+                element = element(prescription = RepPrescription.uniform(3, 10)),
+                window = window(level = 2)
+            ).copy(familyPeers = listOf(peer))
+        )
+
+        assertEquals(AdaptiveAction.PROGRESS, result.decision.action)
+        assertEquals("one change, one adjustment per row of the appearance", 2, result.adjustments.size)
+        assertEquals(
+            "the appearance's other row is asked for the same target in its own set shape",
+            listOf(10, 10),
+            result.adjustments.last().after.prescription.perSetTargets
+        )
+        assertEquals(
+            "and it keeps its own exercise: the family's target is an amount, not a replacement",
+            "decline_pushups",
+            result.adjustments.last().after.exerciseId
+        )
+        assertEquals(
+            "the decision names the row it was resolved against",
+            result.adjustment!!.adjustmentId,
+            result.adjustments.first().adjustmentId
         )
     }
 
@@ -298,7 +411,7 @@ class ProgramAdaptiveEngineTest {
         assertEquals(SAME_LEVEL_ALTERNATIVE, result.adjustment!!.before.exerciseId)
         assertEquals(
             "the two ends of a variant change are both declared at the family's own level (§15)",
-            PRESENTED, result.adjustment.after.exerciseId
+            PRESENTED, result.adjustments.first().after.exerciseId
         )
     }
 

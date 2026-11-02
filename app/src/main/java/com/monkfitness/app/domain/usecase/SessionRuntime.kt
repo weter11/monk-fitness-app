@@ -309,7 +309,13 @@ class SessionRuntime(
 
         inTransaction {
             sessionRepository.finishSession(completed, completedSlot)
-            decided.forEach { leg -> adaptiveRepository.persistDecision(leg.decision, leg.adjustment) }
+            decided.forEach { leg ->
+                adaptiveRepository.persistDecision(
+                    leg.decision,
+                    leg.adjustment,
+                    additional = leg.additionalAdjustments
+                )
+            }
             familyStates.forEach { state -> adaptiveRepository.saveFamilyState(state) }
         }
 

@@ -106,27 +106,29 @@ class ProgramAdaptiveRepository(
      * @throws IllegalArgumentException when the decision and the adjustment are not one fact.
      * @throws Exception whatever the DAOs throw, with the transaction rolled back.
      */
-    suspend fun persistDecision(decision: AdaptiveDecision, adjustment: AdaptiveAdjustment? = null) {
-        require((decision.outcome == DecisionOutcome.APPLIED) == (adjustment != null)) {
-            "an APPLIED decision produced exactly one adjustment and a NOT_APPLIED one produced " +
+    suspend fun persistDecision(
+        decision: AdaptiveDecision,
+        adjustment: AdaptiveAdjustment? = null,
+        additional: List<AdaptiveAdjustment> = emptyList()
+    ) {
+        val adjustments = listOfNotNull(adjustment) + additional
+        require((decision.outcome == DecisionOutcome.APPLIED) == adjustments.isNotEmpty()) {
+            "an APPLIED decision produced at least one adjustment and a NOT_APPLIED one produced " +
                 "none: decision='${decision.decisionId.value}' outcome=${decision.outcome} " +
-                "adjustment=${adjustment?.adjustmentId?.value}"
+                "adjustments=${adjustments.map { it.adjustmentId.value }}"
         }
-        require(adjustment == null || adjustment.decisionId == decision.decisionId) {
-            "an adjustment belongs to the decision that produced it: adjustment " +
-                "'${adjustment?.adjustmentId?.value}' names decision " +
-                "'${adjustment?.decisionId?.value}' (${decision.decisionId.value} was handed in)"
+        require(adjustments.all { it.decisionId == decision.decisionId }) {
+            "an adjustment belongs to the decision that produced it: ${adjustments.map { it.adjustmentId.value }}"
         }
-        require(adjustment == null || adjustment.slotId == decision.slotId) {
-            "an adjustment applies to the slot of its decision: adjustment " +
-                "'${adjustment?.adjustmentId?.value}' names slot '${adjustment?.slotId?.value}' " +
+        require(adjustments.all { it.slotId == decision.slotId }) {
+            "an adjustment applies to the slot of its decision: ${adjustments.map { it.slotId.value }} " +
                 "(${decision.slotId.value} was handed in)"
         }
 
         inTransaction {
             decisionDao.insertDecision(decision.toEntity())
-            adjustment?.let {
-                adjustmentDao.insertAdjustment(it.toEntity(decision.programId, decision.revisionId))
+            adjustments.forEach { created ->
+                adjustmentDao.insertAdjustment(created.toEntity(decision.programId, decision.revisionId))
             }
         }
     }
@@ -135,19 +137,16 @@ class ProgramAdaptiveRepository(
      * The decisions of one row set, each carrying the identity of the adjustment it produced.
      *
      * A decision row does not store its adjustment (one link, owned by the adjustment), so the chain is
-     * read from the adjustment rows that name each decision — one query per distinct decision, which is
-     * exact: "an `APPLIED` decision produced exactly one adjustment" is the schema's own rule, so more
-     * than one adjustment naming the same decision is invalid persisted data and fails loudly rather
-     * than being resolved by picking a row.
+     * read from the adjustment rows that name each decision. One row per element of the family's
+     * appearance is legal — one change, written for every row of one appearance — and the decision names
+     * the first of them by id.
      */
     private suspend fun decide(
         decisions: List<com.monkfitness.app.data.model.AdaptiveDecisionRecordEntity>
     ): List<AdaptiveDecision> = decisions.map { decision ->
         val adjustments = adjustmentDao.adjustmentsOfDecision(decision.decisionId)
-        require(adjustments.size <= 1) {
-            "an APPLIED decision produced exactly one adjustment: decision " +
-                "'${decision.decisionId}' is named by ${adjustments.size} adjustments"
-        }
-        decision.toDomain(adjustments.singleOrNull()?.let { AdjustmentId(it.adjustmentId) })
+        decision.toDomain(
+            adjustments.minByOrNull { it.adjustmentId }?.let { AdjustmentId(it.adjustmentId) }
+        )
     }
 }

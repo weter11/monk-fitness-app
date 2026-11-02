@@ -1010,6 +1010,7 @@
     <string name="programs_session_outcome_below_target">riallineato a quello che hai fatto</string>
     <string name="programs_session_outcome_ceiling">già in cima al suo intervallo</string>
     <string name="programs_session_outcome_floor">già al passo più facile</string>
+    <string name="programs_session_outcome_lower_bound">resta al limite inferiore: hai fatto meno di quanto chiede</string>
     <string name="programs_session_outcome_user_authored">mantenuto come l\'hai scritto</string>
     <string name="programs_session_outcome_window_only">non è nel prossimo allenamento, quindi invariato</string>
     <string name="programs_session_outcome_no_further_appearance">non compare più in questo piano, quindi invariato</string>

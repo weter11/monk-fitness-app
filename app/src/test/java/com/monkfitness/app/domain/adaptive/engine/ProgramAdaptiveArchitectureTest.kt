@@ -188,7 +188,8 @@ class ProgramAdaptiveArchitectureTest {
             ProgramPolicyDecision::class.java,
             ProgramAdaptivePolicy::class.java,
             ProgramAdaptiveRequest::class.java,
-            ProgramAdaptiveResult::class.java
+            ProgramAdaptiveResult::class.java,
+            ProgramFamilyPeer::class.java
         )
 
         val offenders = pureTypes.flatMap { type ->
@@ -287,13 +288,14 @@ class ProgramAdaptiveArchitectureTest {
             .map { it.name }
 
         assertEquals(
-            "a result carries the decision, the adjustment, the family's next state, the reason, what " +
-                "was asked for, the signals, the guard's verdict and the window's own verdict — and " +
-                "nothing to persist through. The last of those was added by §30 step 12: the caller " +
-                "maintains the family's confirmation counts, cooldown position and recovery exit count " +
-                "from the policy's per-window answers, and a window cannot count itself",
+            "a result carries the decision, the adjustments (one per row of the family's appearance), " +
+                "the family's next state, the reason, what was asked for, the signals, the guard's " +
+                "verdict and the window's own verdict — and nothing to persist through. The window's " +
+                "verdict was added by §30 step 12: the caller maintains the family's confirmation " +
+                "counts, cooldown position and recovery exit count from the policy's per-window " +
+                "answers, and a window cannot count itself",
             listOf(
-                "decision", "adjustment", "state", "reason", "requestedAction", "signals", "guard",
+                "decision", "adjustments", "state", "reason", "requestedAction", "signals", "guard",
                 "verdict"
             ),
             resultFields
