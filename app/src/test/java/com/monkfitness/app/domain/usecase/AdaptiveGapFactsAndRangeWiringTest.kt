@@ -585,6 +585,65 @@ class AdaptiveGapFactsAndRangeWiringTest {
         )
     }
 
+    /**
+     * An absence is measured against how often *this family* comes round, not against calendar days: with
+     * too little history to state a habit, the rhythm the plan gives the family answers, so a fortnight
+     * away from a family the plan presents every twelfth day is one missed appearance rather than a break.
+     * A measured habit still outranks the plan's rhythm.
+     */
+    @Test
+    fun theFamilysOwnAppearanceIntervalAnswersWhenTheHistoryIsTooShort() {
+        val today = Instant.parse("2026-10-31T07:00:00Z")
+        val noHabit = programGapFactsOf(
+            sessions = listOf(
+                performedSession("older", today.minus(Duration.ofDays(15)), "pushups"),
+                performedSession("today", today, "pushups")
+            ),
+            completion = SessionId("session-today"),
+            familyOf = ::familyOf,
+            familyId = FAMILY,
+            zone = ZoneOffset.UTC,
+            statedOn = LocalDate.ofInstant(today, ZoneOffset.UTC),
+            policy = ProgramAdaptivePolicy.V1,
+            planInterval = Duration.ofDays(12)
+        )
+        val policy = ProgramAdaptivePolicy.V1
+
+        assertEquals(
+            "one earlier session is no habit, so the family's rhythm in the plan is what the gap is read " +
+                "against",
+            Duration.ofDays(12),
+            noHabit.usualInterval
+        )
+        assertFalse(
+            "fifteen days on a twelve-day rhythm is one missed appearance, not a return: " +
+                "${policy.usualIntervalDaysOf(noHabit)} days usual",
+            policy.returnAfterGapHolds(noHabit)
+        )
+
+        val withAHabit = programGapFactsOf(
+            sessions = listOf(
+                performedSession("a", today.minus(Duration.ofDays(23)), "pushups"),
+                performedSession("b", today.minus(Duration.ofDays(19)), "pushups"),
+                performedSession("c", today.minus(Duration.ofDays(15)), "pushups"),
+                performedSession("today", today, "pushups")
+            ),
+            completion = SessionId("session-today"),
+            familyOf = ::familyOf,
+            familyId = FAMILY,
+            zone = ZoneOffset.UTC,
+            statedOn = LocalDate.ofInstant(today, ZoneOffset.UTC),
+            policy = ProgramAdaptivePolicy.V1,
+            planInterval = Duration.ofDays(12)
+        )
+
+        assertEquals(
+            "what the user actually does outranks the plan's rhythm",
+            Duration.ofDays(4),
+            withAHabit.usualInterval
+        )
+    }
+
     /** A gap the return rule is measured on: how long the user was away, and how often they usually train. */
     private fun gap(daysAway: Long?, usualInterval: Duration?): ProgramGapFacts =
         ProgramGapFacts(daysAway = daysAway, usualInterval = usualInterval)

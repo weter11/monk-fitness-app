@@ -1008,6 +1008,7 @@
     <string name="programs_session_outcome_below_target">підлаштовано під те, що ви зробили</string>
     <string name="programs_session_outcome_ceiling">уже на верхній межі діапазону</string>
     <string name="programs_session_outcome_floor">уже на найлегшому кроці</string>
+    <string name="programs_session_outcome_lower_bound">лишилося на нижній межі: зроблено менше, ніж потрібно</string>
     <string name="programs_session_outcome_user_authored">залишено як ви написали</string>
     <string name="programs_session_outcome_window_only">цього немає в наступному тренуванні, тому без змін</string>
     <string name="programs_session_outcome_no_further_appearance">більше не зустрічається в цьому плані, тому без змін</string>

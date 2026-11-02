@@ -1,5 +1,6 @@
 package com.monkfitness.app.domain.adaptive.integration
 
+import com.monkfitness.app.domain.adaptive.engine.FamilyProgression
 import com.monkfitness.app.domain.adaptive.engine.ProgramProgressionRelation
 
 /**
@@ -13,6 +14,15 @@ import com.monkfitness.app.domain.adaptive.engine.ProgramProgressionRelation
 fun interface ExerciseFamilyClassification {
 
     fun familyOf(exerciseId: String): String?
+
+    /**
+     * How [familyId] is declared to progress, or `null` when this caller cannot describe it — which the
+     * engine reports instead of adapting on a rung nobody declared.
+     *
+     * The default is the reading a family without an authored ladder already gets — inside each
+     * exercise's own range — so a caller that states membership alone decides exactly as before.
+     */
+    fun progressionOf(familyId: String): FamilyProgression? = FamilyProgression.WITHIN_EXERCISE
 }
 
 /**

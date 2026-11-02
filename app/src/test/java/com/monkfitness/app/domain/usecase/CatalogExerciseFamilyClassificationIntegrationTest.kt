@@ -17,11 +17,12 @@ import org.junit.Test
  * The production claim, measured on a real database with the real repositories and the **production**
  * classification, against a ladder source that declares **nothing**.
  *
- * That emptied source is the case the derived rung exists for: a family the catalogue does not describe is
- * adapted from the element the plan already presents, so the exercise climbs its own range and holds at
- * that range's top. The assertions are ordered by how easily each could pass for the wrong reason: the
- * classification is reached at all, the pass reaches the engine rather than a gap, the classification is
- * what made that possible, and the only row written is the family's own state.
+ * That emptied source is the case the family's classification decides: a family declared to progress
+ * inside its exercises' own ranges is adapted from the element the plan already presents — the exercise
+ * climbs its own range and holds at that range's top — and a family declared to climb variants is
+ * reported until its ladder is loaded, never adapted on a rung nobody authored. The assertions are
+ * ordered by how easily each could pass for the wrong reason: the classification is reached at all, the
+ * pass reaches the engine rather than a gap, and the answer is the one the classification states.
  */
 class CatalogExerciseFamilyClassificationIntegrationTest {
 
@@ -39,24 +40,31 @@ class CatalogExerciseFamilyClassificationIntegrationTest {
     fun close() = rig.close()
 
     /**
-     * **The central assertion.** With the production classification and no declared ladder, a pass over a
-     * day presenting a family the completion exposed reaches the engine with the rung the plan presents —
-     * *not* `NO_FAMILY_CLASSIFICATION`, where the same pass stopped while the gap was open, and not
-     * `NO_DECLARED_PROGRESSION_RELATION`, which it used to report.
+     * **The central assertion.** With the production classification and no declared ladder, the family's
+     * own classification decides what its progression is: `pushups` is declared as a family that climbs
+     * variants, so a missing ladder is reported as the unavailable progression it is rather than replaced
+     * by a rung nobody authored. It is neither `NO_FAMILY_CLASSIFICATION` — where the pass stopped while
+     * the gap was open — nor a silently adapted family.
      */
     @Test
-    fun withClassificationAndNoLadderTheFamilyIsAdaptedOnItsOwnRung() = runBlocking {
+    fun withClassificationAndNoLadderALadderFamilyIsReportedNotAdapted() = runBlocking {
         rig.createSingleFamilyGraph()
         val trigger = rig.seedHistoryAndTrigger()
 
         val outcome = rig.outcomeOf(rig.adapt(trigger.sessionId))
 
         assertTrue(
-            "production can classify the exercise, so the pass reaches the engine instead of reporting a " +
-                "gap: $outcome",
+            "production can classify the exercise, so the pass reaches the engine instead of reporting an " +
+                "input gap: $outcome",
             outcome !is AdaptiveIntegrationOutcome.CannotBuildAdaptiveRequest
         )
         assertEquals("and it is the family the completion trained", "pushups", outcome.familyId)
+        assertEquals(
+            "the classification says this family's progression is a ladder, so a missing ladder is " +
+                "reported instead of being filled in by a derived rung: $outcome",
+            ProgramAdaptiveReason.PROGRESSION_UNAVAILABLE,
+            (outcome as AdaptiveIntegrationOutcome.NothingToAdapt).reason
+        )
         assertTrue(
             "with a position to store, so its window was evaluated: ${outcome.completion}",
             outcome.completion is AdaptiveCompletion.WindowEvaluated

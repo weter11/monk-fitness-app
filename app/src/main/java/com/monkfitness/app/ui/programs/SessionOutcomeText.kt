@@ -67,6 +67,7 @@ internal object SessionOutcomeText {
     fun holdText(reasonCode: String): Int = when (reasonCode) {
         ProgramAdaptiveReason.CEILING_REACHED.name -> R.string.programs_session_outcome_ceiling
         ProgramAdaptiveReason.FLOOR_REACHED.name -> R.string.programs_session_outcome_floor
+        ProgramAdaptiveReason.HELD_AT_LOWER_BOUND.name -> R.string.programs_session_outcome_lower_bound
         ProgramAdaptiveReason.USER_AUTHORED_ELEMENT.name -> R.string.programs_session_outcome_user_authored
         else -> NEUTRAL
     }

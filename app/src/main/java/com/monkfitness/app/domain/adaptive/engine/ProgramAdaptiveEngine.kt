@@ -26,6 +26,19 @@ import com.monkfitness.app.domain.workout.EffectiveExercise
 import java.time.Instant
 
 /**
+ * One row of the family's appearance in the target workout, other than the element the decision is about:
+ * the row, the identity its own adjustment takes, and the standing adjustment it replaces.
+ *
+ * An appearance is adapted as **one** family target, so every automatic row of the family carries the
+ * same target and no workout presents two. A row the user pinned or authored is never one of these.
+ */
+data class ProgramFamilyPeer(
+    val presentation: EffectiveExercise,
+    val adjustmentId: AdjustmentId,
+    val supersedesAdjustmentId: AdjustmentId? = null
+)
+
+/**
  * Everything the engine is given for one decision: the whole input surface, with no collaborator, no
  * clock and no lookup, so a decision is reproducible from this value alone. [availableExerciseIds] is
  * the user's own selection, read for a same-level realignment; a ladder step is answered by the family's
@@ -44,6 +57,7 @@ data class ProgramAdaptiveRequest(
     val range: ExerciseRange? = null,
     val prescriptionStep: ProgramPrescriptionStep? = null,
     val supersedesAdjustmentId: AdjustmentId? = null,
+    val familyPeers: List<ProgramFamilyPeer> = emptyList(),
     val policy: ProgramAdaptivePolicy = ProgramAdaptivePolicy.V1
 ) {
 
@@ -82,10 +96,14 @@ data class ProgramPrescriptionStep(
 /**
  * What the adaptive stage decided. [requestedAction] is kept separate from [decision]'s action because
  * the load guard's refusal is recorded as a `HOLD` while the record still shows a `PROGRESS` was asked.
+ *
+ * [adjustments] holds one row per element of the family's appearance: the element the decision was
+ * resolved against, and every other automatic row of the same family that the target changes. They are
+ * one change about one appearance, written together; [adjustment] is the one the decision names.
  */
 data class ProgramAdaptiveResult(
     val decision: AdaptiveDecision,
-    val adjustment: AdaptiveAdjustment?,
+    val adjustments: List<AdaptiveAdjustment>,
     val state: AdaptiveState,
     val reason: ProgramAdaptiveReason,
     val requestedAction: AdaptiveAction,
@@ -95,11 +113,11 @@ data class ProgramAdaptiveResult(
 ) {
 
     init {
-        require((decision.outcome == DecisionOutcome.APPLIED) == (adjustment != null)) {
-            "an applied decision produced exactly one adjustment and a not-applied one produced none: " +
-                "outcome=${decision.outcome} adjustment=${adjustment?.adjustmentId?.value}"
+        require((decision.outcome == DecisionOutcome.APPLIED) == adjustments.isNotEmpty()) {
+            "an applied decision produced at least one adjustment and a not-applied one produced none: " +
+                "outcome=${decision.outcome} adjustments=${adjustments.map { it.adjustmentId.value }}"
         }
-        require(adjustment == null || adjustment.decisionId == decision.decisionId) {
+        require(adjustments.all { it.decisionId == decision.decisionId }) {
             "an adjustment belongs to the decision that produced it"
         }
         require(reason.action == decision.action) {
@@ -111,6 +129,10 @@ data class ProgramAdaptiveResult(
                 "guard=${guard.scope}"
         }
     }
+
+    /** The element the decision was resolved against; the appearance's other rows are beside it. */
+    val adjustment: AdaptiveAdjustment?
+        get() = adjustments.firstOrNull()
 
     val isApplied: Boolean
         get() = decision.isApplied
@@ -188,6 +210,7 @@ object ProgramAdaptiveEngine {
                 supersedesAdjustmentId = request.supersedesAdjustmentId
             )
         }
+        val adjustments = listOfNotNull(adjustment) + (change?.let { resolved -> peersOf(request, resolved) } ?: emptyList())
 
         val decision = AdaptiveDecision(
             decisionId = request.decisionId,
@@ -209,7 +232,7 @@ object ProgramAdaptiveEngine {
 
         return ProgramAdaptiveResult(
             decision = decision,
-            adjustment = adjustment,
+            adjustments = adjustments,
             state = stateAfter(policyDecision.state, change),
             reason = reason,
             requestedAction = requestedAction,
@@ -362,8 +385,8 @@ object ProgramAdaptiveEngine {
      * presented: `null` when every set met or beat the presentation, and `null` when this exercise has no
      * span in its own dimension to keep the correction inside.
      *
-     * Only lowering is expressed here — a set above its target is the policy's business, not a raise
-     * disguised as a correction.
+     * A shortfall the range's floor cannot express is [ProgramAdaptiveReason.HELD_AT_LOWER_BOUND], never
+     * the presented values again: the user did less than the range allows, and that is a result.
      */
     private fun belowTargetCorrection(request: ProgramAdaptiveRequest): Resolution? {
         val before = request.element.presentation
@@ -375,12 +398,15 @@ object ProgramAdaptiveEngine {
 
         // The element's own shape: one entry per presented set, taken in set order and repeated from the
         // last set where fewer sets were performed than are presented.
-        val target = presented.indices.map { index ->
-            performed.getOrElse(index) { performed.last() }
-                .coerceIn(amounts.first, amounts.last)
-                .coerceAtMost(presented[index])
+        val attempted = presented.indices.map { index -> performed.getOrElse(index) { performed.last() } }
+        if (attempted.indices.none { index -> attempted[index] < presented[index] }) return null
+
+        val target = attempted.mapIndexed { index, amount ->
+            amount.coerceIn(amounts.first, amounts.last).coerceAtMost(presented[index])
         }
-        if (target.indices.none { index -> target[index] < presented[index] }) return null
+        if (target.indices.none { index -> target[index] < presented[index] }) {
+            return Resolution.None(ProgramAdaptiveReason.HELD_AT_LOWER_BOUND)
+        }
 
         return Resolution.Change(
             action = AdaptiveAction.REGRESS,
@@ -665,6 +691,51 @@ object ProgramAdaptiveEngine {
         prescription = variant.prescription,
         focus = presentation.focus
     )
+
+    /**
+     * The appearance's other rows: each is given the resolved change's target in its own set shape, and
+     * keeps its own exercise. A row whose shape cannot express the target — a different dimension, or a
+     * target it already states — is left as the plan has it and carries no adjustment.
+     */
+    private fun peersOf(
+        request: ProgramAdaptiveRequest,
+        change: Resolution.Change
+    ): List<AdaptiveAdjustment> = request.familyPeers.mapNotNull { peer ->
+        val target = change.after.prescription.inTheShapeOf(peer.presentation.prescription)
+            ?: return@mapNotNull null
+        if (target == peer.presentation.prescription) return@mapNotNull null
+
+        AdaptiveAdjustment(
+            adjustmentId = peer.adjustmentId,
+            decisionId = request.decisionId,
+            slotId = request.snapshot.slotId,
+            before = peer.presentation,
+            after = EffectiveExercise(
+                programExerciseId = peer.presentation.programExerciseId,
+                exerciseId = peer.presentation.exerciseId,
+                prescription = target,
+                focus = peer.presentation.focus
+            ),
+            createdAt = request.decidedAt,
+            supersedesAdjustmentId = peer.supersedesAdjustmentId
+        )
+    }
+
+    /**
+     * One target in another row's set shape: taken in set order and repeated from its last set, exactly as
+     * a per-set target is read elsewhere. `null` when the two rows are not in the same dimension, where no
+     * shape exists that keeps the target's meaning.
+     */
+    private fun Prescription.inTheShapeOf(shape: Prescription): Prescription? {
+        if (dimension != shape.dimension) return null
+        val amounts = perSetTargets
+        if (amounts.isEmpty()) return null
+        val reshaped = (0 until shape.setCount).map { index -> amounts.getOrElse(index) { amounts.last() } }
+        return when (this) {
+            is RepPrescription -> RepPrescription(reshaped)
+            is TimePrescription -> TimePrescription(reshaped)
+        }
+    }
 
     /**
      * Recovery is reported whether or not anything was adapted: a safety state that a user-authored

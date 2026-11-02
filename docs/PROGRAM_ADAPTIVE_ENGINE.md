@@ -511,7 +511,7 @@ script says so in its own output:
    engine decides at one of them (`EXERCISE` for a variant change, `FAMILY` for a level move). The
    session-scope pass is available through the same component and is left to the integration stage, because
    a candidate *session* needs every element's resolved change (see §9.3).
-2. **The energy of the reason vocabulary is deliberate.** Eighteen hold reasons the policy can reach, one
+2. **The energy of the reason vocabulary is deliberate.** Nineteen hold reasons the policy can reach, one
    more the integration emits for a family the revision never presents again (`NO_FURTHER_APPEARANCE`),
    and three change reasons, each the answer to one rule. The alternative — one `HOLD` with an optional
    detail string — would put user-facing text (or a free-form field) where a stable domain token belongs

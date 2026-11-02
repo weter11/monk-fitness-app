@@ -31,12 +31,17 @@ sealed interface AdaptiveIntegrationOutcome {
     val isApplied: Boolean
         get() = this is AdaptiveApplied
 
-    /** A change was resolved **and applied**: the decision, the adjustment and the family's state after it. */
+    /**
+     * A change was resolved **and applied**: the decision, the adjustment and the family's state after it.
+     * [additionalAdjustments] are the same change written for the appearance's other rows — one family
+     * target, so no workout presents two.
+     */
     data class AdaptiveApplied(
         val decision: AdaptiveDecision,
         val adjustment: AdaptiveAdjustment,
         val familyState: FamilyProgressionState,
-        val reason: ProgramAdaptiveReason
+        val reason: ProgramAdaptiveReason,
+        val additionalAdjustments: List<AdaptiveAdjustment> = emptyList()
     ) : AdaptiveIntegrationOutcome {
 
         init {
@@ -49,8 +54,12 @@ sealed interface AdaptiveIntegrationOutcome {
             }
         }
 
+        /** Every row of the appearance this change was written for. */
+        val adjustments: List<AdaptiveAdjustment>
+            get() = listOf(adjustment) + additionalAdjustments
+
         override val completion: AdaptiveCompletion
-            get() = AdaptiveCompletion.Decided(decision, adjustment, familyState)
+            get() = AdaptiveCompletion.Decided(decision, adjustment, familyState, additionalAdjustments)
 
         override val familyId: String
             get() = familyState.familyId

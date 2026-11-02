@@ -1,6 +1,8 @@
 package com.monkfitness.app.domain.usecase
 
+import com.monkfitness.app.domain.adaptive.engine.FamilyProgression
 import com.monkfitness.app.domain.adaptive.integration.ExerciseFamilyClassification
+import com.monkfitness.app.domain.product.ProductionFamilyProgression
 
 /**
  * The app's shipped catalogue read as an exercise→family classification.
@@ -32,4 +34,6 @@ class CatalogExerciseFamilyClassification : ExerciseFamilyClassification {
      * layer reports the gap itself.
      */
     override fun familyOf(exerciseId: String): String? = familyByExerciseId[exerciseId]
+
+    override fun progressionOf(familyId: String): FamilyProgression? = ProductionFamilyProgression.of(familyId)
 }
