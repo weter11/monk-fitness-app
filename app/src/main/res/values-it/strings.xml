@@ -1013,9 +1013,9 @@
     <string name="programs_session_outcome_ceiling">già in cima al suo intervallo</string>
     <string name="programs_session_outcome_floor">già al passo più facile</string>
     <string name="programs_session_outcome_lower_bound">resta al limite inferiore: hai fatto meno di quanto chiede</string>
-    <string name="programs_session_outcome_upper_bound">fermo in cima al suo intervallo: non c'è nulla di più impegnativo a cui passare</string>
+    <string name="programs_session_outcome_upper_bound">fermo in cima al suo intervallo: non c\'è nulla di più impegnativo a cui passare</string>
     <string name="programs_session_outcome_easier_variant">fermo due volte in fondo al suo intervallo: prova una variante più facile di questa famiglia</string>
-    <string name="programs_session_outcome_too_heavy">fermo due volte in fondo al suo intervallo: questo esercizio sembra troppo pesante per l'intervallo che hai scelto</string>
+    <string name="programs_session_outcome_too_heavy">fermo due volte in fondo al suo intervallo: questo esercizio sembra troppo pesante per l\'intervallo che hai scelto</string>
     <string name="programs_session_outcome_row_limited">una seconda riga di questa famiglia è stata tenuta dentro il proprio intervallo</string>
     <string name="programs_session_outcome_user_authored">mantenuto come l\'hai scritto</string>
     <string name="programs_session_outcome_window_only">non è nel prossimo allenamento, quindi invariato</string>
