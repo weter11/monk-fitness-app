@@ -11,6 +11,7 @@ import com.monkfitness.app.domain.program.ProgramDayType
 import com.monkfitness.app.domain.program.ProgramMode
 import com.monkfitness.app.domain.program.ScheduleCadence
 import com.monkfitness.app.domain.program.SequentialIds
+import com.monkfitness.app.domain.program.SlotStatus
 import com.monkfitness.app.domain.program.WorkoutSlot
 import com.monkfitness.app.domain.program.target.TargetProgramDayBinding
 import com.monkfitness.app.domain.program.transfer.ProgramTransferFile
@@ -383,6 +384,10 @@ internal class ProgramsRig(key: String = "ui") {
 
     /** A Program's opportunities, read through the schedule repository. */
     suspend fun slotsOf(programId: ProgramId): List<WorkoutSlot> = transfer.slotsOf(programId)
+
+    /** How many opportunities the Program still holds as planned, read from storage. */
+    suspend fun plannedSlots(programId: ProgramId): Int =
+        transfer.scheduleRepository.countSlots(programId, SlotStatus.PLANNED)
 
     /**
      * Stores an explicit target authoring against [programId]'s current revision — the one fact a

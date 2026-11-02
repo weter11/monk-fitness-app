@@ -1090,10 +1090,10 @@ class ProgramsController(
     /**
      * The same publication for the one *composed* operation, whose two halves can disagree.
      *
-     * Separate from [action] because a start that succeeded while its target scheduling was refused is
-     * **not** the start's success notice, and collapsing it would tell the user a Program was planned when
-     * nothing about it was. The state is refreshed whenever the Program really did start, because its
-     * lifecycle changed whatever the second half reported.
+     * Separate from [action] because a refused target pass can leave a Program with nothing planned, which
+     * is not the start's success notice; the refusal alone does not say that, so the notice is decided from
+     * the schedule the start left behind. The state is refreshed whenever the Program really did start,
+     * because its lifecycle changed whatever the second half reported.
      */
     private suspend fun startAction(
         operation: suspend () -> ProgramStartResult
@@ -1102,7 +1102,7 @@ class ProgramsController(
         val notice = when (result) {
             is ProgramStartResult.Started -> ProgramNotice.STARTED
             is ProgramStartResult.TargetSchedulingRefused ->
-                ProgramNotice.TARGET_SCHEDULING_UNAVAILABLE
+                noticeForTargetRefusal(result.program.programId)
             is ProgramStartResult.StartRefused -> noticeFor(result.reason)
             is ProgramStartResult.StartFailed -> ProgramNotice.STORAGE_FAILED
         }
@@ -1112,6 +1112,22 @@ class ProgramsController(
         }
         return notice
     }
+
+    /**
+     * A refused target pass is "nothing was planned" only when the Program really has no planned
+     * opportunity afterwards. A calendar that cannot be read is not an absence of slots, so it is
+     * reported as the storage failure it is rather than as an unplanned schedule.
+     */
+    private suspend fun noticeForTargetRefusal(programId: ProgramId): ProgramNotice =
+        try {
+            if (progress.calendarProgress(ProgressScope.OfProgram(programId)).upcoming > 0) {
+                ProgramNotice.STARTED
+            } else {
+                ProgramNotice.TARGET_SCHEDULING_UNAVAILABLE
+            }
+        } catch (failure: Throwable) {
+            ProgramNotice.STORAGE_FAILED
+        }
 
     /** Re-reads the list, and the open Detail when one is open, from the services that own them. */
     private suspend fun refresh() {

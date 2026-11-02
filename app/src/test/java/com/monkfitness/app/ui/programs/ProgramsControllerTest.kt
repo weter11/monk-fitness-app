@@ -9,6 +9,7 @@ import com.monkfitness.app.domain.program.ProgramDayType
 import com.monkfitness.app.domain.program.ProgramMode
 import com.monkfitness.app.domain.program.ProgramRow
 import com.monkfitness.app.domain.program.ProgramSource
+import com.monkfitness.app.domain.program.SlotStatus
 import com.monkfitness.app.domain.program.StandardProgram
 import com.monkfitness.app.domain.program.transfer.ProgramTransferFormat
 import com.monkfitness.app.domain.progress.ProgressScope
@@ -354,11 +355,10 @@ class ProgramsControllerTest {
         val created = rig.createProgramThroughTheUi("Lifecycle")!!
 
         // Start is a *composed* operation. The editor's save states no target authoring, so the
-        // controlled invocation has no source to plan from and reports that as its own notice — the
-        // Program still started, which is what the next two assertions measure. The success notice is
-        // asserted by the case below, which does state an authoring.
+        // controlled invocation has no source to plan from — and the creation already planned the
+        // Program's opportunities, so the start reports itself and nothing else.
         rig.controller.start(created)
-        assertEquals(ProgramNotice.TARGET_SCHEDULING_UNAVAILABLE, rig.state.notice)
+        assertEquals(ProgramNotice.STARTED, rig.state.notice)
         assertEquals(LifecycleStatus.RUNNING, rig.storedProgram(ProgramId(created))!!.lifecycleStatus)
         assertNotNull(
             "starting records the factual start date, inside the service",
@@ -419,21 +419,53 @@ class ProgramsControllerTest {
     }
 
     /**
-     * The other half of the failure semantics, measured through the screen: a Program with no target
-     * authoring still starts, and the operation says so rather than reporting the start's own success.
+     * The notice follows the schedule the start left behind, not which half of the composed operation
+     * ran: a Program that already holds planned opportunities is told only that it started.
      */
     @Test
-    fun aStartWithNoTargetAuthoringStartsTheProgramAndReportsTheTargetRefusal() = runBlocking {
-        val id = rig.createProgramThroughTheUi("Untargeted")!!
+    fun aStartThatLeavesTheProgramPlannedSaysOnlyThatItStarted() = runBlocking {
+        val id = rig.createProgramThroughTheUi("Already planned")!!
+        val plannedBefore = rig.plannedSlots(ProgramId(id))
+        assertTrue(
+            "the creation planned this Program's opportunities, which is the state the notice used " +
+                "to contradict",
+            plannedBefore > 0
+        )
 
         rig.controller.start(id)
 
         assertEquals(
-            "a revision that states no target semantics is a typed absence, and the user is told " +
-                "the Program started while its target schedule was not planned",
-            ProgramNotice.TARGET_SCHEDULING_UNAVAILABLE,
+            "nothing was found unplanned, so there is nothing to report beyond the start",
+            ProgramNotice.STARTED,
             rig.state.notice
         )
+        assertEquals(
+            "and the start neither dropped nor replanned the opportunities that already existed",
+            plannedBefore,
+            rig.plannedSlots(ProgramId(id))
+        )
+        assertEquals(
+            "the Program really did start",
+            LifecycleStatus.RUNNING,
+            rig.storedProgram(ProgramId(id))!!.lifecycleStatus
+        )
+    }
+
+    /**
+     * The genuine case, which the fix must keep: a Program left with no planned opportunity is told
+     * its schedule was not planned.
+     */
+    @Test
+    fun aStartWithNothingPlannedReportsThatTheTargetScheduleWasNotPlanned() = runBlocking {
+        val id = rig.createProgramThroughTheUi("Nothing left planned")!!
+        rig.slotsOf(ProgramId(id)).forEach { slot ->
+            rig.transfer.scheduleRepository.recordSlotOutcome(slot.slotId, SlotStatus.SUPERSEDED, null)
+        }
+        assertEquals(0, rig.plannedSlots(ProgramId(id)))
+
+        rig.controller.start(id)
+
+        assertEquals(ProgramNotice.TARGET_SCHEDULING_UNAVAILABLE, rig.state.notice)
         assertEquals(
             "the Program really did start — this is not a lifecycle refusal wearing a target's name",
             LifecycleStatus.RUNNING,
