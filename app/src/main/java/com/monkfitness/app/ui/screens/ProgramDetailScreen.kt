@@ -2,6 +2,8 @@ package com.monkfitness.app.ui.screens
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -32,7 +34,7 @@ import com.monkfitness.app.ui.programs.ProgramsController
  * protection, the archive-of-selection guard, the `IN_PROGRESS` guard, which transitions are legal) stay
  * in the services; a refusal is surfaced as the sentence that explains it instead of being ignored.
  */
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
 fun ProgramDetailScreen(
     controller: ProgramsController,
@@ -226,7 +228,11 @@ fun ProgramDetailScreen(
                 }
             }
 
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            FlowRow(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
                 TextButton(onClick = { showRenameDialog = true }) {
                     Text(stringResource(R.string.programs_action_rename))
                 }

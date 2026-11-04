@@ -20,7 +20,9 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.unit.Density
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.navigation.NavType
@@ -84,6 +86,9 @@ sealed class Screen(val route: String, val titleRes: Int, val icon: ImageVector)
     object Posture : Screen("posture", R.string.exercises_tab, Icons.Default.Person)
 }
 
+/** Above this scale a five-item bar on a 325 dp screen cannot draw its labels whole. */
+private const val NAV_LABEL_MAX_FONT_SCALE = 0.85f
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun MainApp(viewModel: MainViewModel) {
@@ -115,6 +120,7 @@ fun MainApp(viewModel: MainViewModel) {
                 currentRoute == Screen.Nutrition.route ||
                 currentRoute == Screen.Progress.route ||
                 currentRoute == Screen.Posture.route)) {
+                val density = LocalDensity.current
                 NavigationBar {
                     val screens = listOf(
                         Screen.Home,
@@ -127,13 +133,22 @@ fun MainApp(viewModel: MainViewModel) {
                         NavigationBarItem(
                             icon = { Icon(screen.icon, contentDescription = stringResource(screen.titleRes)) },
                             label = {
-                                Text(
-                                    text = stringResource(screen.titleRes),
-                                    maxLines = 1,
-                                    softWrap = false,
-                                    overflow = TextOverflow.Ellipsis,
-                                    style = MaterialTheme.typography.labelSmall
-                                )
+                                // A 325 dp bar gives each item ~51 dp; the widest label any locale ships
+                                // needs ~59 dp at font scale 1, so the labels stop growing above 0.85.
+                                CompositionLocalProvider(
+                                    LocalDensity provides Density(
+                                        density.density,
+                                        minOf(density.fontScale, NAV_LABEL_MAX_FONT_SCALE)
+                                    )
+                                ) {
+                                    Text(
+                                        text = stringResource(screen.titleRes),
+                                        maxLines = 1,
+                                        softWrap = false,
+                                        overflow = TextOverflow.Ellipsis,
+                                        style = MaterialTheme.typography.labelSmall
+                                    )
+                                }
                             },
                             selected = currentRoute == screen.route,
                             onClick = {

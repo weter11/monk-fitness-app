@@ -22,6 +22,7 @@ import androidx.compose.runtime.*
 import androidx.annotation.StringRes
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import com.monkfitness.app.R
@@ -261,7 +262,11 @@ fun ProgramEditorScreen(
             }
 
             ProgramSection(stringResource(R.string.programs_editor_plan))
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            FlowRow(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
                 TextButton(onClick = { controller.addDraftDay(ProgramDayType.TRAINING) }) {
                     Text(stringResource(R.string.programs_editor_add_training_day))
                 }
@@ -734,6 +739,7 @@ private fun FocusSharesDialog(
 ) {
     var entry by remember { mutableStateOf(initial) }
     val finished = entry.toFocusPlan()
+    val fontScale = LocalDensity.current.fontScale
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -760,7 +766,7 @@ private fun FocusSharesDialog(
                                 )
                             },
                             singleLine = true,
-                            modifier = Modifier.width(PERCENT_FIELD_WIDTH)
+                            modifier = Modifier.width(PERCENT_FIELD_WIDTH * fontScale)
                         )
                     }
                 }
@@ -1029,6 +1035,7 @@ private fun DraftDayCard(
  * One plan element. The prescription is edited in the element's **own** dimension: repetitions, or
  * seconds when the catalogue records the exercise as timed.
  */
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun DraftElementRow(
     element: ProgramDraftElementUi,
@@ -1054,9 +1061,10 @@ private fun DraftElementRow(
     Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
         Text(text = name, style = MaterialTheme.typography.bodyMedium)
 
-        Row(
+        FlowRow(
+            modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(8.dp),
-            verticalAlignment = Alignment.CenterVertically
+            verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             Stepper(
                 label = stringResource(R.string.programs_editor_sets),
@@ -1117,7 +1125,12 @@ private fun DraftElementRow(
 @Composable
 private fun Stepper(label: String, value: Int, onChange: (Int) -> Unit) {
     Row(verticalAlignment = Alignment.CenterVertically) {
-        Text(text = label, style = MaterialTheme.typography.bodySmall)
+        // The label yields to the two buttons: a scale that makes it wrap still leaves them laid out.
+        Text(
+            text = label,
+            style = MaterialTheme.typography.bodySmall,
+            modifier = Modifier.weight(1f, fill = false)
+        )
         TextButton(onClick = { onChange(value - 1) }, enabled = value > 1) {
             Text(text = MINUS)
         }

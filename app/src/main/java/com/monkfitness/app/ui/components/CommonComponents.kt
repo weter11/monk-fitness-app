@@ -38,7 +38,7 @@ fun MonkButton(
         onClick = onClick,
         modifier = modifier
             .fillMaxWidth()
-            .height(56.dp),
+            .heightIn(min = 56.dp),
         shape = RoundedCornerShape(16.dp),
         enabled = enabled,
         colors = ButtonDefaults.buttonColors(

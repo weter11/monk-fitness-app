@@ -41,6 +41,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.KeyboardType
@@ -84,6 +85,7 @@ fun ProgramSessionScreen(
     val state by controller.state.collectAsState()
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
+    val fontScale = LocalDensity.current.fontScale
 
     // The screen a workout is running on stays on, owned by the only screen that knows one is running.
     val view = LocalView.current
@@ -286,7 +288,7 @@ fun ProgramSessionScreen(
                             },
                             singleLine = true,
                             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                            modifier = Modifier.width(96.dp)
+                            modifier = Modifier.width(REST_FIELD_WIDTH * fontScale)
                         )
                     }
 
@@ -513,3 +515,6 @@ private fun SessionExerciseRow(
         }
     }
 }
+
+/** The rest field's width at font scale 1; the digits are given the same room at every scale. */
+private val REST_FIELD_WIDTH = 96.dp
