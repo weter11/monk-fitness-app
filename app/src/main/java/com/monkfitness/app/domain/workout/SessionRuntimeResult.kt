@@ -196,6 +196,27 @@ sealed interface SessionRefusal {
     }
 
     /**
+     * A skip means the occurrence observed nothing, so it cannot stand beside confirmed sets: the two are
+     * contradicting records of the same work. Undoing the sets first is the only way to skip it.
+     */
+    data class SkippingWouldEraseConfirmedSets(
+        val sessionId: SessionId,
+        val sessionExerciseId: SessionExerciseId,
+        val confirmedSets: Int
+    ) : SessionRefusal {
+        override val message: String =
+            "the occurrence '${sessionExerciseId.value}' of session '${sessionId.value}' holds " +
+                "$confirmedSets confirmed set(s), and a skipped occurrence observed none (§12): " +
+                "undo them before skipping it"
+    }
+
+    /** There is no confirmed set to take back: undo corrects a recording, it never invents one. */
+    data class NothingToUndo(val sessionId: SessionId) : SessionRefusal {
+        override val message: String =
+            "the session '${sessionId.value}' has no confirmed set to undo (§19)"
+    }
+
+    /**
      * A repetition set carries repetitions and no time, a timed set time and no repetitions, and a set that
      * was not performed is absent rather than a set of zeroes. So a set with neither amount, with both, or
      * with the one the prescription does not measure is refused rather than stored.

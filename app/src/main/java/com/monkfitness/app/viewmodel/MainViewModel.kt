@@ -57,6 +57,7 @@ import com.monkfitness.app.ui.programs.SessionRestPreference
 import com.monkfitness.app.validation.EngineeringValidationFilter
 import com.monkfitness.app.validation.ValidationCategory
 import com.monkfitness.app.validation.ValidationPose
+import com.monkfitness.app.di.Clock
 import com.monkfitness.app.validation.ValidationSettings
 import com.monkfitness.app.validation.ValidationPoseRegistry
 import com.monkfitness.app.util.normalize
@@ -97,6 +98,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
      */
     val settingsManager: SettingsManager
 
+    /** The clock the session screen's elapsed display reads: the Program System's port, not a second one. */
+    private val sessionClock: Clock
+
     /**
      * The app's one owner of language selection: it writes the choice as the *application locale* and
      * reads it back, so Android's per-app language screen and Settings are the same state, not two.
@@ -126,6 +130,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         val container = (application as MonkFitnessApplication).container
         val settings = SettingsManager(application)
         settingsManager = settings
+        sessionClock = container.clock
         trackStartDate = settings.trackStartDateFlow.map { raw ->
             runCatching { LocalDate.parse(raw) }.getOrDefault(LocalDate.now())
         }
@@ -147,6 +152,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         )
         programSession = ProgramSessionController(
             runtime = container.sessionRuntime,
+            editing = container.sessionEditing,
             adaptive = container.programAdaptiveIntegration,
             lifecycle = container.programLifecycleService,
             catalogue = {
@@ -1298,6 +1304,12 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private fun parseDate(raw: String, fallback: LocalDate): LocalDate {
         return runCatching { LocalDate.parse(raw) }.getOrDefault(fallback)
     }
+
+    /** The app's one countdown cue, shared by the exercise timer and a set's own timer. */
+    fun beep() = playBeep(500)
+
+    /** The current time as the injected clock states it, for the session's elapsed display. */
+    fun sessionNowMillis(): Long = sessionClock.now().toEpochMilli()
 
     private val toneG = ToneGenerator(AudioManager.STREAM_ALARM, 100)
 

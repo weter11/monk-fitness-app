@@ -96,6 +96,10 @@ internal object ProgramDaoSql {
 
     const val SESSION_EXERCISE_DAO_SESSION_EXERCISE_BY_ID = "SELECT * FROM `session_exercise` WHERE `sessionExerciseId` = :sessionExerciseId LIMIT 1"
 
+    const val SESSION_EXERCISE_DAO_MARK_SKIPPED = "UPDATE `session_exercise` SET `skipped` = 1 WHERE `sessionExerciseId` = :sessionExerciseId"
+
+    const val PROGRAM_SET_LOG_DAO_REMOVE_SET = "DELETE FROM `program_set_log` WHERE `setLogId` = :setLogId"
+
     const val PROGRAM_SET_LOG_DAO_SETS_OF_SESSION_EXERCISE = "SELECT * FROM `program_set_log` WHERE `sessionExerciseId` = :sessionExerciseId ORDER BY `setIndex` ASC"
 
     const val PROGRAM_SET_LOG_DAO_SETS_OF_SESSIONS = "SELECT `program_set_log`.* FROM `program_set_log` INNER JOIN `session_exercise` ON `session_exercise`.`sessionExerciseId` = `program_set_log`.`sessionExerciseId` WHERE `session_exercise`.`sessionId` IN (:sessionIds) ORDER BY `session_exercise`.`sessionId` ASC, `session_exercise`.`position` ASC, `program_set_log`.`setIndex` ASC"
@@ -199,6 +203,8 @@ internal object ProgramDaoSql {
         "SessionSnapshotExerciseDao.snapshotExercisesOfSessions" to SESSION_SNAPSHOT_EXERCISE_DAO_SNAPSHOT_EXERCISES_OF_SESSIONS,
         "SessionExerciseDao.sessionExercisesOfSessions" to SESSION_EXERCISE_DAO_SESSION_EXERCISES_OF_SESSIONS,
         "SessionExerciseDao.sessionExerciseById" to SESSION_EXERCISE_DAO_SESSION_EXERCISE_BY_ID,
+        "SessionExerciseDao.markSkipped" to SESSION_EXERCISE_DAO_MARK_SKIPPED,
+        "ProgramSetLogDao.removeSet" to PROGRAM_SET_LOG_DAO_REMOVE_SET,
         "ProgramSetLogDao.setsOfSessionExercise" to PROGRAM_SET_LOG_DAO_SETS_OF_SESSION_EXERCISE,
         "ProgramSetLogDao.setsOfSessions" to PROGRAM_SET_LOG_DAO_SETS_OF_SESSIONS,
         "ProgramSetLogDao.countSetsOfProgram" to PROGRAM_SET_LOG_DAO_COUNT_SETS_OF_PROGRAM,

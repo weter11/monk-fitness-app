@@ -683,11 +683,17 @@ internal class SqliteSessionExerciseDao(private val database: SqliteTestDatabase
     override suspend fun sessionExerciseById(sessionExerciseId: String): SessionExerciseEntity? =
         database.rows(ProgramDaoSql.SESSION_EXERCISE_DAO_SESSION_EXERCISE_BY_ID, sessionExerciseId)
             .firstOrNull()?.sessionExerciseEntity()
+
+    override suspend fun markSkipped(sessionExerciseId: String) =
+        database.exec(ProgramDaoSql.SESSION_EXERCISE_DAO_MARK_SKIPPED, sessionExerciseId)
 }
 
 internal class SqliteProgramSetLogDao(private val database: SqliteTestDatabase) : ProgramSetLogDao {
 
     override suspend fun insertSet(setLog: SetLogEntity) = database.insertRow(setLog)
+
+    override suspend fun removeSet(setLogId: String) =
+        database.exec(ProgramDaoSql.PROGRAM_SET_LOG_DAO_REMOVE_SET, setLogId)
 
     override suspend fun setsOfSessionExercise(sessionExerciseId: String): List<SetLogEntity> =
         database.rows(ProgramDaoSql.PROGRAM_SET_LOG_DAO_SETS_OF_SESSION_EXERCISE, sessionExerciseId)

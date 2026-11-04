@@ -1,6 +1,7 @@
 package com.monkfitness.app.domain.usecase
 
 import com.monkfitness.app.data.repository.ProgramDataAccessRig
+import com.monkfitness.app.data.repository.WorkoutSessionRepository
 import com.monkfitness.app.data.repository.ProgramDaoFaults
 import com.monkfitness.app.data.repository.ProgramGraph
 import com.monkfitness.app.data.repository.ProgramGraphFixture
@@ -104,6 +105,9 @@ internal class SessionRuntimeRig(key: String = "r", database: SqliteTestDatabase
 
     /** Persists the fixture's graph through the production creation path. */
     suspend fun createProgram() = data.createGraph()
+
+    /** The session graph through fresh repositories, for the edits that sit beside the runtime. */
+    fun freshSessionRepository(): WorkoutSessionRepository = data.freshSessionRepository()
 
     /** The plan day at [position] of the Program's first revision. */
     fun day(position: Int): ProgramDay = graph.days.single { it.position == position }

@@ -1041,6 +1041,13 @@
     <string name="programs_session_slot_unavailable">Este entrenamiento no se puede iniciar desde el plan al que pertenece.</string>
     <string name="programs_session_already_in_progress">Este entrenamiento ya está en curso, pero no se ha podido leer el intento guardado.</string>
     <string name="programs_session_completed_adaptive_unavailable">El entrenamiento se ha guardado. No se ha podido leer la parte adaptativa, así que no se ha cambiado nada.</string>
+    <string name="programs_session_action_refused">Eso no es posible en este entrenamiento.</string>
+    <string name="programs_session_rest_next">A continuación: %1$s, serie %2$d</string>
+    <string name="programs_session_skip_exercise">Saltar ejercicio</string>
+    <string name="programs_session_elapsed">Transcurrido %1$s</string>
+    <string name="programs_session_extend_rest">+15 s</string>
+    <string name="programs_session_no_rest">Sin descanso</string>
+    <string name="programs_session_skipped">Omitido</string>
     <string name="programs_home_current_program">Programa actual</string>
     <string name="programs_home_no_program">No hay ningún programa seleccionado</string>
     <string name="programs_home_next_workout">Próximo entrenamiento</string>

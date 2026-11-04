@@ -10,8 +10,10 @@ import com.monkfitness.app.domain.prescription.PrescriptionDimension
 import com.monkfitness.app.domain.program.ProgramOperationResult
 import com.monkfitness.app.domain.usecase.ProgramAdaptiveIntegration
 import com.monkfitness.app.domain.usecase.ProgramLifecycleService
+import com.monkfitness.app.domain.usecase.SessionEditingService
 import com.monkfitness.app.domain.usecase.SessionRuntime
 import com.monkfitness.app.domain.workout.AdaptiveCompletion
+import com.monkfitness.app.domain.workout.SessionExercise
 import com.monkfitness.app.domain.workout.SessionRefusal
 import com.monkfitness.app.domain.workout.SessionRuntimeResult
 import com.monkfitness.app.domain.workout.WorkoutSession
@@ -39,11 +41,23 @@ data class SessionExerciseUi(
     val isCurrent: Boolean,
     val dimension: PrescriptionDimension,
     /** The prescribed target of the next set, or `0` when the occurrence is finished. */
-    val nextTarget: Int
+    val nextTarget: Int,
+    /** Whether the user explicitly skipped this occurrence; a skipped one never asks for a set. */
+    val skipped: Boolean = false,
+    /** What each confirmed set recorded, in set order, in the occurrence's own unit. */
+    val performed: List<Int> = emptyList()
 ) {
 
     val isFinished: Boolean
         get() = completedSets >= setCount
+
+    /** The set the user is on, 1-based, clamped to the last set once the occurrence is done. */
+    val setNumber: Int
+        get() = if (isFinished) setCount else completedSets + 1
+
+    /** Whether a set of this occurrence can be confirmed now: a skipped or finished one asks for nothing. */
+    val isPerformable: Boolean
+        get() = !skipped && !isFinished
 }
 
 /** Where the session screen is in the attempt's life. */
@@ -88,6 +102,14 @@ data class ProgramSessionUiState(
     val currentExercise: SessionExerciseUi? = null,
     /** The rest a new interval starts from, in seconds: the user's current choice. */
     val restSeconds: Int = 0,
+    /** How much of the running rest interval is left; `0` when no interval is running. */
+    val restSecondsLeft: Int = 0,
+    /** The length the running interval started from, which is what `+15 s` extends. */
+    val restTotalSeconds: Int = 0,
+    /** What the user does when the interval ends, or `null` when no interval is running. */
+    val restNext: SessionExerciseUi? = null,
+    /** When the attempt started, so the screen can show the time it has been running. */
+    val startedAtMillis: Long? = null,
     /** One line per family the completion's adaptive half read, in the pass's own order. */
     val outcomes: List<SessionOutcomeUi> = emptyList(),
     /** The sentence explaining a refusal, a failure or a reported non-fatal problem. */
@@ -96,6 +118,13 @@ data class ProgramSessionUiState(
 
     val isPresenting: Boolean
         get() = stage == SessionStage.PRESENTING
+
+    val isResting: Boolean
+        get() = restSecondsLeft > 0
+
+    /** Whether the occurrence on screen can take a set now. */
+    val canConfirmCurrent: Boolean
+        get() = !isResting && currentExercise?.isPerformable == true
 
     val everythingConfirmed: Boolean
         get() = exercises.isNotEmpty() && exercises.all { exercise -> exercise.isFinished }
@@ -141,6 +170,9 @@ sealed interface ProgramSessionNotice {
 
         /** The attempt could not be read or written. */
         val STORAGE_FAILED: ProgramSessionNotice = Failed(R.string.programs_notice_failed)
+
+        /** The workout refused an edit — undoing a set that is not there, skipping one that holds sets. */
+        val ACTION_REFUSED: ProgramSessionNotice = Refused(R.string.programs_session_action_refused)
 
         /** The completion landed, but the adaptive half could not be evaluated. */
         val COMPLETED_ADAPTIVE_UNAVAILABLE: ProgramSessionNotice =
@@ -204,6 +236,7 @@ interface SessionRestPreference {
  */
 class ProgramSessionController(
     private val runtime: SessionRuntime,
+    private val editing: SessionEditingService,
     private val adaptive: ProgramAdaptiveIntegration,
     private val lifecycle: ProgramLifecycleService,
     private val catalogue: ExerciseCatalogue,
@@ -228,6 +261,9 @@ class ProgramSessionController(
     /** The rest the user last chose, read once when the attempt opens. */
     private var rememberedRestSeconds: Int? = null
 
+    /** The occurrence the user jumped to, or `null` for "the next one still to perform". */
+    private var focusedSessionExerciseId: String? = null
+
     /**
      * Opens the attempt for [slotId]: restores the one already in progress, or starts a new one.
      *
@@ -237,6 +273,7 @@ class ProgramSessionController(
      */
     suspend fun open(slotId: String) {
         session = null
+        focusedSessionExerciseId = null
         rememberedRestSeconds = restPreference.read()
         mutableState.value = ProgramSessionUiState(stage = SessionStage.LOADING, slotId = slotId)
         when (val started = runtime.startSession(SlotId(slotId))) {
@@ -267,17 +304,16 @@ class ProgramSessionController(
         }
     }
 
-    suspend fun confirmSet(completedReps: Int = 0, durationSeconds: Int = 0, restSeconds: Int? = null) {
-        val stored = confirmSetInternal(completedReps, durationSeconds, restSeconds)
+    suspend fun confirmSet(completedReps: Int = 0, durationSeconds: Int = 0) {
+        val stored = confirmSetInternal(completedReps, durationSeconds)
         if (!stored) return
     }
 
     /**
      * Sets the rest the next interval counts down from, and remembers it as the default of later workouts.
      *
-     * The value is a countdown length, not a measurement: the rest a confirmed set stores is the time that
-     * actually elapsed, which is this length unless the user skipped the interval early. Zero is legal and
-     * means "no rest".
+     * The value is a countdown length for the *next* interval, not a measurement: the rest a confirmed set
+     * stores is the time that actually elapsed. Zero is legal and means "no rest".
      */
     suspend fun setRestSeconds(seconds: Int) {
         val bounded = seconds.coerceAtLeast(0)
@@ -287,42 +323,146 @@ class ProgramSessionController(
     }
 
     /**
+     * Parses the rest the user typed. A cleared, non-integral or non-positive entry returns `false` and
+     * stores nothing: zero is a choice of its own, made through [chooseNoRest].
+     */
+    suspend fun setRestSecondsFromInput(raw: String): Boolean {
+        val seconds = raw.trim().toIntOrNull() ?: return false
+        if (seconds <= 0) return false
+        setRestSeconds(seconds)
+        return true
+    }
+
+    /** The user's explicit "no rest": the only way zero is written. */
+    suspend fun chooseNoRest() = setRestSeconds(0)
+
+    /** Advances the running rest by one second; `true` when that second ended it. */
+    fun tickRest(): Boolean {
+        val left = mutableState.value.restSecondsLeft
+        if (left <= 0) return false
+        val remaining = left - 1
+        mutableState.update { state ->
+            state.copy(restSecondsLeft = remaining, restNext = state.restNext.takeIf { remaining > 0 })
+        }
+        return remaining == 0
+    }
+
+    /** Ends the running rest now. The interval still counts as the rest taken before the next set. */
+    fun skipRest() {
+        mutableState.update { state -> state.copy(restSecondsLeft = 0, restNext = null) }
+    }
+
+    fun extendRest(seconds: Int) {
+        if (mutableState.value.restSecondsLeft <= 0) return
+        mutableState.update { state ->
+            state.copy(
+                restSecondsLeft = state.restSecondsLeft + seconds,
+                restTotalSeconds = state.restTotalSeconds + seconds
+            )
+        }
+    }
+
+    /** Makes [sessionExerciseId] the occurrence on screen; a finished or skipped one is shown read-only. */
+    suspend fun focus(sessionExerciseId: String) {
+        val current = currentAttempt() ?: return
+        if (current.exercises.none { it.sessionExerciseId.value == sessionExerciseId }) return
+        focusedSessionExerciseId = sessionExerciseId
+        present(current)
+        // A rest interval names what comes after it, so jumping during one renames its target.
+        if (mutableState.value.isResting && mutableState.value.currentExercise?.isPerformable == true) {
+            mutableState.update { state -> state.copy(restNext = state.currentExercise) }
+        }
+    }
+
+    /** Takes back the set performed last; `true` when one was removed. */
+    suspend fun undoLastSet(): Boolean {
+        val current = currentAttempt() ?: return false
+        return when (val undone = editing.undoLastSet(current.sessionId)) {
+            is SessionRuntimeResult.Success -> {
+                endRest()
+                present(undone.value)
+                true
+            }
+
+            is SessionRuntimeResult.Refused -> {
+                mutableState.update { state -> state.copy(notice = ProgramSessionNotice.ACTION_REFUSED) }
+                false
+            }
+
+            is SessionRuntimeResult.Failure -> {
+                mutableState.update { state -> state.copy(notice = ProgramSessionNotice.STORAGE_FAILED) }
+                false
+            }
+        }
+    }
+
+    /** Skips the occurrence on screen; `true` when it is now skipped. */
+    suspend fun skipCurrentExercise(): Boolean {
+        val current = currentAttempt() ?: return false
+        val occurrence = occurrenceOnScreen(current) ?: return false
+        if (occurrence.skipped) return false
+        return when (
+            val skipped = editing.skipOccurrence(
+                sessionId = current.sessionId,
+                sessionExerciseId = occurrence.sessionExerciseId
+            )
+        ) {
+            is SessionRuntimeResult.Success -> {
+                if (focusedSessionExerciseId == occurrence.sessionExerciseId.value) {
+                    focusedSessionExerciseId = null
+                }
+                endRest()
+                present(skipped.value)
+                true
+            }
+
+            is SessionRuntimeResult.Refused -> {
+                mutableState.update { state -> state.copy(notice = ProgramSessionNotice.ACTION_REFUSED) }
+                false
+            }
+
+            is SessionRuntimeResult.Failure -> {
+                mutableState.update { state -> state.copy(notice = ProgramSessionNotice.STORAGE_FAILED) }
+                false
+            }
+        }
+    }
+
+    /**
      * Parses and confirms the value the user actually performed.
      *
      * Blank, non-integral, zero and negative values return `false` without calling [SessionRuntime].
      * The prescribed target is never used as a fallback: it remains presentation only until the user
      * explicitly confirms a valid actual result.
      */
-    suspend fun confirmActualSet(rawValue: String, restSeconds: Int? = null): Boolean {
+    suspend fun confirmActualSet(rawValue: String): Boolean {
         val value = rawValue.trim().toIntOrNull() ?: return false
         if (value <= 0) return false
         val current = currentAttempt() ?: return false
         val occurrence = occurrenceToPerform(current) ?: return false
         return confirmSetInternal(
             completedReps = if (occurrence.dimension == PrescriptionDimension.TIME_BASED) 0 else value,
-            durationSeconds = if (occurrence.dimension == PrescriptionDimension.TIME_BASED) value else 0,
-            restSeconds = restSeconds
+            durationSeconds = if (occurrence.dimension == PrescriptionDimension.TIME_BASED) value else 0
         )
     }
 
-    private suspend fun confirmSetInternal(
-        completedReps: Int,
-        durationSeconds: Int,
-        restSeconds: Int?
-    ): Boolean {
+    private suspend fun confirmSetInternal(completedReps: Int, durationSeconds: Int): Boolean {
         val current = currentAttempt() ?: return false
         val occurrence = occurrenceToPerform(current) ?: return false
+        val rested = restTakenSeconds()
         return when (
             val confirmed = runtime.confirmSet(
                 sessionId = current.sessionId,
                 sessionExerciseId = SessionExerciseId(occurrence.sessionExerciseId),
                 completedReps = completedReps,
                 durationSeconds = durationSeconds,
-                restSeconds = restSeconds
+                restSeconds = rested
             )
         ) {
             is SessionRuntimeResult.Success -> {
+                clearFocusIfResolved(confirmed.value)
                 present(confirmed.value)
+                startRestAfter(confirmed.value)
                 true
             }
 
@@ -407,14 +547,22 @@ class ProgramSessionController(
     private fun currentAttempt(): WorkoutSession? = session
 
     /**
-     * The occurrence the user is on: the first of the session's own rows that is neither skipped nor
-     * complete, in presentation order. `null` when every occurrence is finished.
+     * The occurrence the user is on: the one they jumped to, or else the first of the session's own rows
+     * that is neither skipped nor complete, in presentation order. `null` when there is nothing left.
      */
+    private fun occurrenceOnScreen(session: WorkoutSession): SessionExercise? {
+        val focused = session.exercises.firstOrNull { exercise ->
+            exercise.sessionExerciseId.value == focusedSessionExerciseId
+        }
+        return focused
+            ?: session.exercises.firstOrNull { exercise -> exercise.isPerformable() }
+            ?: session.exercises.lastOrNull()
+    }
+
+    /** The occurrence [confirmSet] acts on: the one on screen while it still has sets to perform. */
     private fun occurrenceToPerform(session: WorkoutSession): SessionOccurrence? =
-        session.exercises
-            .firstOrNull { exercise ->
-                !exercise.skipped && exercise.results.size < exercise.prescription.setCount
-            }
+        occurrenceOnScreen(session)
+            ?.takeIf { exercise -> exercise.isPerformable() }
             ?.let { occurrence ->
                 SessionOccurrence(
                     sessionExerciseId = occurrence.sessionExerciseId.value,
@@ -422,6 +570,50 @@ class ProgramSessionController(
                     dimension = occurrence.prescription.dimension
                 )
             }
+
+    private fun SessionExercise.isPerformable(): Boolean =
+        !skipped && results.size < prescription.setCount
+
+    /** Leaving an occurrence that has just been completed, so the screen moves on to the next one. */
+    private fun clearFocusIfResolved(session: WorkoutSession) {
+        val focused = session.exercises.firstOrNull { exercise ->
+            exercise.sessionExerciseId.value == focusedSessionExerciseId
+        } ?: return
+        if (!focused.isPerformable()) focusedSessionExerciseId = null
+    }
+
+    /** The rest actually taken before the set being confirmed, or `null` when no interval ran. */
+    private fun restTakenSeconds(): Int? {
+        val rest = mutableState.value
+        if (rest.restTotalSeconds <= 0) return null
+        return (rest.restTotalSeconds - rest.restSecondsLeft).coerceAtLeast(0)
+    }
+
+    /**
+     * Starts the rest after a confirmed set when there is work left and the user rests at all. The last set
+     * of the workout starts none: an interval with nothing after it is a countdown to nothing.
+     */
+    private fun startRestAfter(session: WorkoutSession) {
+        val length = mutableState.value.restSeconds
+        val next = occurrenceToPerform(session)
+        if (length <= 0 || next == null) {
+            endRest()
+            return
+        }
+        mutableState.update { state ->
+            state.copy(
+                restSecondsLeft = length,
+                restTotalSeconds = length,
+                restNext = state.currentExercise
+            )
+        }
+    }
+
+    private fun endRest() {
+        mutableState.update { state ->
+            state.copy(restSecondsLeft = 0, restTotalSeconds = 0, restNext = null)
+        }
+    }
 
     private suspend fun adaptiveHalfFor(session: WorkoutSession): AdaptiveHalf =
         when (val pass = adaptive.adaptAfter(session.sessionId)) {
@@ -452,7 +644,7 @@ class ProgramSessionController(
     private suspend fun present(session: WorkoutSession) {
         this.session = session
         val workout = session.snapshot.workout
-        val current = occurrenceToPerform(session)
+        val onScreen = occurrenceOnScreen(session)
         val names = names()
 
         val exercises = session.exercises.map { exercise ->
@@ -463,12 +655,16 @@ class ProgramSessionController(
                 nameRes = names[exercise.exerciseId] ?: 0,
                 setCount = exercise.prescription.setCount,
                 completedSets = exercise.results.size,
-                isCurrent = exercise.sessionExerciseId.value == current?.sessionExerciseId,
+                isCurrent = exercise.sessionExerciseId == onScreen?.sessionExerciseId,
                 dimension = exercise.prescription.dimension,
                 nextTarget = if (nextSetNumber <= exercise.prescription.setCount) {
                     exercise.prescription.targetForSet(nextSetNumber)
                 } else {
                     0
+                },
+                skipped = exercise.skipped,
+                performed = exercise.results.map { set ->
+                    if (set.durationSeconds > 0) set.durationSeconds else set.completedReps
                 }
             )
         }
@@ -481,6 +677,7 @@ class ProgramSessionController(
                 plannedFor = workout.plannedFor,
                 exercises = exercises,
                 currentExercise = exercises.firstOrNull { exercise -> exercise.isCurrent },
+                startedAtMillis = session.startedAt.toEpochMilli(),
                 // The prescription vocabulary has no rest dimension, so a presented element states no
                 // rest and the interval starts from the user's remembered choice or the documented default.
                 restSeconds = restSecondsFor(prescribedRestSeconds = null),
@@ -508,6 +705,9 @@ class ProgramSessionController(
                 stage = SessionStage.UNAVAILABLE,
                 exercises = emptyList(),
                 currentExercise = null,
+                restSecondsLeft = 0,
+                restTotalSeconds = 0,
+                restNext = null,
                 notice = notice
             )
         }

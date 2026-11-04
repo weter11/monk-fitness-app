@@ -16,6 +16,7 @@ import com.monkfitness.app.data.mapper.toSnapshotExerciseEntities
 import com.monkfitness.app.domain.common.ProgramId
 import com.monkfitness.app.domain.common.SessionExerciseId
 import com.monkfitness.app.domain.common.SessionId
+import com.monkfitness.app.domain.common.SetLogId
 import com.monkfitness.app.domain.common.SlotId
 import com.monkfitness.app.domain.workout.SetResult
 import com.monkfitness.app.domain.workout.WorkoutSession
@@ -151,6 +152,21 @@ class WorkoutSessionRepository(
     /** The confirmed sets of one occurrence, in set order. */
     suspend fun setsOf(sessionExerciseId: SessionExerciseId): List<SetResult> =
         setLogDao.setsOfSessionExercise(sessionExerciseId.value).map { it.toDomain() }
+
+    /**
+     * Removes one confirmed set.
+     *
+     * The caller names the row, because *"which set was the last one"* is a fact about the order they
+     * were performed in, which this layer does not read.
+     */
+    suspend fun removeSet(setLogId: SetLogId) {
+        setLogDao.removeSet(setLogId.value)
+    }
+
+    /** Marks one occurrence as the user's explicit "not this one". */
+    suspend fun markSkipped(sessionExerciseId: SessionExerciseId) {
+        sessionExerciseDao.markSkipped(sessionExerciseId.value)
+    }
 
     /**
      * Records how one session ended, and nothing else.

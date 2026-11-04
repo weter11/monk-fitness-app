@@ -471,6 +471,9 @@ private class FailingSessionExerciseDao(
 
     override suspend fun sessionExerciseById(sessionExerciseId: String): SessionExerciseEntity? =
         delegate.sessionExerciseById(sessionExerciseId)
+
+    override suspend fun markSkipped(sessionExerciseId: String) =
+        delegate.markSkipped(sessionExerciseId)
 }
 
 /**
@@ -547,6 +550,8 @@ private class FailingProgramSetLogDao(
         if (faults.failSetLogInsert) throw IllegalStateException("planted fault: set log insert")
         delegate.insertSet(setLog)
     }
+
+    override suspend fun removeSet(setLogId: String) = delegate.removeSet(setLogId)
 
     override suspend fun setsOfSessionExercise(sessionExerciseId: String): List<SetLogEntity> =
         delegate.setsOfSessionExercise(sessionExerciseId)

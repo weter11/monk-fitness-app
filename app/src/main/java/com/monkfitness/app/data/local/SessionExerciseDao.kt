@@ -29,4 +29,8 @@ interface SessionExerciseDao {
     /** The occurrence, or `null` when none is stored. */
     @Query("SELECT * FROM `session_exercise` WHERE `sessionExerciseId` = :sessionExerciseId LIMIT 1")
     suspend fun sessionExerciseById(sessionExerciseId: String): SessionExerciseEntity?
+
+    /** Records the user's "not this one". A skip is a flag, never a placeholder set row. */
+    @Query("UPDATE `session_exercise` SET `skipped` = 1 WHERE `sessionExerciseId` = :sessionExerciseId")
+    suspend fun markSkipped(sessionExerciseId: String)
 }

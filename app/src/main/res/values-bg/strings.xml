@@ -1041,6 +1041,13 @@
     <string name="programs_session_slot_unavailable">Тази тренировка не може да бъде започната от плана, към който принадлежи.</string>
     <string name="programs_session_already_in_progress">Тази тренировка вече е в ход, но запазеният опит не можа да бъде прочетен.</string>
     <string name="programs_session_completed_adaptive_unavailable">Тренировката беше запазена. Адаптивната част не можа да бъде прочетена, затова нищо не беше променено.</string>
+    <string name="programs_session_action_refused">Това не е възможно в тази тренировка.</string>
+    <string name="programs_session_rest_next">Следващо: %1$s, серия %2$d</string>
+    <string name="programs_session_skip_exercise">Пропусни упражнението</string>
+    <string name="programs_session_elapsed">Изминали %1$s</string>
+    <string name="programs_session_extend_rest">+15 с</string>
+    <string name="programs_session_no_rest">Без почивка</string>
+    <string name="programs_session_skipped">Пропуснато</string>
     <string name="programs_home_current_program">Текуща програма</string>
     <string name="programs_home_no_program">Не е избрана програма</string>
     <string name="programs_home_next_workout">Следваща тренировка</string>

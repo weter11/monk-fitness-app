@@ -5,6 +5,7 @@ import com.monkfitness.app.domain.adaptive.integration.NoExerciseFamilyClassific
 import com.monkfitness.app.domain.common.ProgramId
 import com.monkfitness.app.domain.program.ProgramSchedulingResult
 import com.monkfitness.app.domain.usecase.ProgramAdaptiveIntegration
+import com.monkfitness.app.domain.usecase.SessionEditingService
 import com.monkfitness.app.domain.usecase.SessionRuntime
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
@@ -73,6 +74,7 @@ class SessionRestDefaultTest {
             )
             val session = ProgramSessionController(
                 runtime = runtime,
+                editing = SessionEditingService(rig.transfer.sessionRepository),
                 adaptive = integration,
                 lifecycle = rig.transfer.lifecycleService,
                 catalogue = { rig.catalogueOptions },

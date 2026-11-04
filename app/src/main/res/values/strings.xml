@@ -1041,6 +1041,13 @@
     <string name="programs_session_slot_unavailable">This workout cannot be started from the plan it belongs to.</string>
     <string name="programs_session_already_in_progress">This workout is already in progress, but the stored attempt could not be read.</string>
     <string name="programs_session_completed_adaptive_unavailable">The workout was saved. The adaptive part could not be read, so nothing was changed.</string>
+    <string name="programs_session_action_refused">That is not possible in this workout.</string>
+    <string name="programs_session_rest_next">Next: %1$s, set %2$d</string>
+    <string name="programs_session_skip_exercise">Skip exercise</string>
+    <string name="programs_session_elapsed">Elapsed %1$s</string>
+    <string name="programs_session_extend_rest">+15 s</string>
+    <string name="programs_session_no_rest">No rest</string>
+    <string name="programs_session_skipped">Skipped</string>
     <string name="programs_home_current_program">Current program</string>
     <string name="programs_home_no_program">No program is selected</string>
     <string name="programs_home_next_workout">Next workout</string>
