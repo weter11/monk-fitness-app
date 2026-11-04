@@ -1,6 +1,7 @@
 package com.monkfitness.app.ui.screens
 
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -28,6 +29,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -189,26 +191,11 @@ fun HomeScreen(
 
         Spacer(modifier = Modifier.height(24.dp))
 
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(16.dp)
-        ) {
-            InfoCard(
-                label = stringResource(R.string.programs_home_streak),
-                value = state.streak.toString(),
-                modifier = Modifier.weight(1f)
-            )
-            InfoCard(
-                label = stringResource(R.string.programs_home_completed),
-                value = state.completed.toString(),
-                modifier = Modifier.weight(1f)
-            )
-            InfoCard(
-                label = stringResource(R.string.programs_home_upcoming),
-                value = state.upcoming.toString(),
-                modifier = Modifier.weight(1f)
-            )
-        }
+        StatCards(
+            streak = state.streak.toString(),
+            completed = state.completed.toString(),
+            upcoming = state.upcoming.toString()
+        )
 
         Spacer(modifier = Modifier.height(24.dp))
 
@@ -284,6 +271,50 @@ private fun lifecycleLabelRes(status: com.monkfitness.app.domain.program.Lifecyc
         com.monkfitness.app.domain.program.LifecycleStatus.COMPLETED ->
             R.string.programs_lifecycle_completed
     }
+
+/**
+ * The three stat cards, reflowed: a card narrower than its label needs would break the word in the
+ * middle, so the count of cards per row follows the width available at the current text scale.
+ */
+@Composable
+private fun StatCards(streak: String, completed: String, upcoming: String) {
+    val labels = listOf(
+        R.string.programs_home_streak,
+        R.string.programs_home_completed,
+        R.string.programs_home_upcoming
+    )
+    val values = listOf(streak, completed, upcoming)
+    val gap = STAT_CARD_GAP
+    BoxWithConstraints(modifier = Modifier.fillMaxWidth()) {
+        // Only the label's own width grows with the text scale; a card's padding does not.
+        val needed = STAT_LABEL_WIDTH * LocalDensity.current.fontScale + STAT_CARD_PADDING
+        val columns = ((maxWidth + gap) / (needed + gap)).toInt().coerceIn(1, values.size)
+        Column(verticalArrangement = Arrangement.spacedBy(gap)) {
+            values.indices.chunked(columns).forEach { row ->
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(gap)
+                ) {
+                    row.forEach { index ->
+                        InfoCard(
+                            label = stringResource(labels[index]),
+                            value = values[index],
+                            modifier = Modifier.weight(1f)
+                        )
+                    }
+                    repeat(columns - row.size) {
+                        Spacer(modifier = Modifier.weight(1f))
+                    }
+                }
+            }
+        }
+    }
+}
+
+/** The widest stat label at font scale 1 ("Completados", "Completati"), which sets a card's minimum. */
+private val STAT_LABEL_WIDTH = 62.dp
+private val STAT_CARD_PADDING = 32.dp
+private val STAT_CARD_GAP = 16.dp
 
 @Composable
 fun InfoCard(label: String, value: String, modifier: Modifier) {
