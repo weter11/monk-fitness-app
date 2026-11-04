@@ -8,9 +8,11 @@ import com.monkfitness.app.data.model.SetLogEntity
 /**
  * Persistence for the `program_set_log` table — one confirmed set.
  *
- * Append and read only. A set row exists because a set was confirmed — a skipped exercise, a missed
- * slot and a cancelled session produce no row at all — so there is no update that could turn a
- * performed set into an unperformed one and no zero row to write in the first place.
+ * A set row exists because a set was confirmed — a skipped exercise, a missed slot and a cancelled
+ * session produce no row at all — so there is no update that could turn a performed set into an
+ * unperformed one and no zero row to write in the first place. The one removal is [removeSet], which
+ * takes back a confirmation the user made by mistake; the choice of which row that is stays with the
+ * layer that knows the order the sets were performed in.
  *
  * [setsOfSessions] is the read a session's reconstruction uses: one query for every confirmed set of
  * every occurrence of several sessions, ordered by presentation order and then by set index, so no
@@ -21,6 +23,9 @@ interface ProgramSetLogDao {
 
     @Insert
     suspend fun insertSet(setLog: SetLogEntity)
+
+    @Query("DELETE FROM `program_set_log` WHERE `setLogId` = :setLogId")
+    suspend fun removeSet(setLogId: String)
 
     @Query("SELECT * FROM `program_set_log` WHERE `sessionExerciseId` = :sessionExerciseId ORDER BY `setIndex` ASC")
     suspend fun setsOfSessionExercise(sessionExerciseId: String): List<SetLogEntity>

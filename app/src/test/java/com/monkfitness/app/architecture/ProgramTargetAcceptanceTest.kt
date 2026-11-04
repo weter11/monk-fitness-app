@@ -12,6 +12,7 @@ import com.monkfitness.app.domain.program.SlotStatus
 import com.monkfitness.app.domain.program.transfer.ProgramTransferResult
 import com.monkfitness.app.domain.progress.ProgressScope
 import com.monkfitness.app.domain.usecase.ProgramAdaptiveIntegration
+import com.monkfitness.app.domain.usecase.SessionEditingService
 import com.monkfitness.app.domain.usecase.SessionRuntime
 import com.monkfitness.app.domain.workout.SessionRuntimeResult
 import com.monkfitness.app.domain.workout.SessionStatus
@@ -76,6 +77,7 @@ class ProgramTargetAcceptanceTest {
             // measurable instead of assumed.
             var session = ProgramSessionController(
                 runtime = runtime,
+                editing = SessionEditingService(rig.transfer.sessionRepository),
                 adaptive = integration,
                 lifecycle = rig.transfer.lifecycleService,
                 catalogue = { rig.catalogueOptions },
@@ -174,6 +176,7 @@ class ProgramTargetAcceptanceTest {
             session.back()
             val reopened = ProgramSessionController(
                 runtime = runtime,
+                editing = SessionEditingService(rig.transfer.sessionRepository),
                 adaptive = integration,
                 lifecycle = rig.transfer.lifecycleService,
                 catalogue = { rig.catalogueOptions },

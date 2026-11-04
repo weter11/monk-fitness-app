@@ -385,7 +385,10 @@ fun MainApp(viewModel: MainViewModel) {
                     onBack = { navController.popBackStack() },
                     onExerciseClick = { exerciseId ->
                         navController.navigate("exercise/$exerciseId")
-                    }
+                    },
+                    now = viewModel::sessionNowMillis,
+                    exerciseOf = { exerciseId -> viewModel.findExerciseById(exerciseId) },
+                    onBeep = viewModel::beep
                 )
             }
             composable("posture-workout") {

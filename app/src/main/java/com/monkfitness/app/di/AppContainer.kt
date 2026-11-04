@@ -62,6 +62,7 @@ import com.monkfitness.app.domain.usecase.TargetScheduleProductionConsumer
 import com.monkfitness.app.domain.usecase.ProgramStartService
 import com.monkfitness.app.domain.usecase.TargetScheduleSlotPersister
 import com.monkfitness.app.domain.usecase.TargetScheduleSourceBridge
+import com.monkfitness.app.domain.usecase.SessionEditingService
 import com.monkfitness.app.domain.usecase.SessionRuntime
 import com.monkfitness.app.domain.program.StandardProgram
 import java.time.ZoneId
@@ -496,6 +497,13 @@ class AppContainer(
         zone = zone,
         inTransaction = inTransaction
     )
+
+    /**
+     * The corrections a user makes to a running attempt: taking back the last set, skipping an occurrence.
+     * It shares the session graph with [sessionRuntime] and writes nothing else, so an edit can never move
+     * the lifecycle the runtime owns.
+     */
+    val sessionEditing: SessionEditingService = SessionEditingService(workoutSessionRepository)
 
     /**
      * The Progress/History layer: which facts a scope *is*, and how they are read. The computation itself is

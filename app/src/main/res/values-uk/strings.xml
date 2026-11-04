@@ -996,7 +996,6 @@
     <string name="programs_session_loading">Підготовка тренування…</string>
     <string name="programs_session_planned_date">Заплановано на %1$s</string>
     <string name="programs_session_sets_progress">%1$d з %2$d підходів</string>
-    <string name="programs_session_set_of">Підхід %1$d з %2$d</string>
     <string name="programs_session_reps_target">%1$d повторень</string>
     <string name="programs_session_seconds_target">%1$d с</string>
     <string name="programs_session_actual_reps">Фактичні повторення</string>
@@ -1039,6 +1038,13 @@
     <string name="programs_session_slot_unavailable">Це тренування не можна почати за планом, до якого воно належить.</string>
     <string name="programs_session_already_in_progress">Це тренування вже виконується, але збережену спробу не вдалося прочитати.</string>
     <string name="programs_session_completed_adaptive_unavailable">Тренування збережено. Адаптивну частину прочитати не вдалося, тому нічого не змінено.</string>
+    <string name="programs_session_action_refused">У цьому тренуванні так не можна.</string>
+    <string name="programs_session_rest_next">Далі: %1$s, підхід %2$d</string>
+    <string name="programs_session_skip_exercise">Пропустити вправу</string>
+    <string name="programs_session_elapsed">Минуло %1$s</string>
+    <string name="programs_session_extend_rest">+15 с</string>
+    <string name="programs_session_no_rest">Без відпочинку</string>
+    <string name="programs_session_skipped">Пропущено</string>
     <string name="programs_home_current_program">Поточна програма</string>
     <string name="programs_home_no_program">Програму не вибрано</string>
     <string name="programs_home_next_workout">Наступне тренування</string>
