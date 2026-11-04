@@ -761,6 +761,10 @@
     <string name="programs_create_manual_desc">Розставте дні та вправи самостійно.</string>
     <string name="programs_create_generated">Складіть за мене</string>
     <string name="programs_create_generated_desc">Почніть із готової структури, яку можна змінити.</string>
+    <string name="programs_generate_action">Створіть план за мене</string>
+    <string name="programs_generate_name">Створений план</string>
+    <string name="programs_generate_busy">План створюється…</string>
+    <string name="programs_generate_failed">Не вдалося створити план, нічого не збережено</string>
     <string name="programs_notice_generated">План створено у чернетці. Збережіть, щоб залишити його</string>
     <string name="programs_preview_title">Попередній перегляд плану</string>
     <string name="programs_preview_summary">%1$d дн. · %2$d вправ</string>

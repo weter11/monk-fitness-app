@@ -90,6 +90,31 @@ fun MyProgramsScreen(
                 }
             }
 
+            Spacer(modifier = Modifier.height(8.dp))
+
+            val generatedName = stringResource(R.string.programs_generate_name)
+            Button(
+                onClick = {
+                    runAction(scope) {
+                        controller.generatePlanForMe(generatedName)?.let { programId ->
+                            onOpenProgram(programId)
+                        }
+                    }
+                },
+                enabled = !state.generating,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text(
+                    text = stringResource(
+                        if (state.generating) {
+                            R.string.programs_generate_busy
+                        } else {
+                            R.string.programs_generate_action
+                        }
+                    )
+                )
+            }
+
             Spacer(modifier = Modifier.height(16.dp))
 
             if (state.isEmpty && !state.loading) {

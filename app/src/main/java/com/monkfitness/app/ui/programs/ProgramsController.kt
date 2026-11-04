@@ -48,10 +48,12 @@ import com.monkfitness.app.domain.usecase.ProgramSaveService
 import com.monkfitness.app.domain.usecase.ProgramScheduler
 import com.monkfitness.app.domain.usecase.ProgramStartResult
 import com.monkfitness.app.domain.usecase.ProgramStartService
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.withContext
 import java.time.LocalDate
 import java.time.ZoneId
 
@@ -963,6 +965,76 @@ class ProgramsController(
                 false
             }
         }
+    }
+
+    /**
+     * The one-tap **Generate**: a plan from the defaults, named, saved, and handed back as the Program's id —
+     * or `null` with the reason on the state. It starts and selects nothing.
+     */
+    suspend fun generatePlanForMe(nameLabel: String): String? {
+        // The guard is the whole double-tap protection: a second tap while the first pass runs must not
+        // create a second Program, and the flag is set before the first suspension point.
+        if (mutableState.value.generating) return null
+        mutableState.update { it.copy(generating = true, notice = null) }
+        return try {
+            withContext(Dispatchers.IO) {
+                val draft = editor.editor(editor.newDraft(generatedPlanName(nameLabel)))
+                    .withMode(ProgramMode.GENERATED)
+                    .draft
+                val result = try {
+                    generation.generate(draft, availableEquipment())
+                } catch (failure: Throwable) {
+                    ProgramGenerationResult.Failed(failure)
+                }
+                when (result) {
+                    is ProgramGenerationResult.Generated ->
+                        when (val saved = saver.save(result.edit.draft, today())) {
+                            is ProgramEditorResult.Success -> {
+                                load()
+                                saved.value.program.programId.value
+                            }
+
+                            is ProgramEditorResult.Rejected -> {
+                                mutableState.update { it.copy(notice = noticeFor(saved.rejection)) }
+                                null
+                            }
+
+                            is ProgramEditorResult.Failed -> {
+                                mutableState.update { it.copy(notice = ProgramNotice.GENERATE_FAILED) }
+                                null
+                            }
+                        }
+
+                    is ProgramGenerationResult.Refused -> {
+                        mutableState.update { it.copy(notice = generationNoticeFor(result.reason)) }
+                        null
+                    }
+
+                    is ProgramGenerationResult.Failed -> {
+                        mutableState.update { it.copy(notice = ProgramNotice.GENERATE_FAILED) }
+                        null
+                    }
+                }
+            }
+        } finally {
+            mutableState.update { it.copy(generating = false) }
+        }
+    }
+
+    /**
+     * The default name for a generated plan: the label and today's date, then the first free ordinal —
+     * a name is the user's handle on a Program, so two plans generated on one day must not share one.
+     */
+    private suspend fun generatedPlanName(label: String): String {
+        val base = "$label ${today()}"
+        val taken = when (val programs = lifecycle.myPrograms()) {
+            is ProgramOperationResult.Success -> programs.value.rows.map { row -> row.name }.toSet()
+            else -> emptySet()
+        }
+        if (base !in taken) return base
+        var ordinal = 2
+        while ("$base $ordinal" in taken) ordinal += 1
+        return "$base $ordinal"
     }
 
     /**

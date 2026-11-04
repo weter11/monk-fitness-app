@@ -14,6 +14,8 @@ import com.monkfitness.app.domain.program.StandardProgram
 import com.monkfitness.app.domain.program.transfer.ProgramTransferFormat
 import com.monkfitness.app.domain.progress.ProgressScope
 import java.time.LocalDate
+import kotlinx.coroutines.async
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.runBlocking
 import org.junit.After
 import org.junit.Assert.assertEquals
@@ -936,6 +938,84 @@ class ProgramsControllerTest {
 
         assertEquals(ProgramNotice.PROGRAM_NOT_FOUND, rig.state.notice)
         assertTrue("and the platform was never asked to share anything", rig.shares.isEmpty())
+    }
+
+    @Test
+    fun oneTapSavesANamedPlanWithRealWorkAndLeavesNoDraft() = runBlocking {
+        val programId = rig.controller.generatePlanForMe("Generated plan")
+
+        assertNotNull("the tap produced the Program the screen opens", programId)
+        val stored = rig.storedPrograms().single()
+        assertEquals(programId, stored.programId.value)
+        assertTrue(
+            "the plan is named from the label the screen handed over",
+            stored.name.startsWith("Generated plan")
+        )
+        assertEquals(
+            "and starts today, read from the composition root's clock",
+            rig.clock.instant.atZone(rig.zone).toLocalDate(),
+            stored.plannedStartDate
+        )
+        val revision = rig.transfer.currentRevision(stored.programId)!!
+        assertEquals(ProgramMode.GENERATED, revision.mode)
+        assertTrue(
+            "the saved plan holds real work, not an empty plan",
+            revision.days.any { day -> day.exercises.isNotEmpty() }
+        )
+        assertNull("nothing is left as a draft", rig.state.draft)
+        assertNull("and nothing was selected for the user", rig.selectedProgramId())
+        assertFalse(rig.state.generating)
+        assertNull("a completed tap reports no failure", rig.state.notice)
+    }
+
+    @Test
+    fun aSecondTapWhileTheFirstRunsCreatesNoSecondProgram() = runBlocking {
+        val (first, second) = coroutineScope {
+            val a = async { rig.controller.generatePlanForMe("Generated plan") }
+            val b = async { rig.controller.generatePlanForMe("Generated plan") }
+            a.await() to b.await()
+        }
+
+        assertNotNull("the first tap saved a plan", first)
+        assertNull("the second tap ran into the pass already under way", second)
+        assertEquals("exactly one Program was created", 1, rig.storedPrograms().size)
+    }
+
+    @Test
+    fun aRefusedGenerationCarriesItsCauseAndSavesNothing() = runBlocking {
+        // The shipped classification serves every focus, so the refusal is reached the way the existing
+        // refusal case reaches it: the rig states PULL only for the catalogue's bar and band exercises, and
+        // with nothing declared nothing a Balanced plan may train can be served.
+        val needsEquipment = rig.barOrBandExercises()
+        rig.withFocusSource { exerciseId ->
+            if (exerciseId in needsEquipment) setOf(Focus.PULL) else null
+        }
+
+        assertNull(
+            "a refused pass hands the screen no Program",
+            rig.controller.generatePlanForMe("Generated plan")
+        )
+
+        assertEquals(
+            "the equipment refusal is the sentence the user reads, not a silent failure",
+            ProgramNotice.GENERATION_REFUSED,
+            rig.state.notice
+        )
+        assertTrue("and nothing was saved", rig.storedPrograms().isEmpty())
+        assertNull("no draft was left behind either", rig.state.draft)
+        assertFalse(rig.state.generating)
+    }
+
+    @Test
+    fun eachGeneratedPlanGetsItsOwnName() = runBlocking {
+        rig.controller.generatePlanForMe("Generated plan")
+        rig.controller.generatePlanForMe("Generated plan")
+        rig.clock.instant = rig.clock.instant.plusSeconds(86_400)
+        rig.controller.generatePlanForMe("Generated plan")
+
+        val names = rig.storedPrograms().map { program -> program.name }
+        assertEquals("three taps, three Programs", 3, names.size)
+        assertEquals("and three names the user can tell apart", 3, names.toSet().size)
     }
 
     private fun assertArrayEquals(message: String, expected: ByteArray, actual: ByteArray) {

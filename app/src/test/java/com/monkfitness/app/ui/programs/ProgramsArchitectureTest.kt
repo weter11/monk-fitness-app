@@ -232,8 +232,21 @@ class ProgramsArchitectureTest {
     fun thePlatformObjectsAppearOnlyAtTheTwoCallSitesAndNeverInTheStateHolder() {
         assertNoToken(
             stateHolderSources,
-            listOf("Intent", "Uri", "contentResolver", "FileProvider", "ContentResolver", "Context"),
+            listOf("Intent", "Uri", "contentResolver", "FileProvider", "ContentResolver"),
             "§11 and §12 keep the Android boundary out of the layer that decides what is shared"
+        )
+        // The Android `Context` type by whole identifier: a plain substring test also rejects the
+        // coroutines `withContext` the state holder hops to a dispatcher with, which opens no boundary.
+        val androidContext = stateHolderSources.flatMap { file ->
+            Regex("""\bContext\b""")
+                .findAll(code(file.readText()))
+                .map { "${file.name}: Context" }
+                .toList()
+        }
+        assertEquals(
+            "the state holder holds no `Context` — the Android type, not the coroutines call",
+            emptyList<String>(),
+            androidContext
         )
 
         val offenders = mainSourceRoot.walkTopDown()
