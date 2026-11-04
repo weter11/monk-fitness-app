@@ -1036,6 +1036,7 @@
     <string name="programs_session_result_completed">Workout complete</string>
     <string name="programs_session_result_cancelled">Workout cancelled</string>
     <string name="programs_session_exercise_details">Exercise details</string>
+    <string name="programs_session_show_demo">Show larger demo</string>
     <string name="programs_session_notice_title">Notice</string>
     <string name="programs_session_slot_unavailable">This workout cannot be started from the plan it belongs to.</string>
     <string name="programs_session_already_in_progress">This workout is already in progress, but the stored attempt could not be read.</string>

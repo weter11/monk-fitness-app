@@ -1036,6 +1036,7 @@
     <string name="programs_session_result_completed">Тренировката е завършена</string>
     <string name="programs_session_result_cancelled">Тренировката е отменена</string>
     <string name="programs_session_exercise_details">Подробности за упражнението</string>
+    <string name="programs_session_show_demo">Покажи по-голяма демонстрация</string>
     <string name="programs_session_notice_title">Известие</string>
     <string name="programs_session_slot_unavailable">Тази тренировка не може да бъде започната от плана, към който принадлежи.</string>
     <string name="programs_session_already_in_progress">Тази тренировка вече е в ход, но запазеният опит не можа да бъде прочетен.</string>

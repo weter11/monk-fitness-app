@@ -1036,6 +1036,7 @@
     <string name="programs_session_result_completed">Entrenamiento completado</string>
     <string name="programs_session_result_cancelled">Entrenamiento cancelado</string>
     <string name="programs_session_exercise_details">Detalles del ejercicio</string>
+    <string name="programs_session_show_demo">Ver demostración más grande</string>
     <string name="programs_session_notice_title">Aviso</string>
     <string name="programs_session_slot_unavailable">Este entrenamiento no se puede iniciar desde el plan al que pertenece.</string>
     <string name="programs_session_already_in_progress">Este entrenamiento ya está en curso, pero no se ha podido leer el intento guardado.</string>

@@ -1034,6 +1034,7 @@
     <string name="programs_session_result_completed">Тренування виконано</string>
     <string name="programs_session_result_cancelled">Тренування скасовано</string>
     <string name="programs_session_exercise_details">Опис вправи</string>
+    <string name="programs_session_show_demo">Показати демонстрацію більшою</string>
     <string name="programs_session_notice_title">Повідомлення</string>
     <string name="programs_session_slot_unavailable">Це тренування не можна почати за планом, до якого воно належить.</string>
     <string name="programs_session_already_in_progress">Це тренування вже виконується, але збережену спробу не вдалося прочитати.</string>
