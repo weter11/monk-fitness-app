@@ -763,6 +763,10 @@
     <string name="programs_create_manual_desc">Organize você mesmo os dias e os exercícios.</string>
     <string name="programs_create_generated">Montar para mim</string>
     <string name="programs_create_generated_desc">Comece de uma estrutura planejada que você ainda pode editar.</string>
+    <string name="programs_generate_action">Gerar um plano para mim</string>
+    <string name="programs_generate_name">Plano gerado</string>
+    <string name="programs_generate_busy">Gerando seu plano…</string>
+    <string name="programs_generate_failed">Não foi possível gerar o plano e nada foi salvo</string>
     <string name="programs_generation_unavailable">O planejamento automático ainda não está disponível</string>
     <string name="programs_notice_generated">Um plano foi gerado no rascunho. Salve para mantê-lo</string>
     <string name="programs_preview_title">Pré-visualização do plano</string>

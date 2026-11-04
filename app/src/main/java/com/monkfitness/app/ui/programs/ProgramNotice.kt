@@ -107,6 +107,9 @@ sealed interface ProgramNotice {
          */
         val GENERATION_FAILED: ProgramNotice = Failed(R.string.programs_generation_failed)
 
+        /** The one-tap Generate failed — the pass threw or its save did. Nothing was written. */
+        val GENERATE_FAILED: ProgramNotice = Failed(R.string.programs_generate_failed)
+
         /**
          * The Program **started**, and its target schedule was not planned.
          *

@@ -151,10 +151,12 @@ class GenerationPreviewArchitectureTest {
             "GenerationRequest(" in text
         )
         assertEquals(
-            "the controller reaches generation in exactly two places and nowhere else: the " +
+            "the controller reaches generation in exactly three places and nowhere else: the " +
                 "Generate/Regenerate entry (Regenerate delegates to it — the domain's own recorded " +
-                "decision that the two are one reconciliation) and the Preview entry",
-            2,
+                "decision that the two are one reconciliation), the Preview entry, and the one-tap " +
+                "entry that names and saves what it generates — a third call on the *same* service, " +
+                "never a second generation path",
+            3,
             Regex("""generation\.(generate|preview)\(""").findAll(text).count()
         )
     }

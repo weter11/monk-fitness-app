@@ -761,6 +761,10 @@
     <string name="programs_create_manual_desc">Расставьте дни и упражнения самостоятельно.</string>
     <string name="programs_create_generated">Соберите за меня</string>
     <string name="programs_create_generated_desc">Начните с готовой структуры, которую можно изменить.</string>
+    <string name="programs_generate_action">Создайте план за меня</string>
+    <string name="programs_generate_name">Созданный план</string>
+    <string name="programs_generate_busy">План создаётся…</string>
+    <string name="programs_generate_failed">Не удалось создать план, ничего не сохранено</string>
     <string name="programs_notice_generated">План создан в черновике. Сохраните, чтобы оставить его</string>
     <string name="programs_preview_title">Предпросмотр плана</string>
     <string name="programs_preview_summary">%1$d дн. · %2$d упражнений</string>

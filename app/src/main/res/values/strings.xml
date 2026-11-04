@@ -763,6 +763,10 @@
     <string name="programs_create_manual_desc">Arrange the days and the exercises yourself.</string>
     <string name="programs_create_generated">Build for me</string>
     <string name="programs_create_generated_desc">Start from a planned structure you can still edit.</string>
+    <string name="programs_generate_action">Generate a plan for me</string>
+    <string name="programs_generate_name">Generated plan</string>
+    <string name="programs_generate_busy">Generating your plan…</string>
+    <string name="programs_generate_failed">The plan could not be generated and nothing was saved</string>
     <string name="programs_notice_generated">A plan was generated into the draft. Save to keep it</string>
     <string name="programs_preview_title">Plan preview</string>
     <string name="programs_preview_summary">%1$d days · %2$d exercises</string>

@@ -281,6 +281,8 @@ data class ProgramImportReviewUi(
  */
 data class ProgramsUiState(
     val loading: Boolean = false,
+    /** Whether the one-tap Generate is running. The action is disabled while it is. */
+    val generating: Boolean = false,
     val rows: List<ProgramRowUi> = emptyList(),
     val selectedProgramId: String? = null,
     val hasNextProgram: Boolean = false,
