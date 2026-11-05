@@ -782,6 +782,9 @@
     <string name="programs_preview_level_pinned">Pinned</string>
     <string name="programs_preview_level_override">Added by you</string>
     <string name="programs_preview_limitations">What could not be planned</string>
+    <string name="programs_preview_session_type">Session type: %1$s</string>
+    <string name="programs_preview_reason_thin_selection">%1$s has few exercises in this selection, so some will repeat</string>
+    <string name="programs_preview_reason_preference_ignored">%1$s is among your preferred exercises but outside the selected session types, so this plan ignores it</string>
     <string name="programs_preview_reason_no_exercise">%1$s cannot be planned: no exercise in your selection trains it</string>
     <string name="programs_preview_reason_equipment">%1$s cannot be planned: every exercise that trains it needs equipment you did not choose</string>
     <string name="programs_preview_reason_dimension">%1$s cannot be planned: it is only available in a prescription form this app does not generate yet</string>
@@ -922,6 +925,14 @@
     <string name="programs_change_duration">duration</string>
     <string name="programs_change_schedule">schedule</string>
     <string name="programs_editor_goals_focus">Goals and focus</string>
+    <string name="programs_editor_session_type">Session type</string>
+    <string name="programs_session_type_strength">Strength</string>
+    <string name="programs_session_type_mobility">Mobility &amp; stretching</string>
+    <string name="programs_session_type_posture">Posture</string>
+    <string name="programs_session_type_hyperlordosis">Hyperlordosis</string>
+    <string name="programs_session_type_mixed">Mixed — every exercise is used</string>
+    <string name="programs_session_type_mixed_label">Mixed</string>
+    <string name="programs_session_type_help">Only exercises of the selected types are used. Your goals, schedule and every other setting are generated as usual.</string>
     <string name="programs_editor_goal_label">Goal: %1$s</string>
     <string name="programs_goal_balanced">Balanced</string>
     <string name="programs_goal_focused">Focused</string>
@@ -945,6 +956,7 @@
     <string name="programs_focus_posture">Posture</string>
     <string name="programs_focus_conditioning">Conditioning</string>
     <string name="programs_change_focus">goals and focus</string>
+    <string name="programs_change_session_types">session type</string>
     <string name="programs_change_days">days</string>
     <string name="programs_change_exercises">exercises</string>
     <string name="programs_change_prescriptions">prescriptions</string>

@@ -164,6 +164,13 @@ class ProgramSchemaTest {
     private fun restStatements(): List<String> =
         recordStatements(AppDatabase.MIGRATION_18_19)
 
+    /**
+     * The one exact statement the **session-type selection** step (19 -> 20) executes: the nullable
+     * column, with no default and no backfill of the revisions a device already holds.
+     */
+    private fun sessionTypesStatements(): List<String> =
+        recordStatements(AppDatabase.MIGRATION_19_20)
+
     private fun allAdditiveStatements(): List<String> =
         additiveStatements() + focusStatements() + windowStatements()
 
@@ -436,8 +443,14 @@ class ProgramSchemaTest {
         )
         assertEquals(19, AppDatabase.MIGRATION_18_19.endVersion)
         assertEquals(
+            "the session-type selection is the additive step after the rest column",
+            19,
+            AppDatabase.MIGRATION_19_20.startVersion
+        )
+        assertEquals(20, AppDatabase.MIGRATION_19_20.endVersion)
+        assertEquals(
             "and the declared version is where the chain ends",
-            AppDatabase.MIGRATION_18_19.endVersion,
+            AppDatabase.MIGRATION_19_20.endVersion,
             currentVersion()
         )
     }
@@ -507,6 +520,44 @@ class ProgramSchemaTest {
                 Regex("\\b(INSERT|UPDATE|CREATE TABLE|DROP)\\b", RegexOption.IGNORE_CASE)
                     .containsMatchIn(statement)
             }
+        )
+    }
+
+    /**
+     * The session-type step adds exactly one nullable column on the revision, with **no `DEFAULT`**.
+     *
+     * `null` is the whole claim: it is what every revision stored before this step holds, and it means
+     * **Mixed** — the whole catalogue, which is exactly the pool those revisions were planned from. A
+     * default would state a selection nobody chose, and a backfill would rewrite rows the device holds.
+     */
+    @Test
+    fun theSessionTypeMigrationAddsOneNullableColumnAndNoDefault() {
+        val statements = sessionTypesStatements()
+
+        assertEquals(
+            "19 -> 20 executes exactly one statement: the column on the immutable revision",
+            1,
+            statements.size
+        )
+        assertEquals(
+            "ALTER TABLE `program_revision` ADD COLUMN `sessionTypes` TEXT",
+            ProgramSchemaFixture.normalized(statements.single())
+        )
+        assertEquals(
+            "and it is nullable, so Mixed is stored as an absence rather than as a token",
+            listOf(true),
+            ProgramSchemaFixture.columnsAddedBy("MIGRATION_19_20", "program_revision").map { it.nullable }
+        )
+        assertTrue(
+            "no statement writes a row: a backfill would put a selection on every revision already saved",
+            statements.none { statement ->
+                Regex("\\b(INSERT|UPDATE|DELETE|DROP|RENAME)\\b", RegexOption.IGNORE_CASE)
+                    .containsMatchIn(statement)
+            }
+        )
+        assertTrue(
+            "and no default is stated, because a selection the user never made is what a default would write",
+            statements.none { statement -> statement.contains("DEFAULT", ignoreCase = true) }
         )
     }
 
@@ -1471,11 +1522,13 @@ class ProgramSchemaTest {
         upgraded.migrate(AppDatabase.MIGRATION_17_18)
         // The per-set rest column, so the chain lands on the declared version.
         upgraded.migrate(AppDatabase.MIGRATION_18_19)
+        // The session-type selection, so the chain lands on the declared version.
+        upgraded.migrate(AppDatabase.MIGRATION_19_20)
 
         assertEquals(
             "the revision table the chain leaves behind is the one the contract describes: the " +
-                "version-8 columns in declaration order, then every appended one, §9's exercise " +
-                "preference last",
+                "version-8 columns in declaration order, then every appended one, the session-type " +
+                "selection last",
             ProgramSchemaFixture.normalized(
                 ProgramSchemaFixture.expectedCurrentTableDdl("program_revision")
             ).replace("IF NOT EXISTS ", ""),
@@ -2039,7 +2092,8 @@ class ProgramSchemaTest {
         // list is the set of steps being audited, not a sample of them.
         val added = ProgramSchemaFixture.normalized(
             (allAdditiveStatements() + targetOccurrenceStatements() + preferenceStatements() +
-                historicalFocusStatements() + restStatements()).joinToString(" ")
+                historicalFocusStatements() + restStatements() + sessionTypesStatements())
+                .joinToString(" ")
         )
         // The two target-occurrence tables are created outright rather than appended to, so their columns
         // are checked against their own `CREATE TABLE` — what [statementFor] returns for them. No column

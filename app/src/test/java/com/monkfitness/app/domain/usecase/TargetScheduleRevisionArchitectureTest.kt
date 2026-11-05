@@ -94,7 +94,7 @@ class TargetScheduleRevisionArchitectureTest {
                 "preference among them, and no target field beside either",
             listOf(
                 "programId", "baseRevisionId", "name", "description", "mode", "duration",
-                "schedule", "days", "focus", "preferredExercises"
+                "schedule", "days", "focus", "preferredExercises", "sessionTypes"
             ),
             draftFields
         )

@@ -30,11 +30,12 @@ class ProgramEditorDraftTest {
             .toSet()
 
         assertEquals(
-            "the working facts of a draft, with the Goals & Focus configuration and the user's " +
-                "exercise preference among them (§6, §8, §9) and no revision identity anywhere",
+            "the working facts of a draft, with the Goals & Focus configuration, the user's " +
+                "exercise preference and the session-type selection among them (§6, §8, §9) and no " +
+                "revision identity anywhere",
             setOf(
                 "programId", "baseRevisionId", "name", "description", "mode", "duration",
-                "schedule", "days", "focus", "preferredExercises"
+                "schedule", "days", "focus", "preferredExercises", "sessionTypes"
             ),
             draftFields
         )

@@ -783,6 +783,9 @@
     <string name="programs_preview_level_pinned">Закрепено</string>
     <string name="programs_preview_level_override">Добавено от вас</string>
     <string name="programs_preview_limitations">Какво не можа да бъде планирано</string>
+    <string name="programs_preview_session_type">Тип сесия: %1$s</string>
+    <string name="programs_preview_reason_thin_selection">%1$s има малко упражнения в тази селекция, затова някои ще се повтарят</string>
+    <string name="programs_preview_reason_preference_ignored">%1$s е сред предпочитаните ви упражнения, но е извън избраните типове сесии, затова този план го пренебрегва</string>
     <string name="programs_preview_reason_no_exercise">%1$s не може да бъде планиран: нито едно упражнение от избора ви не го тренира</string>
     <string name="programs_preview_reason_equipment">%1$s не може да бъде планиран: всяко упражнение, което го тренира, изисква оборудване, което не сте избрали</string>
     <string name="programs_preview_reason_dimension">%1$s не може да бъде планиран: достъпен е само под форма, която приложението все още не създава</string>
@@ -922,6 +925,14 @@
     <string name="programs_change_duration">продължителност</string>
     <string name="programs_change_schedule">график</string>
     <string name="programs_editor_goals_focus">Цели и фокуси</string>
+    <string name="programs_editor_session_type">Тип сесия</string>
+    <string name="programs_session_type_strength">Сила</string>
+    <string name="programs_session_type_mobility">Мобилност и разтягане</string>
+    <string name="programs_session_type_posture">Поза</string>
+    <string name="programs_session_type_hyperlordosis">Хиперлордоза</string>
+    <string name="programs_session_type_mixed">Смесен — използват се всички упражнения</string>
+    <string name="programs_session_type_mixed_label">Смесен</string>
+    <string name="programs_session_type_help">Използват се само упражнения от избраните типове. Целите, графикът и всички други настройки се генерират както обикновено.</string>
     <string name="programs_editor_goal_label">Цел: %1$s</string>
     <string name="programs_goal_balanced">Балансирана</string>
     <string name="programs_goal_focused">Точечна</string>
@@ -945,6 +956,7 @@
     <string name="programs_focus_posture">Стойка</string>
     <string name="programs_focus_conditioning">Издръжливост</string>
     <string name="programs_change_focus">цели и фокус</string>
+    <string name="programs_change_session_types">тип сесия</string>
     <string name="programs_change_days">дни</string>
     <string name="programs_change_exercises">упражнения</string>
     <string name="programs_change_prescriptions">предписания</string>

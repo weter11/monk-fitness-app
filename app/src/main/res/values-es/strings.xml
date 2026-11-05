@@ -783,6 +783,9 @@
     <string name="programs_preview_level_pinned">Fijado</string>
     <string name="programs_preview_level_override">Añadido por ti</string>
     <string name="programs_preview_limitations">Qué no se ha podido planificar</string>
+    <string name="programs_preview_session_type">Tipo de sesión: %1$s</string>
+    <string name="programs_preview_reason_thin_selection">%1$s tiene pocos ejercicios en esta selección, así que algunos se repetirán</string>
+    <string name="programs_preview_reason_preference_ignored">%1$s está entre tus ejercicios preferidos pero fuera de los tipos de sesión seleccionados, así que este plan lo ignora</string>
     <string name="programs_preview_reason_no_exercise">%1$s no se puede planificar: ningún ejercicio de tu selección lo entrena</string>
     <string name="programs_preview_reason_equipment">%1$s no se puede planificar: todos los ejercicios que lo entrenan necesitan un equipo que no has elegido</string>
     <string name="programs_preview_reason_dimension">%1$s no se puede planificar: solo está disponible en una forma de prescripción que la app aún no genera</string>
@@ -922,6 +925,14 @@
     <string name="programs_change_duration">duración</string>
     <string name="programs_change_schedule">calendario</string>
     <string name="programs_editor_goals_focus">Objetivos y enfoques</string>
+    <string name="programs_editor_session_type">Tipo de sesión</string>
+    <string name="programs_session_type_strength">Fuerza</string>
+    <string name="programs_session_type_mobility">Movilidad y estiramientos</string>
+    <string name="programs_session_type_posture">Postura</string>
+    <string name="programs_session_type_hyperlordosis">Hiperlordosis</string>
+    <string name="programs_session_type_mixed">Mixto — se usan todos los ejercicios</string>
+    <string name="programs_session_type_mixed_label">Mixto</string>
+    <string name="programs_session_type_help">Solo se usan ejercicios de los tipos seleccionados. Tus objetivos, tu horario y todos los demás ajustes se generan como siempre.</string>
     <string name="programs_editor_goal_label">Objetivo: %1$s</string>
     <string name="programs_goal_balanced">Equilibrado</string>
     <string name="programs_goal_focused">Enfocado</string>
@@ -945,6 +956,7 @@
     <string name="programs_focus_posture">Postura</string>
     <string name="programs_focus_conditioning">Condicionamiento</string>
     <string name="programs_change_focus">objetivos y enfoque</string>
+    <string name="programs_change_session_types">tipo de sesión</string>
     <string name="programs_change_days">días</string>
     <string name="programs_change_exercises">ejercicios</string>
     <string name="programs_change_prescriptions">prescripciones</string>

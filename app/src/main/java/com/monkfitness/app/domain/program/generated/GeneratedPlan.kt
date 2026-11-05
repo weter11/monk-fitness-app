@@ -3,6 +3,7 @@ package com.monkfitness.app.domain.program.generated
 import com.monkfitness.app.domain.prescription.Prescription
 import com.monkfitness.app.domain.program.Focus
 import com.monkfitness.app.domain.program.FocusPlan
+import com.monkfitness.app.domain.program.SessionType
 
 /**
  * What one planned slot is **for**: one primary focus and `0–2` secondary focuses.
@@ -118,7 +119,9 @@ enum class FocusUnusableReason {
  * whose selection makes a focus unplannable has not failed — it has produced a plan that does not
  * contain that focus, and the honest output says so instead of filling the gap with an exercise the
  * equipment forbids or a prescription the domain cannot state. Silently violating a hard constraint or
- * silently substituting a focus are exactly what this type exists to make impossible.
+ * silently substituting a focus are exactly what this type exists to make impossible. The session-type
+ * lines report facts about the selection rather than a decision the planner made, but they are
+ * limitations of the same pass and belong in its one list.
  */
 sealed interface GenerationLimitation {
 
@@ -141,6 +144,32 @@ sealed interface GenerationLimitation {
                 "${focus.name} cannot be planned: every exercise that trains it is prescribed in a " +
                     "dimension this stage does not generate"
         }
+    }
+
+    /**
+     * A selected session type whose pool is thinner than the plan's own day count, so its exercises will
+     * come round again. Reported rather than presented as variety the selection cannot deliver.
+     */
+    data class ThinSelection(
+        val sessionType: SessionType,
+        val available: Int,
+        val days: Int
+    ) : GenerationLimitation {
+
+        override val message: String =
+            "${sessionType.name} has $available exercises in this selection for a plan of $days days, " +
+                "so some will repeat"
+    }
+
+    /**
+     * A preferred exercise that is outside the selected session types, so this plan does not use it. Said
+     * out loud rather than silently dropped: the user stated the preference and the selection overrides it.
+     */
+    data class UnusedPreference(val exerciseId: String) : GenerationLimitation {
+
+        override val message: String =
+            "preferred exercise '$exerciseId' is outside the selected session types, so this plan " +
+                "ignores it"
     }
 
     /** No focus of the configuration can be planned, so the plan holds no slot at all. */

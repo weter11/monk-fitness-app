@@ -186,7 +186,8 @@ class ProgramEditorService(
             schedule = revision.schedule,
             days = revision.days,
             focus = revision.focus,
-            preferredExercises = revision.preferredExercises
+            preferredExercises = revision.preferredExercises,
+            sessionTypes = revision.sessionTypes
         )
     }.rejecting()
 
@@ -441,7 +442,8 @@ class ProgramEditorService(
             },
             createdAt = at,
             focus = plan.focus,
-            preferredExercises = plan.preferredExercises
+            preferredExercises = plan.preferredExercises,
+            sessionTypes = plan.sessionTypes
         )
         require(revision.structure == plan.structure) {
             "saving a draft re-identifies its plan and changes nothing else: the minted revision and " +
@@ -491,7 +493,8 @@ class ProgramEditorService(
             schedule = revision.schedule,
             days = revision.days,
             focus = revision.focus,
-            preferredExercises = revision.preferredExercises
+            preferredExercises = revision.preferredExercises,
+            sessionTypes = revision.sessionTypes
         )
 
     /** The stored Program [programId] names, or a [EditorProgramMissing] refusal. */

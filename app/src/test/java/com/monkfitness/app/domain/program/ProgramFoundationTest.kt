@@ -99,11 +99,11 @@ class ProgramFoundationTest {
 
         assertEquals(
             "the revision's own facts: identity, the Program it belongs to, its ordinal, the " +
-                "configuration (mode, duration, schedule, §6's goals/focus and §9's user preference) " +
-                "and its plan",
+                "configuration (mode, duration, schedule, §6's goals/focus and §9's user preference, " +
+                "and the session-type selection) and its plan",
             setOf(
                 "revisionId", "programId", "revisionNumber", "mode", "duration",
-                "schedule", "days", "createdAt", "focus", "preferredExercises"
+                "schedule", "days", "createdAt", "focus", "preferredExercises", "sessionTypes"
             ),
             revisionFields
         )
@@ -462,7 +462,7 @@ class ProgramFoundationTest {
         // Guards the reflection helper: if the filter stopped matching, the field-set assertions
         // above would pass vacuously against an empty set.
         assertEquals(11, declaredFieldNames(Program::class.java).size)
-        assertEquals(10, declaredFieldNames(ProgramRevision::class.java).size)
-        assertEquals(10, declaredFieldNames(ProgramEditorDraft::class.java).size)
+        assertEquals(11, declaredFieldNames(ProgramRevision::class.java).size)
+        assertEquals(11, declaredFieldNames(ProgramEditorDraft::class.java).size)
     }
 }

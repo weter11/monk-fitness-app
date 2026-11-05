@@ -267,6 +267,7 @@ internal class CompositionRootRig(
         // The per-set rest column: the container's suites write confirmed sets, so the rig has to be
         // the schema the app opens.
         database.migrate(AppDatabase.MIGRATION_18_19)
+        database.migrate(AppDatabase.MIGRATION_19_20)
     }
 
     val database = SqliteAppDatabase(engine)

@@ -43,6 +43,11 @@ data class ProgramGenerationPreviewUi(
     val removedDayCount: Int,
     val conflicts: List<ProgramGenerationPreviewConflictUi>,
     /**
+     * The session types this plan was planned from, as labels — empty for **Mixed**, which is a state and
+     * not a missing value. Read from the draft the pass produced rather than from a second argument.
+     */
+    val sessionTypeLabelRes: List<Int> = emptyList(),
+    /**
      * The reconciliation's detail list, in the reconciliation's own order: the *same* changes the four
      * counts summarise, so summary and detail can never disagree, and a day that disappeared reads as a
      * day rather than as an exercise the user lost.
@@ -106,23 +111,29 @@ data class ProgramGenerationPreviewElementUi(
 }
 
 /**
- * One thing the planner could not do, as a sentence the user can read.
+ * One thing the planner could not do, or a fact about the selection that costs the plan something, as a
+ * sentence the user can read.
  *
  * The domain's `GenerationLimitation.message` is deliberately **not** carried here: it is
  * developer-facing English built from the enum's own name (`MOBILITY cannot be planned: …`). What reaches
- * a screen is a *pair of resources* — the focus's label and the reason's own sentence — mapped in one
- * place so the phrasing lives in `strings.xml` where a translator can reach it.
+ * a screen is a *resource pair* — the label the sentence names and the reason's own sentence — mapped in
+ * one place so the phrasing lives in `strings.xml` where a translator can reach it.
  *
- * [focusLabelRes] is `0` for the limitation that names no single focus.
+ * [labelRes] is `0` for a sentence that names no label. [argumentRes] / [argumentId] carry the argument of
+ * the one sentence whose subject is an exercise rather than a label of this feature: its catalogue name when
+ * the catalogue has one, or the raw id when it does not — the same fallback a conflict line uses, so an
+ * exercise the app cannot name is still addressable.
  */
 data class ProgramGenerationLimitationUi(
-    val focusLabelRes: Int,
-    val reasonRes: Int
+    val labelRes: Int,
+    val reasonRes: Int,
+    val argumentRes: Int = 0,
+    val argumentId: String? = null
 ) {
 
-    /** Whether this limitation names one focus, which is what decides how the sentence is built. */
-    val namesAFocus: Boolean
-        get() = focusLabelRes != 0
+    /** Whether this limitation names one label, which is what decides how the sentence is built. */
+    val namesALabel: Boolean
+        get() = labelRes != 0
 }
 
 /**
@@ -228,6 +239,17 @@ object ProgramGenerationPreviewRes {
     val LEVEL_OVERRIDE: Int = com.monkfitness.app.R.string.programs_preview_level_override
 
     val LIMITATIONS: Int = com.monkfitness.app.R.string.programs_preview_limitations
+
+    /** The header line naming the session types the plan was planned from (or Mixed). */
+    val SESSION_TYPE: Int = com.monkfitness.app.R.string.programs_preview_session_type
+
+    /** A selected type with fewer usable exercises than the plan has days. */
+    val REASON_THIN_SELECTION: Int =
+        com.monkfitness.app.R.string.programs_preview_reason_thin_selection
+
+    /** A preferred exercise the selection puts outside the pool, so this plan ignores it. */
+    val REASON_PREFERENCE_IGNORED: Int =
+        com.monkfitness.app.R.string.programs_preview_reason_preference_ignored
 
     /**
      * No exercise in the user's selection trains this focus.

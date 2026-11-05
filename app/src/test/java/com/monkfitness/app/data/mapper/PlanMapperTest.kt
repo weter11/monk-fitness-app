@@ -11,6 +11,7 @@ import com.monkfitness.app.domain.program.FocusPlan
 import com.monkfitness.app.domain.program.ProgramDuration
 import com.monkfitness.app.domain.program.ProgramRevision
 import com.monkfitness.app.domain.program.ProgramSchedule
+import com.monkfitness.app.domain.program.SessionType
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertThrows
@@ -36,6 +37,60 @@ class PlanMapperTest {
 
         assertEquals("domain → rows → domain", revision, revisionDomain(rows.revision, rows.days, rows.exercises))
         assertEquals("rows → domain → rows", rows, loaded().toRows())
+    }
+
+    @Test
+    fun aSessionTypeSelectionIsStoredByNameInTheVocabularyOrder() {
+        val selected = revision.copy(
+            sessionTypes = setOf(SessionType.MOBILITY, SessionType.STRENGTH)
+        )
+        val rows = selected.toRows()
+
+        assertEquals(
+            "names, never ordinals, and in the domain's own order so two equivalent selections are one row",
+            "STRENGTH,MOBILITY",
+            rows.revision.sessionTypes
+        )
+        assertEquals(
+            "and the selection comes back as it was stated",
+            setOf(SessionType.STRENGTH, SessionType.MOBILITY),
+            revisionDomain(rows.revision, rows.days, rows.exercises).sessionTypes
+        )
+    }
+
+    @Test
+    fun aRevisionStoredBeforeTheSelectionExistedReadsAsMixed() {
+        val rows = rows()
+        val withoutSelection = rows.revision.copy(sessionTypes = null)
+
+        assertEquals(
+            "null is an absence of a selection, not a missing value: it is the whole catalogue",
+            emptySet<SessionType>(),
+            revisionDomain(withoutSelection, rows.days, rows.exercises).sessionTypes
+        )
+        assertNull(
+            "and a Mixed selection writes no token at all rather than an empty string",
+            rows.revision.sessionTypes
+        )
+    }
+
+    @Test
+    fun anUnknownOrDuplicatedSessionTypeTokenIsRefused() {
+        val rows = rows()
+
+        assertThrows(IllegalArgumentException::class.java) {
+            revisionDomain(rows.revision.copy(sessionTypes = "STRENGTH,PILATES"), rows.days, rows.exercises)
+        }
+        assertThrows(IllegalArgumentException::class.java) {
+            revisionDomain(rows.revision.copy(sessionTypes = "POSTURE,POSTURE"), rows.days, rows.exercises)
+        }
+        assertThrows(
+            "a selection stored out of order is refused, because the canonical form is what makes a " +
+                "re-save byte-identical",
+            IllegalArgumentException::class.java
+        ) {
+            revisionDomain(rows.revision.copy(sessionTypes = "POSTURE,STRENGTH"), rows.days, rows.exercises)
+        }
     }
 
     @Test

@@ -196,7 +196,9 @@ private fun Map<String, String?>.revisionEntity() = ProgramRevisionEntity(
     focusTargets = this["focusTargets"],
     // The preference column, raw for the same reason: token format and ORDER belong to the mapper. A
     // harness that left the column out would report an empty preference for a correctly stored one.
-    preferredExerciseIds = this["preferredExerciseIds"]
+    preferredExerciseIds = this["preferredExerciseIds"],
+    // Raw as well: the selection's token form and order belong to the mapper.
+    sessionTypes = this["sessionTypes"]
 )
 
 private fun Map<String, String?>.dayEntity() = ProgramDayEntity(

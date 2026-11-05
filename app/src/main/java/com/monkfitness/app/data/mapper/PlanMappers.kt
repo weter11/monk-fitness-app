@@ -24,6 +24,7 @@ import com.monkfitness.app.domain.program.ProgramExerciseOrigin
 import com.monkfitness.app.domain.program.ProgramMode
 import com.monkfitness.app.domain.program.ProgramRevision
 import com.monkfitness.app.domain.program.ProgramSchedule
+import com.monkfitness.app.domain.program.SessionType
 
 /**
  * The plan rows ⇄ the revision aggregate: `program_revision` + `program_day` + `program_exercise`.
@@ -103,7 +104,8 @@ internal fun revisionDomain(
         },
         createdAt = storedInstant("program_revision.createdAt", revision.createdAt),
         focus = focusOf(revision),
-        preferredExercises = preferenceOf(revision)
+        preferredExercises = preferenceOf(revision),
+        sessionTypes = sessionTypesOf(revision)
     )
 }
 
@@ -130,7 +132,8 @@ internal fun ProgramRevision.toEntity(): ProgramRevisionEntity = ProgramRevision
     createdAt = storedMilliseconds(createdAt),
     focusGoal = focus.goal.name,
     focusTargets = focus.storedFocusTargets(),
-    preferredExerciseIds = preferredExercises.storedExerciseIds()
+    preferredExerciseIds = preferredExercises.storedExerciseIds(),
+    sessionTypes = sessionTypes.storedSessionTypes()
 )
 
 /** The duration one revision row stores. */
@@ -325,6 +328,50 @@ private fun preferredIdsOf(revision: ProgramRevisionEntity): List<String> {
  */
 private fun ExercisePreference.storedExerciseIds(): String? =
     exerciseIds.takeIf { it.isNotEmpty() }?.joinToString(PREFERENCE_SEPARATOR)
+
+/**
+ * The **session-type selection** one revision row stores.
+ *
+ * `null` is read as the empty set — Mixed, the whole catalogue — which is both what a row written before
+ * this column existed means and what saving a draft with no chip selected writes. It is deliberately not
+ * read as "every type selected": those are different values that would plan the same pool for different
+ * reasons, and only one of them is what the user stated.
+ *
+ * Reading is strict, like the columns above it: a token that is not a [SessionType] member fails here, a
+ * selection that names a type twice fails here, and so does a selection stored out of the canonical order —
+ * the domain's own order is what makes two equivalent selections one row. What the tokens do **not** decide
+ * is whether an exercise belongs to a type: this mapper has no catalogue, and the production table owns
+ * that fact.
+ */
+private fun sessionTypesOf(revision: ProgramRevisionEntity): Set<SessionType> {
+    val stored = revision.sessionTypes ?: return emptySet()
+    val tokens = stored.split(TARGET_SEPARATOR).map { it.trim() }
+    require(tokens.isNotEmpty() && tokens.none { it.isEmpty() }) {
+        "revision '${revision.revisionId}' stores session types that are not a list of tokens: '$stored'"
+    }
+    val types = tokens.map { token ->
+        storedToken(token, SessionType.entries, "program_revision.sessionTypes")
+    }
+    require(types.distinct().size == types.size) {
+        "revision '${revision.revisionId}' names a session type twice: '$stored'"
+    }
+    require(types == SessionType.canonical(types)) {
+        "a stored session-type selection is held in the vocabulary's own order, so two equivalent " +
+            "selections are one row: '${revision.revisionId}' stores $types instead of " +
+            "${SessionType.canonical(types)}"
+    }
+    return types.toSet()
+}
+
+/**
+ * The stored form of a selection: the enum names in canonical order, or `null` for Mixed.
+ *
+ * `null` and not an empty string, for the same reason the two columns above use it: the absence of a
+ * selection is a fact worth storing as itself.
+ */
+private fun Set<SessionType>.storedSessionTypes(): String? =
+    SessionType.canonical(this).takeIf { types -> types.isNotEmpty() }
+        ?.joinToString(TARGET_SEPARATOR) { type -> type.name }
 
 /**
  * The separator between two stored preferred exercise ids.

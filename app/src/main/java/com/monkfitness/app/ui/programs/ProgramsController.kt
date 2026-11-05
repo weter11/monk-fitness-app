@@ -27,6 +27,7 @@ import com.monkfitness.app.domain.program.ProgramSchedulingResult
 import com.monkfitness.app.domain.program.ProgramSaveOutcome
 import com.monkfitness.app.domain.program.ProgramSchedule
 import com.monkfitness.app.domain.program.ProgramStructureAspect
+import com.monkfitness.app.domain.program.SessionType
 import com.monkfitness.app.domain.program.ProgramDuration
 import com.monkfitness.app.domain.program.generated.ChangeKind
 import com.monkfitness.app.domain.program.generated.GeneratedDraftEdit
@@ -637,16 +638,32 @@ class ProgramsController(
             limitations = edit.plan.limitations.map { limitation ->
                 when (limitation) {
                     is GenerationLimitation.UnusableFocus -> ProgramGenerationLimitationUi(
-                        focusLabelRes = focusLabelRes(limitation.focus),
+                        labelRes = focusLabelRes(limitation.focus),
                         reasonRes = focusUnusableReasonRes(limitation.reason)
                     )
 
+                    is GenerationLimitation.ThinSelection -> ProgramGenerationLimitationUi(
+                        labelRes = sessionTypeLabelRes(limitation.sessionType),
+                        reasonRes = ProgramGenerationPreviewRes.REASON_THIN_SELECTION
+                    )
+
+                    is GenerationLimitation.UnusedPreference -> ProgramGenerationLimitationUi(
+                        labelRes = 0,
+                        reasonRes = ProgramGenerationPreviewRes.REASON_PREFERENCE_IGNORED,
+                        argumentRes = labelOf(limitation.exerciseId),
+                        argumentId = limitation.exerciseId
+                    )
+
                     GenerationLimitation.NoPlannableFocus -> ProgramGenerationLimitationUi(
-                        focusLabelRes = 0,
+                        labelRes = 0,
                         reasonRes = ProgramGenerationPreviewRes.REASON_NO_PLANNABLE_FOCUS
                     )
                 }
             },
+            // The selection the pass was planned from, read off the draft it produced: an empty selection is
+            // Mixed, which the header states rather than leaving the line out.
+            sessionTypeLabelRes = SessionType.canonical(edit.draft.sessionTypes)
+                .map { type -> sessionTypeLabelRes(type) },
             preservedCount = edit.reconciliation.preservedCount,
             addedCount = edit.reconciliation.addedCount,
             // A user's own element is never counted as dropped: the reconciler cannot drop one, and
@@ -748,6 +765,27 @@ class ProgramsController(
      */
     fun setDraftPreferredExercises(preference: ExercisePreference) =
         editDraft { draft -> editor.editor(draft).withPreferredExercises(preference).draft }
+
+    /**
+     * The **session type** selection: the kinds of workout the next generation may draw from. The empty set
+     * is Mixed, so clearing every chip is a state and not an error.
+     *
+     * Structural content, like [setDraftFocus]: a save that changes only the selection still creates a
+     * revision, because the stored selection is what the next generation reads.
+     */
+    fun setDraftSessionTypes(sessionTypes: Set<SessionType>) =
+        editDraft { draft -> editor.editor(draft).withSessionTypes(sessionTypes).draft }
+
+    /**
+     * Adds [type] to the selection or removes it.
+     *
+     * The toggle is a pure rule in `GoalsFocusAuthoring`, so the controller does not decide what
+     * "unchecking the last one" means; it hands the answer to [setDraftSessionTypes].
+     */
+    fun toggleDraftSessionType(type: SessionType) =
+        setDraftSessionTypes(toggledSessionType(currentSessionTypes(), type))
+
+    private fun currentSessionTypes(): Set<SessionType> = workingDraft?.sessionTypes.orEmpty()
 
     /**
      * Prefers [exerciseId], as the least preferred entry.
@@ -1356,6 +1394,8 @@ class ProgramsController(
             // it by handing a whole `ExercisePreference` back, so the order displayed is the order the next
             // generation will be planned against.
             preferredExercises = draft.preferredExercises,
+            // The selection the next Generate filters the catalogue with, held as the draft's own value.
+            sessionTypes = draft.sessionTypes,
             isValid = validation.isValid,
             issueRes = validation.issues.map { issue -> issueRes(issue) },
             review = review
@@ -1453,6 +1493,7 @@ class ProgramsController(
         ProgramStructureAspect.SCHEDULE -> R.string.programs_change_schedule
         ProgramStructureAspect.FOCUS -> R.string.programs_change_focus
         ProgramStructureAspect.PREFERRED_EXERCISES -> R.string.programs_change_preferred_exercises
+        ProgramStructureAspect.SESSION_TYPES -> R.string.programs_change_session_types
         ProgramStructureAspect.DAYS -> R.string.programs_change_days
         ProgramStructureAspect.EXERCISES -> R.string.programs_change_exercises
         ProgramStructureAspect.PRESCRIPTIONS -> R.string.programs_change_prescriptions
