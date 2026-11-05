@@ -244,7 +244,17 @@ class ProgramDraftEditor(val draft: ProgramEditorDraft, private val ids: DraftId
                     it.copy(
                         exercises = it.exercises.map { element ->
                             if (element.programExerciseId == programExerciseId) {
-                                element.copy(prescription = prescription)
+                                element.copy(
+                                    prescription = prescription,
+                                    // The user owns this amount now, so regeneration may no longer
+                                    // replace it; a semi-automatic element keeps adapting, and an
+                                    // element the user already owned is unchanged.
+                                    origin = if (element.origin == ProgramExerciseOrigin.GENERATED) {
+                                        ProgramExerciseOrigin.USER_AUTHORED
+                                    } else {
+                                        element.origin
+                                    }
+                                )
                             } else {
                                 element
                             }
