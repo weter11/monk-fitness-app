@@ -584,6 +584,99 @@ class PlanReconcilerTest {
         )
     }
 
+    @Test
+    fun aPinnedElementStandsInForItsFocusInsteadOfBeingPlannedTwice() {
+        val plan = plan()
+        val slot = plan.slots.first()
+        val pinned = element(
+            "pinned-1",
+            "legs-squat",
+            RepPrescription(listOf(7)),
+            pinned = true,
+            focus = slot.elements.first().focus
+        )
+
+        val reconciled = PlanReconciler.reconcile(draftOf(day(pinned)), plan, ids("new"))
+
+        val elements = reconciled.days.first().exercises
+        assertEquals(
+            "the pinned element is the day's element for its focus, so the plan does not plan that " +
+                "focus a second time",
+            slot.elements.size,
+            elements.size
+        )
+        assertEquals("and the element that stands there is the user's", pinned, elements.first())
+        assertEquals(
+            "with the difference reported rather than acted on",
+            listOf(ProgramExerciseId("pinned-1")),
+            reconciled.report.conflicts.map { it.programExerciseId }
+        )
+        assertEquals(
+            "so no focus is planned twice on the day",
+            elements.mapNotNull { it.focus }.distinct().size,
+            elements.mapNotNull { it.focus }.size
+        )
+    }
+
+    @Test
+    fun aPinnedElementOfTheSameExerciseWithADifferentPrescriptionIsOneElement() {
+        val plan = plan()
+        val planned = plan.slots.first().elements.first()
+        val pinned = element(
+            "pinned-1",
+            planned.exerciseId,
+            RepPrescription(listOf(1)),
+            pinned = true,
+            focus = planned.focus
+        )
+
+        val reconciled = PlanReconciler.reconcile(draftOf(day(pinned)), plan, ids("new"))
+
+        val occurrences = reconciled.days.first().exercises.filter { it.exerciseId == planned.exerciseId }
+        assertEquals("the exercise is on the day once, not twice", 1, occurrences.size)
+        assertEquals("prescribed the way the user pinned it", RepPrescription(listOf(1)), occurrences.single().prescription)
+        assertEquals(
+            "and the plan's own amount is what the conflict names",
+            listOf(ProgramExerciseId("pinned-1")),
+            reconciled.report.conflicts.map { it.programExerciseId }
+        )
+    }
+
+    @Test
+    fun aManuallyAddedElementKeepsBehavingAsItDid() {
+        val plan = plan()
+        val manual = element("manual-1", "legs-squat", origin = ProgramExerciseOrigin.USER_AUTHORED)
+
+        val reconciled = PlanReconciler.reconcile(draftOf(day(manual)), plan, ids("new"))
+
+        assertEquals(
+            "an element added by hand states no focus, so it stays extra content beside the plan",
+            plan.slots.first().elements.size + 1,
+            reconciled.days.first().exercises.size
+        )
+        assertEquals(manual, reconciled.days.first().exercises.first())
+    }
+
+    @Test
+    fun anUnpinnedElementIsReplaceableAgain() {
+        val plan = plan()
+        val unpinned = element(
+            "unpinned-1",
+            "legs-squat",
+            RepPrescription(listOf(1)),
+            focus = plan.slots.first().elements.first().focus
+        )
+
+        val reconciled = PlanReconciler.reconcile(draftOf(day(unpinned)), plan, ids("new"))
+
+        assertEquals(
+            "without the pin a generated element is the plan's to replace, focus or no focus",
+            listOf(ProgramExerciseId("unpinned-1")),
+            reconciled.report.ofKind(ChangeKind.DROPPED).map { it.programExerciseId }
+        )
+        assertEquals(plan.slots.first().elements.size, reconciled.days.first().exercises.size)
+    }
+
     /** The plan the generated planner produces for the rig's balanced request. */
     private fun plan(): GeneratedPlan = GeneratedPlanner.plan(GeneratedPlannerRig.request())
 
@@ -607,13 +700,15 @@ class PlanReconcilerTest {
         prescription: com.monkfitness.app.domain.prescription.Prescription =
             RepPrescription(listOf(10)),
         origin: ProgramExerciseOrigin = ProgramExerciseOrigin.GENERATED,
-        pinned: Boolean = false
+        pinned: Boolean = false,
+        focus: Focus? = null
     ): ProgramExercise = ProgramExercise(
         programExerciseId = ProgramExerciseId(id),
         exerciseId = exerciseId,
         prescription = prescription,
         origin = origin,
-        isPinned = pinned
+        isPinned = pinned,
+        focus = focus
     )
 
     /** Identity minted by a test, so a failure message names the identity the reconciler produced. */

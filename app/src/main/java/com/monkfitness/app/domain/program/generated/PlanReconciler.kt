@@ -162,12 +162,14 @@ data class ReconciledPlan(
  *
  * An element the user owns **stands in** for the plan's element it agrees with. Matching is one-to-one
  * against everything the draft holds, on what an element *says* — the exercise and the prescription,
- * together, greedily in plan order — not on identity or position. That is what makes the *compatible*
- * level real rather than a label: when the user's own element is what the plan would have produced
- * anyway, it satisfies that plan element and nothing is added beside it. The alternative — treating the
- * user's element as extra content and adding the plan's identical element next to it — would duplicate
- * the exercise on the day. The user's own content therefore comes **first** on a day, and the
- * generator's content follows in plan order around it.
+ * together, greedily in plan order — not on identity or position. A preserved element that states the
+ * focus it was planned for is matched by that focus before anything else, so it still satisfies the
+ * focus it was planned for when the plan chose a different exercise or amount for it. That is what
+ * makes the *compatible* level real rather than a label: when the user's own element is what the plan
+ * would have produced anyway, it satisfies that plan element and nothing is added beside it. The
+ * alternative — treating the user's element as extra content and adding the plan's identical element
+ * next to it — would duplicate the exercise on the day. The user's own content therefore comes
+ * **first** on a day, and the generator's content follows in plan order around it.
  *
  * Identities here are working handles, not persisted facts: `Save` re-mints every day and element
  * identity into the revision it writes, so nothing here decides what is stored. What it does decide is
@@ -322,13 +324,20 @@ object PlanReconciler {
     /**
      * The plan's elements matched one-to-one against a day's elements.
      *
+     * A preserved element that states the focus it was planned for is matched to that focus's plan
+     * element first, whatever exercise or prescription the new plan chose: the user kept it, and
+     * without this the plan would plan the same focus a second time beside it.
+     *
      * Two occurrences of one exercise are matched as two occurrences rather than collapsed: a match
      * removes the element it consumed, so the second plan element of the same exercise looks for a
      * second element to be satisfied by.
      */
     private fun List<ProgramExercise>.matchAgainst(planned: List<GeneratedElement>): Matches =
         planned.fold(Matches(emptyList(), this)) { state, element ->
-            val index = state.unmatched.indexOfFirst { it.saysTheSameAs(element) }
+            val byFocus = state.unmatched.indexOfFirst {
+                it.isOwnedByTheUser && it.focus != null && it.focus == element.focus
+            }
+            val index = if (byFocus >= 0) byFocus else state.unmatched.indexOfFirst { it.saysTheSameAs(element) }
             if (index < 0) {
                 Matches(state.reused + null, state.unmatched)
             } else {
