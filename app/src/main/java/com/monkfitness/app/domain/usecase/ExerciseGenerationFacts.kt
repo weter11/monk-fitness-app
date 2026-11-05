@@ -2,10 +2,11 @@ package com.monkfitness.app.domain.usecase
 
 import com.monkfitness.app.domain.prescription.PrescriptionDimension
 import com.monkfitness.app.domain.program.Focus
+import com.monkfitness.app.domain.program.SessionType
 
 /**
  * The production facts about an exercise that the catalogue does not hold and a generation request
- * cannot be built without — currently only which focuses it trains.
+ * cannot be built without — which focuses it trains, and which session types it belongs to.
  */
 object ExerciseGenerationFacts {
 
@@ -20,6 +21,19 @@ object ExerciseGenerationFacts {
 
         /** The focuses [exerciseId] trains, or `null` when this source states none. */
         fun focusesOf(exerciseId: String): Set<Focus>?
+    }
+
+    /**
+     * Where an exercise's session-type membership is stated.
+     *
+     * `null` is the same kind of answer [GenerationFocusSource] gives: *"this source makes no claim"*, which
+     * leaves the exercise outside every selection (a type is a filter, so an unstated exercise is never
+     * silently admitted by belonging to everything).
+     */
+    fun interface SessionTypeSource {
+
+        /** The session types [exerciseId] belongs to, or `null` when this source states none. */
+        fun sessionTypesOf(exerciseId: String): Set<SessionType>?
     }
 
     /**

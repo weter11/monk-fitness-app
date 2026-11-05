@@ -780,6 +780,9 @@
     <string name="programs_preview_level_pinned">Закреплено</string>
     <string name="programs_preview_level_override">Добавлено вами</string>
     <string name="programs_preview_limitations">Что не удалось запланировать</string>
+    <string name="programs_preview_session_type">Тип сессии: %1$s</string>
+    <string name="programs_preview_reason_thin_selection">В этой выборке мало упражнений типа «%1$s», поэтому некоторые будут повторяться</string>
+    <string name="programs_preview_reason_preference_ignored">«%1$s» есть среди ваших предпочтительных упражнений, но не входит в выбранные типы сессий, поэтому этот план его игнорирует</string>
     <string name="programs_preview_reason_no_exercise">%1$s нельзя запланировать: ни одно упражнение из вашего выбора не тренирует его</string>
     <string name="programs_preview_reason_equipment">%1$s нельзя запланировать: любое упражнение на него требует оборудования, которое вы не выбрали</string>
     <string name="programs_preview_reason_dimension">%1$s нельзя запланировать: он доступен только в той форме назначения, которую это приложение пока не создаёт</string>
@@ -920,6 +923,14 @@
     <string name="programs_change_duration">длительность</string>
     <string name="programs_change_schedule">расписание</string>
     <string name="programs_editor_goals_focus">Цели и акценты</string>
+    <string name="programs_editor_session_type">Тип сессии</string>
+    <string name="programs_session_type_strength">Сила</string>
+    <string name="programs_session_type_mobility">Мобильность и растяжка</string>
+    <string name="programs_session_type_posture">Осанка</string>
+    <string name="programs_session_type_hyperlordosis">Гиперлордоз</string>
+    <string name="programs_session_type_mixed">Смешанный — используются все упражнения</string>
+    <string name="programs_session_type_mixed_label">Смешанный</string>
+    <string name="programs_session_type_help">Используются только упражнения выбранных типов. Ваши цели, расписание и все остальные настройки генерируются как обычно.</string>
     <string name="programs_editor_goal_label">Цель: %1$s</string>
     <string name="programs_goal_balanced">Сбалансированная</string>
     <string name="programs_goal_focused">Точечная</string>
@@ -943,6 +954,7 @@
     <string name="programs_focus_posture">Осанка</string>
     <string name="programs_focus_conditioning">Выносливость</string>
     <string name="programs_change_focus">цели и направленность</string>
+    <string name="programs_change_session_types">тип сессии</string>
     <string name="programs_change_days">дни</string>
     <string name="programs_change_exercises">упражнения</string>
     <string name="programs_change_prescriptions">подходы и повторения</string>

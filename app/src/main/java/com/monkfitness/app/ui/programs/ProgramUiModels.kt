@@ -233,6 +233,11 @@ data class ProgramDraftUi(
      */
     val preferredExercises: com.monkfitness.app.domain.program.ExercisePreference =
         com.monkfitness.app.domain.program.ExercisePreference.NONE,
+    /**
+     * The draft's session-type selection, handed over unchanged for [focus]'s reason: an empty set is the
+     * Mixed pool of every exercise, and a copy here could disagree with the draft the next generation reads.
+     */
+    val sessionTypes: Set<com.monkfitness.app.domain.program.SessionType> = emptySet(),
     /** Whether the draft could be saved right now, as `validate` answered it. */
     val isValid: Boolean,
     /** The findings, as message resources, in the domain's own order. */

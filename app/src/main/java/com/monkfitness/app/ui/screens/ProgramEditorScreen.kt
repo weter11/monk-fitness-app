@@ -34,6 +34,7 @@ import com.monkfitness.app.domain.program.ProgramDayType
 import com.monkfitness.app.domain.program.ProgramDuration
 import com.monkfitness.app.domain.program.ProgramMode
 import com.monkfitness.app.domain.program.ProgramSchedule
+import com.monkfitness.app.domain.program.SessionType
 import com.monkfitness.app.domain.program.ExercisePreference
 import com.monkfitness.app.ui.programs.ExerciseOptionUi
 import com.monkfitness.app.ui.programs.addablePreferenceOptions
@@ -48,6 +49,7 @@ import com.monkfitness.app.ui.programs.ProgramGenerationPreviewElementUi
 import com.monkfitness.app.ui.programs.ProgramGenerationPreviewUi
 import com.monkfitness.app.ui.programs.ProgramsController
 import com.monkfitness.app.ui.programs.focusLabelRes
+import com.monkfitness.app.ui.programs.sessionTypeLabelRes
 import com.monkfitness.app.ui.programs.matchesExerciseQuery
 import com.monkfitness.app.ui.programs.toggledFocus
 
@@ -177,6 +179,16 @@ fun ProgramEditorScreen(
                 focus = current.focus,
                 onFocus = { focus -> controller.setDraftFocus(focus) }
             )
+
+            // The pool the next Generate may draw from. A Generated draft only: a Manual plan has no
+            // generation to filter, and showing the chips there would offer a setting with no effect.
+            if (current.mode == ProgramMode.GENERATED) {
+                ProgramSection(stringResource(R.string.programs_editor_session_type))
+                SessionTypeSection(
+                    selected = current.sessionTypes,
+                    onToggle = { type -> controller.toggleDraftSessionType(type) }
+                )
+            }
 
             // Sits under Goals & Focus because both state what the next Generate will be built with,
             // and neither is part of the plan shown below.
@@ -535,6 +547,49 @@ private fun localizedExerciseName(option: ExerciseOptionUi): String =
     if (option.nameRes != 0) stringResource(option.nameRes) else option.exerciseId
 
 /**
+ * The draft's own session-type selection, displayed as it is and edited by handing a toggle back — no second
+ * copy that could disagree with the draft the next generation reads.
+ *
+ * The chips are a `FlowRow`, not a `Row`: "Mobility & stretching" alone is wide in the longer locales, and a
+ * Row would clip the last chip or push it off screen at a larger font scale. Nothing selected is the
+ * default **Mixed** state, which is stated in words because an all-unselected row of chips does not say
+ * whether it means *everything* or *nothing*.
+ */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun SessionTypeSection(
+    selected: Set<SessionType>,
+    onToggle: (SessionType) -> Unit
+) {
+    FlowRow(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        SessionType.entries.forEach { type ->
+            FilterChip(
+                selected = type in selected,
+                onClick = { onToggle(type) },
+                label = {
+                    Text(text = stringResource(sessionTypeLabelRes(type)))
+                }
+            )
+        }
+    }
+    if (selected.isEmpty()) {
+        Text(
+            text = stringResource(R.string.programs_session_type_mixed),
+            style = MaterialTheme.typography.bodyMedium
+        )
+    }
+    Text(
+        text = stringResource(R.string.programs_session_type_help),
+        style = MaterialTheme.typography.bodySmall,
+        color = MaterialTheme.colorScheme.secondary
+    )
+}
+
+/**
  * The draft's own [FocusPlan], displayed as it is and edited by handing a new one back — no second copy
  * that could disagree with the draft the next generation reads. Which form is shown follows from the
  * value itself, and both choosable goals are settled by a dialog the user confirms, because each needs
@@ -830,6 +885,19 @@ private fun GenerationPreviewSection(
                 ),
                 style = MaterialTheme.typography.bodyMedium
             )
+            // The selection the plan was built from: **Mixed** is stated, not left as a blank line, because
+            // "no chips selected" and "the header forgot to say" look identical otherwise.
+            Text(
+                text = stringResource(
+                    ProgramGenerationPreviewRes.SESSION_TYPE,
+                    preview.sessionTypeLabelRes
+                        .map { labelRes -> stringResource(labelRes) }
+                        .ifEmpty { listOf(stringResource(R.string.programs_session_type_mixed_label)) }
+                        .joinToString(", ")
+                ),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.secondary
+            )
 
             preview.days.forEach { day ->
                 Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
@@ -927,12 +995,15 @@ private fun GenerationPreviewSection(
                     style = MaterialTheme.typography.titleSmall
                 )
                 preview.limitations.forEach { limitation ->
+                    val argument = when {
+                        limitation.argumentRes != 0 -> stringResource(limitation.argumentRes)
+                        limitation.argumentId != null -> limitation.argumentId
+                        limitation.namesALabel -> stringResource(limitation.labelRes)
+                        else -> null
+                    }
                     Text(
-                        text = if (limitation.namesAFocus) {
-                            stringResource(
-                                limitation.reasonRes,
-                                stringResource(limitation.focusLabelRes)
-                            )
+                        text = if (argument != null) {
+                            stringResource(limitation.reasonRes, argument)
                         } else {
                             stringResource(limitation.reasonRes)
                         },

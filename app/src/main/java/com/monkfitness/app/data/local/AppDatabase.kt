@@ -84,7 +84,7 @@ import com.monkfitness.app.data.model.WorkoutSessionEntity
         AdaptiveDecisionRecordEntity::class,
         AdaptiveAdjustmentEntity::class
     ],
-    version = 19,
+    version = 20,
     exportSchema = false
 )
 @TypeConverters(AdaptiveTypeConverters::class, ProgramTypeConverters::class)
@@ -1205,6 +1205,27 @@ abstract class AppDatabase : RoomDatabase() {
             }
         }
 
+        /**
+         * The session-type selection a Generated draft was planned with becomes revision content.
+         *
+         * One nullable column and nothing else — no table, because a selection is a handful of tokens
+         * belonging to exactly one immutable revision, the same reasoning `focusGoal`/`focusTargets` and
+         * `preferredExerciseIds` gave. There is deliberately **no `DEFAULT` and no backfill**: a default
+         * would state a selection on every existing row, and no user ever chose one. `null` is what an
+         * upgraded row gets, and `null` means **Mixed** — the whole catalogue, which is exactly the pool
+         * every existing revision was built from.
+         *
+         * The tokens are enum names in canonical order, never ordinals, so a renumbered enum cannot
+         * re-point a stored selection; the mapper refuses a token it does not know.
+         */
+        internal val MIGRATION_19_20 = object : Migration(19, 20) {
+            override fun migrate(database: SupportSQLiteDatabase) {
+                database.execSQL(
+                    "ALTER TABLE `program_revision` ADD COLUMN `sessionTypes` TEXT"
+                )
+            }
+        }
+
         fun getDatabase(context: Context): AppDatabase {
             return INSTANCE ?: synchronized(this) {
                 val instance = Room.databaseBuilder(
@@ -1230,7 +1251,8 @@ abstract class AppDatabase : RoomDatabase() {
                         MIGRATION_15_16,
                         MIGRATION_16_17,
                         MIGRATION_17_18,
-                        MIGRATION_18_19
+                        MIGRATION_18_19,
+                        MIGRATION_19_20
                     )
                     .build()
                 INSTANCE = instance

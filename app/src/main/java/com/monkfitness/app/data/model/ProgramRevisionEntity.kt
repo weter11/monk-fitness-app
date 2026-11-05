@@ -72,6 +72,12 @@ import java.time.DayOfWeek
  *   column existed: the user stated no preference, which is what `ExercisePreference.NONE` says. It is
  *   deliberately **not** defaulted to a ranking of the catalogue, and not defaulted to `""` either,
  *   because both would state a preference nobody chose.
+ * @property sessionTypes the session types the plan's exercises are drawn from, as the enum names in
+ *   canonical order, or `null` for **Mixed** — no selection, which is the whole catalogue and exactly what
+ *   every row written before this column existed was built from. No default and no backfill for that
+ *   reason: a default would state a selection nobody chose. Declared last because the column is appended by
+ *   a migration, and declaration order equal to physical order is what keeps a fresh database and an
+ *   upgraded one byte-identical.
  */
 @Entity(
     tableName = "program_revision",
@@ -98,7 +104,8 @@ data class ProgramRevisionEntity(
     val scheduleSessionsPerWeek: Int? = null,
     val focusGoal: String? = null,
     val focusTargets: String? = null,
-    val preferredExerciseIds: String? = null
+    val preferredExerciseIds: String? = null,
+    val sessionTypes: String? = null
 ) {
 
     init {

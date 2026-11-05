@@ -85,10 +85,12 @@ class ProgramStructureTest {
         assertEquals(
             "§6's list of what creates a revision, grouped as the editor presents it — goals/focus " +
                 "included, because §6 lists them among the configuration facts that create one, and " +
-                "§9's user preference beside them for the same reason (§6's program-behavior clause)",
+                "§9's user preference beside them for the same reason (§6's program-behavior clause), " +
+                "and the session-type selection beside both because it is configuration the stored " +
+                "revision carries for the next generation",
             listOf(
-                "MODE", "DURATION", "SCHEDULE", "FOCUS", "PREFERRED_EXERCISES", "DAYS", "EXERCISES",
-                "PRESCRIPTIONS", "PINNING"
+                "MODE", "DURATION", "SCHEDULE", "FOCUS", "PREFERRED_EXERCISES", "SESSION_TYPES", "DAYS",
+                "EXERCISES", "PRESCRIPTIONS", "PINNING"
             ),
             ProgramStructureAspect.entries.map { it.name }
         )

@@ -52,9 +52,9 @@ class ProgramRevisionImmutabilityTest {
             .map { it.toInt() }
             .sorted()
         assertEquals(
-            "a data class exposes one component per property — ten of them, the Goals & Focus " +
-                "configuration and §9's user preference included (§6, §8, §9)",
-            (1..10).toList(),
+            "a data class exposes one component per property — eleven of them, the Goals & Focus " +
+                "configuration, §9's user preference and the session-type selection included (§6, §8, §9)",
+            (1..11).toList(),
             components
         )
         assertTrue(

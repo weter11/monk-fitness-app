@@ -601,7 +601,7 @@ internal object ProgramSchemaFixture {
     /** The columns that store a collection converted to one deterministic `TEXT` value, and must
      * never be flattened into a scalar. */
     val COLLECTION_COLUMNS: Map<String, List<String>> = mapOf(
-        "program_revision" to listOf("scheduleWeekdays"),
+        "program_revision" to listOf("scheduleWeekdays", "sessionTypes"),
         "program_exercise" to listOf("perSetTargets"),
         "session_snapshot" to listOf("appliedAdjustmentIds"),
         "session_snapshot_exercise" to listOf("perSetTargets"),
@@ -676,6 +676,13 @@ internal object ProgramSchemaFixture {
         // rows unchanged, and the engine reads them exactly as it did before this step.
         "MIGRATION_18_19" to mapOf(
             "program_set_log" to listOf(Column("restSeconds", INTEGER, nullable = true))
+        ),
+        // The session-type selection a Generated plan was built from: nullable with no default, because
+        // `null` is what every revision written before the column existed holds and it means **Mixed** —
+        // the whole catalogue, which is the pool those revisions were planned from. A default would state a
+        // selection no user chose.
+        "MIGRATION_19_20" to mapOf(
+            "program_revision" to listOf(Column("sessionTypes", TEXT, nullable = true))
         )
     )
 

@@ -19,9 +19,10 @@ import com.monkfitness.app.domain.prescription.Prescription
  * re-identifies an unchanged plan, turning the one case that must create nothing into a revision.
  *
  * It compares mode, duration and schedule (the revision's own configuration), focus (the Goals & Focus
- * configuration the plan is built for), the preferred exercises in order, the days in order with their
- * type and name, and the plan elements in order with their exercise, per-set prescription, authorship
- * and pin. [focus] belongs to the configuration rather than to the plan's content because changing what
+ * configuration the plan is built for), the preferred exercises in order, the session types the plan draws
+ * from, the days in order with their type and name, and the plan elements in order with their exercise,
+ * per-set prescription, authorship and pin. [focus] belongs to the configuration rather than to the
+ * plan's content because changing what
  * a plan is **for** is structural even when not one exercise moved: the same days built for a different
  * goal are a different plan.
  *
@@ -34,7 +35,8 @@ data class ProgramStructure(
     val schedule: ProgramSchedule,
     val days: List<StructuredDay>,
     val focus: FocusPlan = FocusPlan.DEFAULT,
-    val preferredExercises: ExercisePreference = ExercisePreference.NONE
+    val preferredExercises: ExercisePreference = ExercisePreference.NONE,
+    val sessionTypes: Set<SessionType> = emptySet()
 ) {
 
     val dayCount: Int
@@ -56,14 +58,16 @@ data class ProgramStructure(
             schedule: ProgramSchedule,
             days: List<ProgramDay>,
             focus: FocusPlan = FocusPlan.DEFAULT,
-            preferredExercises: ExercisePreference = ExercisePreference.NONE
+            preferredExercises: ExercisePreference = ExercisePreference.NONE,
+            sessionTypes: Set<SessionType> = emptySet()
         ): ProgramStructure = ProgramStructure(
             mode = mode,
             duration = duration,
             schedule = schedule,
             days = days.map { StructuredDay.of(it) },
             focus = focus,
-            preferredExercises = preferredExercises
+            preferredExercises = preferredExercises,
+            sessionTypes = sessionTypes
         )
     }
 }
@@ -119,11 +123,11 @@ data class StructuredExercise(
 
 /** The structure of the plan a saved revision describes. */
 val ProgramRevision.structure: ProgramStructure
-    get() = ProgramStructure.of(mode, duration, schedule, days, focus, preferredExercises)
+    get() = ProgramStructure.of(mode, duration, schedule, days, focus, preferredExercises, sessionTypes)
 
 /** The structure of the plan a draft is currently holding — what `Save` would persist. */
 val ProgramEditorDraft.structure: ProgramStructure
-    get() = ProgramStructure.of(mode, duration, schedule, days, focus, preferredExercises)
+    get() = ProgramStructure.of(mode, duration, schedule, days, focus, preferredExercises, sessionTypes)
 
 /**
  * A dimension of the structure that can differ between two plans.
@@ -165,6 +169,15 @@ enum class ProgramStructureAspect {
      */
     PREFERRED_EXERCISES,
 
+    /**
+     * The session types the plan's exercises are drawn from.
+     *
+     * Configuration rather than plan content, for [PREFERRED_EXERCISES]' reason: it says which exercises a
+     * future generation may reach for. Changing it therefore creates a revision even when not one exercise
+     * moved, because the stored selection is what the next generation reads.
+     */
+    SESSION_TYPES,
+
     /** The days themselves — how many, in what order, of which type, under which names. */
     DAYS,
 
@@ -197,6 +210,7 @@ private fun ProgramStructure.differsFrom(
     ProgramStructureAspect.SCHEDULE -> schedule != base.schedule
     ProgramStructureAspect.FOCUS -> focus != base.focus
     ProgramStructureAspect.PREFERRED_EXERCISES -> preferredExercises != base.preferredExercises
+    ProgramStructureAspect.SESSION_TYPES -> sessionTypes != base.sessionTypes
     ProgramStructureAspect.DAYS -> dayLabels != base.dayLabels
     ProgramStructureAspect.EXERCISES -> selection != base.selection
     ProgramStructureAspect.PRESCRIPTIONS -> prescriptions != base.prescriptions

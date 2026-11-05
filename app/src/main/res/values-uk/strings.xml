@@ -780,6 +780,9 @@
     <string name="programs_preview_level_pinned">Закріплено</string>
     <string name="programs_preview_level_override">Додано вами</string>
     <string name="programs_preview_limitations">Що не вдалося спланувати</string>
+    <string name="programs_preview_session_type">Тип сесії: %1$s</string>
+    <string name="programs_preview_reason_thin_selection">У цій вибірці мало вправ типу «%1$s», тому деякі повторюватимуться</string>
+    <string name="programs_preview_reason_preference_ignored">«%1$s» є серед ваших бажаних вправ, але не входить до вибраних типів сесій, тому цей план його ігнорує</string>
     <string name="programs_preview_reason_no_exercise">%1$s неможливо спланувати: жодна вправа з вашого вибору його не тренує</string>
     <string name="programs_preview_reason_equipment">%1$s неможливо спланувати: будь-яка вправа на нього потребує обладнання, якого ви не обрали</string>
     <string name="programs_preview_reason_dimension">%1$s неможливо спланувати: він доступний лише у формі призначення, яку застосунок ще не створює</string>
@@ -920,6 +923,14 @@
     <string name="programs_change_duration">тривалість</string>
     <string name="programs_change_schedule">розклад</string>
     <string name="programs_editor_goals_focus">Цілі та акценти</string>
+    <string name="programs_editor_session_type">Тип сесії</string>
+    <string name="programs_session_type_strength">Сила</string>
+    <string name="programs_session_type_mobility">Мобільність і розтяжка</string>
+    <string name="programs_session_type_posture">Постава</string>
+    <string name="programs_session_type_hyperlordosis">Гіперлордоз</string>
+    <string name="programs_session_type_mixed">Змішаний — використовуються всі вправи</string>
+    <string name="programs_session_type_mixed_label">Змішаний</string>
+    <string name="programs_session_type_help">Використовуються лише вправи вибраних типів. Ваші цілі, розклад і всі інші налаштування генеруються як зазвичай.</string>
     <string name="programs_editor_goal_label">Ціль: %1$s</string>
     <string name="programs_goal_balanced">Збалансована</string>
     <string name="programs_goal_focused">Точкова</string>
@@ -943,6 +954,7 @@
     <string name="programs_focus_posture">Постава</string>
     <string name="programs_focus_conditioning">Витривалість</string>
     <string name="programs_change_focus">цілі та спрямованість</string>
+    <string name="programs_change_session_types">тип сесії</string>
     <string name="programs_change_days">дні</string>
     <string name="programs_change_exercises">вправи</string>
     <string name="programs_change_prescriptions">підходи та повторення</string>

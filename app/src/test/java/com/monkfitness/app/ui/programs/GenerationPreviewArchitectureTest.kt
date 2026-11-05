@@ -251,7 +251,7 @@ class GenerationPreviewArchitectureTest {
     @Test
     fun thePreviewModelCarriesNoGeneratedDomainType() {
         // Matched on the **field's** type, not on a rendered "Type.field" string: a substring test over
-        // the qualified name matches `ProgramGenerationLimitationUi.focusLabelRes` on the substring
+        // the qualified name matches `ProgramGenerationLimitationUi.labelRes` on the substring
         // "GenerationLimitation", which is this file's own name and says nothing about the field.
         val fields = listOf(
             ProgramGenerationPreviewUi::class.java,

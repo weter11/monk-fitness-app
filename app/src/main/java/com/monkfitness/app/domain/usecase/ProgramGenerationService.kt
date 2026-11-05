@@ -4,10 +4,13 @@ import com.monkfitness.app.data.model.Equipment
 import com.monkfitness.app.domain.program.DraftIdSource
 import com.monkfitness.app.domain.program.FocusPlan
 import com.monkfitness.app.domain.program.ProgramEditorDraft
+import com.monkfitness.app.domain.program.SessionType
 import com.monkfitness.app.domain.program.generated.GeneratedDraftEdit
+import com.monkfitness.app.domain.program.generated.GenerationCandidate
 import com.monkfitness.app.domain.program.generated.GenerationLimitation
 import com.monkfitness.app.domain.program.generated.GenerationPolicy
 import com.monkfitness.app.domain.program.generated.GenerationPreferences
+import com.monkfitness.app.domain.program.generated.GenerationRequest
 import com.monkfitness.app.domain.program.generated.ProgramGeneratedEditor
 import com.monkfitness.app.domain.usecase.ExerciseGenerationFacts.GenerationFocusSource
 import com.monkfitness.app.domain.usecase.ProductionGenerationBoundary.ProductionGenerationCatalogue
@@ -47,6 +50,10 @@ import com.monkfitness.app.domain.usecase.ProductionGenerationBoundary.Productio
  * @param context where the plain signals come from. Required rather than defaulted: a default here is exactly
  *   the quiet neutrality the read replaced, so every construction site must say where its facts come from.
  * @param policy the generated domain's own numbers, defaulted to [GenerationPolicy.DEFAULT].
+ *
+ * Session-type membership is read from [ProductionSessionTypeClassification] directly rather than through a
+ * sixth collaborator: the table holds no state and cannot vary per pass, so it is the app's own constant
+ * fact here, not a caller-supplied signal a pass could be given a different version of.
  */
 class ProgramGenerationService(
     private val catalogue: GenerationCatalogue,
@@ -125,6 +132,25 @@ class ProgramGenerationService(
         ProgramGenerationResult.Failed(failure)
     }
 
+    /**
+     * The catalogue view the selection allows: **Mixed** (no type chosen) leaves the catalogue untouched, so
+     * a draft that states nothing is planned from exactly the pool it was planned from before the selection
+     * existed. Exercises are dropped from the pool here, at the one place the view is built — the planner is
+     * never told about session types, only about the candidates it may choose from.
+     */
+    private fun ProductionGenerationCatalogue.onlyOf(
+        types: Set<SessionType>
+    ): ProductionGenerationCatalogue = if (types.isEmpty()) {
+        this
+    } else {
+        ProductionGenerationCatalogue(
+            candidates = candidates.filter { candidate ->
+                candidate.sessionTypes().any { type -> type in types }
+            },
+            unclassifiedExerciseIds = unclassifiedExerciseIds
+        )
+    }
+
     private fun planned(
         draft: ProgramEditorDraft,
         availableEquipment: Set<Equipment>,
@@ -132,7 +158,7 @@ class ProgramGenerationService(
         preferences: GenerationPreferences
     ): ProgramGenerationResult {
         val request = ProductionGenerationBoundary.generationRequest(
-            catalogue = classified,
+            catalogue = classified.onlyOf(draft.sessionTypes),
             focus = draft.focus,
             schedule = draft.schedule,
             duration = draft.duration,
@@ -141,17 +167,60 @@ class ProgramGenerationService(
             policy = policy
         )
         val edit = ProgramGeneratedEditor(draft = draft, ids = ids).generate(request)
+        val selection = selectionLimitations(draft, request)
         return if (edit.plan.slots.isEmpty()) {
             ProgramGenerationResult.Refused(
                 ProgramGenerationRefusal.NothingPlannable(
                     focus = draft.focus,
-                    limitations = edit.plan.limitations
+                    limitations = edit.plan.limitations + selection
                 )
             )
         } else {
-            ProgramGenerationResult.Generated(edit)
+            ProgramGenerationResult.Generated(
+                edit.copy(plan = edit.plan.copy(limitations = edit.plan.limitations + selection))
+            )
         }
     }
+
+    /**
+     * What the **selection** costs this plan, in the same limitation list the planner's own findings use —
+     * there is one place a user learns what the plan could not do, and a second reporting channel would let
+     * the two disagree.
+     *
+     * A type is reported as thin when fewer of its exercises are usable than the plan has days: with fewer
+     * distinct exercises than slots, at least one of them must come round again, and the preview should say
+     * so rather than present the repetition as variety. A preferred exercise is reported when the selection
+     * puts it outside the pool, because a preference the plan ignores must not disappear silently. Both are
+     * said only when a selection is active; **Mixed** states nothing and so costs nothing.
+     */
+    private fun selectionLimitations(
+        draft: ProgramEditorDraft,
+        request: GenerationRequest<Equipment>
+    ): List<GenerationLimitation> {
+        if (draft.sessionTypes.isEmpty()) return emptyList()
+        val thin = SessionType.entries
+            .filter { type -> type in draft.sessionTypes }
+            .mapNotNull { type ->
+                val available = request.candidates.count { candidate ->
+                    type in candidate.sessionTypes() && request.isUsable(candidate)
+                }
+                if (available in 1 until request.slotCount) {
+                    GenerationLimitation.ThinSelection(type, available, request.slotCount)
+                } else {
+                    null
+                }
+            }
+        val ignored = draft.preferredExercises.exerciseIds
+            .filter { exerciseId ->
+                val stated = ProductionSessionTypeClassification.sessionTypesOf(exerciseId)
+                stated != null && stated.none { type -> type in draft.sessionTypes }
+            }
+            .map { exerciseId -> GenerationLimitation.UnusedPreference(exerciseId) }
+        return thin + ignored
+    }
+
+    private fun GenerationCandidate<Equipment>.sessionTypes(): Set<SessionType> =
+        ProductionSessionTypeClassification.sessionTypesOf(exerciseId).orEmpty()
 }
 
 /**

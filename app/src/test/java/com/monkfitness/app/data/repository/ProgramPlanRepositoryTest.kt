@@ -4,6 +4,7 @@ import com.monkfitness.app.domain.common.ProgramId
 import com.monkfitness.app.domain.common.RevisionId
 import com.monkfitness.app.domain.program.ProgramDuration
 import com.monkfitness.app.domain.program.ProgramSchedule
+import com.monkfitness.app.domain.program.SessionType
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
@@ -164,6 +165,30 @@ class ProgramPlanRepositoryTest {
             "and it still loads as the weekday set it was saved with",
             ProgramSchedule.FixedWeekdays(setOf(DayOfWeek.MONDAY, DayOfWeek.WEDNESDAY, DayOfWeek.FRIDAY)),
             rig.freshPlanRepository().revisionById(firstRevisionId)!!.schedule
+        )
+    }
+
+    @Test
+    fun aSavedSelectionSurvivesTheRoundTripThroughAFreshRepository() = runBlocking {
+        rig.createGraph()
+        val second = ProgramGraphFixture.nextRevision("a")
+            .copy(sessionTypes = setOf(SessionType.HYPERLORDOSIS, SessionType.STRENGTH))
+
+        rig.programPlanRepository.saveNewRevision(second, ProgramGraphFixture.FINISHED)
+
+        // A new repository over the same file is what a reopened app reads.
+        assertEquals(
+            "the selection is revision content, so it comes back exactly as it was saved",
+            setOf(SessionType.STRENGTH, SessionType.HYPERLORDOSIS),
+            rig.freshPlanRepository().revisionById(second.revisionId)!!.sessionTypes
+        )
+        assertEquals(
+            "and it is stored as canonical names, not as an ordinal list",
+            listOf<String?>("STRENGTH,HYPERLORDOSIS"),
+            rig.database.strings(
+                "SELECT `sessionTypes` FROM `program_revision` WHERE `revisionId` = ?",
+                second.revisionId.value
+            )
         )
     }
 

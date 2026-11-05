@@ -77,6 +77,16 @@ class ProgramDraftEditor(val draft: ProgramEditorDraft, private val ids: DraftId
         next(draft.copy(preferredExercises = preference))
 
     /**
+     * The working **session type** selection: the kinds of workout the next generation may draw from.
+     *
+     * Whole-value, like [withFocus]: the empty set is Mixed and the value cannot be inconsistent, so the
+     * one thing left to state is that a changed selection is structural content — a save that changes only
+     * this still creates a revision.
+     */
+    fun withSessionTypes(types: Set<SessionType>): ProgramDraftEditor =
+        next(draft.copy(sessionTypes = types))
+
+    /**
      * Appends a day, or inserts it at [at] (1-based, `1..dayCount + 1`).
      *
      * A day added as [ProgramDayType.REST] starts empty, which is the only shape a rest day may have;

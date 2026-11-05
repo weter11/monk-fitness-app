@@ -30,7 +30,9 @@ import java.time.Instant
  * [focus] defaults to `BALANCED`, which states nothing: a plan built before Goals & Focus existed was
  * built for every focus with no share stated, and reading it as anything else would put words in the user's
  * mouth. [preferredExercises] defaults to `ExercisePreference.NONE` for the same reason — the user named
- * nothing, rather than an ordering of the catalogue no user ever stated.
+ * nothing, rather than an ordering of the catalogue no user ever stated. [sessionTypes] defaults to the
+ * empty set, which is Mixed: the whole catalogue, exactly what every revision written before the selection
+ * existed was built from.
  */
 data class ProgramRevision(
     val revisionId: RevisionId,
@@ -42,7 +44,8 @@ data class ProgramRevision(
     val days: List<ProgramDay>,
     val createdAt: Instant,
     val focus: FocusPlan = FocusPlan.DEFAULT,
-    val preferredExercises: ExercisePreference = ExercisePreference.NONE
+    val preferredExercises: ExercisePreference = ExercisePreference.NONE,
+    val sessionTypes: Set<SessionType> = emptySet()
 ) {
 
     init {

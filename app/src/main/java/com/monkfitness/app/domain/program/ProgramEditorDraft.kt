@@ -29,6 +29,11 @@ import com.monkfitness.app.domain.common.RevisionId
  * generation rather than plan content, and structural, so a save that changes either and nothing else still
  * creates a revision. `ExercisePreference.NONE` is the absence — the user named nothing, which is a fact
  * and never an implicit ranking.
+ *
+ * [sessionTypes] is the same kind of input: the kinds of workout the next generation may draw from. An
+ * **empty set means Mixed** — every exercise, which is what generation did before the selection existed —
+ * so the absence of a selection is stored as itself rather than as a fifth "mixed" member. A type narrows
+ * the pool and nothing else: it never overrides [focus], the schedule or any other parameter.
  */
 data class ProgramEditorDraft(
     val programId: ProgramId? = null,
@@ -40,7 +45,8 @@ data class ProgramEditorDraft(
     val schedule: ProgramSchedule = ProgramSchedule.FlexiblePerWeek(3),
     val days: List<ProgramDay> = emptyList(),
     val focus: FocusPlan = FocusPlan.DEFAULT,
-    val preferredExercises: ExercisePreference = ExercisePreference.NONE
+    val preferredExercises: ExercisePreference = ExercisePreference.NONE,
+    val sessionTypes: Set<SessionType> = emptySet()
 ) {
 
     /** Whether saving this draft would create a Program rather than update one. */
@@ -57,4 +63,8 @@ data class ProgramEditorDraft(
 
     val isGenerated: Boolean
         get() = mode == ProgramMode.GENERATED
+
+    /** Whether the draft states no session type at all — the *Mixed* pool of every exercise. */
+    val isMixedSessionTypes: Boolean
+        get() = sessionTypes.isEmpty()
 }

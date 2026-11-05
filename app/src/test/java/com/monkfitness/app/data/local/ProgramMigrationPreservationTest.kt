@@ -85,6 +85,7 @@ class ProgramMigrationPreservationTest {
         // The deployed chain, in the order a device runs it.
         // The per-set rest column — nullable, additive, and no backfill of the sets already stored.
         database.migrate(AppDatabase.MIGRATION_18_19)
+        database.migrate(AppDatabase.MIGRATION_19_20)
     }
 
     /** A populated **version-18** database: every step before the per-set rest column. */
@@ -628,6 +629,8 @@ class ProgramMigrationPreservationTest {
         assertEquals(18, AppDatabase.MIGRATION_17_18.endVersion)
         assertEquals(18, AppDatabase.MIGRATION_18_19.startVersion)
         assertEquals(19, AppDatabase.MIGRATION_18_19.endVersion)
+        assertEquals(19, AppDatabase.MIGRATION_19_20.startVersion)
+        assertEquals(20, AppDatabase.MIGRATION_19_20.endVersion)
 
         val database = SqliteTestDatabase.inMemory()
         database.execAll(LegacyV7Schema.TABLE_STATEMENTS)
@@ -641,9 +644,10 @@ class ProgramMigrationPreservationTest {
             database.migrate(AppDatabase.MIGRATION_13_14)
             database.migrate(AppDatabase.MIGRATION_14_15)
             database.migrate(AppDatabase.MIGRATION_15_16)
-        database.migrate(AppDatabase.MIGRATION_16_17)
-        database.migrate(AppDatabase.MIGRATION_17_18)
-        database.migrate(AppDatabase.MIGRATION_18_19)
+            database.migrate(AppDatabase.MIGRATION_16_17)
+            database.migrate(AppDatabase.MIGRATION_17_18)
+            database.migrate(AppDatabase.MIGRATION_18_19)
+            database.migrate(AppDatabase.MIGRATION_19_20)
         } catch (failure: SQLException) {
             throw AssertionError("the migration failed on a real engine: ${failure.message}")
         }

@@ -292,7 +292,7 @@ class ProgramsGenerationPreviewTest {
             assertTrue(
                 "a limitation names a focus (or is the whole-configuration one) — the resource pair " +
                     "is how §14 keeps the domain's developer-facing sentence off the screen",
-                limitation.namesAFocus == (limitation.focusLabelRes in FOCUS_LABEL_RESOURCES)
+                limitation.namesALabel == (limitation.labelRes in FOCUS_LABEL_RESOURCES)
             )
             assertTrue(
                 "and carries its own reason sentence",
@@ -318,7 +318,7 @@ class ProgramsGenerationPreviewTest {
         val limitation = rig.state.generationPreview!!.limitations.first()
         assertTrue(
             "the focus is named by the existing vocabulary label, not by its enum name",
-            limitation.focusLabelRes in FOCUS_LABEL_RESOURCES
+            limitation.labelRes in FOCUS_LABEL_RESOURCES
         )
         assertEquals(
             "MOBILITY is Mobility in English and Подвижность in Russian — one resource, seven locales",
@@ -382,7 +382,7 @@ class ProgramsGenerationPreviewTest {
         assertEquals(
             "and each names the focus it is about, so the user knows which one to change",
             setOf(R.string.programs_focus_pull, R.string.programs_focus_legs),
-            limitations.map { it.focusLabelRes }.toSet()
+            limitations.map { it.labelRes }.toSet()
         )
     }
 

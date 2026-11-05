@@ -5,6 +5,7 @@ import com.monkfitness.app.R
 import com.monkfitness.app.domain.program.Focus
 import com.monkfitness.app.domain.program.FocusAllocation
 import com.monkfitness.app.domain.program.FocusPlan
+import com.monkfitness.app.domain.program.SessionType
 
 /**
  * Goals & Focus authoring as pure rules the JVM tests can decide without a Compose harness.
@@ -95,4 +96,26 @@ fun focusLabelRes(focus: Focus): Int = when (focus) {
     Focus.MOBILITY -> R.string.programs_focus_mobility
     Focus.POSTURE -> R.string.programs_focus_posture
     Focus.CONDITIONING -> R.string.programs_focus_conditioning
+}
+
+/**
+ * The selection with [type] added or removed.
+ *
+ * Removing the last one is legal and means **Mixed**, so unlike [toggledFocus] there is no refusal: a type
+ * filter that excludes nothing is the state a user reaches by unchecking every chip.
+ */
+fun toggledSessionType(current: Set<SessionType>, type: SessionType): Set<SessionType> =
+    if (type in current) current - type else current + type
+
+/**
+ * The four session-type labels, exhaustive over the vocabulary: a type without a label here is a chip the
+ * editor cannot show, and the localization census turns that into a failing test rather than an English
+ * word on a foreign screen.
+ */
+@StringRes
+fun sessionTypeLabelRes(type: SessionType): Int = when (type) {
+    SessionType.STRENGTH -> R.string.programs_session_type_strength
+    SessionType.MOBILITY -> R.string.programs_session_type_mobility
+    SessionType.POSTURE -> R.string.programs_session_type_posture
+    SessionType.HYPERLORDOSIS -> R.string.programs_session_type_hyperlordosis
 }
