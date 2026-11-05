@@ -197,6 +197,80 @@ class ProgramDraftEditorTest {
     }
 
     @Test
+    fun editingAGeneratedElementsPrescriptionMakesItTheUsers() {
+        val generated = ProgramExercise(
+            programExerciseId = ProgramExerciseId("element-1"),
+            exerciseId = "pushup",
+            prescription = RepPrescription(listOf(10, 10, 10)),
+            origin = ProgramExerciseOrigin.GENERATED,
+            focus = Focus.PUSH
+        )
+        val day = ProgramDay(
+            programDayId = ProgramDayId("day-1"),
+            position = 1,
+            type = ProgramDayType.TRAINING,
+            exercises = listOf(generated)
+        )
+
+        val edited = editor(ProgramEditorDraft(name = "Generated program", days = listOf(day)), TestIds())
+            .settingPrescription(day.programDayId, generated.programExerciseId, RepPrescription(listOf(8, 8)))
+            .draft
+            .days.single()
+            .exercises
+            .single()
+
+        assertEquals(
+            "the user typed this amount, so they own the element and a regeneration may not replace it",
+            ProgramExerciseOrigin.USER_AUTHORED,
+            edited.origin
+        )
+        assertEquals("with the prescription they set", RepPrescription(listOf(8, 8)), edited.prescription)
+        assertEquals("and the focus the plan gave it, unrelabelled", Focus.PUSH, edited.focus)
+    }
+
+    @Test
+    fun editingAPrescriptionDoesNotMoveAnOriginThatIsAlreadyTheUsers() {
+        val semiAutomatic = ProgramExercise(
+            programExerciseId = ProgramExerciseId("element-1"),
+            exerciseId = "pushup",
+            prescription = RepPrescription(listOf(10, 10, 10)),
+            origin = ProgramExerciseOrigin.SEMI_AUTOMATIC
+        )
+        val authored = ProgramExercise(
+            programExerciseId = ProgramExerciseId("element-2"),
+            exerciseId = "plank",
+            prescription = TimePrescription(listOf(30)),
+            origin = ProgramExerciseOrigin.USER_AUTHORED
+        )
+        val day = ProgramDay(
+            programDayId = ProgramDayId("day-1"),
+            position = 1,
+            type = ProgramDayType.TRAINING,
+            exercises = listOf(semiAutomatic, authored)
+        )
+
+        val edited = editor(ProgramEditorDraft(name = "Generated program", days = listOf(day)), TestIds())
+            .settingPrescription(day.programDayId, semiAutomatic.programExerciseId, RepPrescription(listOf(6)))
+            .settingPrescription(day.programDayId, authored.programExerciseId, TimePrescription(listOf(45)))
+            .draft
+            .days
+            .single()
+            .exercises
+
+        assertEquals(
+            "a semi-automatic element keeps handing its amount to the adaptive stage",
+            ProgramExerciseOrigin.SEMI_AUTOMATIC,
+            edited[0].origin
+        )
+        assertEquals(RepPrescription(listOf(6)), edited[0].prescription)
+        assertEquals(
+            "and an element the user already authored stays theirs",
+            ProgramExerciseOrigin.USER_AUTHORED,
+            edited[1].origin
+        )
+    }
+
+    @Test
     fun pinningIsAPlanEditAndUnpinningDoesNotChangeTheValue() {
         val plan = plan()
         val day = plan.first()

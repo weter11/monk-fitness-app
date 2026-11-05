@@ -8,6 +8,7 @@ import com.monkfitness.app.domain.program.Focus
 import com.monkfitness.app.domain.program.FocusPlan
 import com.monkfitness.app.domain.program.ProgramDay
 import com.monkfitness.app.domain.program.ProgramDayType
+import com.monkfitness.app.domain.program.ProgramDraftEditor
 import com.monkfitness.app.domain.program.ProgramEditorDraft
 import com.monkfitness.app.domain.program.ProgramExercise
 import com.monkfitness.app.domain.program.ProgramExerciseOrigin
@@ -264,6 +265,66 @@ class PlanReconcilerTest {
             "the draft holds the same number of elements as before — one replaced, not one added",
             before.size,
             after.size
+        )
+    }
+
+    @Test
+    fun anEditedGeneratedElementSurvivesRegenerationWithADifferentRequest() {
+        val generated = ProgramGeneratedEditor(draftOf(), ids("gen")).generate(GeneratedPlannerRig.request())
+        val day = generated.draft.days.first()
+        val edited = day.exercises.first()
+        val kept = RepPrescription(listOf(4, 3))
+        val draft = ProgramDraftEditor(generated.draft, ids("edit"))
+            .settingPrescription(day.programDayId, edited.programExerciseId, kept)
+            .draft
+
+        val regenerated = ProgramGeneratedEditor(draft, ids("second")).regenerate(
+            GeneratedPlannerRig.request(focus = FocusPlan.focused(setOf(Focus.POSTURE, Focus.CORE)))
+        )
+
+        val survivor = regenerated.draft.days
+            .flatMap { it.exercises }
+            .firstOrNull { it.programExerciseId == edited.programExerciseId }
+
+        assertEquals(
+            "the amount the user typed is still in the plan after a regeneration that asked for " +
+                "something else",
+            edited.copy(prescription = kept, origin = ProgramExerciseOrigin.USER_AUTHORED),
+            survivor
+        )
+        assertEquals(
+            "and the plan does not produce it, so the disagreement is reported rather than acted on",
+            listOf(edited.programExerciseId),
+            regenerated.reconciliation.conflicts.map { it.programExerciseId }
+        )
+    }
+
+    @Test
+    fun anEditToAPinnedGeneratedElementKeepsItsPinAndItsFocus() {
+        val generated = ProgramGeneratedEditor(draftOf(), ids("gen")).generate(GeneratedPlannerRig.request())
+        val day = generated.draft.days.first()
+        val edited = day.exercises.first()
+        val draft = ProgramDraftEditor(generated.draft, ids("edit"))
+            .settingPinned(day.programDayId, edited.programExerciseId, isPinned = true)
+            .settingPrescription(day.programDayId, edited.programExerciseId, RepPrescription(listOf(4, 3)))
+            .draft
+
+        val regenerated = ProgramGeneratedEditor(draft, ids("second")).regenerate(
+            GeneratedPlannerRig.request(focus = FocusPlan.focused(setOf(Focus.POSTURE, Focus.CORE)))
+        )
+
+        val survivor = regenerated.draft.days
+            .flatMap { it.exercises }
+            .firstOrNull { it.programExerciseId == edited.programExerciseId }
+
+        assertTrue(
+            "the element is still pinned and still knows which focus it was planned for: $survivor",
+            survivor != null && survivor.isPinned && survivor.focus == edited.focus
+        )
+        assertEquals(
+            "and the edit is reported at the pin's level, the highest one",
+            listOf(PreservationLevel.PINNED),
+            regenerated.reconciliation.conflicts.map { it.level }
         )
     }
 
