@@ -534,10 +534,12 @@ class ProductionGenerationBoundaryArchitectureTest {
      * The files this stage owns, excluded from the consumer sweep because a file that *declares* a type
      * obviously names it — three files, not two.
      */
+    /** The boundary and the tables that state its facts: they *are* the vocabulary, not its consumers. */
     private val OWN_FILES = listOf(
         "domain/usecase/ProductionGenerationBoundary.kt",
         "domain/usecase/ExerciseGenerationFacts.kt",
-        "domain/usecase/ProductionFocusClassification.kt"
+        "domain/usecase/ProductionFocusClassification.kt",
+        "domain/usecase/ProductionSessionTypeClassification.kt"
     )
 
     private fun occurrences(text: String, needle: String): Int {
