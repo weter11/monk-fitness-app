@@ -659,6 +659,23 @@ class ProgramsController(
                         reasonRes = ProgramGenerationPreviewRes.REASON_NO_PLANNABLE_FOCUS
                     )
                 }
+            } + if (
+                sevenDayWeekLeavesNoRestDay(
+                    edit.draft.schedule,
+                    edit.draft.mode,
+                    edit.draft.sessionTypes
+                )
+            ) {
+                // A fact about the schedule the user chose rather than about what the planner could do,
+                // stated in the same list so the Preview has one place a plan's costs are read.
+                listOf(
+                    ProgramGenerationLimitationUi(
+                        labelRes = 0,
+                        reasonRes = ProgramGenerationPreviewRes.NO_REST_DAY
+                    )
+                )
+            } else {
+                emptyList()
             },
             // The selection the pass was planned from, read off the draft it produced: an empty selection is
             // Mixed, which the header states rather than leaving the line out.

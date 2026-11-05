@@ -152,6 +152,30 @@ class SlotPlannerTest {
     }
 
     @Test
+    fun sevenSessionsAWeekPlansEveryDateOfTheRunWhicheverWeekdayItStartsOn() {
+        val everyDay = ProgramSchedule.FlexiblePerWeek(7)
+
+        // 2026-09-10 is a Thursday and 2026-09-13 a Sunday: a seven-day week names every weekday, so
+        // neither the anchor nor the Monday-first spread may leave a date out — and a thirty-day run
+        // from either crosses into October.
+        listOf(LocalDate.parse("2026-09-10"), LocalDate.parse("2026-09-13")).forEach { start ->
+            val plan = SlotPlanner.plan(
+                request(
+                    revision(schedule = everyDay, duration = ProgramDuration.FixedDays(30)),
+                    anchor = start
+                )
+            ).asScheduled()
+
+            assertEquals(
+                "seven a week from $start (${start.dayOfWeek}) trains on that date and on every one " +
+                    "after it to the revision's own end — no gap at the month boundary",
+                (0L until 30L).map { offset -> start.plusDays(offset) },
+                plan.createdDates
+            )
+        }
+    }
+
+    @Test
     fun anIndefiniteRevisionKeepsExactlyThirtyDaysOfPlanning() {
         val plan = SlotPlanner.plan(
             request(revision(duration = ProgramDuration.Indefinite), asOf = anchor)

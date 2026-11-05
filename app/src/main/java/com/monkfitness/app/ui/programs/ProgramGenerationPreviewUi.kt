@@ -2,6 +2,9 @@ package com.monkfitness.app.ui.programs
 
 import androidx.annotation.StringRes
 import com.monkfitness.app.domain.prescription.PrescriptionDimension
+import com.monkfitness.app.domain.program.ProgramMode
+import com.monkfitness.app.domain.program.ProgramSchedule
+import com.monkfitness.app.domain.program.SessionType
 
 /**
  * The Preview, presented: what one generation pass *would* produce, and what it *would* do to the draft
@@ -270,7 +273,29 @@ object ProgramGenerationPreviewRes {
     /** No focus of the configuration can be planned, so the plan holds no slot. */
     val REASON_NO_PLANNABLE_FOCUS: Int =
         com.monkfitness.app.R.string.programs_preview_reason_no_plannable_focus
+
+    /** Seven training days a week with strength work in them: the plan has no rest day. */
+    val NO_REST_DAY: Int = com.monkfitness.app.R.string.programs_schedule_no_rest_day
 }
+
+/**
+ * Whether this configuration leaves the plan no rest day: "Every day" together with strength work, or
+ * with Mixed — no selection, so strength may be drawn from the whole catalogue.
+ *
+ * A manual draft answers false: it has no session-type selection and runs no generation, so nothing
+ * here can say what its seven days would hold. Mobility, posture and hyperlordosis work alone can fill
+ * seven days without a loaded one, so they carry no warning either.
+ *
+ * It lives beside the Preview's own vocabulary because it is the same one sentence the frequency row
+ * and the Preview's limitations both show.
+ */
+internal fun sevenDayWeekLeavesNoRestDay(
+    schedule: ProgramSchedule,
+    mode: ProgramMode,
+    sessionTypes: Set<SessionType>
+): Boolean = mode == ProgramMode.GENERATED &&
+    schedule == ProgramSchedule.FlexiblePerWeek(7) &&
+    (sessionTypes.isEmpty() || SessionType.STRENGTH in sessionTypes)
 
 /**
  * The one place a [com.monkfitness.app.domain.program.generated.FocusUnusableReason] becomes a

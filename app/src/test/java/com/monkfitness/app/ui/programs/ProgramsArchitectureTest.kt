@@ -349,9 +349,9 @@ class ProgramsArchitectureTest {
     fun everyScheduleOptionIsRenderedInAWrappingLayout() {
         val editor = codeOf("ui/screens/ProgramEditorScreen.kt")
         assertTrue(
-            "P2 UI-02: the five supported weekly frequencies remain declared — none is dropped " +
+            "P2 UI-02: the six supported weekly frequencies remain declared — none is dropped " +
                 "to make the row fit",
-            editor.contains("SCHEDULE_OPTIONS = listOf(2, 3, 4, 5, 6)")
+            editor.contains("SCHEDULE_OPTIONS = listOf(2, 3, 4, 5, 6, EVERY_DAY_SESSIONS_PER_WEEK)")
         )
         val collapsed = editor.replace(Regex("""\s+"""), " ")
         val flow = collapsed.indexOf("FlowRow(")

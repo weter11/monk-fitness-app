@@ -826,6 +826,8 @@
     <string name="programs_schedule_fixed">%1$d giorni fissi della settimana</string>
     <string name="programs_schedule_flexible">%1$d sessioni a settimana</string>
     <string name="programs_schedule_sessions_per_week">%1$d a settimana</string>
+    <string name="programs_schedule_every_day">Ogni giorno</string>
+    <string name="programs_schedule_no_rest_day">Sette giorni di allenamento a settimana, senza giorno di riposo.</string>
     <string name="programs_session_in_progress">In corso</string>
     <string name="programs_session_completed">Completata</string>
     <string name="programs_session_cancelled">Annullata</string>

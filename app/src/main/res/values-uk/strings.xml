@@ -824,6 +824,8 @@
     <string name="programs_schedule_fixed">%1$d фіксованих днів тижня</string>
     <string name="programs_schedule_flexible">%1$d тренувань на тиждень</string>
     <string name="programs_schedule_sessions_per_week">%1$d на тиждень</string>
+    <string name="programs_schedule_every_day">Щодня</string>
+    <string name="programs_schedule_no_rest_day">Сім тренувальних днів на тиждень, без дня відпочинку.</string>
     <string name="programs_session_in_progress">Виконується</string>
     <string name="programs_session_completed">Завершено</string>
     <string name="programs_session_cancelled">Скасовано</string>

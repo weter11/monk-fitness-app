@@ -91,6 +91,17 @@ class GeneratedPlannerTest {
             GeneratedPlannerRig.request(schedule = ProgramSchedule.FlexiblePerWeek(5)).slotCount
         )
         assertEquals(
+            "seven sessions a week over the same four weeks is the every-day plan's twenty-eight slots",
+            28,
+            GeneratedPlannerRig.request(schedule = ProgramSchedule.FlexiblePerWeek(7)).slotCount
+        )
+        assertEquals(
+            "and the plan holds all twenty-eight, so the count is the plan's and not the request's",
+            28,
+            GeneratedPlanner.plan(GeneratedPlannerRig.request(schedule = ProgramSchedule.FlexiblePerWeek(7)))
+                .slotCount
+        )
+        assertEquals(
             "the planned slots are exactly that many days",
             12,
             GeneratedPlanner.plan(GeneratedPlannerRig.request()).slotCount
