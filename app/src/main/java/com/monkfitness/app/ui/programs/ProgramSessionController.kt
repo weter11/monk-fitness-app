@@ -272,6 +272,10 @@ class ProgramSessionController(
      * attempt"* is the runtime's own answer, so the screen needs no second read to discover it.
      */
     suspend fun open(slotId: String) {
+        // A recreated screen asks to open again while this holder still holds the attempt it finished: the
+        // completion is still the answer, and re-reading the slot would replace it with its start refusal.
+        val shown = mutableState.value
+        if (shown.stage == SessionStage.COMPLETED && shown.slotId == slotId) return
         session = null
         focusedSessionExerciseId = null
         rememberedRestSeconds = restPreference.read()

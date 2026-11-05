@@ -263,6 +263,31 @@ class ProgramSessionFocusTest {
         }
     }
 
+    @Test
+    fun aFinishedWorkoutKeepsItsCompletionWhenTheScreenAsksForItAgain() = runBlocking {
+        withSession { harness ->
+            val controller = harness.controller
+            assertTrue(controller.confirmActualSet("10"))
+            controller.skipRest()
+            controller.finish()
+            assertEquals(SessionStage.COMPLETED, controller.state.value.stage)
+            val outcomes = controller.state.value.outcomes
+            val confirmed = controller.state.value.confirmedSetCount
+
+            // A configuration change recreates the screen, whose open effect asks for the same slot again on
+            // the state holder that survived it.
+            controller.open(harness.slotId)
+
+            assertEquals(
+                "the completion is still the answer, not the completed slot's start refusal",
+                SessionStage.COMPLETED,
+                controller.state.value.stage
+            )
+            assertEquals(confirmed, controller.state.value.confirmedSetCount)
+            assertEquals("what the workout changed is still on screen", outcomes, controller.state.value.outcomes)
+        }
+    }
+
     private suspend fun hangId(controller: ProgramSessionController): String =
         requireNotNull(controller.state.value.exercises.firstOrNull { it.exerciseId == "plank" })
             .sessionExerciseId

@@ -1,7 +1,9 @@
 package com.monkfitness.app.ui.screens
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
@@ -52,13 +54,18 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import com.monkfitness.app.R
 import com.monkfitness.app.data.model.Exercise
 import com.monkfitness.app.domain.prescription.PrescriptionDimension
@@ -75,6 +82,42 @@ import kotlinx.coroutines.launch
 
 /** The seconds one `+`/`−` press changes a timed set by. */
 private const val SECONDS_STEP = 5
+
+/** A card's own vertical cost that is not content: its padding and the gaps around the demo. */
+private val CARD_CHROME = 48.dp
+
+/**
+ * What the demo is reduced to when there is no room for a preview: the height it held before it could be
+ * previewed at all, so a tight screen is no worse than it was. Still an invitation to the full one.
+ */
+private val HERO_COLLAPSED = 80.dp
+
+/** The smallest restore-demo that reads as the next movement, and its ceiling. */
+private val REST_HERO_MIN = 120.dp
+private val REST_HERO_MAX = 360.dp
+
+/** The active set's demo: a preview of the movement being done, not the screen's subject. */
+private val FOCUS_HERO_MIN = 120.dp
+private val FOCUS_HERO_MAX = 200.dp
+
+/**
+ * The demo's height for the room there is.
+ *
+ * [availableHeight] is what the screen and the pinned controls leave and [cardBody] is what the card's own
+ * text, timer and inputs already need, both measured — nothing here assumes a device. A preview too short
+ * to read becomes the thumbnail rather than nothing: the tap is the way to the full demo.
+ */
+private fun previewHeight(availableHeight: Dp, cardBody: Dp, min: Dp, max: Dp): Dp {
+    val room = availableHeight - cardBody - CARD_CHROME
+    return if (room >= min) room.coerceAtMost(max) else HERO_COLLAPSED
+}
+
+/** Reports a node's measured height, so a sibling can take what that node leaves. */
+@Composable
+private fun Modifier.reportHeight(onHeight: (Dp) -> Unit): Modifier {
+    val density = LocalDensity.current
+    return onSizeChanged { size -> onHeight(with(density) { size.height.toDp() }) }
+}
 
 /**
  * **The workout session screen** — the one production workout runtime.
@@ -402,6 +445,9 @@ private fun PresentingSession(
         mutableStateOf(false)
     }
 
+    // The demo the user opened, kept out of the timer state above so opening it cannot touch a countdown.
+    var expandedDemo by remember { mutableStateOf<Exercise?>(null) }
+
     // The countdown writes what it has measured into the field the user confirms, so one value is stored
     // whether the set ran to zero or was stopped early.
     LaunchedEffect(timerRunning, timed?.sessionExerciseId, timed?.completedSets) {
@@ -423,13 +469,21 @@ private fun PresentingSession(
     }
 
     Column(modifier = Modifier.fillMaxSize()) {
+        var viewportHeight by remember { mutableStateOf(0.dp) }
+        var headerHeight by remember { mutableStateOf(0.dp) }
+        // The room the pinned controls leave, measured: they grow with the text scale, so the demo gives
+        // that height back rather than pushing them off the screen.
         Column(
             modifier = Modifier
                 .weight(1f)
+                .reportHeight { height -> viewportHeight = height }
                 .verticalScroll(rememberScrollState())
         ) {
+            // The bar below the row is 10 dp and its gap 4 dp; the row itself is what grows.
             Row(
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .reportHeight { height -> headerHeight = height + 14.dp },
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Column(modifier = Modifier.weight(1f)) {
@@ -472,6 +526,9 @@ private fun PresentingSession(
             if (state.isResting) {
                 RestCard(
                     state = state,
+                    nextDemo = state.restNext?.let { next -> exerciseOf(next.exerciseId) },
+                    availableHeight = viewportHeight - headerHeight,
+                    onExpandDemo = { demo -> expandedDemo = demo },
                     onSkipRest = { controller.skipRest() },
                     onExtendRest = { controller.extendRest(15) }
                 )
@@ -480,6 +537,8 @@ private fun PresentingSession(
                     FocusCard(
                         exercise = exercise,
                         demo = exerciseOf(exercise.exerciseId),
+                        availableHeight = viewportHeight - headerHeight,
+                        onExpandDemo = { demo -> expandedDemo = demo },
                         actualValue = actualValue,
                         actualInputInvalid = actualInputInvalid,
                         timeLeft = timerLeft,
@@ -572,49 +631,130 @@ private fun PresentingSession(
             }
         }
     }
+
+    expandedDemo?.let { demo ->
+        ExpandedDemo(demo = demo, onDismiss = { expandedDemo = null })
+    }
+}
+
+/**
+ * The demo at the size the preview could not afford: its own window, so the card behind it keeps composing
+ * and every countdown on the screen keeps running while it is open.
+ */
+@Composable
+private fun ExpandedDemo(demo: Exercise, onDismiss: () -> Unit) {
+    Dialog(
+        onDismissRequest = onDismiss,
+        properties = DialogProperties(usePlatformDefaultWidth = false)
+    ) {
+        Surface(
+            modifier = Modifier.fillMaxSize(),
+            color = MaterialTheme.colorScheme.surface
+        ) {
+            BoxWithConstraints(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(24.dp)
+            ) {
+                val room = maxHeight
+                Column(modifier = Modifier.fillMaxSize()) {
+                    Text(
+                        text = stringResource(demo.nameRes),
+                        style = MaterialTheme.typography.headlineSmall,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Spacer(modifier = Modifier.height(16.dp))
+                    ExerciseHeroMedia(
+                        exercise = demo,
+                        height = (room * 0.65f).coerceAtLeast(160.dp)
+                    )
+                    Spacer(modifier = Modifier.weight(1f))
+                    Button(onClick = onDismiss, modifier = Modifier.fillMaxWidth()) {
+                        Text(stringResource(R.string.ok))
+                    }
+                }
+            }
+        }
+    }
+}
+
+/** The demo at the height the caller measured, and a way to see it properly. */
+@Composable
+private fun DemoPreview(exercise: Exercise, height: Dp, onExpand: () -> Unit) {
+    ExerciseHeroMedia(
+        exercise = exercise,
+        height = height,
+        modifier = Modifier.clickable(
+            onClickLabel = stringResource(R.string.programs_session_show_demo),
+            onClick = onExpand
+        )
+    )
 }
 
 @Composable
 private fun RestCard(
     state: ProgramSessionUiState,
+    nextDemo: Exercise?,
+    availableHeight: Dp,
+    onExpandDemo: (Exercise) -> Unit,
     onSkipRest: () -> Unit,
     onExtendRest: () -> Unit
 ) {
+    var headHeight by remember { mutableStateOf(0.dp) }
+    var tailHeight by remember { mutableStateOf(0.dp) }
     Card(
         modifier = Modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer)
     ) {
         Column(modifier = Modifier.padding(16.dp)) {
-            Text(
-                text = stringResource(R.string.rest),
-                style = MaterialTheme.typography.titleMedium
-            )
-            Text(
-                text = stringResource(R.string.timer_format)
-                    .format(state.restSecondsLeft / 60, state.restSecondsLeft % 60),
-                style = MaterialTheme.typography.displayMedium,
-                fontWeight = FontWeight.Bold
-            )
-            state.restNext?.let { next ->
+            Column(modifier = Modifier.reportHeight { height -> headHeight = height }) {
                 Text(
-                    text = stringResource(
-                        R.string.programs_session_rest_next,
-                        exerciseNameOf(next),
-                        next.setNumber
-                    ),
-                    style = MaterialTheme.typography.bodyLarge
+                    text = stringResource(R.string.rest),
+                    style = MaterialTheme.typography.titleMedium
+                )
+                Text(
+                    text = stringResource(R.string.timer_format)
+                        .format(state.restSecondsLeft / 60, state.restSecondsLeft % 60),
+                    style = MaterialTheme.typography.displayMedium,
+                    fontWeight = FontWeight.Bold
                 )
             }
-            Spacer(modifier = Modifier.height(12.dp))
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                OutlinedButton(onClick = onSkipRest, modifier = Modifier.weight(1f)) {
-                    Text(text = stringResource(R.string.programs_session_skip_rest))
+            nextDemo?.let { demo ->
+                Spacer(modifier = Modifier.height(8.dp))
+                DemoPreview(
+                    exercise = demo,
+                    height = previewHeight(
+                        availableHeight = availableHeight,
+                        cardBody = headHeight + tailHeight,
+                        min = REST_HERO_MIN,
+                        max = REST_HERO_MAX
+                    ),
+                    onExpand = { onExpandDemo(demo) }
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+            }
+            Column(modifier = Modifier.reportHeight { height -> tailHeight = height }) {
+                state.restNext?.let { next ->
+                    Text(
+                        text = stringResource(
+                            R.string.programs_session_rest_next,
+                            exerciseNameOf(next),
+                            next.setNumber
+                        ),
+                        style = MaterialTheme.typography.bodyLarge
+                    )
                 }
-                OutlinedButton(onClick = onExtendRest, modifier = Modifier.weight(1f)) {
-                    Text(text = stringResource(R.string.programs_session_extend_rest))
+                Spacer(modifier = Modifier.height(12.dp))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    OutlinedButton(onClick = onSkipRest, modifier = Modifier.weight(1f)) {
+                        Text(text = stringResource(R.string.programs_session_skip_rest))
+                    }
+                    OutlinedButton(onClick = onExtendRest, modifier = Modifier.weight(1f)) {
+                        Text(text = stringResource(R.string.programs_session_extend_rest))
+                    }
                 }
             }
         }
@@ -626,6 +766,8 @@ private fun RestCard(
 private fun FocusCard(
     exercise: SessionExerciseUi,
     demo: Exercise?,
+    availableHeight: Dp,
+    onExpandDemo: (Exercise) -> Unit,
     actualValue: String,
     actualInputInvalid: Boolean,
     timeLeft: Int,
@@ -636,114 +778,119 @@ private fun FocusCard(
     onResetTimer: () -> Unit,
     onExerciseClick: () -> Unit
 ) {
+    var cardBody by remember { mutableStateOf(0.dp) }
     Card(
         modifier = Modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer)
     ) {
         Column(modifier = Modifier.padding(16.dp)) {
             demo?.let { illustration ->
-                ExerciseHeroMedia(
+                DemoPreview(
                     exercise = illustration,
-                    modifier = Modifier.fillMaxWidth(),
-                    height = 80.dp
+                    height = previewHeight(availableHeight, cardBody, FOCUS_HERO_MIN, FOCUS_HERO_MAX),
+                    onExpand = { onExpandDemo(illustration) }
                 )
                 Spacer(modifier = Modifier.height(12.dp))
             }
 
-            Text(
-                text = exerciseNameOf(exercise),
-                style = MaterialTheme.typography.headlineSmall,
-                fontWeight = FontWeight.Bold
-            )
-            Spacer(modifier = Modifier.height(4.dp))
-            Text(
-                text = stringResource(
-                    R.string.current_set_format,
-                    exercise.setNumber,
-                    exercise.setCount
-                ),
-                style = MaterialTheme.typography.titleMedium
-            )
-            if (!exercise.isFinished && !exercise.skipped) {
+            Column(
+                modifier = Modifier.reportHeight { height -> cardBody = height }
+            ) {
                 Text(
-                    text = when (exercise.dimension) {
-                        PrescriptionDimension.TIME_BASED ->
-                            stringResource(R.string.programs_session_seconds_target, exercise.nextTarget)
-
-                        else -> stringResource(R.string.programs_session_reps_target, exercise.nextTarget)
-                    },
-                    style = MaterialTheme.typography.bodyLarge,
-                    color = MaterialTheme.colorScheme.primary
-                )
-            }
-            if (exercise.skipped) {
-                Text(
-                    text = stringResource(R.string.programs_session_skipped),
-                    style = MaterialTheme.typography.bodyLarge,
-                    color = MaterialTheme.colorScheme.error
-                )
-            }
-            TextButton(onClick = onExerciseClick) {
-                Text(text = stringResource(R.string.programs_session_exercise_details))
-            }
-
-            Spacer(modifier = Modifier.height(8.dp))
-            SetIndicators(exercise)
-            Spacer(modifier = Modifier.height(12.dp))
-
-            if (exercise.isPerformable) {
-                if (exercise.dimension == PrescriptionDimension.TIME_BASED) {
-                    TimerDisplay(
-                        timeLeft = timeLeft,
-                        isRunning = timerRunning,
-                        onToggle = onToggleTimer,
-                        onReset = onResetTimer
-                    )
-                    Spacer(modifier = Modifier.height(12.dp))
-                }
-
-                Text(
-                    text = stringResource(
-                        when (exercise.dimension) {
-                            PrescriptionDimension.TIME_BASED -> R.string.programs_session_actual_seconds
-                            else -> R.string.programs_session_actual_reps
-                        }
-                    ),
-                    style = MaterialTheme.typography.labelLarge
+                    text = exerciseNameOf(exercise),
+                    style = MaterialTheme.typography.headlineSmall,
+                    fontWeight = FontWeight.Bold
                 )
                 Spacer(modifier = Modifier.height(4.dp))
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    OutlinedIconButton(
-                        onClick = { onStep(-1) },
-                        modifier = Modifier.size(48.dp)
-                    ) {
-                        Text(text = "−", style = MaterialTheme.typography.titleLarge)
-                    }
-                    OutlinedTextField(
-                        value = actualValue,
-                        onValueChange = onActualChange,
-                        singleLine = true,
-                        isError = actualInputInvalid,
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                        modifier = Modifier.weight(1f)
-                    )
-                    OutlinedIconButton(
-                        onClick = { onStep(1) },
-                        modifier = Modifier.size(48.dp)
-                    ) {
-                        Text(text = "+", style = MaterialTheme.typography.titleLarge)
-                    }
-                }
-                if (actualInputInvalid) {
+                Text(
+                    text = stringResource(
+                        R.string.current_set_format,
+                        exercise.setNumber,
+                        exercise.setCount
+                    ),
+                    style = MaterialTheme.typography.titleMedium
+                )
+                if (!exercise.isFinished && !exercise.skipped) {
                     Text(
-                        text = stringResource(R.string.programs_session_actual_invalid),
-                        style = MaterialTheme.typography.bodySmall,
+                        text = when (exercise.dimension) {
+                            PrescriptionDimension.TIME_BASED ->
+                                stringResource(R.string.programs_session_seconds_target, exercise.nextTarget)
+
+                            else -> stringResource(R.string.programs_session_reps_target, exercise.nextTarget)
+                        },
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                }
+                if (exercise.skipped) {
+                    Text(
+                        text = stringResource(R.string.programs_session_skipped),
+                        style = MaterialTheme.typography.bodyLarge,
                         color = MaterialTheme.colorScheme.error
                     )
+                }
+                TextButton(onClick = onExerciseClick) {
+                    Text(text = stringResource(R.string.programs_session_exercise_details))
+                }
+
+                Spacer(modifier = Modifier.height(8.dp))
+                SetIndicators(exercise)
+                Spacer(modifier = Modifier.height(12.dp))
+
+                if (exercise.isPerformable) {
+                    if (exercise.dimension == PrescriptionDimension.TIME_BASED) {
+                        TimerDisplay(
+                            timeLeft = timeLeft,
+                            isRunning = timerRunning,
+                            onToggle = onToggleTimer,
+                            onReset = onResetTimer
+                        )
+                        Spacer(modifier = Modifier.height(12.dp))
+                    }
+
+                    Text(
+                        text = stringResource(
+                            when (exercise.dimension) {
+                                PrescriptionDimension.TIME_BASED -> R.string.programs_session_actual_seconds
+                                else -> R.string.programs_session_actual_reps
+                            }
+                        ),
+                        style = MaterialTheme.typography.labelLarge
+                    )
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        OutlinedIconButton(
+                            onClick = { onStep(-1) },
+                            modifier = Modifier.size(48.dp)
+                        ) {
+                            Text(text = "−", style = MaterialTheme.typography.titleLarge)
+                        }
+                        OutlinedTextField(
+                            value = actualValue,
+                            onValueChange = onActualChange,
+                            singleLine = true,
+                            isError = actualInputInvalid,
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                            modifier = Modifier.weight(1f)
+                        )
+                        OutlinedIconButton(
+                            onClick = { onStep(1) },
+                            modifier = Modifier.size(48.dp)
+                        ) {
+                            Text(text = "+", style = MaterialTheme.typography.titleLarge)
+                        }
+                    }
+                    if (actualInputInvalid) {
+                        Text(
+                            text = stringResource(R.string.programs_session_actual_invalid),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.error
+                        )
+                    }
                 }
             }
         }
