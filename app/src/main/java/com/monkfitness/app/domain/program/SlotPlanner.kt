@@ -16,8 +16,8 @@ import java.time.LocalDate
  *  * a missed slot writes a status and nothing else, and does **not** slide the schedule: the plan day
  *    a date presents is `ordinal(date) mod days`, the ordinal counting *scheduled dates from the
  *    anchor* — never completions, attempts or misses;
- *  * existing planned dates are **preserved**: [SlotPlan.create] skips every date the Program already
- *    holds a slot on, whatever its status, and no row is rewritten, re-pointed or deleted;
+ *  * existing planned dates are **preserved**: [SlotPlan.create] skips every date an existing slot still
+ *    occupies — any status but `SUPERSEDED` — and no row is rewritten, re-pointed or deleted;
  *  * `FlexiblePerWeek.sessionsPerWeek` is **authoritative** and read from the revision — nothing here
  *    counts existing slots, so a schedule can never be derived from its own history;
  *  * the same inputs produce the same slots: no clock, no random source, no mutable state, and
@@ -45,6 +45,11 @@ import java.time.LocalDate
  * part of it either — changing what Wednesday's workout contains creates a new revision and preserves
  * every Wednesday, because the revision still presents Wednesdays. The opportunity is the date; what
  * is trained on it is the revision's business.
+ *
+ * A superseded slot therefore holds **no date**: it is the record of one opportunity, not a claim on
+ * the calendar, so a revision that presents that date again plans an opportunity of its own beside it.
+ * Without that, a frequency changed away and back would shrink the plan to nothing while the schedule
+ * it now describes is intact.
  *
  * **Superseded by a pause.** A pause freezes active program time and missed-opportunity logic, so a
  * date it covers is **not a training date**: the plan does not advance through the pause, and the plan
@@ -108,7 +113,12 @@ object SlotPlanner {
             }
         }
 
-        val occupied = request.slots.map { slot -> slot.plannedFor }.toSet()
+        // A superseded opportunity is history and holds no date: the revision may present that date again,
+        // and then the date needs an opportunity of its own. Nothing is ever written over the old row.
+        val occupied = request.slots
+            .filter { slot -> slot.status != SlotStatus.SUPERSEDED }
+            .map { slot -> slot.plannedFor }
+            .toSet()
         val create = if (window == null) {
             emptyList()
         } else {
@@ -118,8 +128,8 @@ object SlotPlanner {
             datesFromAnchor.mapIndexedNotNull { ordinal, date ->
                 if (!window.contains(date) || coveredBy(request.pauses, date) || date in occupied) {
                     // Behind the user, inside a pause (planned by nobody), or already holding an
-                    // opportunity — trained, missed, superseded or still open. One date holds one slot,
-                    // so nothing is added and nothing is overwritten.
+                    // opportunity that still counts — trained, missed or still open. Nothing is added
+                    // and nothing is overwritten.
                     null
                 } else {
                     WorkoutSlot(
