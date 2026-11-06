@@ -43,6 +43,15 @@ class SessionOutcomeTextTest {
         updatedAt = Instant.parse("2026-10-01T10:00:00Z")
     )
 
+    private val shoulderMobility = FamilyProgressionState(
+        revisionId = RevisionId("revision-1"),
+        familyId = "shoulder_mobility",
+        progressionLevel = 1,
+        adaptationState = AdaptiveState.HOLD,
+        currentExerciseId = "lat_stretch",
+        updatedAt = Instant.parse("2026-10-01T10:00:00Z")
+    )
+
     private val pushups = FamilyProgressionState(
         revisionId = RevisionId("revision-1"),
         familyId = "pushups",
@@ -234,6 +243,101 @@ class SessionOutcomeTextTest {
         )
         assertEquals(R.string.programs_session_outcome_ceiling, lines.single().messageRes)
     }
+
+    @Test
+    fun aLineLeadsWithTheExerciseTheUserPerformedAndKeepsTheFamily() {
+        val line = shoulderLine(performed = listOf(R.string.ex_lat_stretch))
+
+        assertEquals(
+            "the exercise the user trained, not the family's own name",
+            listOf(R.string.ex_lat_stretch),
+            line.performedNameRes
+        )
+        assertEquals(
+            "and the family stays named, because the change applies to the whole family",
+            R.string.family_shoulder_mobility,
+            line.familyNameRes
+        )
+        assertEquals(
+            SessionOutcomeShape.PERFORMED_AND_FAMILY,
+            SessionOutcomeText.shapeOf(listOf("Lat Stretch"), "Shoulder CARs")
+        )
+    }
+
+    @Test
+    fun bothExercisesOfOneFamilyAreListedInTheOrderPerformed() {
+        val line = shoulderLine(
+            performed = listOf(R.string.ex_lat_stretch, R.string.ex_arm_circles)
+        )
+
+        assertEquals(
+            "both, in the session's own order, with nothing dropped",
+            listOf(R.string.ex_lat_stretch, R.string.ex_arm_circles),
+            line.performedNameRes
+        )
+        assertEquals(
+            "two names, neither of them the family, read as both",
+            SessionOutcomeShape.PERFORMED_AND_FAMILY,
+            SessionOutcomeText.shapeOf(listOf("Lat Stretch", "Arm Circles"), "Shoulder CARs")
+        )
+    }
+
+    @Test
+    fun anExerciseNamedLikeItsFamilyIsShownOnce() {
+        val line = shoulderLine(performed = listOf(R.string.ex_shoulder_cars))
+
+        assertEquals(listOf(R.string.ex_shoulder_cars), line.performedNameRes)
+        assertEquals(
+            "the same word must not be printed twice: the family label adds nothing here",
+            SessionOutcomeShape.PERFORMED,
+            SessionOutcomeText.shapeOf(listOf("Shoulder CARs"), "Shoulder CARs")
+        )
+    }
+
+    @Test
+    fun aFamilyTheAttemptDidNotTrainKeepsTheLineItHad() {
+        assertEquals(
+            "the plan's end still reads as the plan's end",
+            R.string.programs_session_outcome_no_further_appearance,
+            SessionOutcomeText.windowText(ProgramAdaptiveReason.NO_FURTHER_APPEARANCE.name)
+        )
+        assertEquals(
+            "and a row the user wrote still says it was kept",
+            R.string.programs_session_outcome_user_authored,
+            SessionOutcomeText.holdText(ProgramAdaptiveReason.USER_AUTHORED_ELEMENT.name)
+        )
+
+        val line = SessionOutcomeText.linesOf(
+            outcomes = listOf(
+                AdaptiveIntegrationOutcome.WindowOnly(
+                    familyId = "shoulder_mobility",
+                    familyState = shoulderMobility,
+                    reason = ProgramAdaptiveReason.SUSTAINED_POSITIVE
+                )
+            ),
+            familyNames = mapOf("shoulder_mobility" to R.string.family_shoulder_mobility),
+            performedNames = emptyMap()
+        ).single()
+
+        assertEquals("no name was added to a line that had none", emptyList<Int>(), line.performedNameRes)
+        assertEquals(
+            SessionOutcomeShape.FAMILY,
+            SessionOutcomeText.shapeOf(emptyList(), "Shoulder CARs")
+        )
+    }
+
+    /** One line for the shoulder-mobility family as the session controller feeds it. */
+    private fun shoulderLine(performed: List<Int>): SessionOutcomeUi = SessionOutcomeText.linesOf(
+        outcomes = listOf(
+            AdaptiveIntegrationOutcome.WindowOnly(
+                familyId = "shoulder_mobility",
+                familyState = shoulderMobility,
+                reason = ProgramAdaptiveReason.SUSTAINED_POSITIVE
+            )
+        ),
+        familyNames = mapOf("shoulder_mobility" to R.string.family_shoulder_mobility),
+        performedNames = mapOf("shoulder_mobility" to performed)
+    ).single()
 
     /** An applied change of the pushups family, with the rows it had to keep inside their own ranges. */
     private fun appliedChange(

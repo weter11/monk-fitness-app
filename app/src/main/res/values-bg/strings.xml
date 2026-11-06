@@ -1023,6 +1023,7 @@
     <string name="programs_session_rest_value">Почивка между сериите (секунди)</string>
     <string name="programs_session_outcomes_title">Какво се променя следващия път</string>
     <string name="programs_session_outcome_line">%1$s: %2$s</string>
+    <string name="programs_session_outcome_line_named">%1$s (%2$s): %3$s</string>
     <string name="programs_session_outcome_progressed">следващия път една стъпка по-трудно</string>
     <string name="programs_session_outcome_eased">следващия път една стъпка по-леко</string>
     <string name="programs_session_outcome_variant">следващия път друг вариант</string>

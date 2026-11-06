@@ -1024,6 +1024,7 @@
     <string name="programs_session_skip_rest">Skip rest</string>
     <string name="programs_session_outcomes_title">What changes next</string>
     <string name="programs_session_outcome_line">%1$s: %2$s</string>
+    <string name="programs_session_outcome_line_named">%1$s (%2$s): %3$s</string>
     <string name="programs_session_outcome_progressed">a step harder next time</string>
     <string name="programs_session_outcome_eased">a lighter step next time</string>
     <string name="programs_session_outcome_variant">a different version next time</string>

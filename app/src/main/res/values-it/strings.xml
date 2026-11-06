@@ -1023,6 +1023,7 @@
     <string name="programs_session_rest_value">Riposo tra le serie (secondi)</string>
     <string name="programs_session_outcomes_title">Cosa cambia la prossima volta</string>
     <string name="programs_session_outcome_line">%1$s: %2$s</string>
+    <string name="programs_session_outcome_line_named">%1$s (%2$s): %3$s</string>
     <string name="programs_session_outcome_progressed">un passo più duro la prossima volta</string>
     <string name="programs_session_outcome_eased">un passo più leggero la prossima volta</string>
     <string name="programs_session_outcome_variant">una variante diversa la prossima volta</string>

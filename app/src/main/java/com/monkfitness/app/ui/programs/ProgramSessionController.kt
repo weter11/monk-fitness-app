@@ -258,6 +258,9 @@ class ProgramSessionController(
     /** Family display names, resolved once for the same reason as [nameByExerciseId]. */
     private var nameByFamilyId: Map<String, Int>? = null
 
+    /** The catalogue's family per exercise id, resolved once: the family a line's change belongs to. */
+    private var familyByExerciseId: Map<String, String>? = null
+
     /** The rest the user last chose, read once when the attempt opens. */
     private var rememberedRestSeconds: Int? = null
 
@@ -519,7 +522,11 @@ class ProgramSessionController(
                     ProgramSessionNotice.COMPLETED_ADAPTIVE_UNAVAILABLE
                 }
                 val outcomes = if (adaptiveHalf.evaluated) {
-                    SessionOutcomeText.linesOf(adaptiveHalf.outcomes, familyNames())
+                    SessionOutcomeText.linesOf(
+                        adaptiveHalf.outcomes,
+                        familyNames(),
+                        performedNamesByFamily(completed.value.session)
+                    )
                 } else {
                     emptyList()
                 }
@@ -549,6 +556,29 @@ class ProgramSessionController(
     fun back() = Unit
 
     private fun currentAttempt(): WorkoutSession? = session
+
+    /**
+     * The exercises this attempt confirmed work for, per family, in the order it presents them: the
+     * completion's line is about what the user did, and the family is the scope of the change.
+     *
+     * Both halves are read from the attempt's own rows and the catalogue's own names, so a skipped
+     * occurrence, a family this build cannot name or an id the catalogue does not hold adds no name
+     * rather than a guess. Two rows of the same exercise are one exercise, so they are named once.
+     */
+    private suspend fun performedNamesByFamily(session: WorkoutSession): Map<String, List<Int>> {
+        val familyOf = familyOfExercise()
+        val names = names()
+        val performed = LinkedHashMap<String, MutableList<Int>>()
+        session.exercises
+            .filter { exercise -> exercise.results.isNotEmpty() }
+            .forEach { exercise ->
+                val familyId = familyOf[exercise.exerciseId] ?: return@forEach
+                val nameRes = names[exercise.exerciseId] ?: return@forEach
+                val inFamily = performed.getOrPut(familyId) { mutableListOf() }
+                if (nameRes !in inFamily) inFamily.add(nameRes)
+            }
+        return performed
+    }
 
     /**
      * The occurrence the user is on: the one they jumped to, or else the first of the session's own rows
@@ -732,6 +762,23 @@ class ProgramSessionController(
             emptyMap()
         }
         nameByExerciseId = loaded
+        return loaded
+    }
+
+    /**
+     * The catalogue's family per exercise id, read once.
+     *
+     * The same catalogue read as [names], so a family and its exercises come from one source; an
+     * unreadable catalogue names no family rather than filing the exercise under a guess.
+     */
+    private suspend fun familyOfExercise(): Map<String, String> {
+        familyByExerciseId?.let { cached -> return cached }
+        val loaded = try {
+            catalogue.options().associate { option -> option.exerciseId to option.familyId }
+        } catch (failure: Throwable) {
+            emptyMap()
+        }
+        familyByExerciseId = loaded
         return loaded
     }
 

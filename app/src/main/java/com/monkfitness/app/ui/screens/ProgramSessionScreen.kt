@@ -76,12 +76,17 @@ import com.monkfitness.app.ui.programs.ProgramSessionController
 import com.monkfitness.app.ui.programs.ProgramSessionNotice
 import com.monkfitness.app.ui.programs.ProgramSessionUiState
 import com.monkfitness.app.ui.programs.SessionExerciseUi
+import com.monkfitness.app.ui.programs.SessionOutcomeShape
+import com.monkfitness.app.ui.programs.SessionOutcomeText
 import com.monkfitness.app.ui.programs.SessionStage
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 /** The seconds one `+`/`−` press changes a timed set by. */
 private const val SECONDS_STEP = 5
+
+/** What separates two exercise names one completion's line lists. */
+private const val PERFORMED_NAME_SEPARATOR = ", "
 
 /** A card's own vertical cost that is not content: its padding and the gaps around the demo. */
 private val CARD_CHROME = 48.dp
@@ -385,14 +390,31 @@ private fun CompletedSummary(state: ProgramSessionUiState) {
             )
             for (outcome in state.outcomes) {
                 val sentence = stringResource(outcome.messageRes)
+                val familyName = outcome.familyNameRes?.let { nameRes -> stringResource(nameRes) }
+                val performedNames = outcome.performedNameRes.map { nameRes -> stringResource(nameRes) }
                 Text(
-                    text = outcome.familyNameRes?.let { nameRes ->
-                        stringResource(
+                    text = when (SessionOutcomeText.shapeOf(performedNames, familyName)) {
+                        SessionOutcomeShape.SENTENCE -> sentence
+
+                        SessionOutcomeShape.FAMILY -> stringResource(
                             R.string.programs_session_outcome_line,
-                            stringResource(nameRes),
+                            familyName.orEmpty(),
                             sentence
                         )
-                    } ?: sentence,
+
+                        SessionOutcomeShape.PERFORMED -> stringResource(
+                            R.string.programs_session_outcome_line,
+                            performedNames.joinToString(PERFORMED_NAME_SEPARATOR),
+                            sentence
+                        )
+
+                        SessionOutcomeShape.PERFORMED_AND_FAMILY -> stringResource(
+                            R.string.programs_session_outcome_line_named,
+                            performedNames.joinToString(PERFORMED_NAME_SEPARATOR),
+                            familyName.orEmpty(),
+                            sentence
+                        )
+                    },
                     style = MaterialTheme.typography.bodyMedium
                 )
                 outcome.noteRes?.let { noteRes ->
