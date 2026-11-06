@@ -1,8 +1,13 @@
 package com.monkfitness.app.ui.programs
 
+import com.monkfitness.app.domain.common.ProgramId
+import com.monkfitness.app.domain.common.SlotId
 import com.monkfitness.app.domain.program.LifecycleStatus
+import com.monkfitness.app.domain.program.ProgramOperationResult
 import com.monkfitness.app.domain.program.ProgramSchedulingResult
 import com.monkfitness.app.domain.program.ProgramSource
+import com.monkfitness.app.domain.usecase.SessionRuntime
+import com.monkfitness.app.domain.workout.SessionRuntimeResult
 import kotlinx.coroutines.runBlocking
 import org.junit.After
 import org.junit.Assert.assertEquals
@@ -40,7 +45,20 @@ class ProgramHomeControllerTest {
     private fun homeController() = ProgramHomeController(
         lifecycle = rig.transfer.lifecycleService,
         scheduler = rig.transfer.scheduler,
-        progress = rig.progress
+        progress = rig.progress,
+        starter = rig.startService
+    )
+
+    /** The one workout runtime, wired as the composition root wires it. */
+    private fun sessionRuntime() = SessionRuntime(
+        planRepository = rig.transfer.planRepository,
+        scheduleRepository = rig.transfer.scheduleRepository,
+        sessionRepository = rig.transfer.sessionRepository,
+        adaptiveRepository = rig.transfer.adaptiveRepository,
+        clock = rig.clock,
+        idGenerator = rig.ids,
+        zone = rig.zone,
+        inTransaction = { block -> rig.database.transaction { block() } }
     )
 
     @Test
@@ -143,6 +161,118 @@ class ProgramHomeControllerTest {
             "and a read is not a create: the list holds exactly the Program the user made",
             1,
             rig.state.rows.count { row -> row.source == ProgramSource.USER }
+        )
+    }
+
+    @Test
+    fun startingFromHomeStartsAProgramThatNeverStarted() = runBlocking {
+        val created = rig.createProgramThroughTheUi("Morning plan")!!
+        rig.controller.select(created)
+        assertEquals(
+            "the creation starts nothing, which is the state this path used to leave behind",
+            LifecycleStatus.NOT_STARTED,
+            rig.storedProgram(ProgramId(created))!!.lifecycleStatus
+        )
+        val home = homeController()
+        home.load()
+        val slotId = home.state.value.nextSlotId!!
+
+        val opened = home.startWorkout(slotId)
+
+        assertEquals("the opportunity the user chose is the one that opens", slotId, opened)
+        val started = rig.storedProgram(ProgramId(created))!!
+        assertEquals(LifecycleStatus.RUNNING, started.lifecycleStatus)
+        assertEquals(
+            "the factual start is the moment of the tap, never the planned date",
+            rig.clock.now(),
+            started.actualStartDate
+        )
+        assertEquals(
+            "and Home reports the Program it just started",
+            LifecycleStatus.RUNNING,
+            home.state.value.lifecycleStatus
+        )
+        assertNull("a start that succeeded needs no message", home.state.value.notice)
+
+        val session = sessionRuntime().startSession(SlotId(slotId))
+        assertTrue(
+            "and the workout the user is sent to really starts",
+            session is SessionRuntimeResult.Success
+        )
+    }
+
+    @Test
+    fun aProgramAlreadyRunningKeepsHomesPathUnchanged() = runBlocking {
+        val created = rig.createProgramThroughTheUi("Running plan")!!
+        rig.controller.select(created)
+        rig.controller.start(created)
+        val started = rig.storedProgram(ProgramId(created))!!
+        assertEquals(LifecycleStatus.RUNNING, started.lifecycleStatus)
+
+        rig.clock.instant = rig.clock.instant.plusSeconds(3_600)
+        val home = homeController()
+        home.load()
+        val slotId = home.state.value.nextSlotId!!
+
+        val opened = home.startWorkout(slotId)
+
+        assertEquals("Home only opens the opportunity, as it always did", slotId, opened)
+        assertEquals(
+            "and a running Program's factual start is not stamped a second time",
+            started.actualStartDate,
+            rig.storedProgram(ProgramId(created))!!.actualStartDate
+        )
+        assertNull("nothing was an operation, so nothing is reported", home.state.value.notice)
+    }
+
+    @Test
+    fun aRefusedStartStartsNoSessionAndSaysWhy() = runBlocking {
+        rig.seedStandardProgram()
+        val created = rig.createProgramThroughTheUi("Gone by the time")!!
+        rig.controller.select(created)
+        val home = homeController()
+        home.load()
+        val slotId = home.state.value.nextSlotId!!
+
+        // Deleted from another screen while this card still offers its opportunity.
+        val deleted = rig.transfer.lifecycleService.deleteProgram(ProgramId(created))
+        assertTrue(deleted is ProgramOperationResult.Success)
+
+        val opened = home.startWorkout(slotId)
+
+        assertNull("a refused start opens nothing", opened)
+        assertEquals(
+            "and the refusal is the Program screens' own sentence",
+            ProgramNotice.PROGRAM_NOT_FOUND,
+            home.state.value.notice
+        )
+        assertEquals(
+            "no workout was started for the opportunity",
+            0,
+            rig.transfer.sessionRepository.sessionsOfSlot(SlotId(slotId)).size
+        )
+    }
+
+    @Test
+    fun aSecondTapDoesNotStartTheProgramTwice() = runBlocking {
+        val created = rig.createProgramThroughTheUi("Double tap")!!
+        rig.controller.select(created)
+        val home = homeController()
+        home.load()
+        val slotId = home.state.value.nextSlotId!!
+
+        home.startWorkout(slotId)
+        val firstStart = rig.storedProgram(ProgramId(created))!!.actualStartDate
+        assertNotNull(firstStart)
+
+        rig.clock.instant = rig.clock.instant.plusSeconds(60)
+        val second = home.startWorkout(slotId)
+
+        assertEquals("the second tap opens the same opportunity", slotId, second)
+        assertEquals(
+            "and the Program was started once: its factual start is still the first tap's moment",
+            firstStart,
+            rig.storedProgram(ProgramId(created))!!.actualStartDate
         )
     }
 }
