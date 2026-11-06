@@ -828,6 +828,7 @@
     <string name="programs_schedule_sessions_per_week">%1$d por semana</string>
     <string name="programs_schedule_every_day">Todos os dias</string>
     <string name="programs_schedule_no_rest_day">Sete dias de treino por semana, sem dia de descanso.</string>
+    <string name="programs_schedule_every_other_day">Dia sim, dia não</string>
     <string name="programs_session_in_progress">Em andamento</string>
     <string name="programs_session_completed">Concluída</string>
     <string name="programs_session_cancelled">Cancelada</string>

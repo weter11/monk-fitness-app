@@ -133,7 +133,8 @@ internal fun ProgramRevision.toEntity(): ProgramRevisionEntity = ProgramRevision
     focusGoal = focus.goal.name,
     focusTargets = focus.storedFocusTargets(),
     preferredExerciseIds = preferredExercises.storedExerciseIds(),
-    sessionTypes = sessionTypes.storedSessionTypes()
+    sessionTypes = sessionTypes.storedSessionTypes(),
+    scheduleIntervalDays = (schedule as? ProgramSchedule.EveryNDays)?.days
 )
 
 /** The duration one revision row stores. */
@@ -168,9 +169,15 @@ private fun scheduleOf(revision: ProgramRevisionEntity): ProgramSchedule =
                     "frequency it runs at: revision '${revision.revisionId}' stores none (§20)"
             }
         )
+        ProgramRevisionEntity.EVERY_N_DAYS -> ProgramSchedule.EveryNDays(
+            requireNotNull(revision.scheduleIntervalDays) {
+                "an ${ProgramRevisionEntity.EVERY_N_DAYS} schedule stores the interval it runs at: " +
+                    "revision '${revision.revisionId}' stores none"
+            }
+        )
         else -> throw IllegalArgumentException(
             "a stored program_revision.scheduleType must be one of " +
-                "${listOf(ProgramRevisionEntity.FIXED_WEEKDAYS, ProgramRevisionEntity.FLEXIBLE_PER_WEEK)}, " +
+                "${listOf(ProgramRevisionEntity.FIXED_WEEKDAYS, ProgramRevisionEntity.FLEXIBLE_PER_WEEK, ProgramRevisionEntity.EVERY_N_DAYS)}, " +
                 "was '${revision.scheduleType}' in '${revision.revisionId}'"
         )
     }
@@ -186,6 +193,7 @@ private fun durationTypeOf(duration: ProgramDuration): String =
 private fun scheduleTypeOf(schedule: ProgramSchedule): String = when (schedule) {
     is ProgramSchedule.FixedWeekdays -> ProgramRevisionEntity.FIXED_WEEKDAYS
     is ProgramSchedule.FlexiblePerWeek -> ProgramRevisionEntity.FLEXIBLE_PER_WEEK
+    is ProgramSchedule.EveryNDays -> ProgramRevisionEntity.EVERY_N_DAYS
 }
 
 /**

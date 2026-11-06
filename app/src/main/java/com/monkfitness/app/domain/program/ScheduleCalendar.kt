@@ -3,41 +3,62 @@ package com.monkfitness.app.domain.program
 import java.time.DayOfWeek
 import java.time.LocalDate
 import java.time.ZoneId
+import java.time.temporal.ChronoUnit
 
 /**
- * The date arithmetic of the two schedule forms, and the pause/date conversion the schedule needs.
+ * The date arithmetic of the three schedule forms, and the pause/date conversion the schedule needs.
  *
  * Everything here is a *reading* of the schedule vocabulary the domain already has
  * ([ProgramSchedule], [ProgramPause]) into the dates a scheduling pass works with. Nothing here decides
  * anything: which dates exist, which of them a pass covers and what happens to a date that passes are
  * [SlotPlanner]'s decisions, kept apart so the arithmetic can be read and tested on its own.
  *
- * Both schedule forms answer one question — *is this date a training date?* — deterministically.
+ * Every form answers one question — *is this date a training date?* — deterministically.
  * [ProgramSchedule.FixedWeekdays] answers by membership; [ProgramSchedule.FlexiblePerWeek] by an even
  * spread over the calendar week, because "three sessions a week, you choose" still means the user
- * delegated the choice to the app, not to chance.
+ * delegated the choice to the app, not to chance; [ProgramSchedule.EveryNDays] by the distance from the
+ * Program's own anchor date, because an interval that drifts across weeks has no weekday set and no week.
  *
  * The frequency is authoritative as a **count the user stated**, never as a description of the slots
  * that happen to exist: `sessionsPerWeek` is read directly and no function here counts rows. A schedule
  * derived from the current slots would make yesterday's miss change next week's rhythm.
  *
- * The spread is distributed over the calendar week, Monday first. Anchoring it to the program's own
+ * The weekly spread is distributed over the calendar week, Monday first. Anchoring it to the program's own
  * start date instead would make the same schedule mean different things for two Programs, and would let
- * a pause move the rhythm.
+ * a pause move the rhythm. An interval has no such choice: its rhythm is the calendar distance from the
+ * anchor, so the anchor is passed in rather than assumed.
  */
 
 /**
- * The weekdays [this] schedule trains on — the one question every schedule form answers.
+ * Whether [date] is one of the training dates [anchor]'s grid presents.
  *
- * Both forms return a set, so no caller has to know which one it was handed.
+ * The weekday forms ignore [anchor]; an interval is counted from it, so "every other day" starts on the
+ * day the Program starts and alternates from there, whatever weekday that is.
  */
-fun ProgramSchedule.scheduledWeekdays(): Set<DayOfWeek> = when (this) {
-    is ProgramSchedule.FixedWeekdays -> weekdays
-    is ProgramSchedule.FlexiblePerWeek -> flexibleSpread(sessionsPerWeek)
+fun ProgramSchedule.schedules(date: LocalDate, anchor: LocalDate): Boolean = when (this) {
+    is ProgramSchedule.FixedWeekdays -> date.dayOfWeek in weekdays
+    is ProgramSchedule.FlexiblePerWeek -> date.dayOfWeek in flexibleSpread(sessionsPerWeek)
+    is ProgramSchedule.EveryNDays ->
+        !date.isBefore(anchor) &&
+            ChronoUnit.DAYS.between(anchor, date) % days == 0L
 }
 
-/** Whether [date] falls on a day [this] schedule trains on. */
-fun ProgramSchedule.schedules(date: LocalDate): Boolean = date.dayOfWeek in scheduledWeekdays()
+/**
+ * The training dates of this schedule from [from] to [to], in order, read against [anchor].
+ *
+ * Written as a day-by-day walk rather than by stepping the interval, so the three forms share one loop and
+ * one answer: a date is a training date or it is not, and the sequence of them is the calendar's. It is
+ * also what keeps a month boundary and a year boundary the same arithmetic as any other pair of days —
+ * the walk moves by one day at a time and never counts weeks or months.
+ */
+fun ProgramSchedule.trainingDates(
+    from: LocalDate,
+    to: LocalDate,
+    anchor: LocalDate
+): List<LocalDate> = generateSequence(from) { date -> date.plusDays(1) }
+    .takeWhile { date -> !date.isAfter(to) }
+    .filter { date -> schedules(date, anchor) }
+    .toList()
 
 /**
  * The deterministic even spread of [sessionsPerWeek] sessions over a Monday-first week.

@@ -24,14 +24,15 @@ import java.time.DayOfWeek
  *  * `durationType` — `FIXED_DAYS` with a day count in `durationDays`, or `INDEFINITE` with no total.
  *    The distinction is load-bearing: an indefinite program has no length, and reporting a fake
  *    `N / 30` for it is forbidden, so the two forms may not be pooled into one number.
- *  * `scheduleType` — `FIXED_WEEKDAYS` naming its weekdays, or `FLEXIBLE_PER_WEEK` with a deterministic
- *    frequency in `scheduleSessionsPerWeek`. The number is revision content exactly as pattern,
- *    duration and the plan are: a revision that knew it was a flexible-frequency plan without knowing
- *    *how many* sessions a week it holds would not describe the plan it is the record of. The column is
- *    nullable because only one of the two forms has a frequency, and it carries no default: inventing
- *    one would state a weekly frequency the user never chose, for a row whose schedule is a fixed
- *    weekday set and therefore has none at all. The pair is held consistent by the guard below, the way
- *    `durationType` and `durationDays` are.
+ *  * `scheduleType` — `FIXED_WEEKDAYS` naming its weekdays, `FLEXIBLE_PER_WEEK` with a deterministic
+ *    frequency in `scheduleSessionsPerWeek`, or `EVERY_N_DAYS` with its interval in
+ *    `scheduleIntervalDays`. The number is revision content exactly as pattern, duration and the plan
+ *    are: a revision that knew it was a flexible-frequency plan without knowing *how many* sessions a
+ *    week it holds would not describe the plan it is the record of. Each payload column is nullable
+ *    because only one of the three forms has it, and none carries a default: inventing one would state a
+ *    frequency the user never chose, for a row whose schedule states something else and therefore has
+ *    none at all. The triple is held consistent by the guard below, the way `durationType` and
+ *    `durationDays` are.
  *
  * The discriminator tokens are the domain subtypes' own names in enum convention (`FixedDays` →
  * `FIXED_DAYS`); `ProgramSchemaTest` asserts that correspondence rather than trusting it.
@@ -78,6 +79,10 @@ import java.time.DayOfWeek
  *   reason: a default would state a selection nobody chose. Declared last because the column is appended by
  *   a migration, and declaration order equal to physical order is what keeps a fresh database and an
  *   upgraded one byte-identical.
+ * @property scheduleIntervalDays the interval of an `EVERY_N_DAYS` revision, in calendar days from its
+ *   anchor, at least [MINIMUM_INTERVAL_DAYS]; `null` when the schedule names weekdays or a weekly
+ *   frequency. Nullable with no default, because only one of the three forms has an interval and a
+ *   default would state a rhythm nobody chose. Declared last for the same reason [sessionTypes] is.
  */
 @Entity(
     tableName = "program_revision",
@@ -105,7 +110,8 @@ data class ProgramRevisionEntity(
     val focusGoal: String? = null,
     val focusTargets: String? = null,
     val preferredExerciseIds: String? = null,
-    val sessionTypes: String? = null
+    val sessionTypes: String? = null,
+    val scheduleIntervalDays: Int? = null
 ) {
 
     init {
@@ -133,6 +139,10 @@ data class ProgramRevisionEntity(
                     "a $FIXED_WEEKDAYS schedule has no frequency to store — the frequency belongs to " +
                         "$FLEXIBLE_PER_WEEK — but scheduleSessionsPerWeek was $scheduleSessionsPerWeek"
                 }
+                require(scheduleIntervalDays == null) {
+                    "a $FIXED_WEEKDAYS schedule has no interval to store — the interval belongs to " +
+                        "$EVERY_N_DAYS — but scheduleIntervalDays was $scheduleIntervalDays"
+                }
             }
             FLEXIBLE_PER_WEEK -> {
                 require(scheduleWeekdays == null) {
@@ -146,6 +156,28 @@ data class ProgramRevisionEntity(
                 require(frequency in SESSIONS_PER_WEEK_RANGE) {
                     "sessionsPerWeek must be within $SESSIONS_PER_WEEK_RANGE, was $frequency " +
                         "(the range the domain's flexible-weekly-frequency schedule accepts)"
+                }
+                require(scheduleIntervalDays == null) {
+                    "a $FLEXIBLE_PER_WEEK schedule has no interval to store — the interval belongs to " +
+                        "$EVERY_N_DAYS — but scheduleIntervalDays was $scheduleIntervalDays"
+                }
+            }
+            EVERY_N_DAYS -> {
+                require(scheduleWeekdays == null) {
+                    "an $EVERY_N_DAYS schedule is an interval of calendar days, not named weekdays, " +
+                        "but scheduleWeekdays was $scheduleWeekdays"
+                }
+                require(scheduleSessionsPerWeek == null) {
+                    "an $EVERY_N_DAYS schedule states an interval rather than a weekly frequency, but " +
+                        "scheduleSessionsPerWeek was $scheduleSessionsPerWeek"
+                }
+                val interval = requireNotNull(scheduleIntervalDays) {
+                    "an $EVERY_N_DAYS schedule stores the interval it runs at; " +
+                        "scheduleIntervalDays was null"
+                }
+                require(interval >= MINIMUM_INTERVAL_DAYS) {
+                    "scheduleIntervalDays must be at least $MINIMUM_INTERVAL_DAYS, was $interval " +
+                        "(the shortest interval the domain's every-N-days schedule accepts)"
                 }
             }
         }
@@ -174,6 +206,8 @@ data class ProgramRevisionEntity(
 
         const val FLEXIBLE_PER_WEEK: String = "FLEXIBLE_PER_WEEK"
 
+        const val EVERY_N_DAYS: String = "EVERY_N_DAYS"
+
         /**
          * Spelled as the domain `Goal` member's own name — `ProgramSchemaTest` asserts that
          * correspondence, as it does for the duration and schedule discriminators above.
@@ -190,5 +224,8 @@ data class ProgramRevisionEntity(
 
         /** Kept identical to the range the domain's `ProgramSchedule.FlexiblePerWeek` accepts. */
         val SESSIONS_PER_WEEK_RANGE: IntRange = 1..7
+
+        /** Kept identical to the shortest interval the domain's `ProgramSchedule.EveryNDays` accepts. */
+        const val MINIMUM_INTERVAL_DAYS: Int = 2
     }
 }

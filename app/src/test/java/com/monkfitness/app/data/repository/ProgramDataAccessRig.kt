@@ -250,6 +250,9 @@ internal class ProgramDataAccessRig(key: String = "a", supplied: SqliteTestDatab
             // `restSeconds` against a table one version behind and fail on the rig's own guard.
             database.migrate(AppDatabase.MIGRATION_18_19)
             database.migrate(AppDatabase.MIGRATION_19_20)
+            // The every-N-days interval column, for the same reason: a rig one version behind fails
+            // the entity/column comparison rather than the test it was built for.
+            database.migrate(AppDatabase.MIGRATION_20_21)
         }
     }
 }

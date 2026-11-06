@@ -828,6 +828,7 @@
     <string name="programs_schedule_sessions_per_week">%1$d на седмица</string>
     <string name="programs_schedule_every_day">Всеки ден</string>
     <string name="programs_schedule_no_rest_day">Седем тренировъчни дни седмично, без ден за почивка.</string>
+    <string name="programs_schedule_every_other_day">През ден</string>
     <string name="programs_session_in_progress">В ход</string>
     <string name="programs_session_completed">Завършена</string>
     <string name="programs_session_cancelled">Отменена</string>

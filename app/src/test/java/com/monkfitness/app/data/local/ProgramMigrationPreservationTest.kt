@@ -86,6 +86,7 @@ class ProgramMigrationPreservationTest {
         // The per-set rest column — nullable, additive, and no backfill of the sets already stored.
         database.migrate(AppDatabase.MIGRATION_18_19)
         database.migrate(AppDatabase.MIGRATION_19_20)
+        database.migrate(AppDatabase.MIGRATION_20_21)
     }
 
     /** A populated **version-18** database: every step before the per-set rest column. */
@@ -631,6 +632,8 @@ class ProgramMigrationPreservationTest {
         assertEquals(19, AppDatabase.MIGRATION_18_19.endVersion)
         assertEquals(19, AppDatabase.MIGRATION_19_20.startVersion)
         assertEquals(20, AppDatabase.MIGRATION_19_20.endVersion)
+        assertEquals(20, AppDatabase.MIGRATION_20_21.startVersion)
+        assertEquals(21, AppDatabase.MIGRATION_20_21.endVersion)
 
         val database = SqliteTestDatabase.inMemory()
         database.execAll(LegacyV7Schema.TABLE_STATEMENTS)
@@ -648,6 +651,7 @@ class ProgramMigrationPreservationTest {
             database.migrate(AppDatabase.MIGRATION_17_18)
             database.migrate(AppDatabase.MIGRATION_18_19)
             database.migrate(AppDatabase.MIGRATION_19_20)
+            database.migrate(AppDatabase.MIGRATION_20_21)
         } catch (failure: SQLException) {
             throw AssertionError("the migration failed on a real engine: ${failure.message}")
         }
@@ -894,6 +898,64 @@ class ProgramMigrationPreservationTest {
             "no other table, index or bookkeeping entry is rewritten",
             schemaBefore.filterKeys { table -> table != "program_set_log" },
             database.masterSql().filterKeys { table -> table != "program_set_log" }
+        )
+    }
+
+    /**
+     * The every-N-days interval is added to the revisions a device already holds **without rewriting
+     * one**: a row written before the form existed keeps every value it held, and its interval reads
+     * `NULL`.
+     *
+     * `NULL` is the point of the step. A backfill of `2` would claim every stored revision trains every
+     * other day, and a `0` would claim an interval the domain refuses; the schema says *no interval
+     * stated* instead, and only a revision whose discriminator is `EVERY_N_DAYS` ever writes one.
+     */
+    @Test
+    fun theIntervalUpgradeKeepsStoredRevisionsAndLeavesTheirIntervalUnstated() {
+        val database = versionEighteenDatabase()
+        database.migrate(AppDatabase.MIGRATION_18_19)
+        database.migrate(AppDatabase.MIGRATION_19_20)
+        database.exec(
+            "INSERT INTO `program` (`programId`, `name`, `description`, `source`, `lifecycleStatus`, " +
+                "`currentRevisionId`, `createdAt`, `updatedAt`) VALUES ('program-1', 'Program', '', " +
+                "'USER', 'RUNNING', 'revision-1', 1700000000000, 1700000000000)"
+        )
+        database.exec(
+            "INSERT INTO `program_revision` (`revisionId`, `programId`, `revisionNumber`, `mode`, " +
+                "`durationType`, `scheduleType`, `scheduleSessionsPerWeek`, `createdAt`, " +
+                "`sessionTypes`) VALUES ('revision-1', 'program-1', 1, 'GENERATED', 'INDEFINITE', " +
+                "'FLEXIBLE_PER_WEEK', 3, 1700000000000, 'STRENGTH')"
+        )
+        val before = database.rows("SELECT * FROM `program_revision`").single()
+        val schemaBefore = database.masterSql()
+
+        database.migrate(AppDatabase.MIGRATION_20_21)
+
+        val after = database.rows("SELECT * FROM `program_revision`").single()
+        assertEquals(
+            "the revision the version-20 database held keeps every value it held, selection included",
+            before,
+            after.filterKeys { key -> key in before.keys }
+        )
+        assertEquals(
+            "and its interval is unstated rather than defaulted: no rhythm was ever chosen for it",
+            listOf(null),
+            listOf(after["scheduleIntervalDays"])
+        )
+        assertEquals(
+            "the column is appended to the row's existing columns, in the order the entity declares them",
+            ProgramSchemaFixture.columnsNow("program_revision").map { it.name },
+            database.columnNames("program_revision")
+        )
+        assertEquals(
+            "no other table, index or bookkeeping entry is rewritten",
+            schemaBefore.filterKeys { table -> table != "program_revision" },
+            database.masterSql().filterKeys { table -> table != "program_revision" }
+        )
+        assertEquals(
+            "and no row was added to or removed from the table",
+            1,
+            database.count("program_revision")
         )
     }
 }

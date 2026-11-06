@@ -278,6 +278,13 @@ fun ProgramEditorScreen(
                         }
                     )
                 }
+                // One more rhythm beside them, not in place of one: "every other day" alternates against
+                // the calendar, so no sessions-per-week chip can state it.
+                FilterChip(
+                    selected = current.schedule == ProgramSchedule.EveryNDays(EVERY_OTHER_DAY),
+                    onClick = { controller.setDraftSchedule(ProgramSchedule.EveryNDays(EVERY_OTHER_DAY)) },
+                    label = { Text(stringResource(R.string.programs_schedule_every_other_day)) }
+                )
             }
 
             // Next to the choice that causes it: the user keeps the frequency either way, and a plan
@@ -1315,6 +1322,9 @@ private const val DURATION_DAYS_56 = 56
 private const val EVERY_DAY_SESSIONS_PER_WEEK = 7
 
 private val SCHEDULE_OPTIONS = listOf(2, 3, 4, 5, 6, EVERY_DAY_SESSIONS_PER_WEEK)
+
+/** The one interval the editor offers. The type holds a number; the row shows one rhythm. */
+private const val EVERY_OTHER_DAY = 2
 
 /** The share dialog's percent field, wide enough for three digits and the field's own padding. */
 private val PERCENT_FIELD_WIDTH = 88.dp

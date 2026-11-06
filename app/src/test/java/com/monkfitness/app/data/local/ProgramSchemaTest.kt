@@ -171,6 +171,13 @@ class ProgramSchemaTest {
     private fun sessionTypesStatements(): List<String> =
         recordStatements(AppDatabase.MIGRATION_19_20)
 
+    /**
+     * The one exact statement the **every-N-days interval** step (20 -> 21) executes: the nullable
+     * column, with no default and no backfill of the revisions a device already holds.
+     */
+    private fun everyNDaysStatements(): List<String> =
+        recordStatements(AppDatabase.MIGRATION_20_21)
+
     private fun allAdditiveStatements(): List<String> =
         additiveStatements() + focusStatements() + windowStatements()
 
@@ -449,8 +456,14 @@ class ProgramSchemaTest {
         )
         assertEquals(20, AppDatabase.MIGRATION_19_20.endVersion)
         assertEquals(
+            "the every-N-days interval is the additive step after the selection",
+            20,
+            AppDatabase.MIGRATION_20_21.startVersion
+        )
+        assertEquals(21, AppDatabase.MIGRATION_20_21.endVersion)
+        assertEquals(
             "and the declared version is where the chain ends",
-            AppDatabase.MIGRATION_19_20.endVersion,
+            AppDatabase.MIGRATION_20_21.endVersion,
             currentVersion()
         )
     }
@@ -557,6 +570,48 @@ class ProgramSchemaTest {
         )
         assertTrue(
             "and no default is stated, because a selection the user never made is what a default would write",
+            statements.none { statement -> statement.contains("DEFAULT", ignoreCase = true) }
+        )
+    }
+
+    /**
+     * The every-N-days step adds exactly one nullable column on the revision, with **no `DEFAULT`** and
+     * nothing else.
+     *
+     * One column and no table: the discriminator is a token in a column that already exists, so a third
+     * *value* needs no DDL. `null` is the whole claim — it is what every revision stored before this step
+     * holds and what every weekday or weekly-frequency revision still holds, and it means *this revision
+     * states no interval*. A default would put a rhythm on rows that never had one, and a backfill would
+     * rewrite rows the device already holds.
+     */
+    @Test
+    fun theEveryNDaysMigrationAddsOneNullableColumnAndNoDefault() {
+        val statements = everyNDaysStatements()
+
+        assertEquals(
+            "20 -> 21 executes exactly one statement: the interval column on the immutable revision",
+            1,
+            statements.size
+        )
+        assertEquals(
+            "ALTER TABLE `program_revision` ADD COLUMN `scheduleIntervalDays` INTEGER",
+            ProgramSchemaFixture.normalized(statements.single())
+        )
+        assertEquals(
+            "and it is nullable, so \"no interval stated\" is stored as an absence rather than as a zero",
+            listOf(true),
+            ProgramSchemaFixture.columnsAddedBy("MIGRATION_20_21", "program_revision")
+                .map { it.nullable }
+        )
+        assertTrue(
+            "no statement writes a row: a backfill would put an interval on every revision already saved",
+            statements.none { statement ->
+                Regex("\\b(INSERT|UPDATE|DELETE|DROP|RENAME)\\b", RegexOption.IGNORE_CASE)
+                    .containsMatchIn(statement)
+            }
+        )
+        assertTrue(
+            "and no default is stated, because a rhythm the user never chose is what a default would write",
             statements.none { statement -> statement.contains("DEFAULT", ignoreCase = true) }
         )
     }
@@ -1524,11 +1579,13 @@ class ProgramSchemaTest {
         upgraded.migrate(AppDatabase.MIGRATION_18_19)
         // The session-type selection, so the chain lands on the declared version.
         upgraded.migrate(AppDatabase.MIGRATION_19_20)
+        // The every-N-days interval, so the chain lands on the declared version.
+        upgraded.migrate(AppDatabase.MIGRATION_20_21)
 
         assertEquals(
             "the revision table the chain leaves behind is the one the contract describes: the " +
-                "version-8 columns in declaration order, then every appended one, the session-type " +
-                "selection last",
+                "version-8 columns in declaration order, then every appended one, the every-N-days " +
+                "interval last",
             ProgramSchemaFixture.normalized(
                 ProgramSchemaFixture.expectedCurrentTableDdl("program_revision")
             ).replace("IF NOT EXISTS ", ""),
@@ -2092,7 +2149,8 @@ class ProgramSchemaTest {
         // list is the set of steps being audited, not a sample of them.
         val added = ProgramSchemaFixture.normalized(
             (allAdditiveStatements() + targetOccurrenceStatements() + preferenceStatements() +
-                historicalFocusStatements() + restStatements() + sessionTypesStatements())
+                historicalFocusStatements() + restStatements() + sessionTypesStatements() +
+                everyNDaysStatements())
                 .joinToString(" ")
         )
         // The two target-occurrence tables are created outright rather than appended to, so their columns

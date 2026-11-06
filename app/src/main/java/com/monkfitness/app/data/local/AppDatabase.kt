@@ -84,7 +84,7 @@ import com.monkfitness.app.data.model.WorkoutSessionEntity
         AdaptiveDecisionRecordEntity::class,
         AdaptiveAdjustmentEntity::class
     ],
-    version = 20,
+    version = 21,
     exportSchema = false
 )
 @TypeConverters(AdaptiveTypeConverters::class, ProgramTypeConverters::class)
@@ -1226,6 +1226,24 @@ abstract class AppDatabase : RoomDatabase() {
             }
         }
 
+        /**
+         * The **every-N-days interval** becomes a third schedule form.
+         *
+         * One nullable column and nothing else. `scheduleType` already carries the discriminator, and a
+         * third token needs no DDL — it is a value, not a constraint — so the interval is the only fact a
+         * row of that form could not state before. There is deliberately **no `DEFAULT` and no
+         * backfill**: `NULL` means *this revision states no interval*, which is what every row written
+         * before this step holds and what every weekday or weekly-frequency row holds now. Writing `2`
+         * would claim a rhythm those revisions never had.
+         */
+        internal val MIGRATION_20_21 = object : Migration(20, 21) {
+            override fun migrate(database: SupportSQLiteDatabase) {
+                database.execSQL(
+                    "ALTER TABLE `program_revision` ADD COLUMN `scheduleIntervalDays` INTEGER"
+                )
+            }
+        }
+
         fun getDatabase(context: Context): AppDatabase {
             return INSTANCE ?: synchronized(this) {
                 val instance = Room.databaseBuilder(
@@ -1252,7 +1270,8 @@ abstract class AppDatabase : RoomDatabase() {
                         MIGRATION_16_17,
                         MIGRATION_17_18,
                         MIGRATION_18_19,
-                        MIGRATION_19_20
+                        MIGRATION_19_20,
+                        MIGRATION_20_21
                     )
                     .build()
                 INSTANCE = instance

@@ -195,6 +195,7 @@ object ProgramTransferMapper {
         is ScheduleTransfer.FixedWeekdays -> ProgramSchedule.FixedWeekdays(schedule.weekdays.toSet())
         is ScheduleTransfer.FlexiblePerWeek ->
             ProgramSchedule.FlexiblePerWeek(schedule.sessionsPerWeek)
+        is ScheduleTransfer.EveryNDays -> ProgramSchedule.EveryNDays(schedule.days)
     }
 
     private fun focusOf(focus: FocusTransfer): FocusPlan = when (focus) {

@@ -201,22 +201,36 @@ data class GenerationRequest<E>(
 
     /**
      * The number of slots the plan covers: the weekly rhythm's slots, times the whole weeks the duration
-     * covers.
+     * covers — or, for an interval, the dates the interval puts in those weeks.
      *
      * A fixed Program uses its own length in whole weeks (at least [GenerationPolicy.minimumCycleWeeks],
      * so no second calendar-duration interpretation is invented), and an indefinite one uses the
      * planning horizon's whole weeks. The result is a count of **plan days**, not of dates: which dates
      * those days land on remains the Scheduler's decision, and nothing here reads a calendar, a clock or
      * a weekday.
+     *
+     * The interval's count is `ceil(cycleWeeks * 7 / days)` — the days of the cycle divided by the
+     * interval, rounded up, because the cycle's last date may fall before its week's end. For four weeks
+     * and two days that is fourteen.
      */
     val slotCount: Int
-        get() = sessionsPerWeek * cycleWeeks
+        get() = when (val plan = schedule) {
+            is ProgramSchedule.EveryNDays ->
+                (cycleWeeks * DAYS_PER_WEEK + plan.days - 1) / plan.days
+            else -> sessionsPerWeek * cycleWeeks
+        }
 
     /** How many training opportunities one week of this schedule holds. */
     val sessionsPerWeek: Int
         get() = when (schedule) {
             is ProgramSchedule.FixedWeekdays -> schedule.weekdays.size
             is ProgramSchedule.FlexiblePerWeek -> schedule.sessionsPerWeek
+            // An interval is not a weekly count: two days is three and a half sessions a week, and a
+            // rounded number here would silently become the cycle's length. `slotCount` states it.
+            is ProgramSchedule.EveryNDays -> throw IllegalArgumentException(
+                "an every-${schedule.days}-days schedule states an interval, not a count of sessions " +
+                    "per week"
+            )
         }
 
     /** How many whole weeks the plan covers, from the Program's own duration or the horizon. */
@@ -227,6 +241,9 @@ data class GenerationRequest<E>(
         }
 
     companion object {
+
+        /** The week the cycle length is counted in — a calendar constant, not a schedule's own. */
+        private const val DAYS_PER_WEEK: Int = 7
 
         /**
          * Whether a generated element may be prescribed in [dimension].

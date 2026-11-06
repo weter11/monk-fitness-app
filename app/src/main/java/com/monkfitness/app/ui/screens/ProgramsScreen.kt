@@ -247,6 +247,8 @@ fun scheduleLabel(schedule: ProgramSchedule): String = when (schedule) {
 
     is ProgramSchedule.FlexiblePerWeek ->
         stringResource(R.string.programs_schedule_flexible, schedule.sessionsPerWeek)
+
+    is ProgramSchedule.EveryNDays -> stringResource(R.string.programs_schedule_every_other_day)
 }
 
 @Composable

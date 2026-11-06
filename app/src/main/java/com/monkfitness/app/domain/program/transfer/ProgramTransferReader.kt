@@ -43,7 +43,7 @@ internal object ProgramTransferReader {
         "mode", "duration", "schedule", "focus", "days", "preferredExercises", "sessionTypes"
     )
     private val DURATION_FIELDS = listOf("kind", "days")
-    private val SCHEDULE_FIELDS = listOf("kind", "weekdays", "sessionsPerWeek")
+    private val SCHEDULE_FIELDS = listOf("kind", "weekdays", "sessionsPerWeek", "days")
     private val FOCUS_FIELDS = listOf("goal", "focuses", "allocations")
     private val ALLOCATION_FIELDS = listOf("focus", "percent")
     private val DAY_FIELDS = listOf("type", "name", "exercises")
@@ -320,12 +320,17 @@ internal object ProgramTransferReader {
             token(
                 value,
                 "$path.kind",
-                listOf(TransferTokens.FIXED_WEEKDAYS, TransferTokens.FLEXIBLE_PER_WEEK)
+                listOf(
+                    TransferTokens.FIXED_WEEKDAYS,
+                    TransferTokens.FLEXIBLE_PER_WEEK,
+                    TransferTokens.EVERY_N_DAYS
+                )
             ) { token -> token }
         }
         val allowed = when (kind.value) {
             TransferTokens.FIXED_WEEKDAYS -> listOf("kind", "weekdays")
             TransferTokens.FLEXIBLE_PER_WEEK -> listOf("kind", "sessionsPerWeek")
+            TransferTokens.EVERY_N_DAYS -> listOf("kind", "days")
             else -> SCHEDULE_FIELDS
         }
         val weekdays = if (kind.value == TransferTokens.FIXED_WEEKDAYS) {
@@ -340,14 +345,24 @@ internal object ProgramTransferReader {
         } else {
             Read.of(null)
         }
+        // Read even when the interval is not the whole story: an EVERY_N_DAYS record without it is a
+        // missing field, not an absent option, and [ProgramTransferValidation] refuses an interval the
+        // domain would not hold.
+        val interval = if (kind.value == TransferTokens.EVERY_N_DAYS) {
+            intField(record, path, "days")
+        } else {
+            Read.of(null)
+        }
         val issues = kind.issues + unknownFields(record, path, allowed) + weekdays.issues +
-            sessions.issues
+            sessions.issues + interval.issues
         val schedule = when (kind.value) {
             null -> null
             TransferTokens.FIXED_WEEKDAYS ->
                 weekdays.value?.let { days -> ScheduleTransfer.FixedWeekdays(days) }
             TransferTokens.FLEXIBLE_PER_WEEK ->
                 sessions.value?.let { perWeek -> ScheduleTransfer.FlexiblePerWeek(perWeek) }
+            TransferTokens.EVERY_N_DAYS ->
+                interval.value?.let { every -> ScheduleTransfer.EveryNDays(every) }
             else -> null
         }
         return Read(schedule, issues)

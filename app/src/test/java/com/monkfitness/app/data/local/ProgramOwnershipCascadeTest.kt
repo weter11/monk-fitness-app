@@ -37,6 +37,7 @@ class ProgramOwnershipCascadeTest {
         database.migrate(AppDatabase.MIGRATION_17_18)
         database.migrate(AppDatabase.MIGRATION_18_19)
         database.migrate(AppDatabase.MIGRATION_19_20)
+        database.migrate(AppDatabase.MIGRATION_20_21)
         ProgramGraphInserts.insertCompleteProgram(
             database, "1", targetOccurrenceRows = true, targetScheduleSourceRows = true
         )

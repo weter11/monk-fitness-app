@@ -33,11 +33,14 @@ sealed interface ProgramDuration {
 }
 
 /**
- * When the slots of a revision fall: fixed weekdays, or a deterministic flexible frequency.
+ * When the slots of a revision fall: fixed weekdays, a deterministic flexible frequency, or a fixed
+ * interval of calendar days counted from the Program's own start.
  *
  * Fixed weekdays are the user's explicit weekly rhythm. Flexible frequency is a **deterministic** target —
  * the scheduler spreads that many sessions across the week by rule, never by chance, and never by sliding
- * the whole schedule after a missed workout.
+ * the whole schedule after a missed workout. An interval is the form for a rhythm that is not a weekday
+ * pattern at all: "every other day" repeats against the calendar, so no weekday set describes it and the
+ * week is not its period.
  *
  * This type states the input only. Which weekdays a flexible frequency lands on, how a missed opportunity
  * affects the rest of the horizon, and how the horizon is extended are the Scheduler's decisions.
@@ -61,6 +64,28 @@ sealed interface ProgramSchedule {
             require(sessionsPerWeek in 1..7) {
                 "sessionsPerWeek must be within 1..7, was $sessionsPerWeek"
             }
+        }
+    }
+
+    /**
+     * One session every [days] calendar days, the first on the Program's anchor date.
+     *
+     * The interval is held as a number because that *is* what the user stated, and two days is the one
+     * value the editor offers. An interval of one is not a schedule: it is every day, which the weekly
+     * forms already state, and admitting it here would make one rhythm expressible two ways.
+     */
+    data class EveryNDays(val days: Int) : ProgramSchedule {
+
+        init {
+            require(days >= MINIMUM_INTERVAL_DAYS) {
+                "an every-N-days schedule is an interval of at least $MINIMUM_INTERVAL_DAYS days, was $days"
+            }
+        }
+
+        companion object {
+
+            /** The shortest interval this form states: below it the rhythm is a weekly one. */
+            const val MINIMUM_INTERVAL_DAYS: Int = 2
         }
     }
 }
