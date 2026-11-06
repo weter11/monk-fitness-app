@@ -6,6 +6,7 @@ import android.view.WindowManager
 import androidx.appcompat.app.AppCompatActivity
 import androidx.activity.compose.setContent
 import androidx.activity.viewModels
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Favorite
@@ -24,7 +25,7 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
@@ -89,6 +90,24 @@ sealed class Screen(val route: String, val titleRes: Int, val icon: ImageVector)
 /** Above this scale a five-item bar on a 325 dp screen cannot draw its labels whole. */
 private const val NAV_LABEL_MAX_FONT_SCALE = 0.85f
 
+/**
+ * A tab name at the largest size that fits its item: an ellipsized or mid-word-broken tab name is not
+ * readable, and the bar's five items leave less room than the longest localized names need.
+ */
+@Composable
+private fun NavigationBarLabel(text: String) {
+    val style = MaterialTheme.typography.labelSmall
+    val measurer = rememberTextMeasurer()
+    BoxWithConstraints {
+        val available = with(LocalDensity.current) { maxWidth.toPx() }
+        val fontSize = remember(text, style, available) {
+            val measured = measurer.measure(text, style, maxLines = 1, softWrap = false).size.width
+            if (measured <= available) style.fontSize else style.fontSize * (available / measured)
+        }
+        Text(text = text, maxLines = 1, softWrap = false, style = style.copy(fontSize = fontSize))
+    }
+}
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun MainApp(viewModel: MainViewModel) {
@@ -133,21 +152,16 @@ fun MainApp(viewModel: MainViewModel) {
                         NavigationBarItem(
                             icon = { Icon(screen.icon, contentDescription = stringResource(screen.titleRes)) },
                             label = {
-                                // A 325 dp bar gives each item ~51 dp; the widest label any locale ships
-                                // needs ~59 dp at font scale 1, so the labels stop growing above 0.85.
+                                // A 325 dp bar gives each item ~51 dp of label room; the widest names any
+                                // locale ships exceed that even with the 0.85 growth cap, so the label
+                                // shrinks to fit instead of ellipsizing.
                                 CompositionLocalProvider(
                                     LocalDensity provides Density(
                                         density.density,
                                         minOf(density.fontScale, NAV_LABEL_MAX_FONT_SCALE)
                                     )
                                 ) {
-                                    Text(
-                                        text = stringResource(screen.titleRes),
-                                        maxLines = 1,
-                                        softWrap = false,
-                                        overflow = TextOverflow.Ellipsis,
-                                        style = MaterialTheme.typography.labelSmall
-                                    )
+                                    NavigationBarLabel(stringResource(screen.titleRes))
                                 }
                             },
                             selected = currentRoute == screen.route,
