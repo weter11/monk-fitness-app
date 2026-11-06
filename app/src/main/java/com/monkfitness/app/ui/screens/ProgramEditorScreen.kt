@@ -629,7 +629,11 @@ private fun GoalsAndFocusSection(
         ),
         style = MaterialTheme.typography.bodyMedium
     )
-    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+    FlowRow(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
         FilterChip(
             selected = focus.goal == Goal.BALANCED,
             onClick = { onFocus(FocusPlan.Balanced) },
@@ -1062,8 +1066,11 @@ private fun previewElementLabel(element: ProgramGenerationPreviewElementUi): Str
         element.sets,
         element.targetsPerSet.joinToString(PER_SET_TARGET_SEPARATOR)
     )
-    return "$name \\u00b7 $prescription"
+    return previewElementLabelText(name, prescription)
 }
+
+internal fun previewElementLabelText(name: String, prescription: String): String =
+    "$name \u00b7 $prescription"
 
 private const val PER_SET_TARGET_SEPARATOR = " / "
 

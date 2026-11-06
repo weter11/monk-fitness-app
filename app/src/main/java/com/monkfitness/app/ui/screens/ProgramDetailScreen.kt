@@ -203,26 +203,25 @@ fun ProgramDetailScreen(
 
             ProgramSection(stringResource(R.string.programs_detail_actions))
 
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            FlowRow(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
                 if (current.isSelectable) {
                     Button(
-                        onClick = { runAction(scope) { controller.select(current.row.programId) } },
-                        modifier = Modifier.weight(1f)
+                        onClick = { runAction(scope) { controller.select(current.row.programId) } }
                     ) {
                         Text(stringResource(R.string.programs_action_select))
                     }
                 }
                 if (!current.row.isBuiltIn) {
-                    Button(
-                        onClick = { onEditProgram(current.row.programId) },
-                        modifier = Modifier.weight(1f)
-                    ) {
+                    Button(onClick = { onEditProgram(current.row.programId) }) {
                         Text(stringResource(R.string.programs_action_edit))
                     }
                 }
                 Button(
-                    onClick = { onCopyProgram(current.row.programId) },
-                    modifier = Modifier.weight(1f)
+                    onClick = { onCopyProgram(current.row.programId) }
                 ) {
                     Text(stringResource(R.string.programs_action_copy))
                 }
