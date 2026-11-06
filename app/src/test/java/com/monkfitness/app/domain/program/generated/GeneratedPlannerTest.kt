@@ -122,6 +122,54 @@ class GeneratedPlannerTest {
     }
 
     @Test
+    fun anEveryOtherDayPlanHoldsTheDatesItsCycleCovers() {
+        val everyOtherDay = ProgramSchedule.EveryNDays(2)
+
+        assertEquals(
+            "four weeks of every other day is fourteen plan days: ceil(4 * 7 / 2)",
+            14,
+            GeneratedPlannerRig.request(schedule = everyOtherDay).slotCount
+        )
+        assertEquals(
+            "and the indefinite horizon is the same four whole weeks",
+            14,
+            GeneratedPlannerRig.request(
+                schedule = everyOtherDay,
+                duration = ProgramDuration.Indefinite
+            ).slotCount
+        )
+        assertEquals(
+            "a thirty-day program covers four whole weeks too",
+            14,
+            GeneratedPlannerRig.request(
+                schedule = everyOtherDay,
+                duration = ProgramDuration.FixedDays(30)
+            ).slotCount
+        )
+        assertEquals(
+            "eight weeks is twenty-eight plan days",
+            28,
+            GeneratedPlannerRig.request(
+                schedule = everyOtherDay,
+                duration = ProgramDuration.FixedDays(56)
+            ).slotCount
+        )
+        assertEquals(
+            "and a one-week program holds four: the cycle's last date falls before its week ends",
+            4,
+            GeneratedPlannerRig.request(
+                schedule = everyOtherDay,
+                duration = ProgramDuration.FixedDays(7)
+            ).slotCount
+        )
+        assertEquals(
+            "the plan the generator produces is exactly that many days",
+            14,
+            GeneratedPlanner.plan(GeneratedPlannerRig.request(schedule = everyOtherDay)).slotCount
+        )
+    }
+
+    @Test
     fun everySlotPlansOneElementPerAssignedFocusInTheAssignmentsOwnOrder() {
         val plan = GeneratedPlanner.plan(GeneratedPlannerRig.request())
 

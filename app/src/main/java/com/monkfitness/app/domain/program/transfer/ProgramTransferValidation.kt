@@ -3,6 +3,7 @@ package com.monkfitness.app.domain.program.transfer
 import com.monkfitness.app.domain.prescription.PrescriptionDimension
 import com.monkfitness.app.domain.program.FocusPlan
 import com.monkfitness.app.domain.program.ProgramDayType
+import com.monkfitness.app.domain.program.ProgramSchedule
 
 /**
  * The semantic validation: a document the schema accepted, judged as a program.
@@ -94,6 +95,21 @@ object ProgramTransferValidation {
                         "$SCHEDULE.sessionsPerWeek",
                         "a flexible schedule trains between 1 and 7 days a week (§20), was " +
                             "${schedule.sessionsPerWeek}"
+                    )
+                )
+            }
+
+            is ScheduleTransfer.EveryNDays -> if (
+                schedule.days >= ProgramSchedule.EveryNDays.MINIMUM_INTERVAL_DAYS
+            ) {
+                emptyList()
+            } else {
+                listOf(
+                    ProgramTransferIssue.InvalidSchedule(
+                        "$SCHEDULE.days",
+                        "an every-N-days schedule trains at an interval of at least " +
+                            "${ProgramSchedule.EveryNDays.MINIMUM_INTERVAL_DAYS} days, was " +
+                            "${schedule.days}"
                     )
                 )
             }

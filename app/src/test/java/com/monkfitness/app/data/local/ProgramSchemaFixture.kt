@@ -683,6 +683,12 @@ internal object ProgramSchemaFixture {
         // selection no user chose.
         "MIGRATION_19_20" to mapOf(
             "program_revision" to listOf(Column("sessionTypes", TEXT, nullable = true))
+        ),
+        // The every-N-days interval: nullable with no default, because `null` is what every revision
+        // written before the form existed holds, and it means *this revision states no interval* — a `2`
+        // would claim a rhythm those revisions never had.
+        "MIGRATION_20_21" to mapOf(
+            "program_revision" to listOf(Column("scheduleIntervalDays", INTEGER, nullable = true))
         )
     )
 

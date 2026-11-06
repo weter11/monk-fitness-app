@@ -198,7 +198,9 @@ private fun Map<String, String?>.revisionEntity() = ProgramRevisionEntity(
     // harness that left the column out would report an empty preference for a correctly stored one.
     preferredExerciseIds = this["preferredExerciseIds"],
     // Raw as well: the selection's token form and order belong to the mapper.
-    sessionTypes = this["sessionTypes"]
+    sessionTypes = this["sessionTypes"],
+    // And the interval, raw: which forms may state one is the mapper's and the entity's rule.
+    scheduleIntervalDays = this["scheduleIntervalDays"]?.toInt()
 )
 
 private fun Map<String, String?>.dayEntity() = ProgramDayEntity(

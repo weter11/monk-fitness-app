@@ -312,6 +312,113 @@ class PlanMapperTest {
     }
 
     @Test
+    fun anEveryOtherDayScheduleCrossesTheBoundaryWithItsIntervalAndNoFrequency() {
+        val schedule = ProgramSchedule.EveryNDays(2)
+        val everyOtherDay = revision.copy(schedule = schedule)
+
+        val stored = everyOtherDay.toEntity()
+
+        assertEquals("the form is its own discriminator", "EVERY_N_DAYS", stored.scheduleType)
+        assertEquals("with the interval it runs at, not a default", 2, stored.scheduleIntervalDays)
+        assertNull("and with no weekday set: the forms do not mix", stored.scheduleWeekdays)
+        assertNull("and no weekly frequency, because an interval is not one", stored.scheduleSessionsPerWeek)
+
+        val loaded = revisionDomain(
+            everyOtherDay.toRows().revision,
+            everyOtherDay.toRows().days,
+            everyOtherDay.toRows().exercises
+        )
+        assertEquals("rows → domain: every other day is read back as every other day", schedule, loaded.schedule)
+        assertEquals("and domain → rows → domain is the identity", everyOtherDay, loaded)
+        assertEquals("as is rows → domain → rows", everyOtherDay.toRows(), loaded.toRows())
+    }
+
+    @Test
+    fun theIntervalColumnIsWrittenForTheIntervalFormOnly() {
+        assertNull(
+            "a weekday revision states no interval, and none is invented for it",
+            revision.toEntity().scheduleIntervalDays
+        )
+        assertNull(
+            "a weekly-frequency revision states no interval either",
+            revision.copy(schedule = ProgramSchedule.FlexiblePerWeek(3)).toEntity().scheduleIntervalDays
+        )
+    }
+
+    @Test
+    fun anEveryNDaysRowWithoutAUsableIntervalIsRefusedRatherThanRepaired() {
+        val days = rows().days
+        val exercises = rows().exercises
+
+        val withoutAnInterval = assertThrows(IllegalArgumentException::class.java) {
+            revisionDomain(
+                rows().revision.copy(
+                    scheduleType = "EVERY_N_DAYS",
+                    scheduleWeekdays = null,
+                    scheduleSessionsPerWeek = null,
+                    scheduleIntervalDays = null
+                ),
+                days,
+                exercises
+            )
+        }
+        assertTrue(
+            "an interval schedule without its interval describes no rhythm, and the mapper does not " +
+                "invent one: ${withoutAnInterval.message}",
+            withoutAnInterval.message!!.contains("interval it runs at")
+        )
+
+        val intervalBelowTheMinimum = assertThrows(IllegalArgumentException::class.java) {
+            rows().revision.copy(
+                scheduleType = "EVERY_N_DAYS",
+                scheduleWeekdays = null,
+                scheduleSessionsPerWeek = null,
+                scheduleIntervalDays = 1
+            )
+        }
+        assertTrue(
+            "and an interval the domain refuses is refused, never clamped: " +
+                "${intervalBelowTheMinimum.message}",
+            intervalBelowTheMinimum.message!!.contains("at least 2")
+        )
+
+        val weekdayFormWithAnInterval = assertThrows(IllegalArgumentException::class.java) {
+            rows().revision.copy(scheduleIntervalDays = 2)
+        }
+        assertTrue(
+            "a weekday revision carrying an interval is a row that says two things at once: " +
+                "${weekdayFormWithAnInterval.message}",
+            weekdayFormWithAnInterval.message!!.contains("no interval to store")
+        )
+
+        val frequencyFormWithAnInterval = assertThrows(IllegalArgumentException::class.java) {
+            rows().revision.copy(
+                scheduleType = "FLEXIBLE_PER_WEEK",
+                scheduleWeekdays = null,
+                scheduleSessionsPerWeek = 3,
+                scheduleIntervalDays = 2
+            )
+        }
+        assertTrue(
+            "and so is a weekly-frequency revision carrying one: " +
+                "${frequencyFormWithAnInterval.message}",
+            frequencyFormWithAnInterval.message!!.contains("no interval to store")
+        )
+    }
+
+    @Test
+    fun anUnknownStoredScheduleTokenFailsLoudly() {
+        val refused = assertThrows(IllegalArgumentException::class.java) {
+            revisionDomain(rows().revision.copy(scheduleType = "EVERY_THIRD_DAY"), rows().days, rows().exercises)
+        }
+
+        assertTrue(
+            "a token this app does not know is not read as some other schedule: ${refused.message}",
+            refused.message!!.contains("must be one of") && refused.message!!.contains("EVERY_THIRD_DAY")
+        )
+    }
+
+    @Test
     fun aPrescriptionInADimensionTheDomainDoesNotImplementCannotBeLoaded() {
         val element = rows().exercises.first()
 

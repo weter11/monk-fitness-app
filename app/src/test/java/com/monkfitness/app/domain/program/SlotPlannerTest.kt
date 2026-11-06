@@ -907,6 +907,151 @@ class SlotPlannerTest {
         )
     }
 
+    @Test
+    fun anEveryOtherDayRevisionAlternatesFromTheAnchorAndCrossesAMonthBoundary() {
+        val plan = SlotPlanner.plan(
+            request(
+                revision(
+                    schedule = ProgramSchedule.EveryNDays(2),
+                    duration = ProgramDuration.FixedDays(30)
+                ),
+                anchor = LocalDate.parse("2026-10-27")
+            )
+        ).asScheduled()
+
+        assertEquals(
+            "every second date from the anchor, across 31 October: the walk moves one day at a time, " +
+                "so a month boundary is not a different kind of arithmetic",
+            listOf(
+                "2026-10-27", "2026-10-29", "2026-10-31", "2026-11-02", "2026-11-04", "2026-11-06",
+                "2026-11-08", "2026-11-10", "2026-11-12", "2026-11-14", "2026-11-16", "2026-11-18",
+                "2026-11-20", "2026-11-22", "2026-11-24"
+            ),
+            plan.createdDates.map { it.toString() }
+        )
+        assertEquals(
+            "and the plan days cycle in order over those dates",
+            listOf("day-1", "day-2", "day-3", "day-1", "day-2", "day-3", "day-1", "day-2", "day-3",
+                "day-1", "day-2", "day-3", "day-1", "day-2", "day-3"),
+            plan.create.map { it.programDayId.value }
+        )
+    }
+
+    @Test
+    fun anEveryOtherDayRevisionAlternatesAcrossAYearBoundary() {
+        val plan = SlotPlanner.plan(
+            request(
+                revision(
+                    schedule = ProgramSchedule.EveryNDays(2),
+                    duration = ProgramDuration.FixedDays(20)
+                ),
+                anchor = LocalDate.parse("2026-12-28")
+            )
+        ).asScheduled()
+
+        assertEquals(
+            "the interval holds across the new year: 28 and 30 December, then 1 January and every " +
+                "second day after it",
+            listOf(
+                "2026-12-28", "2026-12-30", "2027-01-01", "2027-01-03", "2027-01-05", "2027-01-07",
+                "2027-01-09", "2027-01-11", "2027-01-13", "2027-01-15"
+            ),
+            plan.createdDates.map { it.toString() }
+        )
+    }
+
+    @Test
+    fun anEveryOtherDayRevisionAlternatesTheSameWayWhateverWeekdayTheAnchorIs() {
+        listOf("2026-09-14", "2026-09-15", "2026-09-16", "2026-09-17").forEach { anchorText ->
+            val anchorDate = LocalDate.parse(anchorText)
+            val plan = SlotPlanner.plan(
+                request(
+                    revision(
+                        schedule = ProgramSchedule.EveryNDays(2),
+                        duration = ProgramDuration.FixedDays(8)
+                    ),
+                    anchor = anchorDate
+                )
+            ).asScheduled()
+
+            assertEquals(
+                "$anchorText (${anchorDate.dayOfWeek}) is the first date, and every second date follows it",
+                (0 until 4).map { step -> anchorDate.plusDays(step * 2L).toString() },
+                plan.createdDates.map { it.toString() }
+            )
+        }
+    }
+
+    @Test
+    fun aPauseDoesNotRenumberThePlanDaysOfAnEveryOtherDayRevision() {
+        val plan = SlotPlanner.plan(
+            request(
+                revision(
+                    schedule = ProgramSchedule.EveryNDays(2),
+                    duration = ProgramDuration.FixedDays(30)
+                ),
+                pauses = listOf(
+                    PausedInterval(
+                        firstDate = LocalDate.parse("2026-09-18"),
+                        lastDate = LocalDate.parse("2026-09-19")
+                    )
+                )
+            )
+        ).asScheduled()
+
+        assertEquals(
+            "the paused date is not planned, and the plan continues on the next date the interval presents",
+            listOf(
+                "2026-09-14", "2026-09-16", "2026-09-20", "2026-09-22", "2026-09-24", "2026-09-26"
+            ),
+            plan.createdDates.take(6).map { it.toString() }
+        )
+        assertEquals(
+            "and the days keep their places on the calendar: 2026-09-18 would have been day-3, so the " +
+                "date after the pause is cycle position four — day-1 — not day-3 restarted",
+            listOf("day-1", "day-2", "day-1", "day-2", "day-3", "day-1"),
+            plan.create.take(6).map { it.programDayId.value }
+        )
+    }
+
+    @Test
+    fun changingTheFrequencyKeepsCompletedSlotsAndSupersedesTheDatesTheNewOneDoesNotPresent() {
+        val asOf = LocalDate.parse("2026-09-18")
+        val existing = listOf(
+            slot("slot-completed", "2026-09-14", dayPosition = 1, attempts = listOf(SessionId("session-1")))
+                .copy(status = SlotStatus.COMPLETED, completedAt = Instant.parse("2026-09-14T09:00:00Z")),
+            slot("slot-today", "2026-09-18", dayPosition = 3),
+            slot("slot-ahead", "2026-09-20", dayPosition = 2)
+        )
+
+        val plan = SlotPlanner.plan(
+            request(
+                revision(schedule = ProgramSchedule.FlexiblePerWeek(3)),
+                asOf = asOf,
+                slots = existing
+            )
+        )
+
+        assertEquals(
+            "2026-09-20 is a Sunday, and three sessions a week run Monday, Wednesday and Friday — an " +
+                "opportunity ahead of the user on a date the new revision does not present is superseded",
+            listOf("slot-ahead"),
+            plan.supersede.map { it.slotId.value }
+        )
+        assertTrue(
+            "and the completed opportunity is kept: a slot that was trained is not re-decided by a later " +
+                "revision, and 2026-09-14 is a Monday the new revision presents anyway",
+            existing.single { it.slotId.value == "slot-completed" } !in plan.create &&
+                plan.supersede.none { it.slotId.value == "slot-completed" } &&
+                plan.miss.none { it == com.monkfitness.app.domain.common.SlotId("slot-completed") }
+        )
+        assertTrue(
+            "2026-09-18 is presented by the new revision and already holds an opportunity, so it is " +
+                "neither re-created nor superseded",
+            plan.create.none { it.plannedFor == asOf } && plan.supersede.none { it.slotId.value == "slot-today" }
+        )
+    }
+
     /** The plan of a request that produced one, failing loudly when the pass had no window. */
     private fun SlotPlan.asScheduled(): SlotPlan {
         require(!hasNoFutureDate) { "expected a pass with a window, got $this" }

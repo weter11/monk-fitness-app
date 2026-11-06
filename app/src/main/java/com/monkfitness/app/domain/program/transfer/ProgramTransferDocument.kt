@@ -117,6 +117,14 @@ sealed interface ScheduleTransfer {
 
     /** A deterministic number of sessions per week, without fixed weekdays. */
     data class FlexiblePerWeek(val sessionsPerWeek: Int) : ScheduleTransfer
+
+    /**
+     * One session every [days] calendar days, counted from the date the Program starts.
+     *
+     * The interval travels with the form because it *is* the form: a file that said "every N days" and
+     * dropped the N would describe no rhythm at all.
+     */
+    data class EveryNDays(val days: Int) : ScheduleTransfer
 }
 
 /**
@@ -194,4 +202,5 @@ fun transferOf(schedule: ProgramSchedule): ScheduleTransfer = when (schedule) {
         ScheduleTransfer.FixedWeekdays(schedule.weekdays.sortedBy { day -> day.value })
     is ProgramSchedule.FlexiblePerWeek ->
         ScheduleTransfer.FlexiblePerWeek(schedule.sessionsPerWeek)
+    is ProgramSchedule.EveryNDays -> ScheduleTransfer.EveryNDays(schedule.days)
 }

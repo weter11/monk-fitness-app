@@ -1,6 +1,5 @@
 package com.monkfitness.app.domain.program
 
-import java.time.DayOfWeek
 import java.time.LocalDate
 
 /**
@@ -35,8 +34,8 @@ import java.time.LocalDate
  * **Superseded by the revision.** Only *future* slots become `SUPERSEDED`: a slot that has already
  * passed was an expectation under the plan that was live then, so a later edit does not retroactively
  * cancel it — it is missed or it was trained. A slot still ahead is superseded when the revision no
- * longer presents its date: its weekday is not one this revision trains on, or the date lies outside
- * this revision's own run. That run is the revision's **extent**, not the planning window — a fixed
+ * longer presents its date: the schedule does not present that date from the anchor, or the date lies
+ * outside this revision's own run. That run is the revision's **extent**, not the planning window — a
  * revision runs to `anchor + days - 1`, an indefinite one runs indefinitely — so shortening a program
  * supersedes the dates beyond its new end while switching to an indefinite one supersedes nothing,
  * the far dates simply lying beyond today's horizon.
@@ -66,7 +65,6 @@ object SlotPlanner {
      */
     fun plan(request: ScheduleRequest): SlotPlan {
         val revision = request.revision
-        val weekdays = revision.schedule.scheduledWeekdays()
         val anchor = request.anchor
 
         // The first date that can still be trained: the plan's own beginning, or today if the plan is
@@ -96,7 +94,7 @@ object SlotPlanner {
         val datesFromAnchor = if (window == null) {
             emptyList()
         } else {
-            planDates(anchor, window.lastDate, weekdays)
+            revision.schedule.trainingDates(anchor, window.lastDate, anchor)
         }
 
         // The dates a pass may create an opportunity on: the revision's dates inside the window that no
@@ -142,7 +140,7 @@ object SlotPlanner {
             when {
                 // Ahead of the user, and the revision in front of us cannot present that date.
                 !slot.plannedFor.isBefore(request.asOf) &&
-                    !presents(revision, slot.plannedFor, anchor, weekdays) ->
+                    !presents(revision, slot.plannedFor, anchor) ->
                     SupersededSlot(
                         slot.slotId,
                         SupersessionReason.THE_REVISION_NO_LONGER_PRESENTS_THE_DATE
@@ -176,30 +174,17 @@ object SlotPlanner {
     }
 
     /**
-     * The dates [from] to [to] that [weekdays] trains on, in order.
-     *
-     * **No pause is consulted here, and that is the rule.** This walk is what the plan's days are
-     * counted along, so excluding a paused date would renumber every date after the pause: the plan day
-     * a date presents would depend on *when* the pass was made rather than on the calendar, and slots
-     * already persisted around the interval would disagree about the cycle. Which dates a pass may
-     * actually *create* on is decided by [SlotPlanner.plan]'s own filter, where a pause does belong.
+     * No pause is consulted by the walk above, and that is the rule: excluding a paused date would
+     * renumber every date after the pause, and slots already persisted around the interval would
+     * disagree about the cycle. Which dates a pass may actually *create* on is decided by the filter,
+     * where a pause does belong.
      */
-    private fun planDates(
-        from: LocalDate,
-        to: LocalDate,
-        weekdays: Set<DayOfWeek>
-    ): List<LocalDate> =
-        generateSequence(from) { date -> date.plusDays(1) }
-            .takeWhile { date -> !date.isAfter(to) }
-            .filter { date -> date.dayOfWeek in weekdays }
-            .toList()
-
     private fun coveredBy(pauses: List<PausedInterval>, date: LocalDate): Boolean =
         pauses.any { pause -> pause.covers(date) }
 
     /**
-     * Whether [revision] still presents [date]: the weekday is one it trains on, and the date lies
-     * within its own run — from the plan's [anchor] to its end, if it has one.
+     * Whether [revision] still presents [date]: the date is one its schedule presents from the plan's
+     * [anchor], and it lies within the revision's own run — from that anchor to its end, if it has one.
      *
      * The run's **end** is the revision's own, never the planning window's: an indefinite revision has
      * no end, so a date beyond today's horizon is still presented by it and is preserved rather than
@@ -209,10 +194,9 @@ object SlotPlanner {
     private fun presents(
         revision: ProgramRevision,
         date: LocalDate,
-        anchor: LocalDate,
-        weekdays: Set<DayOfWeek>
+        anchor: LocalDate
     ): Boolean {
-        if (date.dayOfWeek !in weekdays) return false
+        if (!revision.schedule.schedules(date, anchor)) return false
         if (date.isBefore(anchor)) return false
         val end = (revision.duration as? ProgramDuration.FixedDays)
             ?.let { duration -> anchor.plusDays((duration.days - 1).toLong()) }

@@ -95,6 +95,13 @@ object ProgramTransferJson {
                 "sessionsPerWeek" to schedule.sessionsPerWeek.toString()
             )
         )
+        is ScheduleTransfer.EveryNDays -> record(
+            depth,
+            listOf(
+                "kind" to quoted(TransferTokens.EVERY_N_DAYS),
+                "days" to schedule.days.toString()
+            )
+        )
     }
 
     private fun focus(depth: Int, focus: FocusTransfer): String = when (focus) {
@@ -232,6 +239,7 @@ internal object TransferTokens {
 
     const val FIXED_WEEKDAYS: String = "FIXED_WEEKDAYS"
     const val FLEXIBLE_PER_WEEK: String = "FLEXIBLE_PER_WEEK"
+    const val EVERY_N_DAYS: String = "EVERY_N_DAYS"
 
     const val BALANCED: String = "BALANCED"
     const val FOCUSED: String = "FOCUSED"
