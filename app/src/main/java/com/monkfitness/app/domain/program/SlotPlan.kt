@@ -65,7 +65,7 @@ data class SupersededSlot(val slotId: SlotId, val reason: SupersessionReason)
  * fact about the Program (its actual start, or its planned one) and the Scheduler only decides what
  * follows from it. `asOf` is the date the pass is made on: the first date that can still be trained, the
  * date a passed opportunity is measured against, and the origin of an indefinite program's horizon.
- * `slots` is every slot the Program already has, in any status — the dates already occupied and the
+ * `slots` is every slot the Program already has, in any status — the dates still occupied, and the
  * opportunities a pass may mark missed or superseded. `pauses` are the program's pause intervals as
  * dates: a paused date is not a training date and is never missed.
  */
@@ -88,9 +88,8 @@ data class ScheduleRequest(
  *
  * Three properties are structural, not promises:
  *
- *  * **nothing is created for a date that already holds a slot**, whatever that slot's status — so a
- *    pass applied twice writes nothing the second time, and a superseded opportunity is history rather
- *    than a gap to be refilled silently;
+ *  * **nothing is created for a date whose opportunity still occupies it** — a `SUPERSEDED` one is
+ *    history and holds no date — so a pass applied twice writes nothing the second time;
  *  * **no created slot carries an amount of work**: there is no field here that could hold a repetition,
  *    a duration or a score, because the opportunity is the whole of it;
  *  * **`create` never names a date in `supersede` or `miss`**, since a created slot is new by definition

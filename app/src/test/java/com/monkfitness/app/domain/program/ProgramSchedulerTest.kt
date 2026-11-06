@@ -234,39 +234,76 @@ class ProgramSchedulerTest {
     }
 
     @Test
-    fun aDateThatAlreadyHoldsAnOpportunityIsNeverPlannedAgainEvenAfterItWasSuperseded() = runBlocking {
+    fun changingTheFrequencyBackAndForthEndsWithThePlanAFreshScheduleWouldGive() = runBlocking {
         val graph = rig.create()
         rig.plan(graph.programId, ON_ANCHOR)
-        rig.saveRevision(graph, schedule = TUE_THU, revisionNumber = 2)
-        rig.plan(graph.programId, ON_ANCHOR)
-        val afterTheChange = rig.slots(graph.programId)
-        assertEquals(22, afterTheChange.size)
-        assertEquals(13, afterTheChange.count { it.status == SlotStatus.SUPERSEDED })
+        val firstRevisionSlots = rig.slots(graph.programId)
+        assertEquals(
+            "the first revision plans the thirteen M/W/F dates of its thirty-day run",
+            13,
+            firstRevisionSlots.size
+        )
+
+        rig.saveRevision(graph, schedule = EVERY_OTHER_DAY, revisionNumber = 2)
+        val second = rig.plan(graph.programId, ON_ANCHOR).valueOrFail()
+        assertEquals(
+            "the interval supersedes the six M/W/F dates it does not present",
+            6,
+            second.supersededCount
+        )
+        assertEquals("and plans its eight dates that hold nothing", 8, second.createdCount)
 
         rig.saveRevision(graph, schedule = SchedulerFixture.weekly(), revisionNumber = 3)
-        val backAgain = rig.plan(graph.programId, ON_ANCHOR).valueOrFail()
+        val third = rig.plan(graph.programId, ON_ANCHOR).valueOrFail()
+        assertEquals(
+            "changing back re-plans the six dates whose opportunity was superseded: a superseded row " +
+                "is history, and it does not hold its date",
+            6,
+            third.createdCount
+        )
+        assertEquals(
+            "and supersedes the eight interval dates the week does not present",
+            8,
+            third.supersededCount
+        )
 
+        rig.saveRevision(graph, schedule = EVERY_OTHER_DAY, revisionNumber = 4)
+        val fourth = rig.plan(graph.programId, ON_ANCHOR).valueOrFail()
+        assertEquals(8, fourth.createdCount)
+        assertEquals(6, fourth.supersededCount)
+
+        val fresh = rig.create(key = "fresh", schedule = EVERY_OTHER_DAY)
+        rig.plan(fresh.programId, ON_ANCHOR)
+        val freshDates = rig.slots(fresh.programId).map { slot -> slot.plannedFor }.sorted()
+
+        val stored = rig.slots(graph.programId)
+        assertEquals("a fresh every-other-day Program plans fifteen dates of the same run", 15, freshDates.size)
         assertEquals(
-            "a date holds one opportunity, ever: the Mondays, Wednesdays and Fridays the revision " +
-                "trains on again are the dates whose opportunities were superseded, and a supersession " +
-                "is history rather than a gap to be refilled silently",
-            0,
-            backAgain.createdCount
+            "and the changed Program is left with exactly those dates open",
+            freshDates,
+            stored.filter { slot -> slot.status == SlotStatus.PLANNED }
+                .map { slot -> slot.plannedFor }
+                .sorted()
+        )
+        val occupying = stored.filter { slot -> slot.status != SlotStatus.SUPERSEDED }
+            .map { slot -> slot.plannedFor }
+        assertEquals(
+            "no date holds two opportunities that still count",
+            occupying.distinct().sorted(),
+            occupying.sorted()
         )
         assertEquals(
-            "what the revision used to present and does not any more is superseded in its turn",
-            9,
-            backAgain.supersededCount
+            "twenty rows record a superseded opportunity",
+            20,
+            stored.count { slot -> slot.status == SlotStatus.SUPERSEDED }
         )
+        assertEquals("and no row was ever deleted", 35, stored.size)
         assertEquals(
-            "so a Program whose schedule was changed and changed back has nothing open: every date it " +
-                "trains on again was superseded on the way out and is not re-planned, because a " +
-                "supersession is a durable record rather than a gap",
-            0,
-            rig.slots(graph.programId).count { it.status == SlotStatus.PLANNED }
+            "each superseded row keeps the date and plan day it was planned with: only its status changed",
+            firstRevisionSlots.map { slot -> Triple(slot.slotId, slot.plannedFor, slot.programDayId) },
+            stored.filter { slot -> slot.slotId in firstRevisionSlots.map { it.slotId } }
+                .map { slot -> Triple(slot.slotId, slot.plannedFor, slot.programDayId) }
         )
-        assertEquals(22, rig.slots(graph.programId).count { it.status == SlotStatus.SUPERSEDED })
-        assertEquals("and no row was ever deleted", 22, rig.slots(graph.programId).size)
     }
 
     @Test
@@ -1170,5 +1207,7 @@ class ProgramSchedulerTest {
         val TUE_THU: ProgramSchedule = ProgramSchedule.FixedWeekdays(
             setOf(DayOfWeek.TUESDAY, DayOfWeek.THURSDAY)
         )
+
+        val EVERY_OTHER_DAY: ProgramSchedule = ProgramSchedule.EveryNDays(2)
     }
 }

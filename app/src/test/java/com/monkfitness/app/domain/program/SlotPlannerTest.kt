@@ -821,15 +821,14 @@ class SlotPlannerTest {
     }
 
     /**
-     * A superseded date is never re-planned.
+     * A date the revision presents again is planned again, and the superseded row keeps its record.
      *
-     * One date holds one opportunity, ever: the row that records *what happened* to an opportunity is
-     * the durable fact, so a date the revision stopped presenting keeps its superseded slot and the
-     * Scheduler adds nothing for it, however many passes run afterwards. Re-planning a superseded date
-     * would destroy that record.
+     * A supersession is a fact about one opportunity — what happened to that row — not a claim on the
+     * date. The row keeps its identity, date and status, and the date it sits on is free for the
+     * revision that trains on it today.
      */
     @Test
-    fun aSupersededDateIsNeverReplanned() {
+    fun aDateWhoseSupersededOpportunityTheRevisionPresentsAgainIsPlannedAgain() {
         val plan = SlotPlanner.plan(
             request(
                 revision(duration = ProgramDuration.Indefinite),
@@ -838,21 +837,87 @@ class SlotPlannerTest {
             )
         ).asScheduled()
 
-        assertTrue(
-            "the pass adds nothing for the date whose opportunity was superseded",
-            plan.createdDates.none { it.toString() == "2026-09-16" }
-        )
         assertEquals(
-            "and it plans every other date of the revision, so the rule is not hiding a gap",
+            "the revision trains on 2026-09-16, so the date gains an opportunity beside the superseded row",
             listOf(
-                "2026-09-14", "2026-09-18", "2026-09-21", "2026-09-23", "2026-09-25", "2026-09-28",
-                "2026-09-30", "2026-10-02", "2026-10-05", "2026-10-07", "2026-10-09", "2026-10-12"
+                "2026-09-14", "2026-09-16", "2026-09-18", "2026-09-21", "2026-09-23", "2026-09-25",
+                "2026-09-28", "2026-09-30", "2026-10-02", "2026-10-05", "2026-10-07", "2026-10-09",
+                "2026-10-12"
             ),
             plan.createdDates.map { it.toString() }
         )
         assertTrue(
-            "and the superseded opportunity is not deleted, re-statused or superseded again",
+            "the superseded row is not deleted, re-statused or superseded again",
             plan.supersede.isEmpty() && plan.miss.isEmpty()
+        )
+        assertTrue(
+            "and the new opportunity is a row of its own, never the superseded one resurrected",
+            plan.create.single { it.plannedFor.toString() == "2026-09-16" }.slotId.value != "superseded"
+        )
+    }
+
+    /**
+     * A frequency changed back and forth ends with the plan a fresh schedule of the last frequency
+     * would give: 3/week → every other day → 3/week → every other day.
+     *
+     * The trained date stays trained — a completed opportunity occupies its date and is never a gap to
+     * refill — and every other date the final revision presents is open exactly once, however many
+     * revisions superseded an opportunity on it along the way.
+     */
+    @Test
+    fun aFrequencyChangedBackAndForthEndsWithThePlanAFreshScheduleWouldGive() {
+        val trainedDate = LocalDate.parse("2026-09-14")
+        val weekly = ProgramSchedule.FixedWeekdays(
+            setOf(DayOfWeek.MONDAY, DayOfWeek.WEDNESDAY, DayOfWeek.FRIDAY)
+        )
+        val everyOtherDay = ProgramSchedule.EveryNDays(2)
+        // One identity source for the whole chain: a slot is unique across passes, not within one.
+        val identities = TestSlotIds()
+        var slots = listOf(
+            slot("trained", "2026-09-14", dayPosition = 1, attempts = listOf(SessionId("session-1")))
+                .copy(status = SlotStatus.COMPLETED, completedAt = Instant.parse("2026-09-14T09:00:00Z"))
+        )
+
+        listOf(weekly, everyOtherDay, weekly, everyOtherDay).forEach { schedule ->
+            val plan = SlotPlanner.plan(
+                request(revision(schedule = schedule), asOf = anchor, slots = slots, slotIds = identities)
+            ).asScheduled()
+            val superseded = plan.supersede.map { supersededSlot -> supersededSlot.slotId }.toSet()
+            val missed = plan.miss.toSet()
+            slots = slots.map { existing ->
+                when (existing.slotId) {
+                    in superseded -> existing.copy(status = SlotStatus.SUPERSEDED)
+                    in missed -> existing.copy(status = SlotStatus.MISSED)
+                    else -> existing
+                }
+            } + plan.create
+        }
+
+        val fresh = SlotPlanner.plan(
+            request(revision(schedule = everyOtherDay), asOf = anchor)
+        ).asScheduled()
+
+        assertEquals(
+            "every date the final schedule presents is open — the one that was trained excepted",
+            fresh.createdDates.filter { date -> date != trainedDate },
+            slots.filter { it.status == SlotStatus.PLANNED }.map { it.plannedFor }.sorted()
+        )
+        val occupying = slots.filter { slot -> slot.status != SlotStatus.SUPERSEDED }.map { it.plannedFor }
+        assertEquals(
+            "and no date holds two opportunities that still count, however many were superseded on it",
+            occupying.distinct().sorted(),
+            occupying.sorted()
+        )
+        assertEquals(
+            "the trained opportunity is untouched: same row, same date, still completed",
+            listOf(SlotStatus.COMPLETED to trainedDate),
+            slots.filter { it.slotId.value == "trained" }.map { it.status to it.plannedFor }
+        )
+        assertEquals(
+            "the superseded rows are the six M/W/F dates the interval dropped, the eight interval dates " +
+                "the week dropped, and the six re-planned M/W/F dates it dropped again",
+            20,
+            slots.count { it.status == SlotStatus.SUPERSEDED }
         )
     }
 
@@ -1068,14 +1133,15 @@ class SlotPlannerTest {
         anchor: LocalDate = this.anchor,
         asOf: LocalDate = anchor,
         slots: List<WorkoutSlot> = emptyList(),
-        pauses: List<PausedInterval> = emptyList()
+        pauses: List<PausedInterval> = emptyList(),
+        slotIds: SlotIdSource = TestSlotIds()
     ): ScheduleRequest = ScheduleRequest(
         revision = revision,
         anchor = anchor,
         asOf = asOf,
         slots = slots,
         pauses = pauses,
-        slotIds = TestSlotIds()
+        slotIds = slotIds
     )
 
     private fun slot(
