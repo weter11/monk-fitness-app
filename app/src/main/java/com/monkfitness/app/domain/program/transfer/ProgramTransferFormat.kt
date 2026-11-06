@@ -44,6 +44,10 @@ object ProgramTransferFormat {
      * refused as unsupported and **not** read as a program with no preference: its `preferredExercises`
      * is absent, not empty, and treating an older file as today's would be a guess about what its author
      * meant.
+     *
+     * `revision.sessionTypes` is the one addition that is not a bump, because absence already states its
+     * value: Mixed is the field being absent, which is exactly what every file shared before the selection
+     * existed says. A bump would refuse those files to say the same thing they already say.
      */
     const val VERSION: Int = 2
 

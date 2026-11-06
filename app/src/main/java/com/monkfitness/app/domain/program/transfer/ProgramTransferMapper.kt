@@ -80,7 +80,8 @@ object ProgramTransferMapper {
                 // The user's preference, carried verbatim in the user's own order. Not re-sorted and not
                 // filtered against the plan — a preferred exercise the exported plan happens not to use
                 // today is still the exercise the user asked for first.
-                preferredExercises = revision.preferredExercises.exerciseIds
+                preferredExercises = revision.preferredExercises.exerciseIds,
+                sessionTypes = revision.sessionTypes
             )
         )
 
@@ -123,7 +124,8 @@ object ProgramTransferMapper {
                 )
             },
             focus = focusOf(document.revision.focus),
-            preferredExercises = ExercisePreference(document.revision.preferredExercises)
+            preferredExercises = ExercisePreference(document.revision.preferredExercises),
+            sessionTypes = document.revision.sessionTypes
         )
 
     /**
@@ -162,7 +164,8 @@ object ProgramTransferMapper {
             },
             createdAt = at,
             focus = renumbered.focus,
-            preferredExercises = renumbered.preferredExercises
+            preferredExercises = renumbered.preferredExercises,
+            sessionTypes = renumbered.sessionTypes
         )
         require(revision.structure == renumbered.structure) {
             "re-identifying a plan changes nothing else about it: the minted revision and the draft it " +

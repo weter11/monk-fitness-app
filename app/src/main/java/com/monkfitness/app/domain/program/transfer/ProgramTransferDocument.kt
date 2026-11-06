@@ -6,6 +6,7 @@ import com.monkfitness.app.domain.program.ProgramDuration
 import com.monkfitness.app.domain.program.ProgramExerciseOrigin
 import com.monkfitness.app.domain.program.ProgramMode
 import com.monkfitness.app.domain.program.ProgramSchedule
+import com.monkfitness.app.domain.program.SessionType
 import com.monkfitness.app.domain.prescription.PrescriptionDimension
 import java.time.DayOfWeek
 
@@ -75,7 +76,16 @@ data class RevisionTransfer(
     val schedule: ScheduleTransfer,
     val focus: FocusTransfer,
     val days: List<DayTransfer>,
-    val preferredExercises: List<String> = emptyList()
+    val preferredExercises: List<String> = emptyList(),
+    /**
+     * The session types the plan draws from, or empty for **Mixed**.
+     *
+     * Empty is written as an absent field rather than an empty array, for the reason a day's absent name is
+     * absent: Mixed is one value, so the format admits one representation of it — and that representation is
+     * the one a file written before the selection existed already has. A version bump would therefore
+     * refuse every shared file in exchange for nothing.
+     */
+    val sessionTypes: Set<SessionType> = emptySet()
 )
 
 /**

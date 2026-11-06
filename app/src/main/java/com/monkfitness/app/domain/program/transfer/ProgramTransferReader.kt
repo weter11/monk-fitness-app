@@ -5,6 +5,7 @@ import com.monkfitness.app.domain.program.Focus
 import com.monkfitness.app.domain.program.ProgramDayType
 import com.monkfitness.app.domain.program.ProgramExerciseOrigin
 import com.monkfitness.app.domain.program.ProgramMode
+import com.monkfitness.app.domain.program.SessionType
 import java.time.DayOfWeek
 
 /**
@@ -38,7 +39,9 @@ internal object ProgramTransferReader {
 
     private val DOCUMENT_FIELDS = listOf("format", "formatVersion", "program", "revision")
     private val PROGRAM_FIELDS = listOf("name", "description")
-    private val REVISION_FIELDS = listOf("mode", "duration", "schedule", "focus", "days", "preferredExercises")
+    private val REVISION_FIELDS = listOf(
+        "mode", "duration", "schedule", "focus", "days", "preferredExercises", "sessionTypes"
+    )
     private val DURATION_FIELDS = listOf("kind", "days")
     private val SCHEDULE_FIELDS = listOf("kind", "weekdays", "sessionsPerWeek")
     private val FOCUS_FIELDS = listOf("goal", "focuses", "allocations")
@@ -164,12 +167,20 @@ internal object ProgramTransferReader {
         val preferred = fieldOf(record, REVISION, "preferredExercises")
             .then { value -> arrayOf(value, "$REVISION.preferredExercises") }
             .then { elements -> preferredIdList(elements) }
+        // Optional, and absent is the value: an empty selection is Mixed, which is what a file written
+        // before the selection existed means. A *present* token that names no type is still a finding.
+        val sessionTypes = record.named("sessionTypes")?.let { value ->
+            arrayOf(value, "$REVISION.sessionTypes")
+                .then { elements -> sessionTypeList(elements) }
+        } ?: Read.of(emptySet<SessionType>())
 
         val issues = unknownFields(record, REVISION, REVISION_FIELDS) + mode.issues +
-            duration.issues + schedule.issues + focus.issues + days.issues + preferred.issues
+            duration.issues + schedule.issues + focus.issues + days.issues + preferred.issues +
+            sessionTypes.issues
         val revision = if (
             mode.value != null && duration.value != null && schedule.value != null &&
-            focus.value != null && days.value != null && preferred.value != null
+            focus.value != null && days.value != null && preferred.value != null &&
+            sessionTypes.value != null
         ) {
             RevisionTransfer(
                 mode = mode.value,
@@ -177,12 +188,45 @@ internal object ProgramTransferReader {
                 schedule = schedule.value,
                 focus = focus.value,
                 days = days.value,
-                preferredExercises = preferred.value
+                preferredExercises = preferred.value,
+                sessionTypes = sessionTypes.value
             )
         } else {
             null
         }
         return Read(revision, issues)
+    }
+
+    /**
+     * The session-type selection, read strictly.
+     *
+     * A token the vocabulary does not hold is a finding rather than a dropped entry: the selection narrows
+     * the pool the next generation draws from, and importing a plan as Mixed because one token was
+     * misspelled would silently widen it. Naming a type twice is a finding for the same reason a repeated
+     * preference is — a set that states a member twice says two things at once.
+     */
+    private fun sessionTypeList(elements: List<JsonValue>): Read<Set<SessionType>> {
+        val path = "$REVISION.sessionTypes"
+        val types = collect(
+            elements.mapIndexed { index, element ->
+                token(element, "$path[$index]", SessionType.entries.map { it.name }) { token ->
+                    SessionType.entries.firstOrNull { each -> each.name == token }
+                }
+            }
+        )
+        val repeated = types.value?.groupingBy { type -> type }?.eachCount()
+            ?.filterValues { count -> count > 1 }?.keys.orEmpty()
+        val extra = if (repeated.isEmpty()) {
+            emptyList()
+        } else {
+            listOf(
+                ProgramTransferIssue.InvalidDefinition(
+                    path,
+                    "a session type is named more than once: $repeated"
+                )
+            )
+        }
+        return Read(types.value?.toSet(), types.issues + extra)
     }
 
     /**
