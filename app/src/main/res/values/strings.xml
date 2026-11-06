@@ -826,6 +826,8 @@
     <string name="programs_schedule_fixed">%1$d fixed weekdays</string>
     <string name="programs_schedule_flexible">%1$d sessions per week</string>
     <string name="programs_schedule_sessions_per_week">%1$d per week</string>
+    <string name="programs_schedule_every_day">Every day</string>
+    <string name="programs_schedule_no_rest_day">Seven training days a week, with no rest day.</string>
     <string name="programs_session_in_progress">In progress</string>
     <string name="programs_session_completed">Completed</string>
     <string name="programs_session_cancelled">Cancelled</string>

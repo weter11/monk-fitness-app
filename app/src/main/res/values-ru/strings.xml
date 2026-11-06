@@ -824,6 +824,8 @@
     <string name="programs_schedule_fixed">%1$d фиксированных дней недели</string>
     <string name="programs_schedule_flexible">%1$d тренировок в неделю</string>
     <string name="programs_schedule_sessions_per_week">%1$d в неделю</string>
+    <string name="programs_schedule_every_day">Каждый день</string>
+    <string name="programs_schedule_no_rest_day">Семь тренировочных дней в неделю, без дня отдыха.</string>
     <string name="programs_session_in_progress">В процессе</string>
     <string name="programs_session_completed">Завершена</string>
     <string name="programs_session_cancelled">Отменена</string>

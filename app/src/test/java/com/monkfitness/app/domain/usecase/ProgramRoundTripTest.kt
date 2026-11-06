@@ -70,6 +70,12 @@ class ProgramRoundTripTest {
                 duration = ProgramDuration.FixedDays(14),
                 schedule = ProgramSchedule.FixedWeekdays(setOf(DayOfWeek.SATURDAY)),
                 focus = FocusPlan.focused(listOf(Focus.PULL, Focus.CORE))
+            ),
+            "generated, fixed, every day, focused" to Shape(
+                mode = ProgramMode.GENERATED,
+                duration = ProgramDuration.FixedDays(28),
+                schedule = ProgramSchedule.FlexiblePerWeek(7),
+                focus = FocusPlan.focused(listOf(Focus.PUSH, Focus.CORE))
             )
         )
 

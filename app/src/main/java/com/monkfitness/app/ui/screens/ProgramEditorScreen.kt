@@ -51,6 +51,7 @@ import com.monkfitness.app.ui.programs.ProgramsController
 import com.monkfitness.app.ui.programs.focusLabelRes
 import com.monkfitness.app.ui.programs.sessionTypeLabelRes
 import com.monkfitness.app.ui.programs.matchesExerciseQuery
+import com.monkfitness.app.ui.programs.sevenDayWeekLeavesNoRestDay
 import com.monkfitness.app.ui.programs.toggledFocus
 
 /**
@@ -267,10 +268,26 @@ fun ProgramEditorScreen(
                             controller.setDraftSchedule(ProgramSchedule.FlexiblePerWeek(sessions))
                         },
                         label = {
-                            Text(stringResource(R.string.programs_schedule_sessions_per_week, sessions))
+                            Text(
+                                if (sessions == EVERY_DAY_SESSIONS_PER_WEEK) {
+                                    stringResource(R.string.programs_schedule_every_day)
+                                } else {
+                                    stringResource(R.string.programs_schedule_sessions_per_week, sessions)
+                                }
+                            )
                         }
                     )
                 }
+            }
+
+            // Next to the choice that causes it: the user keeps the frequency either way, and a plan
+            // with no rest day is worth knowing before it is generated rather than after.
+            if (sevenDayWeekLeavesNoRestDay(current.schedule, current.mode, current.sessionTypes)) {
+                Text(
+                    text = stringResource(ProgramGenerationPreviewRes.NO_REST_DAY),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.error
+                )
             }
 
             ProgramSection(stringResource(R.string.programs_editor_plan))
@@ -1287,7 +1304,10 @@ private const val DURATION_DAYS_30 = 30
 
 private const val DURATION_DAYS_56 = 56
 
-private val SCHEDULE_OPTIONS = listOf(2, 3, 4, 5, 6)
+/** The one frequency the chips label by name: seven days a week is "Every day", not "7 per week". */
+private const val EVERY_DAY_SESSIONS_PER_WEEK = 7
+
+private val SCHEDULE_OPTIONS = listOf(2, 3, 4, 5, 6, EVERY_DAY_SESSIONS_PER_WEEK)
 
 /** The share dialog's percent field, wide enough for three digits and the field's own padding. */
 private val PERCENT_FIELD_WIDTH = 88.dp
