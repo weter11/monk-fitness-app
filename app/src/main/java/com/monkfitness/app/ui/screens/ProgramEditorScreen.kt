@@ -17,6 +17,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.annotation.StringRes
@@ -81,6 +82,9 @@ fun ProgramEditorScreen(
 
     val draft: ProgramDraftUi? = state.draft
 
+    // The top bar and the footer run the same action; a second entry point must not mean a second Save.
+    val save: () -> Unit = { runAction(scope) { if (controller.saveDraft()) onSaved() } }
+
     Scaffold(
         topBar = {
             TopAppBar(
@@ -100,6 +104,14 @@ fun ProgramEditorScreen(
                         Icon(
                             imageVector = Icons.AutoMirrored.Filled.ArrowBack,
                             contentDescription = stringResource(R.string.previous)
+                        )
+                    }
+                },
+                actions = {
+                    IconButton(onClick = save, enabled = draft?.isValid == true) {
+                        Icon(
+                            imageVector = Icons.Filled.Check,
+                            contentDescription = stringResource(R.string.programs_editor_save)
                         )
                     }
                 }
@@ -130,6 +142,19 @@ fun ProgramEditorScreen(
                     color = MaterialTheme.colorScheme.secondary
                 )
                 return@Column
+            }
+
+            // Above the fields, not under the plan: the top bar's Save is disabled from the first screen,
+            // so the reason it is disabled has to be readable there too.
+            if (current.issueRes.isNotEmpty()) {
+                ProgramSection(stringResource(R.string.programs_editor_findings))
+                current.issueRes.forEach { issue ->
+                    Text(
+                        text = stringResource(issue),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.error
+                    )
+                }
             }
 
             OutlinedTextField(
@@ -347,17 +372,6 @@ fun ProgramEditorScreen(
                 )
             }
 
-            if (current.issueRes.isNotEmpty()) {
-                ProgramSection(stringResource(R.string.programs_editor_findings))
-                current.issueRes.forEach { issue ->
-                    Text(
-                        text = stringResource(issue),
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.error
-                    )
-                }
-            }
-
             Spacer(modifier = Modifier.height(8.dp))
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 Button(
@@ -367,11 +381,7 @@ fun ProgramEditorScreen(
                     Text(stringResource(R.string.programs_editor_review))
                 }
                 Button(
-                    onClick = {
-                        runAction(scope) {
-                            if (controller.saveDraft()) onSaved()
-                        }
-                    },
+                    onClick = save,
                     enabled = current.isValid,
                     modifier = Modifier.weight(1f)
                 ) {
