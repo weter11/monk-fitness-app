@@ -1,5 +1,7 @@
 package com.monkfitness.app.domain.program.transfer
 
+import com.monkfitness.app.domain.program.SessionType
+
 /**
  * The transfer format's writer: a document, as the exact bytes a share carries.
  *
@@ -43,7 +45,7 @@ object ProgramTransferJson {
 
     private fun revision(depth: Int, revision: RevisionTransfer): String = record(
         depth,
-        listOf(
+        listOfNotNull(
             "mode" to quoted(revision.mode.name),
             "duration" to duration(depth + 1, revision.duration),
             "schedule" to schedule(depth + 1, revision.schedule),
@@ -54,7 +56,13 @@ object ProgramTransferJson {
             // preference" is a stated `[]` rather than an absent key (one representation per value).
             "preferredExercises" to inlineArray(
                 revision.preferredExercises.map { exerciseId -> quoted(exerciseId) }
-            )
+            ),
+            // Written only when the user selected a type: empty is Mixed, and Mixed is the absent field.
+            revision.sessionTypes.takeIf { types -> types.isNotEmpty() }?.let { types ->
+                "sessionTypes" to inlineArray(
+                    SessionType.canonical(types).map { type -> quoted(type.name) }
+                )
+            }
         )
     )
 

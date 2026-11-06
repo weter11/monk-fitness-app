@@ -258,7 +258,8 @@ internal class ProgramTransferRig(private val key: String = "t") {
         mode: ProgramMode = source.revision.mode,
         duration: ProgramDuration = source.revision.duration,
         schedule: ProgramSchedule = source.revision.schedule,
-        focus: com.monkfitness.app.domain.program.FocusPlan = source.revision.focus
+        focus: com.monkfitness.app.domain.program.FocusPlan = source.revision.focus,
+        sessionTypes: Set<com.monkfitness.app.domain.program.SessionType> = source.revision.sessionTypes
     ): ProgramRevision {
         val tag = "${source.program.programId.value.removePrefix("program-")}-$revisionNumber"
         val revision = ProgramRevision(
@@ -281,7 +282,8 @@ internal class ProgramTransferRig(private val key: String = "t") {
                 )
             },
             createdAt = ProgramGraphFixture.UPDATED,
-            focus = focus
+            focus = focus,
+            sessionTypes = sessionTypes
         )
         planRepository.saveNewRevision(revision, ProgramGraphFixture.UPDATED)
         return revision
