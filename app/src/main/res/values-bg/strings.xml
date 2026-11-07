@@ -208,6 +208,12 @@
     <string name="nutrition_current_program_day">Текущ ден от програмата</string>
     <string name="nutrition_day_type">Тип ден</string>
     <string name="nutrition_protein_target">Цел за белтъчини</string>
+    <string name="nutrition_planned_totals">Планирано: %1$d kcal • %2$dg протеин</string>
+    <string name="nutrition_target_gap_below">Цел %1$d kcal • %2$d под</string>
+    <string name="nutrition_target_gap_above">Цел %1$d kcal • %2$d над</string>
+    <string name="nutrition_cycle_day_of">Ден %1$d от %2$d</string>
+    <string name="nutrition_day_past">Минал</string>
+    <string name="nutrition_disclaimer">Обща информация, не медицински съвет.</string>
     <string name="nutrition_kcal_format">%1$d kcal</string>
     <string name="nutrition_protein_range_format">%1$d–%2$dg</string>
     <string name="nutrition_three_day_plan">3-дневен план за хранене</string>

@@ -208,6 +208,12 @@
     <string name="nutrition_current_program_day">Giorno attuale del programma</string>
     <string name="nutrition_day_type">Tipo di giornata</string>
     <string name="nutrition_protein_target">Obiettivo proteico</string>
+    <string name="nutrition_planned_totals">Pianificato: %1$d kcal • %2$dg di proteine</string>
+    <string name="nutrition_target_gap_below">Obiettivo %1$d kcal • %2$d in meno</string>
+    <string name="nutrition_target_gap_above">Obiettivo %1$d kcal • %2$d in più</string>
+    <string name="nutrition_cycle_day_of">Giorno %1$d di %2$d</string>
+    <string name="nutrition_day_past">Passato</string>
+    <string name="nutrition_disclaimer">Informazioni generali, non consigli medici.</string>
     <string name="nutrition_kcal_format">%1$d kcal</string>
     <string name="nutrition_protein_range_format">%1$d–%2$dg</string>
     <string name="nutrition_three_day_plan">Piano pasti di 3 giorni</string>

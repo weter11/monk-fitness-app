@@ -2,6 +2,8 @@ package com.monkfitness.app.data.model
 
 import androidx.annotation.StringRes
 import com.monkfitness.app.R
+import java.time.LocalDate
+import java.time.temporal.ChronoUnit
 import kotlin.math.absoluteValue
 import kotlin.math.abs
 import kotlin.math.roundToInt
@@ -81,17 +83,59 @@ data class NutritionMeal(
     val cycleId: Long = 0
 )
 
+/** Whether a day's calorie field is a target to reach or the plan's own delivered total. */
+enum class NutritionCalorieBasis { TARGET, PLANNED_TOTAL }
+
+const val NUTRITION_PROGRAM_DAY_CAP = 56
+
 data class NutritionDayPlan(
     val dayNumber: Int,
     val programDay: Int,
     val week: Int,
     val dayType: NutritionDayType,
     val targetCalories: Int,
-    val meals: List<NutritionMeal>
+    val meals: List<NutritionMeal>,
+    val calorieBasis: NutritionCalorieBasis = NutritionCalorieBasis.TARGET
 ) {
     val totalCalories: Int = meals.sumOf { it.calories }
     val totalProteinGrams: Int = meals.sumOf { it.proteinGrams }
 }
+
+enum class NutritionDayStatus { PAST, TODAY, UPCOMING }
+
+/** The 1-based day of a meal cycle that [date] falls on, or null when the cycle is not running then. */
+fun nutritionCycleDayNumber(startDate: LocalDate, date: LocalDate, dayCount: Int): Int? {
+    val number = ChronoUnit.DAYS.between(startDate, date).toInt() + 1
+    return number.takeIf { it in 1..dayCount }
+}
+
+/** The day's shortfall or overshoot once it exceeds 5 % of the target; null when it is close enough. */
+fun NutritionDayPlan.calorieTargetGap(): Int? {
+    if (calorieBasis != NutritionCalorieBasis.TARGET || targetCalories <= 0) return null
+    val gap = targetCalories - totalCalories
+    return gap.takeIf { abs(it) * 100 > targetCalories * 5 }
+}
+
+fun NutritionDayPlan.isProgramDayCapped(): Boolean = programDay >= NUTRITION_PROGRAM_DAY_CAP
+
+fun NutritionDayPlan.statusOn(todayDayNumber: Int?): NutritionDayStatus = when {
+    todayDayNumber == null -> NutritionDayStatus.UPCOMING
+    dayNumber < todayDayNumber -> NutritionDayStatus.PAST
+    dayNumber == todayDayNumber -> NutritionDayStatus.TODAY
+    else -> NutritionDayStatus.UPCOMING
+}
+
+/** Today first, then upcoming days, then past ones — a past day never reads as upcoming. */
+fun NutritionPlan.orderedForDisplay(todayDayNumber: Int?): List<NutritionDayPlan> =
+    days.sortedWith(
+        compareBy<NutritionDayPlan> {
+            when (it.statusOn(todayDayNumber)) {
+                NutritionDayStatus.TODAY -> 0
+                NutritionDayStatus.UPCOMING -> 1
+                NutritionDayStatus.PAST -> 2
+            }
+        }.thenBy { it.dayNumber }
+    )
 
 data class NutritionShoppingListItem(
     val ingredient: NutritionIngredient,
@@ -567,7 +611,7 @@ fun generateNutritionPlan(
     val safeDaysCount = daysCount.coerceIn(1, 7)
 
     val days = (0 until safeDaysCount).map { index ->
-        val programDay = (safeStartDay + index).coerceAtMost(56)
+        val programDay = (safeStartDay + index).coerceAtMost(NUTRITION_PROGRAM_DAY_CAP)
         val week = ((programDay - 1) / 7) + 1
         val dayType = resolveNutritionDayType(workoutTypeForDay(programDay))
         val targetCalories = calculateTargetCalories(weightKg = weightKg, heightCm = heightCm, dayType = dayType)
@@ -890,6 +934,7 @@ fun mealEntitiesToNutritionPlan(cycleId: Long, meals: List<MealEntity>): Nutriti
                 week = first.week,
                 dayType = NutritionDayType.valueOf(first.dayType),
                 targetCalories = items.sumOf { it.calories },
+                calorieBasis = NutritionCalorieBasis.PLANNED_TOTAL,
                 meals = items.map { meal ->
                     NutritionMeal(
                         templateId = meal.templateId,
