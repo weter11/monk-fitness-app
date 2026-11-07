@@ -208,6 +208,11 @@ fun NutritionScreen(
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.secondary
                     )
+                    Text(
+                        text = stringResource(R.string.nutrition_data_sources),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.secondary
+                    )
                 }
             }
 

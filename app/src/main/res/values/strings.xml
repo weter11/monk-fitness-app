@@ -214,6 +214,7 @@
     <string name="nutrition_cycle_day_of">Day %1$d of %2$d</string>
     <string name="nutrition_day_past">Past</string>
     <string name="nutrition_disclaimer">General information, not medical advice.</string>
+    <string name="nutrition_data_sources">Data: USDA FoodData Central (public domain); ANSES Ciqual 2020 (Licence Ouverte 2.0).</string>
     <string name="nutrition_kcal_format">%1$d kcal</string>
     <string name="nutrition_protein_range_format">%1$d–%2$dg</string>
     <string name="nutrition_three_day_plan">3-day meal plan</string>

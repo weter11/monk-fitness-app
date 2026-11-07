@@ -2,6 +2,7 @@ package com.monkfitness.app
 
 import android.app.Application
 import com.monkfitness.app.data.local.SettingsManager
+import com.monkfitness.app.data.model.NutritionCatalogue
 import com.monkfitness.app.di.AppContainer
 import com.monkfitness.app.language.AppLanguageManager
 import com.monkfitness.app.language.SettingsLegacyLanguageStore
@@ -35,6 +36,7 @@ class MonkFitnessApplication : Application() {
     override fun onCreate() {
         super.onCreate()
 
+        loadNutritionCatalogue()
         val settingsManager = SettingsManager(this)
         // Seeded at application start, before any adaptive pass can run: one is only reachable once a
         // Session completes, which is a user action well after start-up. The provider itself never
@@ -49,5 +51,11 @@ class MonkFitnessApplication : Application() {
             val time = settingsManager.notificationTimeFlow.first()
             NotificationScheduler.scheduleDailyReminder(this@MonkFitnessApplication, time.first, time.second)
         }
+    }
+
+    /** Synchronous: every plan built in this process reads the catalogue, so it must exist first. */
+    private fun loadNutritionCatalogue() {
+        val json = assets.open("nutrition/catalogue.json").bufferedReader().use { it.readText() }
+        NutritionCatalogue.load(json)
     }
 }
