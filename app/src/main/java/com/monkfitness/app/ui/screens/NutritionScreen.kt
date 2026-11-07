@@ -50,6 +50,7 @@ import com.monkfitness.app.data.model.NutritionPlan
 import com.monkfitness.app.data.model.NutritionShoppingGroup
 import com.monkfitness.app.data.model.calorieTargetGap
 import com.monkfitness.app.data.model.isProgramDayCapped
+import com.monkfitness.app.data.model.nutritionVariety
 import com.monkfitness.app.data.model.orderedForDisplay
 import com.monkfitness.app.data.model.statusOn
 import com.monkfitness.app.viewmodel.MainViewModel
@@ -618,19 +619,19 @@ fun NutritionPreviewDialog(
                 val totalRecipes = previewPlan.days.flatMap { it.meals }
                 val uniqueRecipesCount = totalRecipes.map { it.templateId }.distinct().size
                 val repeatedRecipesCount = totalRecipes.size - uniqueRecipesCount
+                val variety = nutritionVariety(previewPlan, currentPlan)
                 val shoppingItems = previewPlan.shoppingList.values.flatten()
                 val availableCount = shoppingItems.count { it.ingredient.key in availableProducts }
                 val missingCount = shoppingItems.count { it.ingredient.key !in availableProducts }
 
-                val uniqueRatio = if (totalRecipes.isNotEmpty()) uniqueRecipesCount.toFloat() / totalRecipes.size else 0f
                 val varietyIndicator = when {
-                    uniqueRatio >= 0.8f -> stringResource(R.string.nutrition_variety_excellent)
-                    uniqueRatio >= 0.5f -> stringResource(R.string.nutrition_variety_good)
+                    variety.newRatio >= 0.8f -> stringResource(R.string.nutrition_variety_excellent)
+                    variety.newRatio >= 0.5f -> stringResource(R.string.nutrition_variety_good)
                     else -> stringResource(R.string.nutrition_variety_low)
                 }
                 val varietyColor = when {
-                    uniqueRatio >= 0.8f -> MaterialTheme.colorScheme.primary
-                    uniqueRatio >= 0.5f -> MaterialTheme.colorScheme.secondary
+                    variety.newRatio >= 0.8f -> MaterialTheme.colorScheme.primary
+                    variety.newRatio >= 0.5f -> MaterialTheme.colorScheme.secondary
                     else -> MaterialTheme.colorScheme.error
                 }
 
@@ -692,7 +693,7 @@ fun NutritionPreviewDialog(
                             val previewTemplates = totalRecipes.map { it.templateId }.toSet()
 
                             val newRecipesCount = previewTemplates.count { it !in currentTemplates }
-                            val repeatedFromPrevCount = previewTemplates.count { it in currentTemplates }
+                            val repeatedFromPrevCount = variety.repeatedFromPrevious
 
                             val currentIngredients = currentRecipes.flatMap { it.ingredients }.map { it.ingredient.key }.toSet()
                             val previewIngredients = totalRecipes.flatMap { it.ingredients }.map { it.ingredient.key }.toSet()
