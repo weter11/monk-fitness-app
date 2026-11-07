@@ -2,7 +2,9 @@
   "schemaVersion": 1,
   "sources": {
     "USDA FDC": "FoodData Central, Foundation Foods 2024-10-31 + SR Legacy 2018-04 (CC0)",
-    "CIQUAL 2020": "ANSES-CIQUAL 2020, English XML release 2020-07-07 (Licence Ouverte 2.0)"
+    "CIQUAL 2020": "ANSES-CIQUAL 2020, English XML release 2020-07-07 (Licence Ouverte 2.0)",
+    "AGROVOC": "AGROVOC multilingual thesaurus, FAO, French preferred labels (CC BY 4.0)",
+    "Wikidata": "Wikidata item labels and aliases, item ids given per name (CC0 1.0)"
   },
   "ingredients": [
     {
@@ -29,6 +31,48 @@
         "kcal": 141.0,
         "basis": "cooked",
         "note": "CIQUAL's skinless cooked breast is pan-fried rather than grilled; both are cooked without skin."
+      },
+      "names": {
+        "nl": {
+          "name": "kippenborst",
+          "trust": "sourced",
+          "source": {
+            "database": "Wikidata",
+            "id": "Q2607161",
+            "term": "prefLabel",
+            "licence": "CC0 1.0"
+          }
+        },
+        "fr": {
+          "name": "poitrine de poulet",
+          "trust": "sourced",
+          "source": {
+            "database": "Wikidata",
+            "id": "Q2607161",
+            "term": "prefLabel",
+            "licence": "CC0 1.0"
+          }
+        },
+        "bg": {
+          "name": "пилешки гърди",
+          "trust": "sourced",
+          "source": {
+            "database": "Wikidata",
+            "id": "Q2607161",
+            "term": "prefLabel",
+            "licence": "CC0 1.0"
+          }
+        },
+        "de": {
+          "name": "Hähnchenbrust",
+          "trust": "sourced",
+          "source": {
+            "database": "Wikidata",
+            "id": "Q2607161",
+            "term": "prefLabel",
+            "licence": "CC0 1.0"
+          }
+        }
       }
     },
     {
@@ -61,6 +105,48 @@
         "source": "USDA FDC",
         "itemId": "92500",
         "retrievedOn": "2026-11-07"
+      },
+      "names": {
+        "nl": {
+          "name": "ei",
+          "trust": "sourced",
+          "source": {
+            "database": "Wikidata",
+            "id": "Q93189",
+            "term": "prefLabel",
+            "licence": "CC0 1.0"
+          }
+        },
+        "fr": {
+          "name": "oeuf",
+          "trust": "sourced",
+          "source": {
+            "database": "AGROVOC",
+            "id": "c_2502",
+            "term": "prefLabel",
+            "licence": "CC BY 4.0"
+          }
+        },
+        "bg": {
+          "name": "Яйце",
+          "trust": "sourced",
+          "source": {
+            "database": "Wikidata",
+            "id": "Q93189",
+            "term": "prefLabel",
+            "licence": "CC0 1.0"
+          }
+        },
+        "de": {
+          "name": "Ei",
+          "trust": "sourced",
+          "source": {
+            "database": "Wikidata",
+            "id": "Q93189",
+            "term": "prefLabel",
+            "licence": "CC0 1.0"
+          }
+        }
       }
     },
     {
@@ -87,6 +173,48 @@
         "kcal": 145.0,
         "basis": "cooked",
         "note": "Same food, different cooked moisture: CIQUAL's cooked rice is drier, 11.5% more energy per 100 g."
+      },
+      "names": {
+        "nl": {
+          "name": "rijst",
+          "trust": "sourced",
+          "source": {
+            "database": "Wikidata",
+            "id": "Q5090",
+            "term": "prefLabel",
+            "licence": "CC0 1.0"
+          }
+        },
+        "fr": {
+          "name": "riz",
+          "trust": "sourced",
+          "source": {
+            "database": "AGROVOC",
+            "id": "c_6599",
+            "term": "prefLabel",
+            "licence": "CC BY 4.0"
+          }
+        },
+        "bg": {
+          "name": "ориз",
+          "trust": "sourced",
+          "source": {
+            "database": "Wikidata",
+            "id": "Q5090",
+            "term": "prefLabel",
+            "licence": "CC0 1.0"
+          }
+        },
+        "de": {
+          "name": "Reis",
+          "trust": "sourced",
+          "source": {
+            "database": "Wikidata",
+            "id": "Q5090",
+            "term": "prefLabel",
+            "licence": "CC0 1.0"
+          }
+        }
       }
     },
     {
@@ -113,6 +241,48 @@
         "kcal": 378.0,
         "basis": "raw",
         "note": "Dry oats, the weight the templates buy; the cooking step adds water, not energy."
+      },
+      "names": {
+        "nl": {
+          "name": "haver",
+          "trust": "sourced",
+          "source": {
+            "database": "Wikidata",
+            "id": "Q24265484",
+            "term": "prefLabel",
+            "licence": "CC0 1.0"
+          }
+        },
+        "fr": {
+          "name": "avoine",
+          "trust": "sourced",
+          "source": {
+            "database": "AGROVOC",
+            "id": "c_5287",
+            "term": "prefLabel",
+            "licence": "CC BY 4.0"
+          }
+        },
+        "bg": {
+          "name": "овес",
+          "trust": "sourced",
+          "source": {
+            "database": "Wikidata",
+            "id": "Q24265484",
+            "term": "prefLabel",
+            "licence": "CC0 1.0"
+          }
+        },
+        "de": {
+          "name": "Hafer",
+          "trust": "sourced",
+          "source": {
+            "database": "Wikidata",
+            "id": "Q24265484",
+            "term": "prefLabel",
+            "licence": "CC0 1.0"
+          }
+        }
       }
     },
     {
@@ -138,6 +308,43 @@
         "itemId": "4003",
         "kcal": 80.5,
         "basis": "cooked"
+      },
+      "names": {
+        "nl": {
+          "name": "aardappel",
+          "trust": "sourced",
+          "source": {
+            "database": "Wikidata",
+            "id": "Q16587531",
+            "term": "prefLabel",
+            "licence": "CC0 1.0"
+          }
+        },
+        "fr": {
+          "name": "pomme de terre",
+          "trust": "sourced",
+          "source": {
+            "database": "AGROVOC",
+            "id": "c_13551",
+            "term": "prefLabel",
+            "licence": "CC BY 4.0"
+          }
+        },
+        "bg": {
+          "name": "картофи",
+          "trust": "unverified",
+          "source": "agent"
+        },
+        "de": {
+          "name": "Kartoffel",
+          "trust": "sourced",
+          "source": {
+            "database": "Wikidata",
+            "id": "Q16587531",
+            "term": "alias",
+            "licence": "CC0 1.0"
+          }
+        }
       }
     },
     {
@@ -164,6 +371,43 @@
         "kcal": 356.0,
         "basis": "raw",
         "note": "CIQUAL 2020 has no cooked buckwheat entry; its raw value is recorded for traceability only and is not comparable."
+      },
+      "names": {
+        "nl": {
+          "name": "boekweit",
+          "trust": "sourced",
+          "source": {
+            "database": "Wikidata",
+            "id": "Q4536337",
+            "term": "prefLabel",
+            "licence": "CC0 1.0"
+          }
+        },
+        "fr": {
+          "name": "sarrasin",
+          "trust": "sourced",
+          "source": {
+            "database": "AGROVOC",
+            "id": "c_9471",
+            "term": "prefLabel",
+            "licence": "CC BY 4.0"
+          }
+        },
+        "bg": {
+          "name": "елда",
+          "trust": "unverified",
+          "source": "agent"
+        },
+        "de": {
+          "name": "Buchweizen",
+          "trust": "sourced",
+          "source": {
+            "database": "Wikidata",
+            "id": "Q4536337",
+            "term": "prefLabel",
+            "licence": "CC0 1.0"
+          }
+        }
       }
     },
     {
@@ -190,6 +434,38 @@
         "kcal": 76.9,
         "basis": "raw",
         "note": "CIQUAL's plain fresh cream cheese at 3% fat stands in for US cottage cheese at 2%."
+      },
+      "names": {
+        "nl": {
+          "name": "hüttenkäse",
+          "trust": "sourced",
+          "source": {
+            "database": "Wikidata",
+            "id": "Q13221624",
+            "term": "prefLabel",
+            "licence": "CC0 1.0"
+          }
+        },
+        "fr": {
+          "name": "cottage cheese",
+          "trust": "unverified",
+          "source": "agent"
+        },
+        "bg": {
+          "name": "извара",
+          "trust": "unverified",
+          "source": "agent"
+        },
+        "de": {
+          "name": "Hüttenkäse",
+          "trust": "sourced",
+          "source": {
+            "database": "Wikidata",
+            "id": "Q13221624",
+            "term": "prefLabel",
+            "licence": "CC0 1.0"
+          }
+        }
       }
     },
     {
@@ -216,6 +492,48 @@
         "kcal": 56.8,
         "basis": "raw",
         "note": "CIQUAL's plain-yogurt average spans fat levels; USDA's item is whole milk."
+      },
+      "names": {
+        "nl": {
+          "name": "yoghurt",
+          "trust": "sourced",
+          "source": {
+            "database": "Wikidata",
+            "id": "Q13317",
+            "term": "prefLabel",
+            "licence": "CC0 1.0"
+          }
+        },
+        "fr": {
+          "name": "yaourt",
+          "trust": "sourced",
+          "source": {
+            "database": "AGROVOC",
+            "id": "c_15463",
+            "term": "prefLabel",
+            "licence": "CC BY 4.0"
+          }
+        },
+        "bg": {
+          "name": "Кисело мляко",
+          "trust": "sourced",
+          "source": {
+            "database": "Wikidata",
+            "id": "Q13317",
+            "term": "prefLabel",
+            "licence": "CC0 1.0"
+          }
+        },
+        "de": {
+          "name": "Joghurt",
+          "trust": "sourced",
+          "source": {
+            "database": "Wikidata",
+            "id": "Q13317",
+            "term": "prefLabel",
+            "licence": "CC0 1.0"
+          }
+        }
       }
     },
     {
@@ -247,6 +565,48 @@
         "source": "USDA FDC",
         "itemId": "93515",
         "retrievedOn": "2026-11-07"
+      },
+      "names": {
+        "nl": {
+          "name": "banaan",
+          "trust": "sourced",
+          "source": {
+            "database": "Wikidata",
+            "id": "Q503",
+            "term": "prefLabel",
+            "licence": "CC0 1.0"
+          }
+        },
+        "fr": {
+          "name": "banane",
+          "trust": "sourced",
+          "source": {
+            "database": "AGROVOC",
+            "id": "c_806",
+            "term": "prefLabel",
+            "licence": "CC BY 4.0"
+          }
+        },
+        "bg": {
+          "name": "банан",
+          "trust": "sourced",
+          "source": {
+            "database": "Wikidata",
+            "id": "Q503",
+            "term": "prefLabel",
+            "licence": "CC0 1.0"
+          }
+        },
+        "de": {
+          "name": "Banane",
+          "trust": "sourced",
+          "source": {
+            "database": "Wikidata",
+            "id": "Q503",
+            "term": "prefLabel",
+            "licence": "CC0 1.0"
+          }
+        }
       }
     },
     {
@@ -279,6 +639,48 @@
         "source": "USDA FDC",
         "itemId": "89193",
         "retrievedOn": "2026-11-07"
+      },
+      "names": {
+        "nl": {
+          "name": "appel",
+          "trust": "sourced",
+          "source": {
+            "database": "Wikidata",
+            "id": "Q89",
+            "term": "prefLabel",
+            "licence": "CC0 1.0"
+          }
+        },
+        "fr": {
+          "name": "pomme",
+          "trust": "sourced",
+          "source": {
+            "database": "AGROVOC",
+            "id": "c_541",
+            "term": "prefLabel",
+            "licence": "CC BY 4.0"
+          }
+        },
+        "bg": {
+          "name": "ябълка",
+          "trust": "sourced",
+          "source": {
+            "database": "Wikidata",
+            "id": "Q89",
+            "term": "prefLabel",
+            "licence": "CC0 1.0"
+          }
+        },
+        "de": {
+          "name": "Apfel",
+          "trust": "sourced",
+          "source": {
+            "database": "Wikidata",
+            "id": "Q89",
+            "term": "prefLabel",
+            "licence": "CC0 1.0"
+          }
+        }
       }
     },
     {
@@ -305,6 +707,33 @@
         "kcal": 618.0,
         "basis": "raw",
         "note": "CIQUAL has no mixed-nuts entry; grilled cashew is the closest nut item."
+      },
+      "names": {
+        "nl": {
+          "name": "noten",
+          "trust": "unverified",
+          "source": "agent"
+        },
+        "fr": {
+          "name": "fruit à coque",
+          "trust": "sourced",
+          "source": {
+            "database": "AGROVOC",
+            "id": "c_12873",
+            "term": "prefLabel",
+            "licence": "CC BY 4.0"
+          }
+        },
+        "bg": {
+          "name": "ядки",
+          "trust": "unverified",
+          "source": "agent"
+        },
+        "de": {
+          "name": "Nüsse",
+          "trust": "unverified",
+          "source": "agent"
+        }
       }
     },
     {
@@ -330,6 +759,33 @@
         "itemId": "26039",
         "kcal": 111.0,
         "basis": "raw"
+      },
+      "names": {
+        "nl": {
+          "name": "tonijn",
+          "trust": "unverified",
+          "source": "agent"
+        },
+        "fr": {
+          "name": "thon",
+          "trust": "sourced",
+          "source": {
+            "database": "AGROVOC",
+            "id": "c_8003",
+            "term": "prefLabel",
+            "licence": "CC BY 4.0"
+          }
+        },
+        "bg": {
+          "name": "риба тон",
+          "trust": "unverified",
+          "source": "agent"
+        },
+        "de": {
+          "name": "Thunfisch",
+          "trust": "unverified",
+          "source": "agent"
+        }
       }
     }
   ],

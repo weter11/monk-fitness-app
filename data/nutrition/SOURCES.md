@@ -23,10 +23,58 @@ above is of the bytes actually analysed.
   permitted with attribution of the source; the app names ANSES Ciqual 2020 on the Nutrition screen.
 - Open Food Facts was not used: its ODbL licence does not fit shipped values.
 
+## Ingredient names
+
+A name is a *word* for a food, not a measurement of it, so it is not taken from the composition tables
+above. Those name the analysed preparation ("Fromage blanc, nature, 3% MG", "Kartoffeln, geschält,
+gegart"), and the row a number came from may not even be the food the ingredient stands for — CIQUAL's
+fresh cream cheese stands in for cottage cheese, grilled cashew for mixed nuts. Names are cited per
+concept to a vocabulary instead.
+
+| File committed | Source | URL | Retrieved |
+| --- | --- | --- | --- |
+| `wikidata/labels.csv` | Wikidata item labels and aliases, `action=wbgetentities` | https://www.wikidata.org/w/api.php | 2026-11-07 |
+| `agrovoc/pref_labels.csv` | AGROVOC multilingual thesaurus, SPARQL endpoint | https://agrovoc.fao.org/sparql | 2026-11-07 |
+
+`extract_names.py` queries both, writes the rows quoted in the catalogue, and rebuilds every
+ingredient's `names` member from them. It fails rather than writing a term the source no longer
+returns.
+
+### Licences, per language
+
+- **Wikidata**: CC0 1.0. No attribution required; the app names it anyway, and every name carries the
+  item id it was read from.
+- **AGROVOC**: CC BY 4.0 for the six FAO languages (en, fr, es, ar, ru, zh), whose copyright is FAO's.
+  Content in *other* languages — German, Dutch, Bulgarian — rests with the institutions that
+  contributed it, and FAO publishes no licence for those terms. Only French is therefore cited, and
+  the app credits FAO and the licence.
+
+### Coverage actually found, per language
+
+| Language | Cited from | Concepts with a usable term |
+| --- | --- | --- |
+| fr | AGROVOC, plus Wikidata for chicken breast | 11 of 12 |
+| nl | Wikidata | 10 of 12 |
+| de | Wikidata | 10 of 12 |
+| bg | Wikidata | 7 of 12 |
+
+The rest are the app's own translations, marked `unverified` with `source: "agent"`.
+
+### Sources checked and not used
+
+| Source | Verdict |
+| --- | --- |
+| NEVO (RIVM, Dutch) | Rejected: RIVM/Kingdom of the Netherlands copyright, reuse permitted only unchanged and with the version cited — not an open licence. Dutch names only. |
+| Fineli (THL, Finnish) | Rejected on language coverage: CC BY 4.0, but food names are published in Finnish, Swedish and English only — none of the four pilot languages. |
+| BLS 4.0 (Max Rubner-Institut, German) | Rejected on fit, not licence: free under CC BY 4.0 since version 4.0 (December 2025), but its names describe analysed preparations in a composition table, which is the stand-in problem this pilot exists to avoid. |
+| CIQUAL 2020 (ANSES, French) | Rejected for names: it is the stand-in table itself. Its French rows are preparations, and one of them ("Fromage blanc") is exactly what cottage cheese must not be called. Still cited for numbers. |
+| AGROVOC, German / Dutch / Bulgarian terms | Rejected: the thesaurus holds them (39,196 German, 23,436 Dutch), but their copyright sits with contributing institutions and no licence is published. Bulgarian has no AGROVOC coverage at all (34 preferred terms). |
+
 ## Regenerating
 
 ```bash
 mkdir -p /tmp/sources/usda /tmp/sources/ciqual
 curl -O <the three URLs above>            # into /tmp/sources
 python3 data/nutrition/extract.py /tmp/sources data/nutrition
+python3 data/nutrition/extract_names.py   # queries Wikidata and AGROVOC directly
 ```

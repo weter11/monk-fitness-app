@@ -25,6 +25,8 @@ import com.monkfitness.app.data.model.FlexibilityTrainingType
 import com.monkfitness.app.data.model.MealCycle
 import com.monkfitness.app.data.model.NutritionDayType
 import com.monkfitness.app.data.model.NutritionIngredient
+import com.monkfitness.app.data.model.NutritionLanguage
+import com.monkfitness.app.data.model.NutritionMarket
 import com.monkfitness.app.data.model.NutritionMeal
 import com.monkfitness.app.data.model.NutritionMealType
 import com.monkfitness.app.data.model.NutritionPlan
@@ -927,6 +929,30 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     val nutritionExcludedFoods = settingsManager.nutritionExcludedFoodsFlow.stateIn(
         viewModelScope, SharingStarted.WhileSubscribed(5000), emptySet()
     )
+
+    /** The market the user picked, or `null` when the region preselects one instead. */
+    val nutritionMarket = settingsManager.nutritionMarketFlow.stateIn(
+        viewModelScope, SharingStarted.WhileSubscribed(5000), null
+    )
+
+    val nutritionMarketLanguage = settingsManager.nutritionMarketLanguageFlow.stateIn(
+        viewModelScope, SharingStarted.WhileSubscribed(5000), null
+    )
+
+    fun selectNutritionMarket(market: NutritionMarket) {
+        viewModelScope.launch {
+            settingsManager.setNutritionMarket(market.countryCode)
+            // The language belongs to the market that was showing: a leftover code would be a
+            // language this market does not speak.
+            market.languages.firstOrNull()?.let { settingsManager.setNutritionMarketLanguage(it.code) }
+        }
+    }
+
+    fun selectNutritionMarketLanguage(language: NutritionLanguage) {
+        viewModelScope.launch {
+            settingsManager.setNutritionMarketLanguage(language.code)
+        }
+    }
 
     fun toggleExerciseFamily(familyKey: String) {
         viewModelScope.launch {
