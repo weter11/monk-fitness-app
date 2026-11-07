@@ -60,6 +60,33 @@ returns.
 
 The rest are the app's own translations, marked `unverified` with `source: "agent"`.
 
+### Form
+
+Names are stored the way a dictionary writes them — lowercase for Dutch, French and Bulgarian;
+German nouns capitalised — so a vocabulary label that arrives capitalised is lowercased on the way in
+(`Яйце` → `яйца`, not because the source is wrong but because a shelf label is not an entry).
+
+Foods bought by the piece are stored in the plural (`eieren`, `pommes de terre`, `яйца`, `Eier`) and
+carry `inflectedFrom`, the singular the cited label spells. A reader can therefore still check the
+plural against the row: the validator compares `inflectedFrom` to the cited term, folding case and the
+œ ligature. Foods bought by weight (`chicken`, `rice`, `oats`, `buckwheat`, `cottage_cheese`,
+`yogurt`, `tuna`) keep one form and carry no `inflectedFrom`. An `unverified` plural that the app
+wrote itself (`noten`, `картофи`, `ядки`, `Nüsse`) has no label to point at and so carries none.
+
+French eggs are the one place the app deliberately departs from the source's spelling: AGROVOC types
+`oeuf`, French writes `œuf`, and the row shows `Œufs`. The `note` on that entry says so.
+
+### What the shops say (not a source — evidence for the word chosen)
+
+No open vocabulary names cottage cheese in Dutch, French or Bulgarian, so the app chose the word and
+recorded why on the entry's `note`:
+
+| Market | Word | Evidence |
+| --- | --- | --- |
+| NL / BE (nl) | `hüttenkäse` (Wikidata label) | Albert Heijn sells [Danone Hüttenkäse](https://www.ah.nl/producten/product/wi1932/danone-h%C3%BCttenk%C3%A4se-original) and its own [Cottage cheese](https://www.ah.nl/producten/product/wi400467/ah-cottage-cheese) in a cabinet literally named “Cottage cheese”, describing the Danone tub as “huttenkase, ook wel cottage cheese genoemd”; its Belgian site sells [the same tub](https://www.ah.be/producten/product/wi67552/danone-h%C3%BCttenk%C3%A4se-original). Both words are current, so the vocabulary's word is kept. |
+| BE / FR (fr) | `cottage cheese` (agent) | Carrefour Belgium lists [“Cottage Cheese Fromage Frais”](https://www.carrefour.be/fr/cottage-cheese-fromage-frais-riche-en-proteines-200-g/00959702.html); Delhaize's Belgian product is [“Cottage Cheese”](https://world.openfoodfacts.org/product/5400117596901/cottage-cheese-delhaize). French has no settled name for the product and `fromage blanc` is a different one. |
+| BG | `извара` (agent) | The closest product on Bulgarian shelves; cottage cheese is not sold in mainstream Bulgarian retail, so the note on the entry says exactly that. |
+
 ### Sources checked and not used
 
 | Source | Verdict |
