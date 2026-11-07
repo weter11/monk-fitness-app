@@ -2,10 +2,13 @@ package com.monkfitness.app
 
 import com.monkfitness.app.data.model.NUTRITION_PROGRAM_DAY_CAP
 import com.monkfitness.app.data.model.NutritionCalorieBasis
+import com.monkfitness.app.data.model.NutritionDayPlan
 import com.monkfitness.app.data.model.NutritionDayStatus
 import com.monkfitness.app.data.model.NutritionDayType
+import com.monkfitness.app.data.model.NutritionMeal
 import com.monkfitness.app.data.model.MealType
 import com.monkfitness.app.data.model.NutritionMealType
+import com.monkfitness.app.data.model.NutritionPlan
 import com.monkfitness.app.data.model.calculateNutritionCompletionPercent
 import com.monkfitness.app.data.model.calorieTargetGap
 import com.monkfitness.app.data.model.NutritionGenerationIssue
@@ -15,7 +18,9 @@ import com.monkfitness.app.data.model.getTodayCookingInstructionResIds
 import com.monkfitness.app.data.model.isProgramDayCapped
 import com.monkfitness.app.data.model.mealEntitiesToNutritionPlan
 import com.monkfitness.app.data.model.nutritionCycleDayNumber
+import com.monkfitness.app.data.model.nutritionExclusionIngredients
 import com.monkfitness.app.data.model.nutritionReplacementKey
+import com.monkfitness.app.data.model.nutritionVariety
 import com.monkfitness.app.data.model.orderedForDisplay
 import com.monkfitness.app.data.model.statusOn
 import com.monkfitness.app.data.model.toMealEntities
@@ -177,6 +182,139 @@ class NutritionPlanTest {
         assertEquals(0, calculateNutritionCompletionPercent(today, emptySet()))
         assertEquals(50, calculateNutritionCompletionPercent(today, setOf("breakfast", "dinner")))
         assertEquals(100, calculateNutritionCompletionPercent(today, today.meals.map { it.type.key }.toSet()))
+    }
+
+    private fun NutritionPlan.templateIds(): List<String> =
+        days.flatMap { day -> day.meals.map { "${it.type.key}:${it.templateId}" } }
+
+    private fun planOf(dayCount: Int, vararg templateIds: String): NutritionPlan =
+        NutritionPlan(
+            days = (1..dayCount).map { dayNumber ->
+                NutritionDayPlan(
+                    dayNumber = dayNumber,
+                    programDay = dayNumber,
+                    week = 1,
+                    dayType = NutritionDayType.TRAINING,
+                    targetCalories = 2000,
+                    meals = templateIds.getOrNull(dayNumber - 1)?.let { id ->
+                        listOf(
+                            NutritionMeal(
+                                templateId = id,
+                                type = NutritionMealType.BREAKFAST,
+                                mealType = MealType.BALANCED,
+                                ingredients = emptyList(),
+                                calories = 500,
+                                proteinGrams = 30
+                            )
+                        )
+                    }.orEmpty()
+                )
+            }
+        )
+
+    @Test
+    fun testSelectionIsDeterministicForTheSameSeed() {
+        val first = generateNutritionPlan(seed = 42, startDay = 1, daysCount = 7, weightKg = 80)
+        val second = generateNutritionPlan(seed = 42, startDay = 1, daysCount = 7, weightKg = 80)
+
+        assertEquals(first.templateIds(), second.templateIds())
+    }
+
+    @Test
+    fun testDifferentCyclesGetDifferentPlans() {
+        val first = generateNutritionPlan(seed = 100, startDay = 1, daysCount = 3, weightKg = 80)
+        val second = generateNutritionPlan(seed = 103, startDay = 1, daysCount = 3, weightKg = 80)
+
+        assertNotEquals(first.templateIds(), second.templateIds())
+    }
+
+    @Test
+    fun testSlotUsesEachTemplateBeforeRepeating() {
+        listOf(3, 7).forEach { days ->
+            val plan = generateNutritionPlan(seed = 8, startDay = 1, daysCount = days, weightKg = 80)
+            NutritionMealType.entries.forEach { slot ->
+                val picks = plan.days.mapNotNull { day -> day.meals.firstOrNull { it.type == slot }?.templateId }
+                if (picks.isEmpty()) return@forEach
+                assertEquals("slot $slot in a $days-day plan", minOf(picks.size, 6), picks.distinct().size)
+            }
+        }
+    }
+
+    @Test
+    fun testSlotDoesNotRepeatOnConsecutiveDays() {
+        val plan = generateNutritionPlan(seed = 9, startDay = 1, daysCount = 7, weightKg = 80)
+        val dailySlots = listOf(NutritionMealType.BREAKFAST, NutritionMealType.LUNCH, NutritionMealType.DINNER)
+
+        dailySlots.forEach { slot ->
+            val picks = plan.days.map { day -> day.meals.first { it.type == slot }.templateId }
+            picks.zipWithNext().forEach { (first, second) -> assertNotEquals("slot $slot", first, second) }
+        }
+    }
+
+    @Test
+    fun testConsecutiveThreeDayCyclesShareNoSlotPosition() {
+        val first = generateNutritionPlan(seed = 200, startDay = 1, daysCount = 3, weightKg = 80)
+        val second = generateNutritionPlan(
+            seed = 203,
+            startDay = 4,
+            daysCount = 3,
+            weightKg = 80,
+            previousPlan = first
+        )
+
+        var comparisons = 0
+        second.days.forEachIndexed { index, day ->
+            day.meals.forEach { meal ->
+                val previous = first.days[index].meals.firstOrNull { it.type == meal.type } ?: return@forEach
+                assertNotEquals("${meal.type} on day ${index + 1}", previous.templateId, meal.templateId)
+                comparisons++
+            }
+        }
+        assertTrue(comparisons > 0)
+    }
+
+    @Test
+    fun testHeavyExclusionsGenerateWithFewerDistinctDishes() {
+        val full = generateNutritionPlan(seed = 5, startDay = 1, daysCount = 7, weightKg = 80)
+        val reduced = generateNutritionPlan(
+            seed = 5,
+            startDay = 1,
+            daysCount = 7,
+            weightKg = 80,
+            excludedIngredientKeys = setOf("chicken")
+        )
+        val empty = generateNutritionPlan(
+            seed = 5,
+            startDay = 1,
+            daysCount = 7,
+            weightKg = 80,
+            excludedIngredientKeys = nutritionExclusionIngredients.map { it.key }.toSet()
+        )
+
+        assertEquals(7, reduced.days.size)
+        assertTrue(reduced.days.all { it.meals.isNotEmpty() })
+        assertTrue(reduced.days.flatMap { it.meals }.map { it.templateId }.distinct().size <
+            full.days.flatMap { it.meals }.map { it.templateId }.distinct().size)
+        assertEquals(7, empty.days.size)
+        assertTrue(empty.days.all { it.meals.isEmpty() })
+    }
+
+    @Test
+    fun testVarietyScoreAgreesWithRepeatsFromPreviousCycle() {
+        val previous = planOf(3, "a", "b", "c")
+
+        val halfNew = nutritionVariety(planOf(2, "a", "d"), previous)
+        assertEquals(2, halfNew.distinctTemplates)
+        assertEquals(1, halfNew.repeatedFromPrevious)
+        assertEquals(0.5f, halfNew.newRatio)
+
+        val allNew = nutritionVariety(planOf(2, "d", "e"), previous)
+        assertEquals(0, allNew.repeatedFromPrevious)
+        assertEquals(1f, allNew.newRatio)
+
+        val firstCycle = nutritionVariety(planOf(2, "d", "e"), null)
+        assertEquals(0, firstCycle.repeatedFromPrevious)
+        assertEquals(1f, firstCycle.newRatio)
     }
 
     @Test

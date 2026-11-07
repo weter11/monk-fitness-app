@@ -707,6 +707,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 excludedIngredientKeys = nutritionExcludedFoods.value,
                 preferredIngredientKeys = validPreferredKeys,
                 cycleId = dummyCycleId,
+                previousPlan = nutritionPlan.value,
             )
             _previewNutritionPlan.value = plan
         }
@@ -1311,6 +1312,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             excludedIngredientKeys = nutritionExcludedFoods.value,
             preferredIngredientKeys = validPreferredKeys,
             cycleId = cycleId,
+            previousPlan = nutritionPlan.value,
         )
         nutritionRepository.replaceCycleMeals(cycleId, plan.toMealEntities(cycleId), plan.toShoppingItemEntities(cycleId))
         settingsManager.dismissNutritionWarningFor(null)

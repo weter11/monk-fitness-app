@@ -164,6 +164,24 @@ data class NutritionPlan(
             .mapValues { (_, items) -> items.sortedBy { it.ingredient.key } }
 }
 
+data class NutritionVariety(
+    val distinctTemplates: Int,
+    val repeatedFromPrevious: Int
+) {
+    /** Share of the plan's dishes that the previous cycle did not already contain. */
+    val newRatio: Float = if (distinctTemplates == 0) 0f
+    else (distinctTemplates - repeatedFromPrevious).toFloat() / distinctTemplates
+}
+
+fun nutritionVariety(plan: NutritionPlan, previousPlan: NutritionPlan?): NutritionVariety {
+    val templates = plan.days.flatMap { it.meals }.map { it.templateId }.toSet()
+    val previous = previousPlan?.days.orEmpty().flatMap { it.meals }.map { it.templateId }.toSet()
+    return NutritionVariety(
+        distinctTemplates = templates.size,
+        repeatedFromPrevious = templates.count { it in previous }
+    )
+}
+
 private data class NutritionMealTemplate(
     val id: String,
     val type: NutritionMealType,
@@ -604,11 +622,18 @@ fun generateNutritionPlan(
     replacements: Map<String, String> = emptyMap(),
     preferredIngredientKeys: Set<String> = emptySet(),
     cycleId: Long = 0,
+    previousPlan: NutritionPlan? = null,
     workoutTypeForDay: (Int) -> WorkoutType = ::defaultWorkoutTypeForDay
 ): NutritionPlan {
     val base = seed.absoluteValue
     val safeStartDay = startDay.coerceIn(1, 56)
     val safeDaysCount = daysCount.coerceIn(1, 7)
+    val selection = NutritionSelection(
+        seed = base,
+        excludedIngredientKeys = excludedIngredientKeys,
+        preferredIngredientKeys = preferredIngredientKeys,
+        previousPlan = previousPlan
+    )
 
     val days = (0 until safeDaysCount).map { index ->
         val programDay = (safeStartDay + index).coerceAtMost(NUTRITION_PROGRAM_DAY_CAP)
@@ -622,14 +647,19 @@ fun generateNutritionPlan(
             val mealType = MealType.entries[(rotation + slotIndex) % MealType.entries.size]
             val replacementKey = nutritionReplacementKey(programDay, slot)
             val replacementTemplateId = replacements[replacementKey]
-            selectTemplate(
-                mealType = slot,
-                replacementType = mealType,
-                rotation = rotation + slotIndex,
-                excludedIngredientKeys = excludedIngredientKeys,
-                preferredIngredientKeys = preferredIngredientKeys,
-                explicitTemplateId = replacementTemplateId
-            )
+            val explicit = replacementTemplateId?.let { id ->
+                templatesFor(slot, mealType, excludedIngredientKeys).firstOrNull { it.id == id }
+            }
+            if (explicit != null) {
+                selection.record(slot, explicit)
+                explicit
+            } else {
+                selection.chooseTemplate(
+                    slot = slot,
+                    dayPosition = index + 1,
+                    preferredProfile = mealType
+                )
+            }
         }
 
         val baseCalories = meals.sumOf { it.calories }.coerceAtLeast(1)
@@ -774,35 +804,73 @@ private fun slotsForDayType(dayType: NutritionDayType): List<NutritionMealType> 
     )
 }
 
-private fun selectTemplate(
-    mealType: NutritionMealType,
-    replacementType: MealType,
-    rotation: Int,
-    excludedIngredientKeys: Set<String>,
-    preferredIngredientKeys: Set<String>,
-    explicitTemplateId: String?
-): NutritionMealTemplate? {
-    val filtered = templatesFor(mealType, replacementType, excludedIngredientKeys)
-        .sortedWith(compareByDescending<NutritionMealTemplate> { preferenceScore(it, preferredIngredientKeys) }.thenBy { it.id })
-    val explicit = explicitTemplateId?.let { id -> filtered.firstOrNull { it.id == id } }
-    if (explicit != null) return explicit
+/**
+ * Picks one template per slot with a seeded order: no template repeats within a slot until its pool is
+ * exhausted, never on consecutive days, and the previous cycle's pick for the same slot and position is
+ * avoided while an alternative exists. Rules are relaxed in that order when a pool is too small.
+ */
+private class NutritionSelection(
+    private val seed: Int,
+    private val excludedIngredientKeys: Set<String>,
+    private val preferredIngredientKeys: Set<String>,
+    previousPlan: NutritionPlan?
+) {
+    private val usedBySlot = mutableMapOf<NutritionMealType, MutableSet<String>>()
+    private val lastBySlot = mutableMapOf<NutritionMealType, String>()
+    private val pools = mutableMapOf<NutritionMealType, List<NutritionMealTemplate>>()
+    private val previousByPosition: Map<String, String> = previousPlan?.days.orEmpty()
+        .flatMap { day -> day.meals.map { meal -> "${meal.type.key}:${day.dayNumber}" to meal.templateId } }
+        .toMap()
 
-    if (filtered.isNotEmpty()) {
-        return filtered[rotation.absoluteValue % filtered.size]
+    fun record(slot: NutritionMealType, template: NutritionMealTemplate) {
+        usedBySlot.getOrPut(slot) { mutableSetOf() } += template.id
+        lastBySlot[slot] = template.id
     }
 
-    val fallbackSameSlot = MealType.entries
-        .asSequence()
-        .flatMap { mealProfile -> templatesFor(mealType, mealProfile, excludedIngredientKeys).asSequence() }
-        .distinctBy { it.id }
-        .sortedWith(compareByDescending<NutritionMealTemplate> { preferenceScore(it, preferredIngredientKeys) }.thenBy { it.id })
-        .toList()
+    fun chooseTemplate(
+        slot: NutritionMealType,
+        dayPosition: Int,
+        preferredProfile: MealType
+    ): NutritionMealTemplate? {
+        val pool = pools.getOrPut(slot) {
+            MealType.entries
+                .flatMap { profile -> templatesFor(slot, profile, excludedIngredientKeys) }
+                .distinctBy { it.id }
+                .sortedWith(
+                    compareByDescending<NutritionMealTemplate> { preferenceScore(it, preferredIngredientKeys) }
+                        .thenBy { selectionRank(seed, slot, it.id) }
+                        .thenBy { it.id }
+                )
+        }
+        if (pool.isEmpty()) return null
 
-    if (fallbackSameSlot.isNotEmpty()) {
-        return fallbackSameSlot[rotation.absoluteValue % fallbackSameSlot.size]
+        val used = usedBySlot.getOrPut(slot) { mutableSetOf() }
+        val last = lastBySlot[slot]
+        val previous = previousByPosition["${slot.key}:$dayPosition"]
+        val preferred = pool.filter { it.mealType == preferredProfile }
+
+        val tiers = listOf(
+            preferred.filter { it.id !in used && it.id != last && it.id != previous },
+            pool.filter { it.id !in used && it.id != last && it.id != previous },
+            preferred.filter { it.id !in used && it.id != last },
+            pool.filter { it.id !in used && it.id != last },
+            preferred.filter { it.id !in used },
+            pool.filter { it.id !in used },
+            pool.filter { it.id != last && it.id != previous },
+            pool.filter { it.id != last },
+            pool
+        )
+        val chosen = tiers.firstOrNull { it.isNotEmpty() }?.first() ?: return null
+        record(slot, chosen)
+        return chosen
     }
+}
 
-    return null
+private fun selectionRank(seed: Int, slot: NutritionMealType, templateId: String): Int {
+    var hash = seed xor (slot.ordinal * -1640531527) xor templateId.hashCode()
+    hash *= -1640531527
+    hash = hash xor (hash ushr 16)
+    return hash
 }
 
 private fun templatesFor(
