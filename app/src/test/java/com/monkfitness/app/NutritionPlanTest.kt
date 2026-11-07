@@ -30,10 +30,17 @@ import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
+import org.junit.BeforeClass
 import org.junit.Test
 import java.time.LocalDate
 
 class NutritionPlanTest {
+
+    companion object {
+        @BeforeClass
+        @JvmStatic
+        fun loadCatalogue() = NutritionCatalogueFixture.load()
+    }
 
     @Test
     fun testAvailableProductsValidationRequiresCoreFoodGroups() {

@@ -1,0 +1,926 @@
+{
+  "schemaVersion": 1,
+  "sources": {
+    "USDA FDC": "FoodData Central, Foundation Foods 2024-10-31 + SR Legacy 2018-04 (CC0)",
+    "CIQUAL 2020": "ANSES-CIQUAL 2020, English XML release 2020-07-07 (Licence Ouverte 2.0)"
+  },
+  "ingredients": [
+    {
+      "id": "chicken",
+      "name": "nutrition_ingredient_chicken_breast",
+      "group": "PROTEIN",
+      "unit": "GRAMS",
+      "preparation": "GRILLED",
+      "basis": "cooked",
+      "nutrientsPer100g": {
+        "kcal": 151.0,
+        "proteinG": 30.54,
+        "fatG": 3.17,
+        "carbG": 0.0
+      },
+      "source": {
+        "source": "USDA FDC",
+        "itemId": "171534",
+        "retrievedOn": "2026-11-07"
+      },
+      "secondSource": {
+        "source": "CIQUAL 2020",
+        "itemId": "36018",
+        "kcal": 141.0,
+        "basis": "cooked",
+        "note": "CIQUAL's skinless cooked breast is pan-fried rather than grilled; both are cooked without skin."
+      }
+    },
+    {
+      "id": "eggs",
+      "name": "nutrition_ingredient_eggs",
+      "group": "PROTEIN",
+      "unit": "PIECES",
+      "preparation": "BOILED",
+      "basis": "cooked",
+      "nutrientsPer100g": {
+        "kcal": 155.0,
+        "proteinG": 12.58,
+        "fatG": 10.61,
+        "carbG": 1.12
+      },
+      "source": {
+        "source": "USDA FDC",
+        "itemId": "173424",
+        "retrievedOn": "2026-11-07"
+      },
+      "secondSource": {
+        "source": "CIQUAL 2020",
+        "itemId": "22010",
+        "kcal": 134.0,
+        "basis": "cooked",
+        "note": "Same food, different national measurements: USDA's egg carries 10.6 g fat/100 g against CIQUAL's 8.6 g, a 15.7% energy gap."
+      },
+      "pieceGrams": 50,
+      "pieceSource": {
+        "source": "USDA FDC",
+        "itemId": "92500",
+        "retrievedOn": "2026-11-07"
+      }
+    },
+    {
+      "id": "rice",
+      "name": "nutrition_ingredient_rice",
+      "group": "CARBS",
+      "unit": "GRAMS",
+      "preparation": "COOKED",
+      "basis": "cooked",
+      "nutrientsPer100g": {
+        "kcal": 130.0,
+        "proteinG": 2.69,
+        "fatG": 0.28,
+        "carbG": 28.17
+      },
+      "source": {
+        "source": "USDA FDC",
+        "itemId": "168878",
+        "retrievedOn": "2026-11-07"
+      },
+      "secondSource": {
+        "source": "CIQUAL 2020",
+        "itemId": "9104",
+        "kcal": 145.0,
+        "basis": "cooked",
+        "note": "Same food, different cooked moisture: CIQUAL's cooked rice is drier, 11.5% more energy per 100 g."
+      }
+    },
+    {
+      "id": "oats",
+      "name": "nutrition_ingredient_oats",
+      "group": "CARBS",
+      "unit": "GRAMS",
+      "preparation": "COOKED",
+      "basis": "raw",
+      "nutrientsPer100g": {
+        "kcal": 379.0,
+        "proteinG": 13.15,
+        "fatG": 6.52,
+        "carbG": 67.7
+      },
+      "source": {
+        "source": "USDA FDC",
+        "itemId": "173904",
+        "retrievedOn": "2026-11-07"
+      },
+      "secondSource": {
+        "source": "CIQUAL 2020",
+        "itemId": "9310",
+        "kcal": 378.0,
+        "basis": "raw",
+        "note": "Dry oats, the weight the templates buy; the cooking step adds water, not energy."
+      }
+    },
+    {
+      "id": "potatoes",
+      "name": "nutrition_ingredient_potatoes",
+      "group": "CARBS",
+      "unit": "GRAMS",
+      "preparation": "BOILED",
+      "basis": "cooked",
+      "nutrientsPer100g": {
+        "kcal": 86.0,
+        "proteinG": 1.71,
+        "fatG": 0.1,
+        "carbG": 20.01
+      },
+      "source": {
+        "source": "USDA FDC",
+        "itemId": "170440",
+        "retrievedOn": "2026-11-07"
+      },
+      "secondSource": {
+        "source": "CIQUAL 2020",
+        "itemId": "4003",
+        "kcal": 80.5,
+        "basis": "cooked"
+      }
+    },
+    {
+      "id": "buckwheat",
+      "name": "nutrition_ingredient_buckwheat",
+      "group": "CARBS",
+      "unit": "GRAMS",
+      "preparation": "COOKED",
+      "basis": "raw",
+      "nutrientsPer100g": {
+        "kcal": 92.0,
+        "proteinG": 3.38,
+        "fatG": 0.62,
+        "carbG": 19.94
+      },
+      "source": {
+        "source": "USDA FDC",
+        "itemId": "170686",
+        "retrievedOn": "2026-11-07"
+      },
+      "secondSource": {
+        "source": "CIQUAL 2020",
+        "itemId": "9380",
+        "kcal": 356.0,
+        "basis": "raw",
+        "note": "CIQUAL 2020 has no cooked buckwheat entry; its raw value is recorded for traceability only and is not comparable."
+      }
+    },
+    {
+      "id": "cottage_cheese",
+      "name": "nutrition_ingredient_cottage_cheese",
+      "group": "PROTEIN",
+      "unit": "GRAMS",
+      "preparation": "PLAIN",
+      "basis": "raw",
+      "nutrientsPer100g": {
+        "kcal": 81.0,
+        "proteinG": 10.45,
+        "fatG": 2.27,
+        "carbG": 4.76
+      },
+      "source": {
+        "source": "USDA FDC",
+        "itemId": "172182",
+        "retrievedOn": "2026-11-07"
+      },
+      "secondSource": {
+        "source": "CIQUAL 2020",
+        "itemId": "19646",
+        "kcal": 76.9,
+        "basis": "raw",
+        "note": "CIQUAL's plain fresh cream cheese at 3% fat stands in for US cottage cheese at 2%."
+      }
+    },
+    {
+      "id": "yogurt",
+      "name": "nutrition_ingredient_yogurt",
+      "group": "PROTEIN",
+      "unit": "GRAMS",
+      "preparation": "PLAIN",
+      "basis": "raw",
+      "nutrientsPer100g": {
+        "kcal": 61.0,
+        "proteinG": 3.47,
+        "fatG": 3.25,
+        "carbG": 4.66
+      },
+      "source": {
+        "source": "USDA FDC",
+        "itemId": "171284",
+        "retrievedOn": "2026-11-07"
+      },
+      "secondSource": {
+        "source": "CIQUAL 2020",
+        "itemId": "19600",
+        "kcal": 56.8,
+        "basis": "raw",
+        "note": "CIQUAL's plain-yogurt average spans fat levels; USDA's item is whole milk."
+      }
+    },
+    {
+      "id": "banana",
+      "name": "nutrition_ingredient_banana",
+      "group": "FRUITS_VEGETABLES",
+      "unit": "PIECES",
+      "preparation": "FRESH",
+      "basis": "raw",
+      "nutrientsPer100g": {
+        "kcal": 89.0,
+        "proteinG": 1.09,
+        "fatG": 0.33,
+        "carbG": 22.84
+      },
+      "source": {
+        "source": "USDA FDC",
+        "itemId": "173944",
+        "retrievedOn": "2026-11-07"
+      },
+      "secondSource": {
+        "source": "CIQUAL 2020",
+        "itemId": "13005",
+        "kcal": 90.5,
+        "basis": "raw"
+      },
+      "pieceGrams": 118,
+      "pieceSource": {
+        "source": "USDA FDC",
+        "itemId": "93515",
+        "retrievedOn": "2026-11-07"
+      }
+    },
+    {
+      "id": "apple",
+      "name": "nutrition_ingredient_apple",
+      "group": "FRUITS_VEGETABLES",
+      "unit": "PIECES",
+      "preparation": "FRESH",
+      "basis": "raw",
+      "nutrientsPer100g": {
+        "kcal": 52.0,
+        "proteinG": 0.26,
+        "fatG": 0.17,
+        "carbG": 13.81
+      },
+      "source": {
+        "source": "USDA FDC",
+        "itemId": "171688",
+        "retrievedOn": "2026-11-07"
+      },
+      "secondSource": {
+        "source": "CIQUAL 2020",
+        "itemId": "13620",
+        "kcal": 57.1,
+        "basis": "raw",
+        "note": "CIQUAL's generic apple has no energy value; the Golden variety is the cross-check."
+      },
+      "pieceGrams": 182,
+      "pieceSource": {
+        "source": "USDA FDC",
+        "itemId": "89193",
+        "retrievedOn": "2026-11-07"
+      }
+    },
+    {
+      "id": "nuts",
+      "name": "nutrition_ingredient_nuts",
+      "group": "FATS",
+      "unit": "GRAMS",
+      "preparation": "PLAIN",
+      "basis": "raw",
+      "nutrientsPer100g": {
+        "kcal": 607.0,
+        "proteinG": 19.5,
+        "fatG": 53.5,
+        "carbG": 22.42
+      },
+      "source": {
+        "source": "USDA FDC",
+        "itemId": "170585",
+        "retrievedOn": "2026-11-07"
+      },
+      "secondSource": {
+        "source": "CIQUAL 2020",
+        "itemId": "15054",
+        "kcal": 618.0,
+        "basis": "raw",
+        "note": "CIQUAL has no mixed-nuts entry; grilled cashew is the closest nut item."
+      }
+    },
+    {
+      "id": "tuna",
+      "name": "nutrition_ingredient_tuna",
+      "group": "PROTEIN",
+      "unit": "GRAMS",
+      "preparation": "PLAIN",
+      "basis": "raw",
+      "nutrientsPer100g": {
+        "kcal": 116.0,
+        "proteinG": 25.51,
+        "fatG": 0.82,
+        "carbG": 0.0
+      },
+      "source": {
+        "source": "USDA FDC",
+        "itemId": "171986",
+        "retrievedOn": "2026-11-07"
+      },
+      "secondSource": {
+        "source": "CIQUAL 2020",
+        "itemId": "26039",
+        "kcal": 111.0,
+        "basis": "raw"
+      }
+    }
+  ],
+  "templates": [
+    {
+      "id": "breakfast_high_carb_1",
+      "slot": "BREAKFAST",
+      "profile": "HIGH_CARB",
+      "optional": false,
+      "ingredients": [
+        {
+          "ingredient": "oats",
+          "amount": 90
+        },
+        {
+          "ingredient": "yogurt",
+          "amount": 220
+        },
+        {
+          "ingredient": "banana",
+          "amount": 1
+        }
+      ]
+    },
+    {
+      "id": "breakfast_high_carb_2",
+      "slot": "BREAKFAST",
+      "profile": "HIGH_CARB",
+      "optional": false,
+      "ingredients": [
+        {
+          "ingredient": "rice",
+          "amount": 200
+        },
+        {
+          "ingredient": "eggs",
+          "amount": 2
+        },
+        {
+          "ingredient": "banana",
+          "amount": 1
+        },
+        {
+          "ingredient": "yogurt",
+          "amount": 150
+        }
+      ]
+    },
+    {
+      "id": "breakfast_high_protein_1",
+      "slot": "BREAKFAST",
+      "profile": "HIGH_PROTEIN",
+      "optional": false,
+      "ingredients": [
+        {
+          "ingredient": "cottage_cheese",
+          "amount": 250
+        },
+        {
+          "ingredient": "yogurt",
+          "amount": 180
+        },
+        {
+          "ingredient": "apple",
+          "amount": 1
+        }
+      ]
+    },
+    {
+      "id": "breakfast_high_protein_2",
+      "slot": "BREAKFAST",
+      "profile": "HIGH_PROTEIN",
+      "optional": false,
+      "ingredients": [
+        {
+          "ingredient": "eggs",
+          "amount": 3
+        },
+        {
+          "ingredient": "cottage_cheese",
+          "amount": 180
+        },
+        {
+          "ingredient": "apple",
+          "amount": 1
+        }
+      ]
+    },
+    {
+      "id": "breakfast_balanced_1",
+      "slot": "BREAKFAST",
+      "profile": "BALANCED",
+      "optional": false,
+      "ingredients": [
+        {
+          "ingredient": "oats",
+          "amount": 70
+        },
+        {
+          "ingredient": "cottage_cheese",
+          "amount": 200
+        },
+        {
+          "ingredient": "banana",
+          "amount": 1
+        }
+      ]
+    },
+    {
+      "id": "breakfast_balanced_2",
+      "slot": "BREAKFAST",
+      "profile": "BALANCED",
+      "optional": false,
+      "ingredients": [
+        {
+          "ingredient": "eggs",
+          "amount": 3
+        },
+        {
+          "ingredient": "buckwheat",
+          "amount": 180
+        },
+        {
+          "ingredient": "yogurt",
+          "amount": 180
+        }
+      ]
+    },
+    {
+      "id": "lunch_high_carb_1",
+      "slot": "LUNCH",
+      "profile": "HIGH_CARB",
+      "optional": false,
+      "ingredients": [
+        {
+          "ingredient": "chicken",
+          "amount": 150
+        },
+        {
+          "ingredient": "rice",
+          "amount": 260
+        },
+        {
+          "ingredient": "apple",
+          "amount": 1
+        }
+      ]
+    },
+    {
+      "id": "lunch_high_carb_2",
+      "slot": "LUNCH",
+      "profile": "HIGH_CARB",
+      "optional": false,
+      "ingredients": [
+        {
+          "ingredient": "tuna",
+          "amount": 140
+        },
+        {
+          "ingredient": "potatoes",
+          "amount": 360
+        },
+        {
+          "ingredient": "banana",
+          "amount": 1
+        }
+      ]
+    },
+    {
+      "id": "lunch_high_protein_1",
+      "slot": "LUNCH",
+      "profile": "HIGH_PROTEIN",
+      "optional": false,
+      "ingredients": [
+        {
+          "ingredient": "chicken",
+          "amount": 180
+        },
+        {
+          "ingredient": "buckwheat",
+          "amount": 220
+        },
+        {
+          "ingredient": "yogurt",
+          "amount": 150
+        }
+      ]
+    },
+    {
+      "id": "lunch_high_protein_2",
+      "slot": "LUNCH",
+      "profile": "HIGH_PROTEIN",
+      "optional": false,
+      "ingredients": [
+        {
+          "ingredient": "chicken",
+          "amount": 160
+        },
+        {
+          "ingredient": "eggs",
+          "amount": 3
+        },
+        {
+          "ingredient": "potatoes",
+          "amount": 250
+        }
+      ]
+    },
+    {
+      "id": "lunch_balanced_1",
+      "slot": "LUNCH",
+      "profile": "BALANCED",
+      "optional": false,
+      "ingredients": [
+        {
+          "ingredient": "tuna",
+          "amount": 150
+        },
+        {
+          "ingredient": "rice",
+          "amount": 210
+        },
+        {
+          "ingredient": "apple",
+          "amount": 1
+        }
+      ]
+    },
+    {
+      "id": "lunch_balanced_2",
+      "slot": "LUNCH",
+      "profile": "BALANCED",
+      "optional": false,
+      "ingredients": [
+        {
+          "ingredient": "chicken",
+          "amount": 150
+        },
+        {
+          "ingredient": "potatoes",
+          "amount": 300
+        },
+        {
+          "ingredient": "nuts",
+          "amount": 15
+        }
+      ]
+    },
+    {
+      "id": "dinner_high_carb_1",
+      "slot": "DINNER",
+      "profile": "HIGH_CARB",
+      "optional": false,
+      "ingredients": [
+        {
+          "ingredient": "chicken",
+          "amount": 140
+        },
+        {
+          "ingredient": "rice",
+          "amount": 240
+        },
+        {
+          "ingredient": "banana",
+          "amount": 1
+        }
+      ]
+    },
+    {
+      "id": "dinner_high_carb_2",
+      "slot": "DINNER",
+      "profile": "HIGH_CARB",
+      "optional": false,
+      "ingredients": [
+        {
+          "ingredient": "eggs",
+          "amount": 3
+        },
+        {
+          "ingredient": "buckwheat",
+          "amount": 240
+        },
+        {
+          "ingredient": "apple",
+          "amount": 1
+        }
+      ]
+    },
+    {
+      "id": "dinner_high_protein_1",
+      "slot": "DINNER",
+      "profile": "HIGH_PROTEIN",
+      "optional": false,
+      "ingredients": [
+        {
+          "ingredient": "chicken",
+          "amount": 170
+        },
+        {
+          "ingredient": "cottage_cheese",
+          "amount": 180
+        },
+        {
+          "ingredient": "potatoes",
+          "amount": 260
+        }
+      ]
+    },
+    {
+      "id": "dinner_high_protein_2",
+      "slot": "DINNER",
+      "profile": "HIGH_PROTEIN",
+      "optional": false,
+      "ingredients": [
+        {
+          "ingredient": "tuna",
+          "amount": 170
+        },
+        {
+          "ingredient": "eggs",
+          "amount": 2
+        },
+        {
+          "ingredient": "potatoes",
+          "amount": 250
+        }
+      ]
+    },
+    {
+      "id": "dinner_balanced_1",
+      "slot": "DINNER",
+      "profile": "BALANCED",
+      "optional": false,
+      "ingredients": [
+        {
+          "ingredient": "chicken",
+          "amount": 150
+        },
+        {
+          "ingredient": "buckwheat",
+          "amount": 220
+        },
+        {
+          "ingredient": "apple",
+          "amount": 1
+        }
+      ]
+    },
+    {
+      "id": "dinner_balanced_2",
+      "slot": "DINNER",
+      "profile": "BALANCED",
+      "optional": false,
+      "ingredients": [
+        {
+          "ingredient": "cottage_cheese",
+          "amount": 220
+        },
+        {
+          "ingredient": "potatoes",
+          "amount": 280
+        },
+        {
+          "ingredient": "nuts",
+          "amount": 20
+        }
+      ]
+    },
+    {
+      "id": "post_workout_high_carb_1",
+      "slot": "POST_WORKOUT",
+      "profile": "HIGH_CARB",
+      "optional": false,
+      "ingredients": [
+        {
+          "ingredient": "yogurt",
+          "amount": 200
+        },
+        {
+          "ingredient": "banana",
+          "amount": 1
+        },
+        {
+          "ingredient": "oats",
+          "amount": 40
+        }
+      ]
+    },
+    {
+      "id": "post_workout_high_carb_2",
+      "slot": "POST_WORKOUT",
+      "profile": "HIGH_CARB",
+      "optional": false,
+      "ingredients": [
+        {
+          "ingredient": "yogurt",
+          "amount": 180
+        },
+        {
+          "ingredient": "banana",
+          "amount": 1
+        },
+        {
+          "ingredient": "apple",
+          "amount": 1
+        }
+      ]
+    },
+    {
+      "id": "post_workout_high_protein_1",
+      "slot": "POST_WORKOUT",
+      "profile": "HIGH_PROTEIN",
+      "optional": false,
+      "ingredients": [
+        {
+          "ingredient": "cottage_cheese",
+          "amount": 180
+        },
+        {
+          "ingredient": "banana",
+          "amount": 1
+        }
+      ]
+    },
+    {
+      "id": "post_workout_high_protein_2",
+      "slot": "POST_WORKOUT",
+      "profile": "HIGH_PROTEIN",
+      "optional": false,
+      "ingredients": [
+        {
+          "ingredient": "yogurt",
+          "amount": 180
+        },
+        {
+          "ingredient": "cottage_cheese",
+          "amount": 120
+        },
+        {
+          "ingredient": "apple",
+          "amount": 1
+        }
+      ]
+    },
+    {
+      "id": "post_workout_balanced_1",
+      "slot": "POST_WORKOUT",
+      "profile": "BALANCED",
+      "optional": false,
+      "ingredients": [
+        {
+          "ingredient": "yogurt",
+          "amount": 180
+        },
+        {
+          "ingredient": "banana",
+          "amount": 1
+        },
+        {
+          "ingredient": "nuts",
+          "amount": 15
+        }
+      ]
+    },
+    {
+      "id": "post_workout_balanced_2",
+      "slot": "POST_WORKOUT",
+      "profile": "BALANCED",
+      "optional": false,
+      "ingredients": [
+        {
+          "ingredient": "eggs",
+          "amount": 2
+        },
+        {
+          "ingredient": "apple",
+          "amount": 1
+        },
+        {
+          "ingredient": "yogurt",
+          "amount": 150
+        }
+      ]
+    },
+    {
+      "id": "snack_high_carb_1",
+      "slot": "SNACK",
+      "profile": "HIGH_CARB",
+      "optional": true,
+      "ingredients": [
+        {
+          "ingredient": "banana",
+          "amount": 1
+        },
+        {
+          "ingredient": "yogurt",
+          "amount": 150
+        }
+      ]
+    },
+    {
+      "id": "snack_high_carb_2",
+      "slot": "SNACK",
+      "profile": "HIGH_CARB",
+      "optional": true,
+      "ingredients": [
+        {
+          "ingredient": "apple",
+          "amount": 1
+        },
+        {
+          "ingredient": "oats",
+          "amount": 35
+        },
+        {
+          "ingredient": "yogurt",
+          "amount": 150
+        }
+      ]
+    },
+    {
+      "id": "snack_high_protein_1",
+      "slot": "SNACK",
+      "profile": "HIGH_PROTEIN",
+      "optional": true,
+      "ingredients": [
+        {
+          "ingredient": "cottage_cheese",
+          "amount": 150
+        },
+        {
+          "ingredient": "apple",
+          "amount": 1
+        }
+      ]
+    },
+    {
+      "id": "snack_high_protein_2",
+      "slot": "SNACK",
+      "profile": "HIGH_PROTEIN",
+      "optional": true,
+      "ingredients": [
+        {
+          "ingredient": "eggs",
+          "amount": 2
+        },
+        {
+          "ingredient": "yogurt",
+          "amount": 150
+        }
+      ]
+    },
+    {
+      "id": "snack_balanced_1",
+      "slot": "SNACK",
+      "profile": "BALANCED",
+      "optional": true,
+      "ingredients": [
+        {
+          "ingredient": "yogurt",
+          "amount": 180
+        },
+        {
+          "ingredient": "banana",
+          "amount": 1
+        },
+        {
+          "ingredient": "nuts",
+          "amount": 15
+        }
+      ]
+    },
+    {
+      "id": "snack_balanced_2",
+      "slot": "SNACK",
+      "profile": "BALANCED",
+      "optional": true,
+      "ingredients": [
+        {
+          "ingredient": "cottage_cheese",
+          "amount": 150
+        },
+        {
+          "ingredient": "banana",
+          "amount": 1
+        },
+        {
+          "ingredient": "nuts",
+          "amount": 15
+        }
+      ]
+    }
+  ]
+}
