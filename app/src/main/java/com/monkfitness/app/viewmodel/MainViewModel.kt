@@ -33,6 +33,7 @@ import com.monkfitness.app.data.model.Workout
 import com.monkfitness.app.data.model.applyDifficultyAdjustment
 import com.monkfitness.app.data.model.calculateMuscleGainNutritionTargets
 import com.monkfitness.app.data.model.mealEntitiesToNutritionPlan
+import com.monkfitness.app.data.model.nutritionCycleDayNumber
 import com.monkfitness.app.data.model.nutritionExclusionIngredients
 import com.monkfitness.app.data.model.toMealEntities
 import com.monkfitness.app.data.model.toShoppingItemEntities
@@ -1017,8 +1018,12 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         NutritionPlan(emptyList())
     )
 
-    val todayNutritionPlan = combine(nutritionPlan, currentTrackDay) { plan, day ->
-        plan.days.firstOrNull { it.programDay == day }
+    val nutritionTodayDayNumber = combine(activeMealCycle, currentDate) { cycle, today ->
+        cycle?.let { nutritionCycleDayNumber(parseDate(it.startDate, today), today, it.durationDays) }
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
+
+    val todayNutritionPlan = combine(nutritionPlan, nutritionTodayDayNumber) { plan, dayNumber ->
+        plan.days.firstOrNull { it.dayNumber == dayNumber }
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
 
     val currentNutritionTargets = combine(

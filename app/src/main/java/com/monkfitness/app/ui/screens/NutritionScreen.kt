@@ -33,18 +33,25 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import com.monkfitness.app.R
 import kotlin.math.roundToInt
 import com.monkfitness.app.data.model.MealCycle
+import com.monkfitness.app.data.model.NUTRITION_PROGRAM_DAY_CAP
 import com.monkfitness.app.data.model.NutritionDayPlan
+import com.monkfitness.app.data.model.NutritionDayStatus
 import com.monkfitness.app.data.model.NutritionIngredientAmount
 import com.monkfitness.app.data.model.NutritionMeal
 import com.monkfitness.app.data.model.NutritionQuantityUnit
 import com.monkfitness.app.data.model.NutritionPlan
 import com.monkfitness.app.data.model.NutritionShoppingGroup
+import com.monkfitness.app.data.model.calorieTargetGap
+import com.monkfitness.app.data.model.isProgramDayCapped
+import com.monkfitness.app.data.model.orderedForDisplay
+import com.monkfitness.app.data.model.statusOn
 import com.monkfitness.app.viewmodel.MainViewModel
 import kotlinx.coroutines.flow.collectLatest
 import java.time.LocalDate
@@ -78,6 +85,8 @@ fun NutritionScreen(
     val currentTrackDay by viewModel.currentTrackDay.collectAsState()
     val activeCycle by viewModel.activeMealCycle.collectAsState()
     val pendingCycle by viewModel.pendingMealCycle.collectAsState()
+    val todayDayNumber by viewModel.nutritionTodayDayNumber.collectAsState()
+    val todayPlan by viewModel.todayNutritionPlan.collectAsState()
     val showExpirationWarning by viewModel.shouldShowNutritionExpirationWarning.collectAsState()
     var showAvailableProductsDialog by remember { mutableStateOf(false) }
     val previewPlan by viewModel.previewNutritionPlan.collectAsState()
@@ -167,21 +176,36 @@ fun NutritionScreen(
             Card(modifier = Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)) {
                 Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     Text(text = stringResource(R.string.nutrition_targets), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                    val cycleDayNumber = todayDayNumber
                     NutritionTargetRow(
                         title = stringResource(R.string.nutrition_daily_calories),
-                        value = stringResource(R.string.nutrition_kcal_format, targets.dailyCalories)
+                        value = todayPlan?.let { day ->
+                            stringResource(R.string.nutrition_planned_totals, day.totalCalories, day.totalProteinGrams)
+                        } ?: stringResource(R.string.nutrition_kcal_format, targets.dailyCalories),
+                        supporting = todayPlan?.let { day ->
+                            calorieTargetLine(targetCalories = targets.dailyCalories, deliveredCalories = day.totalCalories)
+                        }
                     )
                     NutritionTargetRow(
                         title = stringResource(R.string.nutrition_current_program_day),
-                        value = stringResource(
-                            R.string.nutrition_program_day_week,
-                            currentTrackDay,
-                            ((currentTrackDay - 1) / 7) + 1
-                        )
+                        value = if (currentTrackDay >= NUTRITION_PROGRAM_DAY_CAP && cycleDayNumber != null && plan.days.isNotEmpty()) {
+                            stringResource(R.string.nutrition_cycle_day_of, cycleDayNumber, plan.days.size)
+                        } else {
+                            stringResource(
+                                R.string.nutrition_program_day_week,
+                                currentTrackDay,
+                                ((currentTrackDay - 1) / 7) + 1
+                            )
+                        }
                     )
                     NutritionTargetRow(
                         title = stringResource(R.string.nutrition_protein_target),
                         value = stringResource(R.string.nutrition_protein_range_format, targets.proteinMinGrams, targets.proteinMaxGrams)
+                    )
+                    Text(
+                        text = stringResource(R.string.nutrition_disclaimer),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.secondary
                     )
                 }
             }
@@ -286,8 +310,12 @@ fun NutritionScreen(
                 fontWeight = FontWeight.Bold
             )
 
-            plan.days.forEach { day ->
-                NutritionDayCard(day = day)
+            plan.orderedForDisplay(todayDayNumber).forEach { day ->
+                NutritionDayCard(
+                    day = day,
+                    status = day.statusOn(todayDayNumber),
+                    dayCount = plan.days.size
+                )
             }
         }
     }
@@ -349,31 +377,81 @@ private fun ActiveCycleCard(activeCycle: MealCycle?, pendingCycle: MealCycle?) {
 }
 
 @Composable
-private fun NutritionTargetRow(title: String, value: String) {
-    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-        Text(text = title, style = MaterialTheme.typography.bodyLarge)
-        Text(text = value, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
+private fun NutritionTargetRow(title: String, value: String, supporting: String? = null) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Column(modifier = Modifier.weight(1f)) {
+            Text(text = title, style = MaterialTheme.typography.bodyLarge)
+            if (supporting != null) {
+                Text(text = supporting, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.secondary)
+            }
+        }
+        Text(
+            text = value,
+            modifier = Modifier.weight(1f),
+            style = MaterialTheme.typography.titleMedium,
+            fontWeight = FontWeight.Bold,
+            color = MaterialTheme.colorScheme.primary,
+            textAlign = TextAlign.End
+        )
     }
 }
 
 @Composable
-private fun NutritionDayCard(day: NutritionDayPlan) {
+private fun calorieTargetLine(targetCalories: Int, deliveredCalories: Int): String {
+    val gap = targetCalories - deliveredCalories
+    return when {
+        kotlin.math.abs(gap) * 100 <= targetCalories * 5 -> stringResource(R.string.nutrition_preview_target_calories, targetCalories)
+        gap > 0 -> stringResource(R.string.nutrition_target_gap_below, targetCalories, gap)
+        else -> stringResource(R.string.nutrition_target_gap_above, targetCalories, -gap)
+    }
+}
+
+@Composable
+private fun dayStatusLine(day: NutritionDayPlan, status: NutritionDayStatus, dayCount: Int): String {
+    val programLine = if (day.isProgramDayCapped()) {
+        stringResource(R.string.nutrition_cycle_day_of, day.dayNumber, dayCount)
+    } else {
+        stringResource(R.string.nutrition_program_day_week, day.programDay, day.week)
+    }
+    return when (status) {
+        NutritionDayStatus.TODAY -> "${stringResource(R.string.nutrition_today_title)} · $programLine"
+        NutritionDayStatus.PAST -> "${stringResource(R.string.nutrition_day_past)} · $programLine"
+        NutritionDayStatus.UPCOMING -> programLine
+    }
+}
+
+@Composable
+private fun NutritionDayCard(day: NutritionDayPlan, status: NutritionDayStatus, dayCount: Int) {
     Card(modifier = Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)) {
         Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                Text(text = stringResource(R.string.day_display, day.dayNumber), style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                    Text(text = stringResource(R.string.day_display, day.dayNumber), style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+                    Text(
+                        text = dayStatusLine(day, status, dayCount),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = if (status == NutritionDayStatus.TODAY) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.secondary
+                    )
+                }
                 Text(text = stringResource(day.dayType.labelRes), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
             }
             Text(
-                text = stringResource(R.string.nutrition_program_day_week, day.programDay, day.week),
+                text = stringResource(R.string.nutrition_planned_totals, day.totalCalories, day.totalProteinGrams),
                 style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.secondary
-            )
-            Text(
-                text = stringResource(R.string.nutrition_meal_summary, day.totalCalories, day.totalProteinGrams),
-                style = MaterialTheme.typography.bodyMedium,
+                fontWeight = FontWeight.Bold,
                 color = MaterialTheme.colorScheme.primary
             )
+            day.calorieTargetGap()?.let {
+                Text(
+                    text = calorieTargetLine(targetCalories = day.targetCalories, deliveredCalories = day.totalCalories),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.secondary
+                )
+            }
             day.meals.forEach { meal -> NutritionMealCard(meal = meal) }
         }
     }
@@ -669,7 +747,17 @@ fun NutritionPreviewDialog(
                                 Text(stringResource(R.string.day_display, day.dayNumber), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
                                 Text(stringResource(day.dayType.labelRes), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold)
                             }
-                            Text(stringResource(R.string.nutrition_preview_target_calories, day.targetCalories), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.secondary)
+                            Text(
+                                text = stringResource(R.string.nutrition_planned_totals, day.totalCalories, day.totalProteinGrams),
+                                style = MaterialTheme.typography.bodyMedium,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.primary
+                            )
+                            Text(
+                                text = calorieTargetLine(targetCalories = day.targetCalories, deliveredCalories = day.totalCalories),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.secondary
+                            )
 
                             day.meals.forEach { meal ->
                                 Column(modifier = Modifier.padding(vertical = 4.dp)) {

@@ -208,6 +208,12 @@
     <string name="nutrition_current_program_day">Current program day</string>
     <string name="nutrition_day_type">Day type</string>
     <string name="nutrition_protein_target">Protein target</string>
+    <string name="nutrition_planned_totals">Planned: %1$d kcal • %2$dg protein</string>
+    <string name="nutrition_target_gap_below">Target %1$d kcal • %2$d below</string>
+    <string name="nutrition_target_gap_above">Target %1$d kcal • %2$d above</string>
+    <string name="nutrition_cycle_day_of">Day %1$d of %2$d</string>
+    <string name="nutrition_day_past">Past</string>
+    <string name="nutrition_disclaimer">General information, not medical advice.</string>
     <string name="nutrition_kcal_format">%1$d kcal</string>
     <string name="nutrition_protein_range_format">%1$d–%2$dg</string>
     <string name="nutrition_three_day_plan">3-day meal plan</string>
