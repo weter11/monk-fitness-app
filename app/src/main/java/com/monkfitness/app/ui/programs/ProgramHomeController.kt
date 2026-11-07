@@ -9,11 +9,14 @@ import com.monkfitness.app.domain.progress.ProgressScope
 import com.monkfitness.app.domain.usecase.ProgramLifecycleService
 import com.monkfitness.app.domain.usecase.ProgramProgressService
 import com.monkfitness.app.domain.usecase.ProgramScheduler
+import com.monkfitness.app.domain.usecase.ProgramStartResult
+import com.monkfitness.app.domain.usecase.ProgramStartService
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import java.time.LocalDate
+import java.util.concurrent.atomic.AtomicBoolean
 
 /**
  * The Home screen's Program state: **which Program is being worked on, and what is next in it.**
@@ -25,8 +28,9 @@ import java.time.LocalDate
  * It reads the selected Program from [ProgramLifecycleService.myPrograms] (selection is not a Program
  * property), the next opportunity from [ProgramScheduler.nextOpportunity] (the scheduler owns
  * opportunities) and the counts from [ProgramProgressService]. No repository, no DAO and no storage type
- * appears here, and nothing is written: a start is a *navigation* to the session route with the
- * opportunity's id.
+ * appears here, and nothing about the Program is written here: a start is a *navigation* to the session
+ * route with the opportunity's id, preceded — when the Program has never been started — by the one
+ * application operation that starts it.
  *
  * `nextSlotId == null` means *"there is no opportunity to start"*, which is an ordinary answer: a Program
  * not yet scheduled, or whose plan is over. A **failure to read** the schedule is a different fact and is
@@ -36,12 +40,16 @@ import java.time.LocalDate
 class ProgramHomeController(
     private val lifecycle: ProgramLifecycleService,
     private val scheduler: ProgramScheduler,
-    private val progress: ProgramProgressService
+    private val progress: ProgramProgressService,
+    private val starter: ProgramStartService
 ) {
 
     private val mutableState = MutableStateFlow(ProgramHomeUiState())
 
     val state: StateFlow<ProgramHomeUiState> = mutableState.asStateFlow()
+
+    /** One start per tap: a second tap that lands while the first is still working starts nothing. */
+    private val startInFlight = AtomicBoolean(false)
 
     /**
      * Reads the selected Program, its next opportunity and its calendar.
@@ -122,6 +130,39 @@ class ProgramHomeController(
 
     fun dismissNotice() {
         mutableState.update { state -> state.copy(notice = null) }
+    }
+
+    /**
+     * Home's Start: opens the Program through the same service Lifecycle -> Start calls when it has never
+     * been started, then answers the opportunity to open.
+     *
+     * A workout performed under a Program that stayed `NOT_STARTED` is history the Program never recorded
+     * as its own, so the tap that begins training begins the Program: one lifecycle transition, its own
+     * target pass and the clock's moment as the factual start — none of it written here.
+     *
+     * @return [slotId] to open, or `null` when the Program did not start and [ProgramHomeUiState.notice]
+     *   says why.
+     */
+    suspend fun startWorkout(slotId: String): String? {
+        if (!startInFlight.compareAndSet(false, true)) return null
+        try {
+            val current = mutableState.value
+            val programId = current.programId ?: return null
+            // A Program already under way keeps the old path: Home opens the opportunity and starts nothing.
+            if (current.lifecycleStatus != LifecycleStatus.NOT_STARTED) return slotId
+
+            val result = starter.start(ProgramId(programId))
+            val started = result is ProgramStartResult.Started ||
+                result is ProgramStartResult.TargetSchedulingRefused
+            val notice = StartNotice.of(result, progress)
+            load()
+            if (notice !is ProgramNotice.Done) {
+                mutableState.update { state -> state.copy(notice = notice) }
+            }
+            return if (started) slotId else null
+        } finally {
+            startInFlight.set(false)
+        }
     }
 
     private fun empty() {

@@ -1226,35 +1226,13 @@ class ProgramsController(
         operation: suspend () -> ProgramStartResult
     ): ProgramNotice {
         val result = operation()
-        val notice = when (result) {
-            is ProgramStartResult.Started -> ProgramNotice.STARTED
-            is ProgramStartResult.TargetSchedulingRefused ->
-                noticeForTargetRefusal(result.program.programId)
-            is ProgramStartResult.StartRefused -> noticeFor(result.reason)
-            is ProgramStartResult.StartFailed -> ProgramNotice.STORAGE_FAILED
-        }
+        val notice = StartNotice.of(result, progress)
         mutableState.update { it.copy(notice = notice) }
         if (result is ProgramStartResult.Started || result is ProgramStartResult.TargetSchedulingRefused) {
             refresh()
         }
         return notice
     }
-
-    /**
-     * A refused target pass is "nothing was planned" only when the Program really has no planned
-     * opportunity afterwards. A calendar that cannot be read is not an absence of slots, so it is
-     * reported as the storage failure it is rather than as an unplanned schedule.
-     */
-    private suspend fun noticeForTargetRefusal(programId: ProgramId): ProgramNotice =
-        try {
-            if (progress.calendarProgress(ProgressScope.OfProgram(programId)).upcoming > 0) {
-                ProgramNotice.STARTED
-            } else {
-                ProgramNotice.TARGET_SCHEDULING_UNAVAILABLE
-            }
-        } catch (failure: Throwable) {
-            ProgramNotice.STORAGE_FAILED
-        }
 
     /** Re-reads the list, and the open Detail when one is open, from the services that own them. */
     private suspend fun refresh() {
@@ -1464,17 +1442,8 @@ class ProgramsController(
     )
 
     /** The refusal vocabulary, as the sentence the user reads. */
-    private fun noticeFor(refusal: ProgramOperationRefusal): ProgramNotice = when (refusal) {
-        ProgramOperationRefusal.StandardProgramCannotBeEdited -> ProgramNotice.STANDARD_CANNOT_BE_EDITED
-        ProgramOperationRefusal.StandardProgramCannotBeDeleted -> ProgramNotice.STANDARD_CANNOT_BE_DELETED
-        ProgramOperationRefusal.StructuralChangeNeedsARevision -> ProgramNotice.ILLEGAL_TRANSITION
-        is ProgramOperationRefusal.HasInProgressSession -> ProgramNotice.ACTIVE_SESSION_BLOCKS_DELETE
-        is ProgramOperationRefusal.ArchivingTheSelectionRequiresAnotherSelection ->
-            ProgramNotice.ARCHIVE_OF_SELECTION
-
-        is ProgramOperationRefusal.IllegalTransition -> ProgramNotice.ILLEGAL_TRANSITION
-        is ProgramOperationRefusal.ProgramNotFound -> ProgramNotice.PROGRAM_NOT_FOUND
-    }
+    private fun noticeFor(refusal: ProgramOperationRefusal): ProgramNotice =
+        StartNotice.refusalNote(refusal)
 
     /** The editor's own refusals, as the sentence the user reads. */
     private fun noticeFor(rejection: ProgramEditorRejection): ProgramNotice = when (rejection) {

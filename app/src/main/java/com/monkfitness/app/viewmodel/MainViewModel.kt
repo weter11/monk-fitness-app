@@ -144,7 +144,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         homeProgram = ProgramHomeController(
             lifecycle = container.programLifecycleService,
             scheduler = container.programScheduler,
-            progress = container.programProgressService
+            progress = container.programProgressService,
+            starter = container.programStartService
         )
         programProgress = ProgramProgressController(
             lifecycle = container.programLifecycleService,
@@ -431,6 +432,19 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     /** Re-reads Home's Program state. Called when the screen appears and after a session completes. */
     fun refreshHomeProgram() {
         viewModelScope.launch { homeProgram.load() }
+    }
+
+    private val _homeStartSlot = MutableStateFlow<String?>(null)
+
+    /** The opportunity Home's Start opened, once that start completed; the screen opens it, then clears it. */
+    val homeStartSlot: StateFlow<String?> = _homeStartSlot.asStateFlow()
+
+    fun startHomeWorkout(slotId: String) {
+        viewModelScope.launch { _homeStartSlot.value = homeProgram.startWorkout(slotId) }
+    }
+
+    fun homeStartHandled() {
+        _homeStartSlot.value = null
     }
 
     fun dismissHomeNotice() = homeProgram.dismissNotice()

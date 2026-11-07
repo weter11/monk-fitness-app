@@ -62,6 +62,15 @@ fun HomeScreen(
     }
 
     val state by viewModel.homeProgramState.collectAsState()
+
+    // The start is the view model's operation, so it outlives this composition; the slot it answers is
+    // what navigates, and only when a start actually completed.
+    val openedSlot by viewModel.homeStartSlot.collectAsState()
+    LaunchedEffect(openedSlot) {
+        val slotId = openedSlot ?: return@LaunchedEffect
+        viewModel.homeStartHandled()
+        onStartWorkout(slotId)
+    }
     val postureCompleted by viewModel.postureCompletedCount.collectAsState()
     val additionalPostureTrainingEnabled by viewModel.additionalPostureTrainingEnabled.collectAsState()
     val flexibilityTrainingType by viewModel.flexibilityTrainingType.collectAsState()
@@ -180,7 +189,7 @@ fun HomeScreen(
             val slotId = state.nextSlotId
             MonkButton(
                 text = stringResource(R.string.programs_session_start),
-                onClick = { if (slotId != null) onStartWorkout(slotId) }
+                onClick = { if (slotId != null) viewModel.startHomeWorkout(slotId) }
             )
         } else {
             MonkButton(
