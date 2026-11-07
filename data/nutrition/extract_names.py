@@ -84,8 +84,6 @@ SELECTION = {
 # The app's own translations, used where no cited vocabulary names the concept in that language.
 # They repeat the wording the interface already uses, which is the point: the app is the author.
 AGENT_NAMES = {
-    ("potatoes", "bg"): "картофи",
-    ("buckwheat", "bg"): "елда",
     ("cottage_cheese", "fr"): "cottage cheese",
     ("cottage_cheese", "bg"): "извара",
     ("nuts", "nl"): "noten",
@@ -94,6 +92,38 @@ AGENT_NAMES = {
     ("tuna", "nl"): "tonijn",
     ("tuna", "de"): "Thunfisch",
     ("tuna", "bg"): "риба тон",
+    ("potatoes", "bg"): "картофи",
+    ("buckwheat", "bg"): "елда",
+}
+
+# Foods bought by the piece are listed as what the shopper puts in the basket, so their name is the
+# plural; the vocabulary terms they are cited to are singular. The pair is stated once, here, because
+# the plural is editorial: it is the inflected form of the cited label, not another source's word.
+INFLECTED = {
+    ("eggs", "nl"): ("eieren", "ei"),
+    ("eggs", "fr"): ("œufs", "oeuf"),
+    ("eggs", "bg"): ("яйца", "Яйце"),
+    ("eggs", "de"): ("Eier", "Ei"),
+    ("potatoes", "nl"): ("aardappelen", "aardappel"),
+    ("potatoes", "fr"): ("pommes de terre", "pomme de terre"),
+    ("potatoes", "de"): ("Kartoffeln", "Kartoffel"),
+    ("banana", "nl"): ("bananen", "banaan"),
+    ("banana", "fr"): ("bananes", "banane"),
+    ("banana", "bg"): ("банани", "банан"),
+    ("banana", "de"): ("Bananen", "Banane"),
+    ("apple", "nl"): ("appels", "appel"),
+    ("apple", "fr"): ("pommes", "pomme"),
+    ("apple", "bg"): ("ябълки", "ябълка"),
+    ("apple", "de"): ("Äpfel", "Apfel"),
+    ("nuts", "fr"): ("fruits à coque", "fruit à coque"),
+}
+
+# Why a name is the word it is, where the source alone does not say it.
+NOTES = {
+    ("eggs", "fr"): "AGROVOC types \"oeuf\"; French writes the ligature, and the plural adds the s.",
+    ("cottage_cheese", "fr"): "French and Belgian shops print the English loan; \"fromage blanc\" is a different product.",
+    ("cottage_cheese", "nl"): "Dutch shops sell both this and the loan \"cottage cheese\"; this is the Danone and Albert Heijn wording.",
+    ("cottage_cheese", "bg"): "Closest locally sold product; cottage cheese is not sold in mainstream Bulgarian retail.",
 }
 
 
@@ -165,6 +195,17 @@ def write_csv(path, header, rows):
         writer.writerows(rows)
 
 
+def dictionary_form(label, lang):
+    """A vocabulary label as a dictionary entry: Dutch, French and Bulgarian are written lowercase,
+    German nouns are capitalised. The source's spelling is kept on the citation, not on the word."""
+    return label if lang == "de" else label.lower()
+
+
+def fold(text):
+    """Comparison form: case and the œ ligature are spelling, not a different food."""
+    return text.replace("œ", "oe").replace("Œ", "OE").lower()
+
+
 def main():
     wikidata = fetch_wikidata(sorted({c["wikidata"] for c in CONCEPTS.values()}))
     agrovoc = fetch_agrovoc(CONCEPTS)
@@ -194,24 +235,35 @@ def main():
         names = {}
         for lang in LANGUAGES:
             database, term_type = SELECTION[key][lang]
+            entry = {}
             if database == "AGENT":
-                name = AGENT_NAMES[(key, lang)]
-                names[lang] = {"name": name, "trust": "unverified", "source": "agent"}
-                continue
-            concept_id = CONCEPTS[key]["wikidata" if database == "Wikidata" else "agrovoc"]
-            name = index[database].get((concept_id, lang, term_type))
-            if not name:
-                sys.exit(f"{key}/{lang}: {database} {concept_id} has no {term_type}")
-            names[lang] = {
-                "name": name,
-                "trust": "sourced",
-                "source": {
-                    "database": database,
-                    "id": concept_id,
-                    "term": term_type,
-                    "licence": LICENCES[database],
-                },
-            }
+                entry = {"name": AGENT_NAMES[(key, lang)], "trust": "unverified", "source": "agent"}
+            else:
+                concept_id = CONCEPTS[key]["wikidata" if database == "Wikidata" else "agrovoc"]
+                label = index[database].get((concept_id, lang, term_type))
+                if not label:
+                    sys.exit(f"{key}/{lang}: {database} {concept_id} has no {term_type}")
+                entry = {
+                    "name": dictionary_form(label, lang),
+                    "trust": "sourced",
+                    "source": {
+                        "database": database,
+                        "id": concept_id,
+                        "term": term_type,
+                        "licence": LICENCES[database],
+                    },
+                }
+            if (key, lang) in INFLECTED:
+                plural, singular = INFLECTED[(key, lang)]
+                if database == "AGENT":
+                    sys.exit(f"{key}/{lang}: an inflected name needs a cited label to inflect from")
+                if fold(dictionary_form(singular, lang)) != fold(entry["name"]):
+                    sys.exit(f"{key}/{lang}: {singular!r} is not the singular of {entry['name']!r}")
+                entry["name"] = plural
+                entry["inflectedFrom"] = singular
+            if (key, lang) in NOTES:
+                entry["note"] = NOTES[(key, lang)]
+            names[lang] = entry
         ingredient["names"] = names
 
     catalogue["sources"]["AGROVOC"] = (

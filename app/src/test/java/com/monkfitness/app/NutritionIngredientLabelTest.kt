@@ -59,10 +59,40 @@ class NutritionIngredientLabelTest {
             "Картофи",
             NutritionIngredientLabel.of(unverified("картофи"), "Картофи", "Potatoes", "bg")
         )
-        // A difference of case only — Wikidata's `ориз` against the interface's `Ориз` — is one word.
+        // A difference of case only — the catalogue's `ориз` against the interface's `Ориз` — is one word.
         assertEquals(
             "Ориз",
             NutritionIngredientLabel.of(sourced("ориз"), "Ориз", "Rice", "bg")
+        )
+        // The plural too: the interface already says eggs, so the market's word adds nothing.
+        assertEquals(
+            "Яйца",
+            NutritionIngredientLabel.of(sourced("яйца"), "Яйца", "Eggs", "bg")
+        )
+    }
+
+    @Test
+    fun aPluralIsShownAsItIsStored() {
+        assertEquals(
+            "Eieren · Eggs",
+            NutritionIngredientLabel.of(sourced("eieren"), "Eggs", "Eggs", "nl")
+        )
+        assertEquals(
+            "Pommes de terre · Potatoes",
+            NutritionIngredientLabel.of(sourced("pommes de terre"), "Potatoes", "Potatoes", "fr")
+        )
+    }
+
+    @Test
+    fun theFrenchLigatureSurvivesTheRow() {
+        // AGROVOC types `oeuf`; the row has to read like French, not like the source's keyboard.
+        assertEquals(
+            "Œufs · Eggs",
+            NutritionIngredientLabel.of(sourced("œufs"), "Eggs", "Eggs", "en")
+        )
+        assertEquals(
+            "Œufs (eggs) · Яйца",
+            NutritionIngredientLabel.of(unverified("œufs"), "Яйца", "Eggs", "ru")
         )
     }
 

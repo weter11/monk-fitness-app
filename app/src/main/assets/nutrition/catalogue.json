@@ -108,44 +108,49 @@
       },
       "names": {
         "nl": {
-          "name": "ei",
+          "name": "eieren",
           "trust": "sourced",
           "source": {
             "database": "Wikidata",
             "id": "Q93189",
             "term": "prefLabel",
             "licence": "CC0 1.0"
-          }
+          },
+          "inflectedFrom": "ei"
         },
         "fr": {
-          "name": "oeuf",
+          "name": "œufs",
           "trust": "sourced",
           "source": {
             "database": "AGROVOC",
             "id": "c_2502",
             "term": "prefLabel",
             "licence": "CC BY 4.0"
-          }
+          },
+          "inflectedFrom": "oeuf",
+          "note": "AGROVOC types \"oeuf\"; French writes the ligature, and the plural adds the s."
         },
         "bg": {
-          "name": "Яйце",
+          "name": "яйца",
           "trust": "sourced",
           "source": {
             "database": "Wikidata",
             "id": "Q93189",
             "term": "prefLabel",
             "licence": "CC0 1.0"
-          }
+          },
+          "inflectedFrom": "Яйце"
         },
         "de": {
-          "name": "Ei",
+          "name": "Eier",
           "trust": "sourced",
           "source": {
             "database": "Wikidata",
             "id": "Q93189",
             "term": "prefLabel",
             "licence": "CC0 1.0"
-          }
+          },
+          "inflectedFrom": "Ei"
         }
       }
     },
@@ -311,24 +316,26 @@
       },
       "names": {
         "nl": {
-          "name": "aardappel",
+          "name": "aardappelen",
           "trust": "sourced",
           "source": {
             "database": "Wikidata",
             "id": "Q16587531",
             "term": "prefLabel",
             "licence": "CC0 1.0"
-          }
+          },
+          "inflectedFrom": "aardappel"
         },
         "fr": {
-          "name": "pomme de terre",
+          "name": "pommes de terre",
           "trust": "sourced",
           "source": {
             "database": "AGROVOC",
             "id": "c_13551",
             "term": "prefLabel",
             "licence": "CC BY 4.0"
-          }
+          },
+          "inflectedFrom": "pomme de terre"
         },
         "bg": {
           "name": "картофи",
@@ -336,14 +343,15 @@
           "source": "agent"
         },
         "de": {
-          "name": "Kartoffel",
+          "name": "Kartoffeln",
           "trust": "sourced",
           "source": {
             "database": "Wikidata",
             "id": "Q16587531",
             "term": "alias",
             "licence": "CC0 1.0"
-          }
+          },
+          "inflectedFrom": "Kartoffel"
         }
       }
     },
@@ -444,17 +452,20 @@
             "id": "Q13221624",
             "term": "prefLabel",
             "licence": "CC0 1.0"
-          }
+          },
+          "note": "Dutch shops sell both this and the loan \"cottage cheese\"; this is the Danone and Albert Heijn wording."
         },
         "fr": {
           "name": "cottage cheese",
           "trust": "unverified",
-          "source": "agent"
+          "source": "agent",
+          "note": "French and Belgian shops print the English loan; \"fromage blanc\" is a different product."
         },
         "bg": {
           "name": "извара",
           "trust": "unverified",
-          "source": "agent"
+          "source": "agent",
+          "note": "Closest locally sold product; cottage cheese is not sold in mainstream Bulgarian retail."
         },
         "de": {
           "name": "Hüttenkäse",
@@ -515,7 +526,7 @@
           }
         },
         "bg": {
-          "name": "Кисело мляко",
+          "name": "кисело мляко",
           "trust": "sourced",
           "source": {
             "database": "Wikidata",
@@ -568,44 +579,48 @@
       },
       "names": {
         "nl": {
-          "name": "banaan",
+          "name": "bananen",
           "trust": "sourced",
           "source": {
             "database": "Wikidata",
             "id": "Q503",
             "term": "prefLabel",
             "licence": "CC0 1.0"
-          }
+          },
+          "inflectedFrom": "banaan"
         },
         "fr": {
-          "name": "banane",
+          "name": "bananes",
           "trust": "sourced",
           "source": {
             "database": "AGROVOC",
             "id": "c_806",
             "term": "prefLabel",
             "licence": "CC BY 4.0"
-          }
+          },
+          "inflectedFrom": "banane"
         },
         "bg": {
-          "name": "банан",
+          "name": "банани",
           "trust": "sourced",
           "source": {
             "database": "Wikidata",
             "id": "Q503",
             "term": "prefLabel",
             "licence": "CC0 1.0"
-          }
+          },
+          "inflectedFrom": "банан"
         },
         "de": {
-          "name": "Banane",
+          "name": "Bananen",
           "trust": "sourced",
           "source": {
             "database": "Wikidata",
             "id": "Q503",
             "term": "prefLabel",
             "licence": "CC0 1.0"
-          }
+          },
+          "inflectedFrom": "Banane"
         }
       }
     },
@@ -642,44 +657,48 @@
       },
       "names": {
         "nl": {
-          "name": "appel",
+          "name": "appels",
           "trust": "sourced",
           "source": {
             "database": "Wikidata",
             "id": "Q89",
             "term": "prefLabel",
             "licence": "CC0 1.0"
-          }
+          },
+          "inflectedFrom": "appel"
         },
         "fr": {
-          "name": "pomme",
+          "name": "pommes",
           "trust": "sourced",
           "source": {
             "database": "AGROVOC",
             "id": "c_541",
             "term": "prefLabel",
             "licence": "CC BY 4.0"
-          }
+          },
+          "inflectedFrom": "pomme"
         },
         "bg": {
-          "name": "ябълка",
+          "name": "ябълки",
           "trust": "sourced",
           "source": {
             "database": "Wikidata",
             "id": "Q89",
             "term": "prefLabel",
             "licence": "CC0 1.0"
-          }
+          },
+          "inflectedFrom": "ябълка"
         },
         "de": {
-          "name": "Apfel",
+          "name": "Äpfel",
           "trust": "sourced",
           "source": {
             "database": "Wikidata",
             "id": "Q89",
             "term": "prefLabel",
             "licence": "CC0 1.0"
-          }
+          },
+          "inflectedFrom": "Apfel"
         }
       }
     },
@@ -715,14 +734,15 @@
           "source": "agent"
         },
         "fr": {
-          "name": "fruit à coque",
+          "name": "fruits à coque",
           "trust": "sourced",
           "source": {
             "database": "AGROVOC",
             "id": "c_12873",
             "term": "prefLabel",
             "licence": "CC BY 4.0"
-          }
+          },
+          "inflectedFrom": "fruit à coque"
         },
         "bg": {
           "name": "ядки",

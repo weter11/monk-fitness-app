@@ -59,11 +59,16 @@ sealed interface NutritionNameSource {
  *
  * Names describe the *concept* the ingredient stands for, so they are never read from the
  * composition row the numbers came from: that row may hold a different food.
+ *
+ * [inflectedFrom] is the vocabulary label a plural was made from, kept so the plural stays checkable
+ * against the row it is cited to. [note] says why a word is the word it is where the source is silent.
  */
 data class NutritionIngredientName(
     val name: String,
     val trust: NutritionNameTrust,
-    val source: NutritionNameSource
+    val source: NutritionNameSource,
+    val inflectedFrom: String? = null,
+    val note: String? = null
 )
 
 /** The asset's ingredient fields map onto the app's enums by name, so a typo cannot pass silently. */
@@ -246,7 +251,13 @@ private fun nameOf(language: String, value: Any?): NutritionIngredientName {
     require((trust == NutritionNameTrust.UNVERIFIED) == (source is NutritionNameSource.Agent)) {
         "catalogue: name \"$language\" is $trust but cites ${if (source is NutritionNameSource.Agent) "no row" else "a vocabulary"}"
     }
-    return NutritionIngredientName(name = entry.string("name"), trust = trust, source = source)
+    return NutritionIngredientName(
+        name = entry.string("name"),
+        trust = trust,
+        source = source,
+        inflectedFrom = entry["inflectedFrom"] as? String,
+        note = entry["note"] as? String
+    )
 }
 
 private fun Map<*, *>.sourceRef(name: String): NutritionSourceRef =

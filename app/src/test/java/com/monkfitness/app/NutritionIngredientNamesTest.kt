@@ -5,15 +5,17 @@ import com.monkfitness.app.data.model.NutritionNameTrust
 import com.monkfitness.app.data.model.parseCatalogue
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.BeforeClass
 import org.junit.Test
 
 /**
  * A name is the word for a food, not a measurement of it, so it is checked against the vocabulary
- * concept it cites rather than against a composition row. Two failure modes matter and neither is
- * visible in the app: naming a concept after the row that merely stands in for it (cottage cheese is
- * not fromage blanc, mixed nuts are not cashew), and claiming a review nobody performed.
+ * concept it cites rather than against a composition row. The failure modes here are invisible in the
+ * app: naming a concept after the row that merely stands in for it (cottage cheese is not fromage
+ * blanc, mixed nuts are not cashew), calling a packet of six eggs "egg", claiming a review nobody
+ * performed, or leaving the source's own capital and singular where a dictionary writes otherwise.
  */
 class NutritionIngredientNamesTest {
 
@@ -23,6 +25,47 @@ class NutritionIngredientNamesTest {
 
         /** What each vocabulary publishes, so a licence cannot be copied from the wrong one. */
         private val LICENCES = mapOf("Wikidata" to "CC0 1.0", "AGROVOC" to "CC BY 4.0")
+
+        /**
+         * Foods sold by the piece, as the shopper meets them: the plural, and — where a cited label
+         * was inflected — the singular that label spells. `null` means the app wrote the plural
+         * itself, so there is no label to point back at.
+         */
+        private val COUNTABLE = mapOf(
+            "eggs" to mapOf(
+                "nl" to ("eieren" to "ei"),
+                "fr" to ("œufs" to "oeuf"),
+                "bg" to ("яйца" to "Яйце"),
+                "de" to ("Eier" to "Ei")
+            ),
+            "potatoes" to mapOf(
+                "nl" to ("aardappelen" to "aardappel"),
+                "fr" to ("pommes de terre" to "pomme de terre"),
+                "bg" to ("картофи" to null),
+                "de" to ("Kartoffeln" to "Kartoffel")
+            ),
+            "banana" to mapOf(
+                "nl" to ("bananen" to "banaan"),
+                "fr" to ("bananes" to "banane"),
+                "bg" to ("банани" to "банан"),
+                "de" to ("Bananen" to "Banane")
+            ),
+            "apple" to mapOf(
+                "nl" to ("appels" to "appel"),
+                "fr" to ("pommes" to "pomme"),
+                "bg" to ("ябълки" to "ябълка"),
+                "de" to ("Äpfel" to "Apfel")
+            ),
+            "nuts" to mapOf(
+                "nl" to ("noten" to null),
+                "fr" to ("fruits à coque" to "fruit à coque"),
+                "bg" to ("ядки" to null),
+                "de" to ("Nüsse" to null)
+            )
+        )
+
+        /** Foods bought by weight or by volume: one word covers any amount of them. */
+        private val MASS = listOf("chicken", "rice", "oats", "buckwheat", "cottage_cheese", "yogurt", "tuna")
 
         @BeforeClass
         @JvmStatic
@@ -42,6 +85,9 @@ class NutritionIngredientNamesTest {
             NutritionCatalogueFixture.rows("usda_fdc/foods.csv").drop(1).map { it[0] }.toSet()
         private val ciqualRows: Set<String> =
             NutritionCatalogueFixture.rows("ciqual_2020/alim.csv").drop(1).map { it[0] }.toSet()
+
+        /** Case and the œ ligature are spelling, not a different food. */
+        fun fold(text: String): String = text.replace("œ", "oe").replace("Œ", "OE").lowercase()
     }
 
     private val catalogue = parseCatalogue(NutritionCatalogueFixture.asset("catalogue.json").readText())
@@ -66,22 +112,106 @@ class NutritionIngredientNamesTest {
     }
 
     @Test
+    fun everyNameIsWrittenTheWayADictionaryWritesIt() {
+        catalogue.ingredients.forEach { ingredient ->
+            ingredient.names.forEach { (language, name) ->
+                if (language == "de") {
+                    assertTrue(
+                        "${ingredient.key}/de: a German noun is capitalised, \"${name.name}\" is not",
+                        name.name.first().isUpperCase()
+                    )
+                } else {
+                    assertEquals(
+                        "${ingredient.key}/$language: a dictionary entry is lowercase",
+                        name.name.lowercase(),
+                        name.name
+                    )
+                }
+            }
+        }
+    }
+
+    @Test
+    fun aCountableFoodIsNamedInThePluralAndSaysWhatItWasInflectedFrom() {
+        COUNTABLE.forEach { (key, byLanguage) ->
+            val ingredient = catalogue.ingredientsByKey.getValue(key)
+            byLanguage.forEach { (language, expected) ->
+                val (plural, singular) = expected
+                val name = ingredient.names.getValue(language)
+
+                assertEquals("$key/$language: the shelf says $plural", plural, name.name)
+                assertEquals(
+                    "$key/$language: inflected from $singular",
+                    singular,
+                    name.inflectedFrom
+                )
+            }
+        }
+    }
+
+    @Test
+    fun aFoodBoughtByWeightKeepsOneForm() {
+        MASS.forEach { key ->
+            val ingredient = catalogue.ingredientsByKey.getValue(key)
+            PILOT_LANGUAGES.forEach { language ->
+                assertNull(
+                    "$key/$language: ${ingredient.names.getValue(language).name} is not countable, " +
+                        "so nothing was inflected",
+                    ingredient.names.getValue(language).inflectedFrom
+                )
+            }
+        }
+    }
+
+    @Test
+    fun anInflectedNameCitesTheLabelItWasInflectedFrom() {
+        catalogue.ingredients.forEach { ingredient ->
+            ingredient.names.forEach { (language, name) ->
+                val singular = name.inflectedFrom ?: return@forEach
+                val source = name.source as? NutritionNameSource.Vocabulary
+                    ?: throw AssertionError("${ingredient.key}/$language: ${name.name} cites no label to inflect")
+                val cited = term(source, language)
+                    ?: throw AssertionError("${ingredient.key}/$language: ${source.itemId} holds no term")
+                assertEquals(
+                    "${ingredient.key}/$language: \"${name.name}\" claims to inflect \"$singular\", " +
+                        "which is not the label ${source.database} ${source.itemId} spells",
+                    fold(cited),
+                    fold(singular)
+                )
+            }
+        }
+    }
+
+    @Test
     fun everySourcedNameCitesATermTheVocabularyActuallyHolds() {
         catalogue.ingredients.forEach { ingredient ->
             ingredient.names.forEach { (language, name) ->
                 val source = name.source as? NutritionNameSource.Vocabulary ?: return@forEach
-                val cited = when (source.database) {
-                    "Wikidata" -> wikidataTerms[Triple(source.itemId, language, source.term)]
-                    "AGROVOC" -> if (source.term == "prefLabel") agrovocTerms[source.itemId to language] else null
-                    else -> null
-                }
+                val cited = term(source, language)
+                    ?: throw AssertionError("${ingredient.key}/$language: ${source.itemId} holds no such term")
+                // A plural is checked through its singular; a plain name is the label itself.
                 assertEquals(
                     "${ingredient.key}/$language: ${source.database} ${source.itemId} holds no such term",
-                    name.name,
-                    cited
+                    fold(cited),
+                    fold(name.inflectedFrom ?: name.name)
                 )
             }
         }
+    }
+
+    @Test
+    fun aNoteIsPlainTextWhenThereIsOne() {
+        catalogue.ingredients.forEach { ingredient ->
+            ingredient.names.forEach { (language, name) ->
+                val note = name.note ?: return@forEach
+                assertTrue("${ingredient.key}/$language: blank note", note.isNotBlank())
+                assertEquals("${ingredient.key}/$language: padded note", note.trim(), note)
+            }
+        }
+        assertTrue(
+            "Bulgarian retail does not sell cottage cheese, so its name has to say so",
+            catalogue.ingredientsByKey.getValue("cottage_cheese").names.getValue("bg").note?.isNotBlank() == true
+        )
     }
 
     @Test
@@ -168,5 +298,11 @@ class NutritionIngredientNamesTest {
                 }
             }
         }
+    }
+
+    private fun term(source: NutritionNameSource.Vocabulary, language: String): String? = when (source.database) {
+        "Wikidata" -> wikidataTerms[Triple(source.itemId, language, source.term)]
+        "AGROVOC" -> if (source.term == "prefLabel") agrovocTerms[source.itemId to language] else null
+        else -> null
     }
 }
