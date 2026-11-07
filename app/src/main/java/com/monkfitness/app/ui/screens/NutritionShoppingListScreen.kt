@@ -1,5 +1,7 @@
 package com.monkfitness.app.ui.screens
 
+import android.content.res.Configuration
+import android.content.res.Resources
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
@@ -21,15 +23,22 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.monkfitness.app.R
+import com.monkfitness.app.data.model.NutritionNaming
 import com.monkfitness.app.data.model.NutritionQuantityUnit
 import com.monkfitness.app.data.model.NutritionShoppingGroup
 import com.monkfitness.app.data.model.NutritionShoppingListItem
+import com.monkfitness.app.ui.nutrition.NutritionIngredientLabel
+import com.monkfitness.app.ui.nutrition.rememberNutritionNaming
 import com.monkfitness.app.viewmodel.MainViewModel
+import java.util.Locale
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -39,6 +48,12 @@ fun NutritionShoppingListScreen(
 ) {
     val cycleLength by viewModel.nutritionCycleLength.collectAsState()
     val plan by viewModel.nutritionPlan.collectAsState()
+    val storedMarket by viewModel.nutritionMarket.collectAsState()
+    val storedLanguage by viewModel.nutritionMarketLanguage.collectAsState()
+
+    val naming = rememberNutritionNaming(storedMarket, storedLanguage)
+    val interfaceLanguage = LocalConfiguration.current.locales[0].language
+    val english = rememberEnglishResources()
 
     Scaffold(
         topBar = {
@@ -75,7 +90,13 @@ fun NutritionShoppingListScreen(
                 NutritionShoppingGroup.entries.forEach { group ->
                     val items = plan.shoppingList[group].orEmpty()
                     if (items.isNotEmpty()) {
-                        NutritionShoppingGroupCard(group = group, items = items)
+                        NutritionShoppingGroupCard(
+                            group = group,
+                            items = items,
+                            naming = naming,
+                            interfaceLanguage = interfaceLanguage,
+                            english = english
+                        )
                     }
                 }
             }
@@ -84,14 +105,46 @@ fun NutritionShoppingListScreen(
 }
 
 @Composable
-private fun NutritionShoppingGroupCard(group: NutritionShoppingGroup, items: List<NutritionShoppingListItem>) {
+private fun NutritionShoppingGroupCard(
+    group: NutritionShoppingGroup,
+    items: List<NutritionShoppingListItem>,
+    naming: NutritionNaming,
+    interfaceLanguage: String,
+    english: Resources
+) {
     Card(modifier = Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)) {
         Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Text(text = stringResource(group.titleRes), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
             items.forEach { item ->
-                Text(text = "• ${stringResource(item.ingredient.nameRes)} — ${quantityText(item)}", style = MaterialTheme.typography.bodyMedium)
+                Text(text = "• ${ingredientLabel(item, naming, interfaceLanguage, english)} — ${quantityText(item)}", style = MaterialTheme.typography.bodyMedium)
             }
         }
+    }
+}
+
+@Composable
+private fun ingredientLabel(
+    item: NutritionShoppingListItem,
+    naming: NutritionNaming,
+    interfaceLanguage: String,
+    english: Resources
+): String = NutritionIngredientLabel.of(
+    localName = naming.nameOf(item.ingredient),
+    interfaceName = stringResource(item.ingredient.nameRes),
+    // The bracket exists to name the food, so it is read from the English table rather than from
+    // the table the reader is already looking at.
+    englishName = english.getString(item.ingredient.nameRes),
+    interfaceLanguage = interfaceLanguage
+)
+
+/** The app's own English table, whatever language the interface is currently showing. */
+@Composable
+private fun rememberEnglishResources(): Resources {
+    val context = LocalContext.current
+    return remember(context) {
+        val configuration = Configuration(context.resources.configuration)
+        configuration.setLocale(Locale.ENGLISH)
+        context.createConfigurationContext(configuration).resources
     }
 }
 

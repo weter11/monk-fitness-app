@@ -18,17 +18,12 @@ class NutritionCatalogueSchemaTest {
     private val asset = NutritionCatalogueFixture.asset("catalogue.json").readText()
 
     @Test
-    fun theShippedAssetCarriesNoPerMarketNamesYet() {
-        assertEquals(false, asset.contains("\"names\""))
-    }
-
-    @Test
     fun anOptionalFieldTheReaderDoesNotKnowIsIgnored() {
-        val withNames = asset
-            .replaceFirst("\"id\": \"chicken\",", "\"id\": \"chicken\",\n      \"names\": {\"fr\": \"Poulet\", \"it\": \"Pollo\"},")
-            .replaceFirst("\"ingredients\": [", "\"markets\": {\"fr\": \"FR\", \"it\": \"IT\"},\n  \"ingredients\": [")
+        val withUnknownMembers = asset
+            .replaceFirst("\"id\": \"chicken\",", "\"id\": \"chicken\",\n      \"retailNote\": \"butcher counter\",")
+            .replaceFirst("\"ingredients\": [", "\"markets\": {\"BE\": [\"nl\", \"fr\"]},\n  \"ingredients\": [")
 
-        val parsed = parseCatalogue(withNames)
+        val parsed = parseCatalogue(withUnknownMembers)
 
         assertEquals(12, parsed.ingredients.size)
         assertEquals(30, parsed.templates.size)

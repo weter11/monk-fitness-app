@@ -70,7 +70,9 @@ data class NutritionIngredient(
     val source: NutritionSourceRef? = null,
     val secondSource: NutritionSecondSource? = null,
     val gramsPerPiece: Int? = null,
-    val pieceSource: NutritionSourceRef? = null
+    val pieceSource: NutritionSourceRef? = null,
+    /** The market's own word for this ingredient, by language tag; empty when none is known. */
+    val names: Map<String, NutritionIngredientName> = emptyMap()
 )
 
 data class NutritionIngredientAmount(

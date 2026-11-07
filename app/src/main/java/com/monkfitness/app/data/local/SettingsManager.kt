@@ -67,6 +67,16 @@ class SettingsManager(private val context: Context) {
          */
         val LEGACY_START_DATE_KEY = stringPreferencesKey("program_start_date")
         val NUTRITION_WARNING_DISMISSED_FOR = stringPreferencesKey("nutrition_warning_dismissed_for")
+
+        /**
+         * The market whose ingredient names the shopping list uses, as a country code, and the
+         * market language to use when it speaks more than one.
+         *
+         * Absent means "no choice made yet": the region preselects a market and the interface a
+         * language, so absence is not the same as "no market".
+         */
+        val NUTRITION_MARKET = stringPreferencesKey("nutrition_market")
+        val NUTRITION_MARKET_LANGUAGE = stringPreferencesKey("nutrition_market_language")
         val SHOW_EXCLUDED_PRODUCTS_IN_NUTRITION = booleanPreferencesKey("show_excluded_products_in_nutrition")
         val DISABLED_EXERCISE_FAMILIES = stringSetPreferencesKey("disabled_exercise_families")
         val REWARDS_GRANTED_DAYS = stringSetPreferencesKey("rewards_granted_days")
@@ -368,6 +378,32 @@ class SettingsManager(private val context: Context) {
     suspend fun setShowExcludedProductsInNutrition(show: Boolean) {
         context.dataStore.edit { preferences ->
             preferences[SHOW_EXCLUDED_PRODUCTS_IN_NUTRITION] = show
+        }
+    }
+
+    /** The market the user picked, or `null` when they never picked one. */
+    val nutritionMarketFlow: Flow<String?> = context.dataStore.data.map { preferences ->
+        preferences[NUTRITION_MARKET]
+    }
+
+    suspend fun setNutritionMarket(countryCode: String?) {
+        context.dataStore.edit { preferences ->
+            if (countryCode == null) {
+                preferences.remove(NUTRITION_MARKET)
+            } else {
+                preferences[NUTRITION_MARKET] = countryCode
+            }
+        }
+    }
+
+    /** The market language the user picked, or `null` when they never picked one. */
+    val nutritionMarketLanguageFlow: Flow<String?> = context.dataStore.data.map { preferences ->
+        preferences[NUTRITION_MARKET_LANGUAGE]
+    }
+
+    suspend fun setNutritionMarketLanguage(code: String) {
+        context.dataStore.edit { preferences ->
+            preferences[NUTRITION_MARKET_LANGUAGE] = code
         }
     }
 
