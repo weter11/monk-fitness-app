@@ -1021,6 +1021,7 @@
     <string name="programs_session_rest_value">Відпочинок між підходами (секунди)</string>
     <string name="programs_session_outcomes_title">Що зміниться наступного разу</string>
     <string name="programs_session_outcome_line">%1$s — %2$s</string>
+    <string name="programs_session_outcome_line_named">%1$s (%2$s) — %3$s</string>
     <string name="programs_session_outcome_progressed">наступного разу на крок складніше</string>
     <string name="programs_session_outcome_eased">наступного разу на крок легше</string>
     <string name="programs_session_outcome_variant">наступного разу інший варіант</string>
