@@ -52,6 +52,9 @@ import com.monkfitness.app.data.model.LibraryStats
 import com.monkfitness.app.data.model.NutritionIngredient
 import com.monkfitness.app.language.AppLanguageSettings
 import com.monkfitness.app.ui.language.LanguagePickerDialog
+import com.monkfitness.app.ui.nutrition.NutritionLanguagePickerDialog
+import com.monkfitness.app.ui.nutrition.NutritionMarketPickerDialog
+import com.monkfitness.app.ui.nutrition.rememberNutritionNaming
 import com.monkfitness.app.data.model.flexibilityFocusAreas as flexibilityFocusAreaOptions
 import com.monkfitness.app.viewmodel.MaintenanceResult
 import com.monkfitness.app.viewmodel.MainViewModel
@@ -73,6 +76,8 @@ fun SettingsScreen(
     val userPreferences by viewModel.userPreferences.collectAsState()
     val nutritionCycleLength by viewModel.nutritionCycleLength.collectAsState()
     val showExcludedProductsInNutrition by viewModel.showExcludedProductsInNutrition.collectAsState()
+    val storedMarket by viewModel.nutritionMarket.collectAsState()
+    val storedLanguage by viewModel.nutritionMarketLanguage.collectAsState()
     val libraryStats by viewModel.libraryStats.collectAsState()
     val disabledExerciseFamilies by viewModel.disabledExerciseFamilies.collectAsState()
     val filterLibraryByCategories by viewModel.filterLibraryByCategories.collectAsState()
@@ -220,6 +225,48 @@ fun SettingsScreen(
                 checked = showExcludedProductsInNutrition,
                 onCheckedChange = viewModel::setShowExcludedProductsInNutrition
             )
+
+            // Which country's shops the shopping list is written for. A list rather than a guess
+            // from where the phone is: the region only preselects, it never decides.
+            val naming = rememberNutritionNaming(storedMarket, storedLanguage)
+            var showMarketPicker by remember { mutableStateOf(false) }
+            var showMarketLanguagePicker by remember { mutableStateOf(false) }
+
+            SettingActionRow(
+                title = stringResource(R.string.nutrition_market),
+                value = naming.market?.let { stringResource(it.labelRes) }
+                    ?: stringResource(R.string.nutrition_market_none),
+                onClick = { showMarketPicker = true }
+            )
+            naming.market?.takeIf { it.languages.size > 1 }?.let { market ->
+                SettingActionRow(
+                    title = stringResource(R.string.nutrition_market_language),
+                    value = stringResource((naming.language ?: market.languages.first()).labelRes),
+                    onClick = { showMarketLanguagePicker = true }
+                )
+            }
+
+            if (showMarketPicker) {
+                NutritionMarketPickerDialog(
+                    current = naming.market,
+                    onSelect = { market ->
+                        showMarketPicker = false
+                        viewModel.selectNutritionMarket(market)
+                    },
+                    onDismiss = { showMarketPicker = false }
+                )
+            }
+            if (showMarketLanguagePicker) {
+                NutritionLanguagePickerDialog(
+                    current = naming.language,
+                    languages = naming.market?.languages.orEmpty(),
+                    onSelect = { language ->
+                        showMarketLanguagePicker = false
+                        viewModel.selectNutritionMarketLanguage(language)
+                    },
+                    onDismiss = { showMarketLanguagePicker = false }
+                )
+            }
 
             Spacer(modifier = Modifier.height(24.dp))
 

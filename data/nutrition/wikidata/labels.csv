@@ -1,0 +1,63 @@
+qid,lang,term_type,term
+Q124762216,fr,prefLabel,chair de thon
+Q124762216,fr,alias,thon (chair)
+Q13221624,nl,prefLabel,hüttenkäse
+Q13221624,fr,prefLabel,cottage cheese
+Q13221624,de,prefLabel,Hüttenkäse
+Q13221624,de,alias,körniger Frischkäse
+Q13221624,de,alias,körniger Käse
+Q13317,nl,prefLabel,yoghurt
+Q13317,fr,prefLabel,yaourt
+Q13317,fr,alias,yoghourt
+Q13317,fr,alias,yogourt
+Q13317,bg,prefLabel,Кисело мляко
+Q13317,bg,alias,Йогурт
+Q13317,de,prefLabel,Joghurt
+Q13317,de,alias,Jogurt
+Q16587531,nl,prefLabel,aardappel
+Q16587531,fr,prefLabel,pomme de terre
+Q16587531,fr,alias,patate
+Q16587531,fr,alias,pomme-de-terre
+Q16587531,de,prefLabel,Kartoffelknolle
+Q16587531,de,alias,Erdapfel
+Q16587531,de,alias,Grundbirne
+Q16587531,de,alias,Grumbeer
+Q16587531,de,alias,Herdöpfel
+Q16587531,de,alias,Kartoffel
+Q24265484,nl,prefLabel,haver
+Q24265484,fr,prefLabel,avoine
+Q24265484,bg,prefLabel,овес
+Q24265484,de,prefLabel,Hafer
+Q2607161,nl,prefLabel,kippenborst
+Q2607161,fr,prefLabel,poitrine de poulet
+Q2607161,fr,alias,filet de poulet
+Q2607161,bg,prefLabel,пилешки гърди
+Q2607161,bg,alias,пилешко филе
+Q2607161,de,prefLabel,Hähnchenbrust
+Q2607161,de,alias,Hühnerbrust
+Q2607161,de,alias,Hähnchenbrustfilet
+Q4536337,nl,prefLabel,boekweit
+Q4536337,fr,prefLabel,graine de sarrasin
+Q4536337,fr,alias,graine de blé noir
+Q4536337,de,prefLabel,Buchweizen
+Q503,nl,prefLabel,banaan
+Q503,nl,alias,banaan (vrucht)
+Q503,fr,prefLabel,banane
+Q503,bg,prefLabel,банан
+Q503,bg,alias,Банан (плод)
+Q503,de,prefLabel,Banane
+Q5090,nl,prefLabel,rijst
+Q5090,fr,prefLabel,riz
+Q5090,bg,prefLabel,ориз
+Q5090,de,prefLabel,Reis
+Q89,nl,prefLabel,appel
+Q89,nl,alias,handappel
+Q89,nl,alias,stoofappel
+Q89,fr,prefLabel,pomme
+Q89,bg,prefLabel,ябълка
+Q89,de,prefLabel,Apfel
+Q93189,nl,prefLabel,ei
+Q93189,fr,prefLabel,œuf
+Q93189,fr,alias,œufs
+Q93189,bg,prefLabel,Яйце
+Q93189,de,prefLabel,Ei

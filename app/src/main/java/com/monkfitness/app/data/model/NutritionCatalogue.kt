@@ -28,6 +28,49 @@ data class NutritionSecondSource(
     val note: String? = null
 )
 
+/** How much a local name can be relied on. */
+enum class NutritionNameTrust(val key: String) {
+    /** Reviewed by a human against the market's own usage. */
+    VERIFIED("verified"),
+
+    /** Taken from an open vocabulary, citable to one concept and one licence. */
+    SOURCED("sourced"),
+
+    /** The app's own translation: nobody but the author has looked at it. */
+    UNVERIFIED("unverified")
+}
+
+/** Where a name came from: a vocabulary concept, citable by id and licence. */
+sealed interface NutritionNameSource {
+
+    /** The app wrote this name itself; there is no external row behind it. */
+    data object Agent : NutritionNameSource
+
+    data class Vocabulary(
+        val database: String,
+        val itemId: String,
+        val term: String,
+        val licence: String
+    ) : NutritionNameSource
+}
+
+/**
+ * One ingredient's name in one language.
+ *
+ * Names describe the *concept* the ingredient stands for, so they are never read from the
+ * composition row the numbers came from: that row may hold a different food.
+ *
+ * [inflectedFrom] is the vocabulary label a plural was made from, kept so the plural stays checkable
+ * against the row it is cited to. [note] says why a word is the word it is where the source is silent.
+ */
+data class NutritionIngredientName(
+    val name: String,
+    val trust: NutritionNameTrust,
+    val source: NutritionNameSource,
+    val inflectedFrom: String? = null,
+    val note: String? = null
+)
+
 /** The asset's ingredient fields map onto the app's enums by name, so a typo cannot pass silently. */
 private val ingredientNameRes: Map<String, Int> = mapOf(
     "nutrition_ingredient_chicken_breast" to R.string.nutrition_ingredient_chicken_breast,
@@ -120,7 +163,8 @@ internal fun parseCatalogue(json: String): ParsedNutritionCatalogue {
                 )
             },
             gramsPerPiece = if (unit == NutritionQuantityUnit.PIECES) entry.number("pieceGrams").toInt() else null,
-            pieceSource = entry.sourceRefOrNull("pieceSource")
+            pieceSource = entry.sourceRefOrNull("pieceSource"),
+            names = entry.objOrNull("names")?.let(::namesOf).orEmpty()
         )
     }
     val byKey = ingredients.associateBy { it.key }
@@ -172,6 +216,49 @@ private fun Map<*, *>.objects(name: String): List<Map<*, *>> =
 
 private fun Map<*, *>.obj(name: String): Map<*, *> =
     this[name] as? Map<*, *> ?: error("catalogue: missing object \"$name\"")
+
+private fun Map<*, *>.objOrNull(name: String): Map<*, *>? = this[name] as? Map<*, *>
+
+private fun namesOf(entry: Map<*, *>): Map<String, NutritionIngredientName> =
+    entry.entries.associate { (language, value) ->
+        val tag = language as? String ?: error("catalogue: a name language must be a string")
+        tag to nameOf(tag, value)
+    }
+
+/**
+ * One entry of an ingredient's `names` map.
+ *
+ * `unverified` unless a vocabulary is cited, and a cited vocabulary entry has to carry the id and
+ * licence that make it checkable — a name is only "sourced" when a reader can go and look.
+ */
+private fun nameOf(language: String, value: Any?): NutritionIngredientName {
+    val entry = value as? Map<*, *> ?: error("catalogue: name \"$language\" must be an object")
+    val trust = NutritionNameTrust.entries.firstOrNull { it.key == entry.string("trust") }
+        ?: error("catalogue: name \"$language\" has trust ${entry["trust"]}")
+    val source = when (val raw = entry["source"]) {
+        is String -> {
+            require(raw == "agent") { "catalogue: name \"$language\" cites \"$raw\" as its source" }
+            NutritionNameSource.Agent
+        }
+        is Map<*, *> -> NutritionNameSource.Vocabulary(
+            database = raw.string("database"),
+            itemId = raw.string("id"),
+            term = raw.string("term"),
+            licence = raw.string("licence")
+        )
+        else -> error("catalogue: name \"$language\" has no source")
+    }
+    require((trust == NutritionNameTrust.UNVERIFIED) == (source is NutritionNameSource.Agent)) {
+        "catalogue: name \"$language\" is $trust but cites ${if (source is NutritionNameSource.Agent) "no row" else "a vocabulary"}"
+    }
+    return NutritionIngredientName(
+        name = entry.string("name"),
+        trust = trust,
+        source = source,
+        inflectedFrom = entry["inflectedFrom"] as? String,
+        note = entry["note"] as? String
+    )
+}
 
 private fun Map<*, *>.sourceRef(name: String): NutritionSourceRef =
     sourceRefOrNull(name) ?: error("catalogue: missing source \"$name\"")

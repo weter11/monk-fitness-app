@@ -23,10 +23,85 @@ above is of the bytes actually analysed.
   permitted with attribution of the source; the app names ANSES Ciqual 2020 on the Nutrition screen.
 - Open Food Facts was not used: its ODbL licence does not fit shipped values.
 
+## Ingredient names
+
+A name is a *word* for a food, not a measurement of it, so it is not taken from the composition tables
+above. Those name the analysed preparation ("Fromage blanc, nature, 3% MG", "Kartoffeln, geschält,
+gegart"), and the row a number came from may not even be the food the ingredient stands for — CIQUAL's
+fresh cream cheese stands in for cottage cheese, grilled cashew for mixed nuts. Names are cited per
+concept to a vocabulary instead.
+
+| File committed | Source | URL | Retrieved |
+| --- | --- | --- | --- |
+| `wikidata/labels.csv` | Wikidata item labels and aliases, `action=wbgetentities` | https://www.wikidata.org/w/api.php | 2026-11-07 |
+| `agrovoc/pref_labels.csv` | AGROVOC multilingual thesaurus, SPARQL endpoint | https://agrovoc.fao.org/sparql | 2026-11-07 |
+
+`extract_names.py` queries both, writes the rows quoted in the catalogue, and rebuilds every
+ingredient's `names` member from them. It fails rather than writing a term the source no longer
+returns.
+
+### Licences, per language
+
+- **Wikidata**: CC0 1.0. No attribution required; the app names it anyway, and every name carries the
+  item id it was read from.
+- **AGROVOC**: CC BY 4.0 for the six FAO languages (en, fr, es, ar, ru, zh), whose copyright is FAO's.
+  Content in *other* languages — German, Dutch, Bulgarian — rests with the institutions that
+  contributed it, and FAO publishes no licence for those terms. Only French is therefore cited, and
+  the app credits FAO and the licence.
+
+### Coverage actually found, per language
+
+| Language | Cited from | Concepts with a usable term |
+| --- | --- | --- |
+| fr | AGROVOC, plus Wikidata for chicken breast | 11 of 12 |
+| nl | Wikidata | 10 of 12 |
+| de | Wikidata | 10 of 12 |
+| bg | Wikidata | 7 of 12 |
+
+The rest are the app's own translations, marked `unverified` with `source: "agent"`.
+
+### Form
+
+Names are stored the way a dictionary writes them — lowercase for Dutch, French and Bulgarian;
+German nouns capitalised — so a vocabulary label that arrives capitalised is lowercased on the way in
+(`Яйце` → `яйца`, not because the source is wrong but because a shelf label is not an entry).
+
+Foods bought by the piece are stored in the plural (`eieren`, `pommes de terre`, `яйца`, `Eier`) and
+carry `inflectedFrom`, the singular the cited label spells. A reader can therefore still check the
+plural against the row: the validator compares `inflectedFrom` to the cited term, folding case and the
+œ ligature. Foods bought by weight (`chicken`, `rice`, `oats`, `buckwheat`, `cottage_cheese`,
+`yogurt`, `tuna`) keep one form and carry no `inflectedFrom`. An `unverified` plural that the app
+wrote itself (`noten`, `картофи`, `ядки`, `Nüsse`) has no label to point at and so carries none.
+
+French eggs are the one place the app deliberately departs from the source's spelling: AGROVOC types
+`oeuf`, French writes `œuf`, and the row shows `Œufs`. The `note` on that entry says so.
+
+### What the shops say (not a source — evidence for the word chosen)
+
+No open vocabulary names cottage cheese in Dutch, French or Bulgarian, so the app chose the word and
+recorded why on the entry's `note`:
+
+| Market | Word | Evidence |
+| --- | --- | --- |
+| NL / BE (nl) | `hüttenkäse` (Wikidata label) | Albert Heijn sells [Danone Hüttenkäse](https://www.ah.nl/producten/product/wi1932/danone-h%C3%BCttenk%C3%A4se-original) and its own [Cottage cheese](https://www.ah.nl/producten/product/wi400467/ah-cottage-cheese) in a cabinet literally named “Cottage cheese”, describing the Danone tub as “huttenkase, ook wel cottage cheese genoemd”; its Belgian site sells [the same tub](https://www.ah.be/producten/product/wi67552/danone-h%C3%BCttenk%C3%A4se-original). Both words are current, so the vocabulary's word is kept. |
+| BE / FR (fr) | `cottage cheese` (agent) | Carrefour Belgium lists [“Cottage Cheese Fromage Frais”](https://www.carrefour.be/fr/cottage-cheese-fromage-frais-riche-en-proteines-200-g/00959702.html); Delhaize's Belgian product is [“Cottage Cheese”](https://world.openfoodfacts.org/product/5400117596901/cottage-cheese-delhaize). French has no settled name for the product and `fromage blanc` is a different one. |
+| BG | `извара` (agent) | The closest product on Bulgarian shelves; cottage cheese is not sold in mainstream Bulgarian retail, so the note on the entry says exactly that. |
+
+### Sources checked and not used
+
+| Source | Verdict |
+| --- | --- |
+| NEVO (RIVM, Dutch) | Rejected: RIVM/Kingdom of the Netherlands copyright, reuse permitted only unchanged and with the version cited — not an open licence. Dutch names only. |
+| Fineli (THL, Finnish) | Rejected on language coverage: CC BY 4.0, but food names are published in Finnish, Swedish and English only — none of the four pilot languages. |
+| BLS 4.0 (Max Rubner-Institut, German) | Rejected on fit, not licence: free under CC BY 4.0 since version 4.0 (December 2025), but its names describe analysed preparations in a composition table, which is the stand-in problem this pilot exists to avoid. |
+| CIQUAL 2020 (ANSES, French) | Rejected for names: it is the stand-in table itself. Its French rows are preparations, and one of them ("Fromage blanc") is exactly what cottage cheese must not be called. Still cited for numbers. |
+| AGROVOC, German / Dutch / Bulgarian terms | Rejected: the thesaurus holds them (39,196 German, 23,436 Dutch), but their copyright sits with contributing institutions and no licence is published. Bulgarian has no AGROVOC coverage at all (34 preferred terms). |
+
 ## Regenerating
 
 ```bash
 mkdir -p /tmp/sources/usda /tmp/sources/ciqual
 curl -O <the three URLs above>            # into /tmp/sources
 python3 data/nutrition/extract.py /tmp/sources data/nutrition
+python3 data/nutrition/extract_names.py   # queries Wikidata and AGROVOC directly
 ```
