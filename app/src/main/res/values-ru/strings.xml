@@ -268,6 +268,10 @@
     <string name="nutrition_plan_days_7">7 дней</string>
     <string name="nutrition_exclusions">Исключенные продукты</string>
     <string name="nutrition_exclusions_desc">План и замены будут исключать выбранные продукты.</string>
+    <string name="nutrition_no_pork">Без свинины</string>
+    <string name="nutrition_lactose_free">Без лактозы</string>
+    <string name="nutrition_dietary_filters_helper">Эти фильтры работают по списку продуктов приложения и не являются гарантией от аллергии или медицинским указанием: скрытые ингредиенты, например молоко в хлебе, не учитываются.</string>
+    <string name="nutrition_dietary_filters_next_cycle">Действует со следующего цикла; текущий цикл сохраняет свои блюда.</string>
     <string name="show_excluded_products_nutrition">Показывать исключенные продукты на экране питания</string>
     <string name="diet_restrictions_summary">Ограничения в диете: %1$s</string>
     <string name="diet_restrictions_none">Нет</string>

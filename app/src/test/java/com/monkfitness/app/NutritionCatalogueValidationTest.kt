@@ -161,4 +161,33 @@ class NutritionCatalogueValidationTest {
         }
         println(report)
     }
+
+    /**
+     * The dietary filters read these two flags and nothing re-checks a plan after it is built, so the audit
+     * lives here as a guard: each row states what the food is, and a tag moved to another food — or a 27th
+     * food arriving untagged — fails a test instead of quietly changing what a user's plan contains.
+     */
+    @Test
+    fun everyIngredientCarriesTheTagItsFoodHas() {
+        val pork = setOf("ham")
+        val lactose = setOf("cottage_cheese", "yogurt", "milk")
+
+        catalogue.ingredients.forEach { ingredient ->
+            assertEquals(
+                "${ingredient.key}: pork tag",
+                ingredient.key in pork,
+                ingredient.pork
+            )
+            assertEquals(
+                "${ingredient.key}: lactose tag",
+                ingredient.key in lactose,
+                ingredient.lactose
+            )
+        }
+        assertEquals(
+            "the audit names a food the catalogue does not ship",
+            emptySet<String>(),
+            (pork + lactose) - catalogue.ingredients.map { it.key }.toSet()
+        )
+    }
 }

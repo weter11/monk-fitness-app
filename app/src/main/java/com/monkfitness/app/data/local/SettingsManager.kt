@@ -23,7 +23,10 @@ import java.time.LocalDate
 
 private val Context.dataStore: DataStore<Preferences> by preferencesDataStore(name = "settings")
 
-class SettingsManager(private val context: Context) {
+class SettingsManager internal constructor(private val dataStore: DataStore<Preferences>) {
+
+    /** The app's one preferences store, reached from the context it was built for. */
+    constructor(context: Context) : this(context.dataStore)
 
     companion object {
         private const val EXERCISE_DIFFICULTY_PREFIX = "exercise_difficulty_"
@@ -78,6 +81,14 @@ class SettingsManager(private val context: Context) {
         val NUTRITION_MARKET = stringPreferencesKey("nutrition_market")
         val NUTRITION_MARKET_LANGUAGE = stringPreferencesKey("nutrition_market_language")
         val SHOW_EXCLUDED_PRODUCTS_IN_NUTRITION = booleanPreferencesKey("show_excluded_products_in_nutrition")
+
+        /**
+         * The dietary filters, stored beside the excluded foods they are added to. Off is the only safe
+         * default: a mistyped read must not narrow a plan the user never asked to narrow.
+         */
+        val NUTRITION_NO_PORK = booleanPreferencesKey("nutrition_no_pork")
+        val NUTRITION_LACTOSE_FREE = booleanPreferencesKey("nutrition_lactose_free")
+
         val DISABLED_EXERCISE_FAMILIES = stringSetPreferencesKey("disabled_exercise_families")
         val REWARDS_GRANTED_DAYS = stringSetPreferencesKey("rewards_granted_days")
         val FILTER_LIBRARY_BY_CATEGORIES = booleanPreferencesKey("filter_library_by_categories")
@@ -93,50 +104,50 @@ class SettingsManager(private val context: Context) {
         val SESSION_REST_SECONDS = intPreferencesKey("session_rest_seconds")
     }
 
-    val filterLibraryByCategoriesFlow: Flow<Boolean> = context.dataStore.data.map { preferences ->
+    val filterLibraryByCategoriesFlow: Flow<Boolean> = dataStore.data.map { preferences ->
         preferences[FILTER_LIBRARY_BY_CATEGORIES] ?: true
     }
 
     suspend fun setFilterLibraryByCategories(enabled: Boolean) {
-        context.dataStore.edit { preferences ->
+        dataStore.edit { preferences ->
             preferences[FILTER_LIBRARY_BY_CATEGORIES] = enabled
         }
     }
 
-    val showEngineeringValidationFlow: Flow<Boolean> = context.dataStore.data.map { preferences ->
+    val showEngineeringValidationFlow: Flow<Boolean> = dataStore.data.map { preferences ->
         // Hidden developer tool: OFF by default on every build.
         preferences[SHOW_ENGINEERING_VALIDATION] ?: false
     }
 
     /** The rest the user last chose, or `null` when they never chose one. */
-    val sessionRestSecondsFlow: Flow<Int?> = context.dataStore.data.map { preferences ->
+    val sessionRestSecondsFlow: Flow<Int?> = dataStore.data.map { preferences ->
         preferences[SESSION_REST_SECONDS]
     }
 
     suspend fun setSessionRestSeconds(seconds: Int) {
-        context.dataStore.edit { preferences ->
+        dataStore.edit { preferences ->
             preferences[SESSION_REST_SECONDS] = seconds.coerceAtLeast(0)
         }
     }
 
     suspend fun setShowEngineeringValidation(enabled: Boolean) {
-        context.dataStore.edit { preferences ->
+        dataStore.edit { preferences ->
             preferences[SHOW_ENGINEERING_VALIDATION] = enabled
         }
     }
 
-    val rewardsGrantedDaysFlow: Flow<Set<String>> = context.dataStore.data.map { preferences ->
+    val rewardsGrantedDaysFlow: Flow<Set<String>> = dataStore.data.map { preferences ->
         preferences[REWARDS_GRANTED_DAYS].orEmpty()
     }
 
     suspend fun setRewardGranted(key: String) {
-        context.dataStore.edit { preferences ->
+        dataStore.edit { preferences ->
             val current = preferences[REWARDS_GRANTED_DAYS].orEmpty()
             preferences[REWARDS_GRANTED_DAYS] = current + key
         }
     }
 
-    val disabledExerciseFamiliesFlow: Flow<Set<String>> = context.dataStore.data.map { preferences ->
+    val disabledExerciseFamiliesFlow: Flow<Set<String>> = dataStore.data.map { preferences ->
         val disabled = preferences[DISABLED_EXERCISE_FAMILIES].orEmpty()
         val allKeys = com.monkfitness.app.data.model.ExerciseCategoryFilter.entries.map { it.key }.toSet()
         val enabled = allKeys - disabled
@@ -148,7 +159,7 @@ class SettingsManager(private val context: Context) {
     }
 
     suspend fun setDisabledExerciseFamilies(families: Set<String>) {
-        context.dataStore.edit { preferences ->
+        dataStore.edit { preferences ->
             preferences[DISABLED_EXERCISE_FAMILIES] = families
         }
     }
@@ -160,124 +171,124 @@ class SettingsManager(private val context: Context) {
      * never chose a language into Russian. Absence means "the user never chose", and the app answers that
      * with the system language.
      */
-    suspend fun readLegacyLanguage(): String? = context.dataStore.data.first()[LEGACY_LANGUAGE_KEY]
+    suspend fun readLegacyLanguage(): String? = dataStore.data.first()[LEGACY_LANGUAGE_KEY]
 
     /**
      * Removes the legacy key, so the platform's application locale is the app's only language state and a
      * second migration can never re-apply a choice the user has since replaced.
      */
     suspend fun clearLegacyLanguage() {
-        context.dataStore.edit { preferences ->
+        dataStore.edit { preferences ->
             preferences.remove(LEGACY_LANGUAGE_KEY)
         }
     }
 
-    val notificationTimeFlow: Flow<Pair<Int, Int>> = context.dataStore.data.map { preferences ->
+    val notificationTimeFlow: Flow<Pair<Int, Int>> = dataStore.data.map { preferences ->
         val hour = preferences[NOTIFICATION_HOUR] ?: 9
         val minute = preferences[NOTIFICATION_MINUTE] ?: 0
         Pair(hour, minute)
     }
 
     suspend fun setNotificationTime(hour: Int, minute: Int) {
-        context.dataStore.edit { preferences ->
+        dataStore.edit { preferences ->
             preferences[NOTIFICATION_HOUR] = hour
             preferences[NOTIFICATION_MINUTE] = minute
         }
     }
 
-    val isOnboardingCompletedFlow: Flow<Boolean> = context.dataStore.data.map { preferences ->
+    val isOnboardingCompletedFlow: Flow<Boolean> = dataStore.data.map { preferences ->
         preferences[IS_ONBOARDING_COMPLETED] ?: false
     }
 
     suspend fun setOnboardingCompleted() {
-        context.dataStore.edit { preferences ->
+        dataStore.edit { preferences ->
             preferences[IS_ONBOARDING_COMPLETED] = true
         }
     }
 
-    val timerTicksEnabledFlow: Flow<Boolean> = context.dataStore.data.map { preferences ->
+    val timerTicksEnabledFlow: Flow<Boolean> = dataStore.data.map { preferences ->
         preferences[TIMER_TICKS_ENABLED] ?: true
     }
 
     suspend fun setTimerTicksEnabled(enabled: Boolean) {
-        context.dataStore.edit { preferences ->
+        dataStore.edit { preferences ->
             preferences[TIMER_TICKS_ENABLED] = enabled
         }
     }
 
-    val vibrationEnabledFlow: Flow<Boolean> = context.dataStore.data.map { preferences ->
+    val vibrationEnabledFlow: Flow<Boolean> = dataStore.data.map { preferences ->
         preferences[VIBRATION_ENABLED] ?: true
     }
 
     suspend fun setVibrationEnabled(enabled: Boolean) {
-        context.dataStore.edit { preferences ->
+        dataStore.edit { preferences ->
             preferences[VIBRATION_ENABLED] = enabled
         }
     }
 
-    val additionalPostureTrainingEnabledFlow: Flow<Boolean> = context.dataStore.data.map { preferences ->
+    val additionalPostureTrainingEnabledFlow: Flow<Boolean> = dataStore.data.map { preferences ->
         preferences[ADDITIONAL_POSTURE_TRAINING_ENABLED] ?: false
     }
 
     suspend fun setAdditionalPostureTrainingEnabled(enabled: Boolean) {
-        context.dataStore.edit { preferences ->
+        dataStore.edit { preferences ->
             preferences[ADDITIONAL_POSTURE_TRAINING_ENABLED] = enabled
         }
     }
 
-    val flexibilityTrainingTypeFlow: Flow<FlexibilityTrainingType> = context.dataStore.data.map { preferences ->
+    val flexibilityTrainingTypeFlow: Flow<FlexibilityTrainingType> = dataStore.data.map { preferences ->
         preferences[FLEXIBILITY_TRAINING_TYPE].toFlexibilityTrainingType()
     }
 
     suspend fun setFlexibilityTrainingType(trainingType: FlexibilityTrainingType) {
-        context.dataStore.edit { preferences ->
+        dataStore.edit { preferences ->
             preferences[FLEXIBILITY_TRAINING_TYPE] = trainingType.name
         }
     }
 
-    val flexibilityFocusAreasFlow: Flow<Set<ExerciseSubCategory>> = context.dataStore.data.map { preferences ->
+    val flexibilityFocusAreasFlow: Flow<Set<ExerciseSubCategory>> = dataStore.data.map { preferences ->
         preferences[FLEXIBILITY_FOCUS_AREAS].toExerciseSubCategorySet()
     }
 
     suspend fun setFlexibilityFocusAreas(focusAreas: Set<ExerciseSubCategory>) {
         val normalizedFocusAreas = normalizeFocusAreas(focusAreas)
-        context.dataStore.edit { preferences ->
+        dataStore.edit { preferences ->
             preferences[FLEXIBILITY_FOCUS_AREAS] = normalizedFocusAreas.joinToString(",") { it.name }
         }
     }
 
-    val availableEquipmentFlow: Flow<Set<Equipment>> = context.dataStore.data.map { preferences ->
+    val availableEquipmentFlow: Flow<Set<Equipment>> = dataStore.data.map { preferences ->
         preferences[AVAILABLE_EQUIPMENT].toEquipmentSet()
     }
 
     suspend fun setAvailableEquipment(equipment: Set<Equipment>) {
         val normalizedEquipment = normalizeAvailableEquipment(equipment)
-        context.dataStore.edit { preferences ->
+        dataStore.edit { preferences ->
             preferences[AVAILABLE_EQUIPMENT] = normalizedEquipment.map { it.name }.toSet()
         }
     }
 
-    val nutritionWeightFlow: Flow<String> = context.dataStore.data.map { preferences ->
+    val nutritionWeightFlow: Flow<String> = dataStore.data.map { preferences ->
         preferences[NUTRITION_WEIGHT] ?: ""
     }
 
     suspend fun setNutritionWeight(weight: String) {
-        context.dataStore.edit { preferences ->
+        dataStore.edit { preferences ->
             preferences[NUTRITION_WEIGHT] = weight
         }
     }
 
-    val nutritionHeightFlow: Flow<String> = context.dataStore.data.map { preferences ->
+    val nutritionHeightFlow: Flow<String> = dataStore.data.map { preferences ->
         preferences[NUTRITION_HEIGHT] ?: ""
     }
 
     suspend fun setNutritionHeight(height: String) {
-        context.dataStore.edit { preferences ->
+        dataStore.edit { preferences ->
             preferences[NUTRITION_HEIGHT] = height
         }
     }
 
-    val nutritionCycleLengthFlow: Flow<Int> = context.dataStore.data.map { preferences ->
+    val nutritionCycleLengthFlow: Flow<Int> = dataStore.data.map { preferences ->
         val explicit = preferences[NUTRITION_CYCLE_LENGTH]
         if (explicit != null) {
             explicit.toNutritionCycleLength()
@@ -287,27 +298,27 @@ class SettingsManager(private val context: Context) {
     }
 
     suspend fun setNutritionCycleLength(days: Int) {
-        context.dataStore.edit { preferences ->
+        dataStore.edit { preferences ->
             preferences[NUTRITION_CYCLE_LENGTH] = days.toNutritionCycleLength()
         }
     }
 
-    val nutritionExcludedFoodsFlow: Flow<Set<String>> = context.dataStore.data.map { preferences ->
+    val nutritionExcludedFoodsFlow: Flow<Set<String>> = dataStore.data.map { preferences ->
         preferences[NUTRITION_EXCLUDED_FOODS].orEmpty()
     }
 
     suspend fun setNutritionExcludedFoods(foodKeys: Set<String>) {
-        context.dataStore.edit { preferences ->
+        dataStore.edit { preferences ->
             preferences[NUTRITION_EXCLUDED_FOODS] = foodKeys
         }
     }
 
-    val nutritionAvailableProductsFlow: Flow<Set<String>> = context.dataStore.data.map { preferences ->
+    val nutritionAvailableProductsFlow: Flow<Set<String>> = dataStore.data.map { preferences ->
         preferences[NUTRITION_AVAILABLE_PRODUCTS].orEmpty()
     }
 
     suspend fun setNutritionAvailableProducts(productKeys: Set<String>) {
-        context.dataStore.edit { preferences ->
+        dataStore.edit { preferences ->
             preferences[NUTRITION_AVAILABLE_PRODUCTS] = productKeys
         }
     }
@@ -329,7 +340,7 @@ class SettingsManager(private val context: Context) {
      * had. A device that has never stored either reads "today" and is stamped with it by
      * [ensureTrackStartDate].
      */
-    val trackStartDateFlow: Flow<String> = context.dataStore.data.map { preferences ->
+    val trackStartDateFlow: Flow<String> = dataStore.data.map { preferences ->
         preferences[TRACK_START_DATE]
             ?: preferences[LEGACY_START_DATE_KEY]
             ?: LocalDate.now().toString()
@@ -340,7 +351,7 @@ class SettingsManager(private val context: Context) {
      * install that predates the rename migrates its own anchor the first time it is opened.
      */
     suspend fun ensureTrackStartDate() {
-        context.dataStore.edit { preferences ->
+        dataStore.edit { preferences ->
             if (preferences[TRACK_START_DATE] == null) {
                 preferences[TRACK_START_DATE] =
                     preferences[LEGACY_START_DATE_KEY] ?: LocalDate.now().toString()
@@ -354,15 +365,15 @@ class SettingsManager(private val context: Context) {
      * onboarding restarts because IS_ONBOARDING_COMPLETED is gone.
      */
     suspend fun clearAll() {
-        context.dataStore.edit { it.clear() }
+        dataStore.edit { it.clear() }
     }
 
-    val nutritionWarningDismissedForFlow: Flow<String?> = context.dataStore.data.map { preferences ->
+    val nutritionWarningDismissedForFlow: Flow<String?> = dataStore.data.map { preferences ->
         preferences[NUTRITION_WARNING_DISMISSED_FOR]
     }
 
     suspend fun dismissNutritionWarningFor(key: String?) {
-        context.dataStore.edit { preferences ->
+        dataStore.edit { preferences ->
             if (key == null) {
                 preferences.remove(NUTRITION_WARNING_DISMISSED_FOR)
             } else {
@@ -371,23 +382,43 @@ class SettingsManager(private val context: Context) {
         }
     }
 
-    val showExcludedProductsInNutritionFlow: Flow<Boolean> = context.dataStore.data.map { preferences ->
+    val showExcludedProductsInNutritionFlow: Flow<Boolean> = dataStore.data.map { preferences ->
         preferences[SHOW_EXCLUDED_PRODUCTS_IN_NUTRITION] ?: false
     }
 
     suspend fun setShowExcludedProductsInNutrition(show: Boolean) {
-        context.dataStore.edit { preferences ->
+        dataStore.edit { preferences ->
             preferences[SHOW_EXCLUDED_PRODUCTS_IN_NUTRITION] = show
         }
     }
 
+    val nutritionNoPorkFlow: Flow<Boolean> = dataStore.data.map { preferences ->
+        preferences[NUTRITION_NO_PORK] ?: false
+    }
+
+    suspend fun setNutritionNoPork(enabled: Boolean) {
+        dataStore.edit { preferences ->
+            preferences[NUTRITION_NO_PORK] = enabled
+        }
+    }
+
+    val nutritionLactoseFreeFlow: Flow<Boolean> = dataStore.data.map { preferences ->
+        preferences[NUTRITION_LACTOSE_FREE] ?: false
+    }
+
+    suspend fun setNutritionLactoseFree(enabled: Boolean) {
+        dataStore.edit { preferences ->
+            preferences[NUTRITION_LACTOSE_FREE] = enabled
+        }
+    }
+
     /** The market the user picked, or `null` when they never picked one. */
-    val nutritionMarketFlow: Flow<String?> = context.dataStore.data.map { preferences ->
+    val nutritionMarketFlow: Flow<String?> = dataStore.data.map { preferences ->
         preferences[NUTRITION_MARKET]
     }
 
     suspend fun setNutritionMarket(countryCode: String?) {
-        context.dataStore.edit { preferences ->
+        dataStore.edit { preferences ->
             if (countryCode == null) {
                 preferences.remove(NUTRITION_MARKET)
             } else {
@@ -397,17 +428,17 @@ class SettingsManager(private val context: Context) {
     }
 
     /** The market language the user picked, or `null` when they never picked one. */
-    val nutritionMarketLanguageFlow: Flow<String?> = context.dataStore.data.map { preferences ->
+    val nutritionMarketLanguageFlow: Flow<String?> = dataStore.data.map { preferences ->
         preferences[NUTRITION_MARKET_LANGUAGE]
     }
 
     suspend fun setNutritionMarketLanguage(code: String) {
-        context.dataStore.edit { preferences ->
+        dataStore.edit { preferences ->
             preferences[NUTRITION_MARKET_LANGUAGE] = code
         }
     }
 
-    val exerciseDifficultyAdjustmentsFlow: Flow<Map<String, Int>> = context.dataStore.data.map { preferences ->
+    val exerciseDifficultyAdjustmentsFlow: Flow<Map<String, Int>> = dataStore.data.map { preferences ->
         preferences.asMap()
             .mapNotNull { (key, value) ->
                 if (!key.name.startsWith(EXERCISE_DIFFICULTY_PREFIX) || value !is Int) {
@@ -419,7 +450,7 @@ class SettingsManager(private val context: Context) {
             .toMap()
     }
 
-    val exercisePersonalRecordsFlow: Flow<Map<String, Int>> = context.dataStore.data.map { preferences ->
+    val exercisePersonalRecordsFlow: Flow<Map<String, Int>> = dataStore.data.map { preferences ->
         preferences.asMap()
             .mapNotNull { (key, value) ->
                 if (!key.name.startsWith(EXERCISE_PERSONAL_RECORD_PREFIX) || value !is Int) {
@@ -433,28 +464,28 @@ class SettingsManager(private val context: Context) {
 
     fun getExerciseDifficultyAdjustmentFlow(exerciseId: String): Flow<Int> {
         val key = intPreferencesKey("$EXERCISE_DIFFICULTY_PREFIX$exerciseId")
-        return context.dataStore.data.map { preferences ->
+        return dataStore.data.map { preferences ->
             (preferences[key] ?: 0).coerceIn(-2, 2)
         }
     }
 
     suspend fun setExerciseDifficultyAdjustment(exerciseId: String, adjustment: Int) {
         val key = intPreferencesKey("$EXERCISE_DIFFICULTY_PREFIX$exerciseId")
-        context.dataStore.edit { preferences ->
+        dataStore.edit { preferences ->
             preferences[key] = adjustment.coerceIn(-2, 2)
         }
     }
 
     fun getExercisePersonalRecordFlow(exerciseId: String): Flow<Int> {
         val key = intPreferencesKey("$EXERCISE_PERSONAL_RECORD_PREFIX$exerciseId")
-        return context.dataStore.data.map { preferences ->
+        return dataStore.data.map { preferences ->
             (preferences[key] ?: 0).coerceAtLeast(0)
         }
     }
 
     suspend fun setExercisePersonalRecord(exerciseId: String, recordValue: Int) {
         val key = intPreferencesKey("$EXERCISE_PERSONAL_RECORD_PREFIX$exerciseId")
-        context.dataStore.edit { preferences ->
+        dataStore.edit { preferences ->
             preferences[key] = recordValue.coerceAtLeast(0)
         }
     }

@@ -49,6 +49,7 @@ import com.monkfitness.app.data.model.NutritionQuantityUnit
 import com.monkfitness.app.data.model.NutritionPlan
 import com.monkfitness.app.data.model.NutritionShoppingGroup
 import com.monkfitness.app.data.model.calorieTargetGap
+import com.monkfitness.app.data.model.nutritionDietaryExcludedKeys
 import com.monkfitness.app.data.model.isProgramDayCapped
 import com.monkfitness.app.data.model.nutritionVariety
 import com.monkfitness.app.data.model.orderedForDisplay
@@ -82,6 +83,11 @@ fun NutritionScreen(
     val heightInput by viewModel.nutritionHeight.collectAsState()
     val cycleLength by viewModel.nutritionCycleLength.collectAsState()
     val excludedFoods by viewModel.nutritionExcludedFoods.collectAsState()
+    val nutritionNoPork by viewModel.nutritionNoPork.collectAsState()
+    val nutritionLactoseFree by viewModel.nutritionLactoseFree.collectAsState()
+    // Both read-only surfaces state every food a new plan avoids; the editable list in Settings stays the
+    // user's own exclusions, so a filter can never edit it.
+    val effectiveExcludedFoods = excludedFoods + nutritionDietaryExcludedKeys(nutritionNoPork, nutritionLactoseFree)
     val availableProducts by viewModel.nutritionAvailableProducts.collectAsState()
     val showExcludedProductsInNutrition by viewModel.showExcludedProductsInNutrition.collectAsState()
     val plan by viewModel.nutritionPlan.collectAsState()
@@ -237,7 +243,7 @@ fun NutritionScreen(
                                 rowItems.forEach { ingredient ->
                                     Row(modifier = Modifier.weight(1f), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                                         Checkbox(
-                                            checked = ingredient.key in excludedFoods,
+                                            checked = ingredient.key in effectiveExcludedFoods,
                                             onCheckedChange = null
                                         )
                                         Text(
@@ -252,10 +258,10 @@ fun NutritionScreen(
                     }
                 }
             } else {
-                val formattedRestrictions = if (excludedFoods.isEmpty()) {
+                val formattedRestrictions = if (effectiveExcludedFoods.isEmpty()) {
                     stringResource(R.string.diet_restrictions_none)
                 } else {
-                    excludedFoods.mapNotNull { key ->
+                    effectiveExcludedFoods.mapNotNull { key ->
                         viewModel.nutritionExclusionOptions.find { it.key == key }?.let {
                             stringResource(it.nameRes)
                         }

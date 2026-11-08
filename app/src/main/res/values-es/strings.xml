@@ -268,6 +268,10 @@
     <string name="nutrition_plan_days_7">7 días</string>
     <string name="nutrition_exclusions">Alimentos excluidos</string>
     <string name="nutrition_exclusions_desc">Las comidas y sustituciones excluirán los alimentos que selecciones.</string>
+    <string name="nutrition_no_pork">Sin cerdo</string>
+    <string name="nutrition_lactose_free">Sin lactosa</string>
+    <string name="nutrition_dietary_filters_helper">Estos filtros usan la lista de ingredientes de la app y no son una garantía contra alergias ni una indicación médica: los ingredientes ocultos, como la leche en el pan, no se controlan.</string>
+    <string name="nutrition_dietary_filters_next_cycle">Se aplica desde el próximo ciclo; el ciclo actual conserva sus comidas.</string>
     <string name="show_excluded_products_nutrition">Mostrar productos excluidos en la pantalla de Nutrición</string>
     <string name="diet_restrictions_summary">Restricciones dietéticas: %1$s</string>
     <string name="diet_restrictions_none">Ninguna</string>

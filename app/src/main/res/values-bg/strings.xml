@@ -268,6 +268,10 @@
     <string name="nutrition_plan_days_7">7 дни</string>
     <string name="nutrition_exclusions">Изключени храни</string>
     <string name="nutrition_exclusions_desc">Ястията и замените ще изключват избраните от вас храни.</string>
+    <string name="nutrition_no_pork">Без свинско</string>
+    <string name="nutrition_lactose_free">Без лактоза</string>
+    <string name="nutrition_dietary_filters_helper">Тези филтри използват списъка с продукти в приложението и не са гаранция срещу алергии или медицинско указание: скритите съставки, например мляко в хляба, не се проследяват.</string>
+    <string name="nutrition_dietary_filters_next_cycle">Прилага се от следващия цикъл; текущият цикъл запазва ястията си.</string>
     <string name="show_excluded_products_nutrition">Показвай изключените продукти в екрана Хранене</string>
     <string name="diet_restrictions_summary">Ограничения в храненето: %1$s</string>
     <string name="diet_restrictions_none">Няма</string>

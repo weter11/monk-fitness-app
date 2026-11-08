@@ -36,6 +36,7 @@ import com.monkfitness.app.data.model.applyDifficultyAdjustment
 import com.monkfitness.app.data.model.calculateMuscleGainNutritionTargets
 import com.monkfitness.app.data.model.mealEntitiesToNutritionPlan
 import com.monkfitness.app.data.model.nutritionCycleDayNumber
+import com.monkfitness.app.data.model.nutritionExcludedFoodKeys
 import com.monkfitness.app.data.model.nutritionExclusionIngredients
 import com.monkfitness.app.data.model.toMealEntities
 import com.monkfitness.app.data.model.toShoppingItemEntities
@@ -706,7 +707,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 daysCount = safeDuration,
                 weightKg = nutritionWeight.value.toIntOrNull(),
                 heightCm = nutritionHeight.value.toIntOrNull(),
-                excludedIngredientKeys = nutritionExcludedFoods.value,
+                excludedIngredientKeys = effectiveExcludedFoodKeys(),
                 preferredIngredientKeys = validPreferredKeys,
                 cycleId = dummyCycleId,
                 previousPlan = nutritionPlan.value,
@@ -930,6 +931,15 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope, SharingStarted.WhileSubscribed(5000), emptySet()
     )
 
+    /** The dietary filters, each off until the user turns it on. */
+    val nutritionNoPork = settingsManager.nutritionNoPorkFlow.stateIn(
+        viewModelScope, SharingStarted.WhileSubscribed(5000), false
+    )
+
+    val nutritionLactoseFree = settingsManager.nutritionLactoseFreeFlow.stateIn(
+        viewModelScope, SharingStarted.WhileSubscribed(5000), false
+    )
+
     /** The market the user picked, or `null` when the region preselects one instead. */
     val nutritionMarket = settingsManager.nutritionMarketFlow.stateIn(
         viewModelScope, SharingStarted.WhileSubscribed(5000), null
@@ -1086,6 +1096,18 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), false)
 
     /**
+     * True while a filter can only reach a cycle that has not started: a stored cycle keeps the meals it
+     * was planned with, so the screen says when the change takes effect instead of implying it was applied.
+     */
+    val nutritionFiltersApplyFromNextCycle = combine(
+        activeMealCycle,
+        nutritionNoPork,
+        nutritionLactoseFree
+    ) { activeCycle, noPork, lactoseFree ->
+        activeCycle != null && (noPork || lactoseFree)
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), false)
+
+    /**
      * Deliberately the **last** thing in this class's initialisation order: `viewModelScope` dispatches on
      * `Dispatchers.Main.immediate`, so this `launch` runs synchronously during construction up to its first
      * suspension point, and every property `syncNutritionCycles()` reads must already be initialised.
@@ -1120,6 +1142,24 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             val current = nutritionExcludedFoods.value
             val next = if (foodKey in current) current - foodKey else current + foodKey
             settingsManager.setNutritionExcludedFoods(next)
+            syncNutritionCycles()
+        }
+    }
+
+    /**
+     * A filter only shapes plans that are not stored yet: [syncNutritionCycles] starts a cycle that does
+     * not exist and never rewrites one that does.
+     */
+    fun setNutritionNoPork(enabled: Boolean) {
+        viewModelScope.launch {
+            settingsManager.setNutritionNoPork(enabled)
+            syncNutritionCycles()
+        }
+    }
+
+    fun setNutritionLactoseFree(enabled: Boolean) {
+        viewModelScope.launch {
+            settingsManager.setNutritionLactoseFree(enabled)
             syncNutritionCycles()
         }
     }
@@ -1196,7 +1236,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             val meal = dayPlan.meals.firstOrNull { it.type == mealType } ?: return@launch
             val replacement = com.monkfitness.app.data.model.replaceMeal(
                 meal = meal,
-                excludedIngredientKeys = nutritionExcludedFoods.value
+                excludedIngredientKeys = effectiveExcludedFoodKeys()
             ) ?: return@launch
 
             val updatedPlan = NutritionPlan(
@@ -1273,6 +1313,13 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    /** What a plan must leave out: the user's exclusions plus the tags the two filters switch on. */
+    private fun effectiveExcludedFoodKeys(): Set<String> = nutritionExcludedFoodKeys(
+        manualExcludedKeys = nutritionExcludedFoods.value,
+        noPork = nutritionNoPork.value,
+        lactoseFree = nutritionLactoseFree.value
+    )
+
     private suspend fun syncNutritionCycles() {
         if (nutritionCycleLength.value == 0) return
 
@@ -1335,7 +1382,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             daysCount = safeDuration,
             weightKg = nutritionWeight.value.toIntOrNull(),
             heightCm = nutritionHeight.value.toIntOrNull(),
-            excludedIngredientKeys = nutritionExcludedFoods.value,
+            excludedIngredientKeys = effectiveExcludedFoodKeys(),
             preferredIngredientKeys = validPreferredKeys,
             cycleId = cycleId,
             previousPlan = nutritionPlan.value,
