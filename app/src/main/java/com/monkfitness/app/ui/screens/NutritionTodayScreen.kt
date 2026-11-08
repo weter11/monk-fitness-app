@@ -33,9 +33,7 @@ import com.monkfitness.app.data.model.NutritionDayPlan
 import com.monkfitness.app.data.model.NutritionIngredientAmount
 import com.monkfitness.app.data.model.NutritionMeal
 import com.monkfitness.app.data.model.NutritionNaming
-import com.monkfitness.app.data.model.nutritionDishIngredientKeys
-import com.monkfitness.app.data.model.nutritionDishName
-import com.monkfitness.app.data.model.nutritionIngredientsByKey
+import com.monkfitness.app.ui.nutrition.nutritionDishTitle
 import com.monkfitness.app.ui.nutrition.rememberNutritionNaming
 import com.monkfitness.app.viewmodel.MainViewModel
 
@@ -135,7 +133,7 @@ private fun NutritionTodayMealCard(
     Surface(modifier = Modifier.fillMaxWidth(), shape = MaterialTheme.shapes.large, color = MaterialTheme.colorScheme.surfaceVariant) {
         Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
             Text(
-                text = dishTitle(meal, naming),
+                text = nutritionDishTitle(meal = meal, naming = naming),
                 style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.Bold
             )
@@ -165,16 +163,3 @@ private fun todayIngredientText(ingredientAmount: NutritionIngredientAmount): St
     )
 }
 
-/**
- * The dish's own name: its main foods joined by " + ", in the market's words when a market is chosen and
- * in the interface's own otherwise. No article and no "with" is added — a name is not a sentence.
- */
-@Composable
-private fun dishTitle(meal: NutritionMeal, naming: NutritionNaming): String {
-    val parts = nutritionDishIngredientKeys(meal).mapNotNull { key ->
-        val ingredient = nutritionIngredientsByKey[key] ?: return@mapNotNull null
-        naming.nameOf(ingredient)?.name?.replaceFirstChar { it.titlecase() }
-            ?: stringResource(ingredient.nameRes)
-    }
-    return nutritionDishName(parts)
-}
