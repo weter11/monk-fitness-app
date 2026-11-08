@@ -19,6 +19,10 @@ FDC_IDS = {
     170440: "potatoes", 170686: "buckwheat", 172182: "cottage_cheese",
     171284: "yogurt", 173944: "banana", 171688: "apple", 170585: "nuts",
     171986: "tuna",
+    170393: "carrots", 170457: "tomatoes", 169291: "courgette", 169986: "cauliflower",
+    172421: "lentils", 173757: "chickpeas", 175167: "salmon", 171955: "cod",
+    169736: "pasta", 172688: "bread", 172456: "soy_milk", 172475: "tofu",
+    173863: "ham", 171267: "milk",
 }
 NUTRIENTS = {"1008": "kcal", "1003": "protein_g", "1004": "fat_g", "1005": "carb_g"}
 PORTIONS = {173424: "3", 173944: "5", 171688: "4"}
@@ -27,6 +31,10 @@ CIQUAL_CODES = {
     "4003": "potatoes", "9380": "buckwheat", "19646": "cottage_cheese",
     "19600": "yogurt", "13005": "banana", "13620": "apple", "15054": "nuts",
     "26039": "tuna",
+    "20009": "carrots", "20047": "tomatoes", "20020": "courgette", "20016": "cauliflower",
+    "20587": "lentils", "20507": "chickpeas", "26036": "salmon", "26043": "cod",
+    "9810": "pasta", "7110": "bread", "18901": "soy_milk", "20904": "tofu",
+    "28913": "ham", "19041": "milk",
 }
 CIQUAL_CONSTITUENTS = {"328": "kcal", "25000": "protein_g", "40000": "fat_g", "31000": "carb_g"}
 

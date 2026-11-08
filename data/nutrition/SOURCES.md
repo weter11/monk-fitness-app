@@ -53,12 +53,26 @@ returns.
 
 | Language | Cited from | Concepts with a usable term |
 | --- | --- | --- |
-| fr | AGROVOC, plus Wikidata for chicken breast | 11 of 12 |
-| nl | Wikidata | 10 of 12 |
-| de | Wikidata | 10 of 12 |
-| bg | Wikidata | 7 of 12 |
+| fr | AGROVOC, plus Wikidata for chicken breast | 25 of 26 |
+| nl | Wikidata | 24 of 26 |
+| de | Wikidata | 23 of 26 |
+| bg | Wikidata | 19 of 26 |
 
-The rest are the app's own translations, marked `unverified` with `source: "agent"`.
+The rest are the app's own translations, marked `unverified` with `source: "agent"` — Bulgarian for
+lentils and wholemeal bread, German for cod, and the five entries this pilot already carried.
+
+Wikidata returns several aliases per language, and the reader indexes one term per (item, language,
+type). The extract therefore keeps only the alias a name actually cites: `tomaten` for the tomato
+(Wikidata's own label names the plant), `Lachs` for the salmon (its label is the plural `Lachse`) and
+`kabeljauw` for the cod (its label names the species).
+
+### Cases where the second table publishes no energy for the row
+
+CIQUAL leaves `328` (energy, kcal) empty for many raw vegetables and dried pulses — broccoli, spinach
+and dried lentils among them. A second source is only usable here if it carries the number, so the row
+chosen for carrots, tomatoes, courgette, cauliflower, lentils, chickpeas and pasta is the one that
+does, and the `basis` field says which preparation that row is. Chickpeas are the one genuine overrun
+(10.4%): CIQUAL's boiled chickpeas hold more water than USDA's, and the note on the entry says so.
 
 ### Form
 
@@ -69,9 +83,15 @@ German nouns capitalised — so a vocabulary label that arrives capitalised is l
 Foods bought by the piece are stored in the plural (`eieren`, `pommes de terre`, `яйца`, `Eier`) and
 carry `inflectedFrom`, the singular the cited label spells. A reader can therefore still check the
 plural against the row: the validator compares `inflectedFrom` to the cited term, folding case and the
-œ ligature. Foods bought by weight (`chicken`, `rice`, `oats`, `buckwheat`, `cottage_cheese`,
-`yogurt`, `tuna`) keep one form and carry no `inflectedFrom`. An `unverified` plural that the app
-wrote itself (`noten`, `картофи`, `ядки`, `Nüsse`) has no label to point at and so carries none.
+œ ligature.
+
+A vegetable or pulse is counted the same way — `wortelen`, `carottes`, `моркови`, `Karotten` beside
+`eieren` — while a food you ask for by weight or by the glass (`cauliflower`, `salmon`, `cod`, `pasta`,
+`bread`, `soy milk`, `tofu`, `ham`, `milk`) keeps one form and carries no `inflectedFrom`. Two of the
+plurals are collective in Bulgarian (`леща`, `нахут`) and one is invariant in German (`Zucchini`), so
+the plural is the label itself; and Dutch tomatoes cite an alias that is already plural. An
+`unverified` plural the app wrote itself (`noten`, `картофи`, `ядки`, `Nüsse`) has no label to point at
+and so carries none.
 
 French eggs are the one place the app deliberately departs from the source's spelling: AGROVOC types
 `oeuf`, French writes `œuf`, and the row shows `Œufs`. The `note` on that entry says so.

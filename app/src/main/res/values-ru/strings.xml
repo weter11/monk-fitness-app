@@ -294,6 +294,9 @@
     <string name="nutrition_step_prepare_dairy_base">Положите йогурт или творог в миску.</string>
     <string name="nutrition_step_finish_with_toppings">Добавьте остальные продукты и подавайте.</string>
     <string name="nutrition_step_finish_simple">Подавайте блюдо и ешьте, пока оно теплое.</string>
+    <string name="nutrition_step_cook_pasta">Отварите пасту до готовности.</string>
+    <string name="nutrition_step_grill_fish">Обжарьте рыбу на гриле до готовности.</string>
+    <string name="nutrition_step_prepare_fresh">Подготовьте свежие продукты.</string>
     <string name="nutrition_breakfast_option_1">Овсянка на молоке с бананом, арахисовой пастой и сывороточным протеином.</string>
     <string name="nutrition_breakfast_option_2">Яйца, цельнозерновой тост и греческий йогурт.</string>
     <string name="nutrition_breakfast_option_3">Творог с ягодами, медом и смесью орехов.</string>
@@ -329,6 +332,16 @@
     <string name="nutrition_ingredient_spinach">Шпинат</string>
     <string name="nutrition_ingredient_cottage_cheese">Творог</string>
     <string name="nutrition_ingredient_nuts">Орехи</string>
+    <string name="nutrition_ingredient_courgette">Кабачки</string>
+    <string name="nutrition_ingredient_cauliflower">Цветная капуста</string>
+    <string name="nutrition_ingredient_lentils">Чечевица</string>
+    <string name="nutrition_ingredient_chickpeas">Нут</string>
+    <string name="nutrition_ingredient_salmon">Лосось</string>
+    <string name="nutrition_ingredient_cod">Треска</string>
+    <string name="nutrition_ingredient_pasta">Паста</string>
+    <string name="nutrition_ingredient_soy_milk">Соевое молоко</string>
+    <string name="nutrition_ingredient_tofu">Тофу</string>
+    <string name="nutrition_ingredient_ham">Ветчина</string>
 
     <!-- Onboarding -->
     <string name="onboarding_title">Добро пожаловать в Monk Fitness</string>

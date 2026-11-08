@@ -294,6 +294,9 @@
     <string name="nutrition_step_prepare_dairy_base">Поставете киселото мляко или изварата в купа.</string>
     <string name="nutrition_step_finish_with_toppings">Добавете останалите храни и поднесете ястието.</string>
     <string name="nutrition_step_finish_simple">Поднесете ястието и го изяжте топло.</string>
+    <string name="nutrition_step_cook_pasta">Сгответе пастата до омекване.</string>
+    <string name="nutrition_step_grill_fish">Изпечете рибата на скара до готовност.</string>
+    <string name="nutrition_step_prepare_fresh">Подгответе пресните продукти.</string>
     <string name="nutrition_breakfast_option_1">Овесена каша с мляко, банан, фъстъчено масло и суроватъчен протеин.</string>
     <string name="nutrition_breakfast_option_2">Яйца, пълнозърнест препечен хляб и гръцко кисело мляко.</string>
     <string name="nutrition_breakfast_option_3">Извара с горски плодове, мед и смесени ядки.</string>
@@ -329,6 +332,16 @@
     <string name="nutrition_ingredient_spinach">Спанак</string>
     <string name="nutrition_ingredient_cottage_cheese">Извара</string>
     <string name="nutrition_ingredient_nuts">Ядки</string>
+    <string name="nutrition_ingredient_courgette">Тиквички</string>
+    <string name="nutrition_ingredient_cauliflower">Карфиол</string>
+    <string name="nutrition_ingredient_lentils">Леща</string>
+    <string name="nutrition_ingredient_chickpeas">Нахут</string>
+    <string name="nutrition_ingredient_salmon">Сьомга</string>
+    <string name="nutrition_ingredient_cod">Треска</string>
+    <string name="nutrition_ingredient_pasta">Паста</string>
+    <string name="nutrition_ingredient_soy_milk">Соево мляко</string>
+    <string name="nutrition_ingredient_tofu">Тофу</string>
+    <string name="nutrition_ingredient_ham">Шунка</string>
 
     <!-- Onboarding -->
     <string name="onboarding_title">Добре дошли в Monk Fitness</string>

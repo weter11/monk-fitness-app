@@ -73,7 +73,9 @@
             "licence": "CC0 1.0"
           }
         }
-      }
+      },
+      "pork": false,
+      "lactose": false
     },
     {
       "id": "eggs",
@@ -152,7 +154,9 @@
           },
           "inflectedFrom": "Ei"
         }
-      }
+      },
+      "pork": false,
+      "lactose": false
     },
     {
       "id": "rice",
@@ -220,7 +224,9 @@
             "licence": "CC0 1.0"
           }
         }
-      }
+      },
+      "pork": false,
+      "lactose": false
     },
     {
       "id": "oats",
@@ -288,7 +294,9 @@
             "licence": "CC0 1.0"
           }
         }
-      }
+      },
+      "pork": false,
+      "lactose": false
     },
     {
       "id": "potatoes",
@@ -353,7 +361,9 @@
           },
           "inflectedFrom": "Kartoffel"
         }
-      }
+      },
+      "pork": false,
+      "lactose": false
     },
     {
       "id": "buckwheat",
@@ -416,7 +426,9 @@
             "licence": "CC0 1.0"
           }
         }
-      }
+      },
+      "pork": false,
+      "lactose": false
     },
     {
       "id": "cottage_cheese",
@@ -477,7 +489,9 @@
             "licence": "CC0 1.0"
           }
         }
-      }
+      },
+      "pork": false,
+      "lactose": true
     },
     {
       "id": "yogurt",
@@ -545,7 +559,9 @@
             "licence": "CC0 1.0"
           }
         }
-      }
+      },
+      "pork": false,
+      "lactose": true
     },
     {
       "id": "banana",
@@ -622,7 +638,9 @@
           },
           "inflectedFrom": "Banane"
         }
-      }
+      },
+      "pork": false,
+      "lactose": false
     },
     {
       "id": "apple",
@@ -700,7 +718,9 @@
           },
           "inflectedFrom": "Apfel"
         }
-      }
+      },
+      "pork": false,
+      "lactose": false
     },
     {
       "id": "nuts",
@@ -754,7 +774,9 @@
           "trust": "unverified",
           "source": "agent"
         }
-      }
+      },
+      "pork": false,
+      "lactose": false
     },
     {
       "id": "tuna",
@@ -806,6 +828,982 @@
           "trust": "unverified",
           "source": "agent"
         }
+      },
+      "pork": false,
+      "lactose": false
+    },
+    {
+      "id": "carrots",
+      "name": "nutrition_ingredient_carrots",
+      "group": "FRUITS_VEGETABLES",
+      "unit": "GRAMS",
+      "preparation": "FRESH",
+      "basis": "raw",
+      "nutrientsPer100g": {
+        "kcal": 41.0,
+        "proteinG": 0.93,
+        "fatG": 0.24,
+        "carbG": 9.58
+      },
+      "source": {
+        "source": "USDA FDC",
+        "itemId": "170393",
+        "retrievedOn": "2026-11-07"
+      },
+      "secondSource": {
+        "source": "CIQUAL 2020",
+        "itemId": "20009",
+        "kcal": 40.2,
+        "basis": "raw"
+      },
+      "pork": false,
+      "lactose": false,
+      "names": {
+        "nl": {
+          "name": "wortelen",
+          "trust": "sourced",
+          "source": {
+            "database": "Wikidata",
+            "id": "Q81",
+            "term": "prefLabel",
+            "licence": "CC0 1.0"
+          },
+          "inflectedFrom": "wortel"
+        },
+        "fr": {
+          "name": "carottes",
+          "trust": "sourced",
+          "source": {
+            "database": "AGROVOC",
+            "id": "c_9640",
+            "term": "prefLabel",
+            "licence": "CC BY 4.0"
+          },
+          "inflectedFrom": "carotte"
+        },
+        "bg": {
+          "name": "моркови",
+          "trust": "sourced",
+          "source": {
+            "database": "Wikidata",
+            "id": "Q81",
+            "term": "prefLabel",
+            "licence": "CC0 1.0"
+          },
+          "inflectedFrom": "морков"
+        },
+        "de": {
+          "name": "Karotten",
+          "trust": "sourced",
+          "source": {
+            "database": "Wikidata",
+            "id": "Q81",
+            "term": "prefLabel",
+            "licence": "CC0 1.0"
+          },
+          "inflectedFrom": "Karotte"
+        }
+      }
+    },
+    {
+      "id": "tomatoes",
+      "name": "nutrition_ingredient_tomatoes",
+      "group": "FRUITS_VEGETABLES",
+      "unit": "GRAMS",
+      "preparation": "FRESH",
+      "basis": "raw",
+      "nutrientsPer100g": {
+        "kcal": 18.0,
+        "proteinG": 0.88,
+        "fatG": 0.2,
+        "carbG": 3.89
+      },
+      "source": {
+        "source": "USDA FDC",
+        "itemId": "170457",
+        "retrievedOn": "2026-11-07"
+      },
+      "secondSource": {
+        "source": "CIQUAL 2020",
+        "itemId": "20047",
+        "kcal": 19.3,
+        "basis": "raw"
+      },
+      "pork": false,
+      "lactose": false,
+      "names": {
+        "nl": {
+          "name": "tomaten",
+          "trust": "sourced",
+          "source": {
+            "database": "Wikidata",
+            "id": "Q23501",
+            "term": "alias",
+            "licence": "CC0 1.0"
+          },
+          "note": "Wikidata's label names the plant; the shop word is the fruit's plural alias."
+        },
+        "fr": {
+          "name": "tomates",
+          "trust": "sourced",
+          "source": {
+            "database": "AGROVOC",
+            "id": "c_7805",
+            "term": "prefLabel",
+            "licence": "CC BY 4.0"
+          },
+          "inflectedFrom": "tomate"
+        },
+        "bg": {
+          "name": "домати",
+          "trust": "sourced",
+          "source": {
+            "database": "Wikidata",
+            "id": "Q23501",
+            "term": "prefLabel",
+            "licence": "CC0 1.0"
+          },
+          "inflectedFrom": "домат"
+        },
+        "de": {
+          "name": "Tomaten",
+          "trust": "sourced",
+          "source": {
+            "database": "Wikidata",
+            "id": "Q23501",
+            "term": "prefLabel",
+            "licence": "CC0 1.0"
+          },
+          "inflectedFrom": "Tomate"
+        }
+      }
+    },
+    {
+      "id": "courgette",
+      "name": "nutrition_ingredient_courgette",
+      "group": "FRUITS_VEGETABLES",
+      "unit": "GRAMS",
+      "preparation": "FRESH",
+      "basis": "raw",
+      "nutrientsPer100g": {
+        "kcal": 17.0,
+        "proteinG": 1.21,
+        "fatG": 0.32,
+        "carbG": 3.11
+      },
+      "source": {
+        "source": "USDA FDC",
+        "itemId": "169291",
+        "retrievedOn": "2026-11-07"
+      },
+      "secondSource": {
+        "source": "CIQUAL 2020",
+        "itemId": "20020",
+        "kcal": 16.5,
+        "basis": "raw"
+      },
+      "pork": false,
+      "lactose": false,
+      "names": {
+        "nl": {
+          "name": "courgettes",
+          "trust": "sourced",
+          "source": {
+            "database": "Wikidata",
+            "id": "Q7533",
+            "term": "prefLabel",
+            "licence": "CC0 1.0"
+          },
+          "inflectedFrom": "courgette"
+        },
+        "fr": {
+          "name": "courgettes",
+          "trust": "sourced",
+          "source": {
+            "database": "AGROVOC",
+            "id": "c_12414",
+            "term": "prefLabel",
+            "licence": "CC BY 4.0"
+          },
+          "inflectedFrom": "courgette"
+        },
+        "bg": {
+          "name": "тиквички",
+          "trust": "sourced",
+          "source": {
+            "database": "Wikidata",
+            "id": "Q7533",
+            "term": "prefLabel",
+            "licence": "CC0 1.0"
+          },
+          "inflectedFrom": "тиквичка"
+        },
+        "de": {
+          "name": "Zucchini",
+          "trust": "sourced",
+          "source": {
+            "database": "Wikidata",
+            "id": "Q7533",
+            "term": "prefLabel",
+            "licence": "CC0 1.0"
+          },
+          "inflectedFrom": "Zucchini"
+        }
+      }
+    },
+    {
+      "id": "cauliflower",
+      "name": "nutrition_ingredient_cauliflower",
+      "group": "FRUITS_VEGETABLES",
+      "unit": "GRAMS",
+      "preparation": "FRESH",
+      "basis": "raw",
+      "nutrientsPer100g": {
+        "kcal": 25.0,
+        "proteinG": 1.92,
+        "fatG": 0.28,
+        "carbG": 4.97
+      },
+      "source": {
+        "source": "USDA FDC",
+        "itemId": "169986",
+        "retrievedOn": "2026-11-07"
+      },
+      "secondSource": {
+        "source": "CIQUAL 2020",
+        "itemId": "20016",
+        "kcal": 26.2,
+        "basis": "raw"
+      },
+      "pork": false,
+      "lactose": false,
+      "names": {
+        "nl": {
+          "name": "bloemkool",
+          "trust": "sourced",
+          "source": {
+            "database": "Wikidata",
+            "id": "Q7537",
+            "term": "prefLabel",
+            "licence": "CC0 1.0"
+          }
+        },
+        "fr": {
+          "name": "chou fleur",
+          "trust": "sourced",
+          "source": {
+            "database": "AGROVOC",
+            "id": "c_1394",
+            "term": "prefLabel",
+            "licence": "CC BY 4.0"
+          }
+        },
+        "bg": {
+          "name": "карфиол",
+          "trust": "sourced",
+          "source": {
+            "database": "Wikidata",
+            "id": "Q7537",
+            "term": "prefLabel",
+            "licence": "CC0 1.0"
+          }
+        },
+        "de": {
+          "name": "Blumenkohl",
+          "trust": "sourced",
+          "source": {
+            "database": "Wikidata",
+            "id": "Q7537",
+            "term": "prefLabel",
+            "licence": "CC0 1.0"
+          }
+        }
+      }
+    },
+    {
+      "id": "lentils",
+      "name": "nutrition_ingredient_lentils",
+      "group": "CARBS",
+      "unit": "GRAMS",
+      "preparation": "BOILED",
+      "basis": "cooked",
+      "nutrientsPer100g": {
+        "kcal": 116.0,
+        "proteinG": 9.02,
+        "fatG": 0.38,
+        "carbG": 20.13
+      },
+      "source": {
+        "source": "USDA FDC",
+        "itemId": "172421",
+        "retrievedOn": "2026-11-07"
+      },
+      "secondSource": {
+        "source": "CIQUAL 2020",
+        "itemId": "20587",
+        "kcal": 127.0,
+        "basis": "cooked"
+      },
+      "pork": false,
+      "lactose": false,
+      "names": {
+        "nl": {
+          "name": "linzen",
+          "trust": "sourced",
+          "source": {
+            "database": "Wikidata",
+            "id": "Q61505177",
+            "term": "prefLabel",
+            "licence": "CC0 1.0"
+          },
+          "inflectedFrom": "linze"
+        },
+        "fr": {
+          "name": "lentilles",
+          "trust": "sourced",
+          "source": {
+            "database": "AGROVOC",
+            "id": "c_12140",
+            "term": "prefLabel",
+            "licence": "CC BY 4.0"
+          },
+          "inflectedFrom": "lentille"
+        },
+        "bg": {
+          "name": "леща",
+          "trust": "unverified",
+          "source": "agent",
+          "note": "Wikidata holds no Bulgarian label for the lentil."
+        },
+        "de": {
+          "name": "Linsen",
+          "trust": "sourced",
+          "source": {
+            "database": "Wikidata",
+            "id": "Q61505177",
+            "term": "prefLabel",
+            "licence": "CC0 1.0"
+          },
+          "inflectedFrom": "Linse"
+        }
+      }
+    },
+    {
+      "id": "chickpeas",
+      "name": "nutrition_ingredient_chickpeas",
+      "group": "CARBS",
+      "unit": "GRAMS",
+      "preparation": "BOILED",
+      "basis": "cooked",
+      "nutrientsPer100g": {
+        "kcal": 164.0,
+        "proteinG": 8.86,
+        "fatG": 2.59,
+        "carbG": 27.42
+      },
+      "source": {
+        "source": "USDA FDC",
+        "itemId": "173757",
+        "retrievedOn": "2026-11-07"
+      },
+      "secondSource": {
+        "source": "CIQUAL 2020",
+        "itemId": "20507",
+        "kcal": 147.0,
+        "basis": "cooked",
+        "note": "CIQUAL's boiled chickpeas hold more water than USDA's row (17.7 g carbohydrate against 27.4 g), so its energy is 10.4% lower; both are boiled, drained chickpeas."
+      },
+      "pork": false,
+      "lactose": false,
+      "names": {
+        "nl": {
+          "name": "kikkererwten",
+          "trust": "sourced",
+          "source": {
+            "database": "Wikidata",
+            "id": "Q21156930",
+            "term": "prefLabel",
+            "licence": "CC0 1.0"
+          },
+          "inflectedFrom": "kikkererwt"
+        },
+        "fr": {
+          "name": "pois chiches",
+          "trust": "sourced",
+          "source": {
+            "database": "AGROVOC",
+            "id": "c_9785",
+            "term": "prefLabel",
+            "licence": "CC BY 4.0"
+          },
+          "inflectedFrom": "pois chiche"
+        },
+        "bg": {
+          "name": "нахут",
+          "trust": "sourced",
+          "source": {
+            "database": "Wikidata",
+            "id": "Q21156930",
+            "term": "prefLabel",
+            "licence": "CC0 1.0"
+          }
+        },
+        "de": {
+          "name": "Kichererbsen",
+          "trust": "sourced",
+          "source": {
+            "database": "Wikidata",
+            "id": "Q21156930",
+            "term": "prefLabel",
+            "licence": "CC0 1.0"
+          },
+          "inflectedFrom": "Kichererbse"
+        }
+      }
+    },
+    {
+      "id": "salmon",
+      "name": "nutrition_ingredient_salmon",
+      "group": "PROTEIN",
+      "unit": "GRAMS",
+      "preparation": "GRILLED",
+      "basis": "raw",
+      "nutrientsPer100g": {
+        "kcal": 208.0,
+        "proteinG": 20.42,
+        "fatG": 13.42,
+        "carbG": 0.0
+      },
+      "source": {
+        "source": "USDA FDC",
+        "itemId": "175167",
+        "retrievedOn": "2026-11-07"
+      },
+      "secondSource": {
+        "source": "CIQUAL 2020",
+        "itemId": "26036",
+        "kcal": 194.0,
+        "basis": "raw"
+      },
+      "pork": false,
+      "lactose": false,
+      "names": {
+        "nl": {
+          "name": "zalm",
+          "trust": "sourced",
+          "source": {
+            "database": "Wikidata",
+            "id": "Q2796766",
+            "term": "prefLabel",
+            "licence": "CC0 1.0"
+          }
+        },
+        "fr": {
+          "name": "saumon",
+          "trust": "sourced",
+          "source": {
+            "database": "AGROVOC",
+            "id": "c_6756",
+            "term": "prefLabel",
+            "licence": "CC BY 4.0"
+          }
+        },
+        "bg": {
+          "name": "сьомга",
+          "trust": "sourced",
+          "source": {
+            "database": "Wikidata",
+            "id": "Q2796766",
+            "term": "prefLabel",
+            "licence": "CC0 1.0"
+          }
+        },
+        "de": {
+          "name": "Lachs",
+          "trust": "sourced",
+          "source": {
+            "database": "Wikidata",
+            "id": "Q2796766",
+            "term": "alias",
+            "licence": "CC0 1.0"
+          }
+        }
+      }
+    },
+    {
+      "id": "cod",
+      "name": "nutrition_ingredient_cod",
+      "group": "PROTEIN",
+      "unit": "GRAMS",
+      "preparation": "GRILLED",
+      "basis": "raw",
+      "nutrientsPer100g": {
+        "kcal": 82.0,
+        "proteinG": 17.81,
+        "fatG": 0.67,
+        "carbG": 0.0
+      },
+      "source": {
+        "source": "USDA FDC",
+        "itemId": "171955",
+        "retrievedOn": "2026-11-07"
+      },
+      "secondSource": {
+        "source": "CIQUAL 2020",
+        "itemId": "26043",
+        "kcal": 77.6,
+        "basis": "raw"
+      },
+      "pork": false,
+      "lactose": false,
+      "names": {
+        "nl": {
+          "name": "kabeljauw",
+          "trust": "sourced",
+          "source": {
+            "database": "Wikidata",
+            "id": "Q199788",
+            "term": "alias",
+            "licence": "CC0 1.0"
+          }
+        },
+        "fr": {
+          "name": "cabillaud",
+          "trust": "sourced",
+          "source": {
+            "database": "AGROVOC",
+            "id": "c_1717",
+            "term": "prefLabel",
+            "licence": "CC BY 4.0"
+          }
+        },
+        "bg": {
+          "name": "треска",
+          "trust": "sourced",
+          "source": {
+            "database": "Wikidata",
+            "id": "Q199788",
+            "term": "prefLabel",
+            "licence": "CC0 1.0"
+          }
+        },
+        "de": {
+          "name": "Kabeljau",
+          "trust": "unverified",
+          "source": "agent",
+          "note": "Wikidata's label names the species (Atlantischer Kabeljau); German shelves print the food's own word, and AGROVOC's German term carries no published licence."
+        }
+      }
+    },
+    {
+      "id": "pasta",
+      "name": "nutrition_ingredient_pasta",
+      "group": "CARBS",
+      "unit": "GRAMS",
+      "preparation": "BOILED",
+      "basis": "raw",
+      "nutrientsPer100g": {
+        "kcal": 371.0,
+        "proteinG": 13.04,
+        "fatG": 1.51,
+        "carbG": 74.67
+      },
+      "source": {
+        "source": "USDA FDC",
+        "itemId": "169736",
+        "retrievedOn": "2026-11-07"
+      },
+      "secondSource": {
+        "source": "CIQUAL 2020",
+        "itemId": "9810",
+        "kcal": 336.0,
+        "basis": "raw"
+      },
+      "pork": false,
+      "lactose": false,
+      "names": {
+        "nl": {
+          "name": "pasta",
+          "trust": "sourced",
+          "source": {
+            "database": "Wikidata",
+            "id": "Q178",
+            "term": "prefLabel",
+            "licence": "CC0 1.0"
+          }
+        },
+        "fr": {
+          "name": "pâte alimentaire",
+          "trust": "sourced",
+          "source": {
+            "database": "AGROVOC",
+            "id": "c_5621",
+            "term": "prefLabel",
+            "licence": "CC BY 4.0"
+          }
+        },
+        "bg": {
+          "name": "паста",
+          "trust": "sourced",
+          "source": {
+            "database": "Wikidata",
+            "id": "Q178",
+            "term": "prefLabel",
+            "licence": "CC0 1.0"
+          }
+        },
+        "de": {
+          "name": "Pasta",
+          "trust": "sourced",
+          "source": {
+            "database": "Wikidata",
+            "id": "Q178",
+            "term": "prefLabel",
+            "licence": "CC0 1.0"
+          }
+        }
+      }
+    },
+    {
+      "id": "bread",
+      "name": "nutrition_ingredient_whole_grain_bread",
+      "group": "CARBS",
+      "unit": "GRAMS",
+      "preparation": "PLAIN",
+      "basis": "raw",
+      "nutrientsPer100g": {
+        "kcal": 252.0,
+        "proteinG": 12.45,
+        "fatG": 3.5,
+        "carbG": 42.71
+      },
+      "source": {
+        "source": "USDA FDC",
+        "itemId": "172688",
+        "retrievedOn": "2026-11-07"
+      },
+      "secondSource": {
+        "source": "CIQUAL 2020",
+        "itemId": "7110",
+        "kcal": 244.0,
+        "basis": "raw"
+      },
+      "pork": false,
+      "lactose": false,
+      "names": {
+        "nl": {
+          "name": "volkorenbrood",
+          "trust": "sourced",
+          "source": {
+            "database": "Wikidata",
+            "id": "Q14650718",
+            "term": "prefLabel",
+            "licence": "CC0 1.0"
+          }
+        },
+        "fr": {
+          "name": "pain complet",
+          "trust": "sourced",
+          "source": {
+            "database": "AGROVOC",
+            "id": "c_6ffb585d",
+            "term": "prefLabel",
+            "licence": "CC BY 4.0"
+          }
+        },
+        "bg": {
+          "name": "пълнозърнест хляб",
+          "trust": "unverified",
+          "source": "agent",
+          "note": "Wikidata holds no Bulgarian label for wholemeal bread."
+        },
+        "de": {
+          "name": "Vollkornbrot",
+          "trust": "sourced",
+          "source": {
+            "database": "Wikidata",
+            "id": "Q14650718",
+            "term": "prefLabel",
+            "licence": "CC0 1.0"
+          }
+        }
+      }
+    },
+    {
+      "id": "soy_milk",
+      "name": "nutrition_ingredient_soy_milk",
+      "group": "PROTEIN",
+      "unit": "MILLILITERS",
+      "preparation": "PLAIN",
+      "basis": "raw",
+      "nutrientsPer100g": {
+        "kcal": 43.0,
+        "proteinG": 2.6,
+        "fatG": 1.47,
+        "carbG": 4.92
+      },
+      "source": {
+        "source": "USDA FDC",
+        "itemId": "172456",
+        "retrievedOn": "2026-11-07"
+      },
+      "secondSource": {
+        "source": "CIQUAL 2020",
+        "itemId": "18901",
+        "kcal": 44.2,
+        "basis": "raw"
+      },
+      "pork": false,
+      "lactose": false,
+      "names": {
+        "nl": {
+          "name": "sojamelk",
+          "trust": "sourced",
+          "source": {
+            "database": "Wikidata",
+            "id": "Q192199",
+            "term": "prefLabel",
+            "licence": "CC0 1.0"
+          }
+        },
+        "fr": {
+          "name": "lait de soja",
+          "trust": "sourced",
+          "source": {
+            "database": "AGROVOC",
+            "id": "c_15563",
+            "term": "prefLabel",
+            "licence": "CC BY 4.0"
+          }
+        },
+        "bg": {
+          "name": "соево мляко",
+          "trust": "sourced",
+          "source": {
+            "database": "Wikidata",
+            "id": "Q192199",
+            "term": "prefLabel",
+            "licence": "CC0 1.0"
+          }
+        },
+        "de": {
+          "name": "Sojamilch",
+          "trust": "sourced",
+          "source": {
+            "database": "Wikidata",
+            "id": "Q192199",
+            "term": "prefLabel",
+            "licence": "CC0 1.0"
+          }
+        }
+      }
+    },
+    {
+      "id": "tofu",
+      "name": "nutrition_ingredient_tofu",
+      "group": "PROTEIN",
+      "unit": "GRAMS",
+      "preparation": "PLAIN",
+      "basis": "raw",
+      "nutrientsPer100g": {
+        "kcal": 144.0,
+        "proteinG": 17.27,
+        "fatG": 8.72,
+        "carbG": 2.78
+      },
+      "source": {
+        "source": "USDA FDC",
+        "itemId": "172475",
+        "retrievedOn": "2026-11-07"
+      },
+      "secondSource": {
+        "source": "CIQUAL 2020",
+        "itemId": "20904",
+        "kcal": 148.0,
+        "basis": "raw"
+      },
+      "pork": false,
+      "lactose": false,
+      "names": {
+        "nl": {
+          "name": "tofu",
+          "trust": "sourced",
+          "source": {
+            "database": "Wikidata",
+            "id": "Q177378",
+            "term": "alias",
+            "licence": "CC0 1.0"
+          },
+          "note": "Albert Heijn, Jumbo and Delhaize all print the loan word \"tofu\"; Wikidata's Dutch label is the alternative spelling \"tofoe\"."
+        },
+        "fr": {
+          "name": "tofu",
+          "trust": "sourced",
+          "source": {
+            "database": "AGROVOC",
+            "id": "c_15570",
+            "term": "prefLabel",
+            "licence": "CC BY 4.0"
+          }
+        },
+        "bg": {
+          "name": "тофу",
+          "trust": "sourced",
+          "source": {
+            "database": "Wikidata",
+            "id": "Q177378",
+            "term": "prefLabel",
+            "licence": "CC0 1.0"
+          }
+        },
+        "de": {
+          "name": "Tofu",
+          "trust": "sourced",
+          "source": {
+            "database": "Wikidata",
+            "id": "Q177378",
+            "term": "prefLabel",
+            "licence": "CC0 1.0"
+          }
+        }
+      }
+    },
+    {
+      "id": "ham",
+      "name": "nutrition_ingredient_ham",
+      "group": "PROTEIN",
+      "unit": "GRAMS",
+      "preparation": "PLAIN",
+      "basis": "cooked",
+      "nutrientsPer100g": {
+        "kcal": 107.0,
+        "proteinG": 16.85,
+        "fatG": 4.04,
+        "carbG": 0.7
+      },
+      "source": {
+        "source": "USDA FDC",
+        "itemId": "173863",
+        "retrievedOn": "2026-11-07"
+      },
+      "secondSource": {
+        "source": "CIQUAL 2020",
+        "itemId": "28913",
+        "kcal": 114.0,
+        "basis": "cooked"
+      },
+      "pork": true,
+      "lactose": false,
+      "names": {
+        "nl": {
+          "name": "ham",
+          "trust": "sourced",
+          "source": {
+            "database": "Wikidata",
+            "id": "Q170486",
+            "term": "prefLabel",
+            "licence": "CC0 1.0"
+          }
+        },
+        "fr": {
+          "name": "jambon",
+          "trust": "sourced",
+          "source": {
+            "database": "AGROVOC",
+            "id": "c_3481",
+            "term": "prefLabel",
+            "licence": "CC BY 4.0"
+          }
+        },
+        "bg": {
+          "name": "шунка",
+          "trust": "sourced",
+          "source": {
+            "database": "Wikidata",
+            "id": "Q170486",
+            "term": "prefLabel",
+            "licence": "CC0 1.0"
+          }
+        },
+        "de": {
+          "name": "Schinken",
+          "trust": "sourced",
+          "source": {
+            "database": "Wikidata",
+            "id": "Q170486",
+            "term": "prefLabel",
+            "licence": "CC0 1.0"
+          }
+        }
+      }
+    },
+    {
+      "id": "milk",
+      "name": "nutrition_ingredient_milk",
+      "group": "PROTEIN",
+      "unit": "MILLILITERS",
+      "preparation": "PLAIN",
+      "basis": "raw",
+      "nutrientsPer100g": {
+        "kcal": 50.0,
+        "proteinG": 3.3,
+        "fatG": 1.98,
+        "carbG": 4.8
+      },
+      "source": {
+        "source": "USDA FDC",
+        "itemId": "171267",
+        "retrievedOn": "2026-11-07"
+      },
+      "secondSource": {
+        "source": "CIQUAL 2020",
+        "itemId": "19041",
+        "kcal": 47.0,
+        "basis": "raw"
+      },
+      "pork": false,
+      "lactose": true,
+      "names": {
+        "nl": {
+          "name": "melk",
+          "trust": "sourced",
+          "source": {
+            "database": "Wikidata",
+            "id": "Q8495",
+            "term": "prefLabel",
+            "licence": "CC0 1.0"
+          }
+        },
+        "fr": {
+          "name": "lait",
+          "trust": "sourced",
+          "source": {
+            "database": "AGROVOC",
+            "id": "c_4826",
+            "term": "prefLabel",
+            "licence": "CC BY 4.0"
+          }
+        },
+        "bg": {
+          "name": "мляко",
+          "trust": "sourced",
+          "source": {
+            "database": "Wikidata",
+            "id": "Q8495",
+            "term": "prefLabel",
+            "licence": "CC0 1.0"
+          }
+        },
+        "de": {
+          "name": "Milch",
+          "trust": "sourced",
+          "source": {
+            "database": "Wikidata",
+            "id": "Q8495",
+            "term": "prefLabel",
+            "licence": "CC0 1.0"
+          }
+        }
       }
     }
   ],
@@ -828,6 +1826,11 @@
           "ingredient": "banana",
           "amount": 1
         }
+      ],
+      "main": [
+        "oats",
+        "yogurt",
+        "banana"
       ]
     },
     {
@@ -852,6 +1855,10 @@
           "ingredient": "yogurt",
           "amount": 150
         }
+      ],
+      "main": [
+        "rice",
+        "eggs"
       ]
     },
     {
@@ -872,6 +1879,11 @@
           "ingredient": "apple",
           "amount": 1
         }
+      ],
+      "main": [
+        "cottage_cheese",
+        "yogurt",
+        "apple"
       ]
     },
     {
@@ -892,6 +1904,10 @@
           "ingredient": "apple",
           "amount": 1
         }
+      ],
+      "main": [
+        "eggs",
+        "cottage_cheese"
       ]
     },
     {
@@ -912,6 +1928,11 @@
           "ingredient": "banana",
           "amount": 1
         }
+      ],
+      "main": [
+        "oats",
+        "cottage_cheese",
+        "banana"
       ]
     },
     {
@@ -932,6 +1953,10 @@
           "ingredient": "yogurt",
           "amount": 180
         }
+      ],
+      "main": [
+        "eggs",
+        "buckwheat"
       ]
     },
     {
@@ -952,6 +1977,10 @@
           "ingredient": "apple",
           "amount": 1
         }
+      ],
+      "main": [
+        "chicken",
+        "rice"
       ]
     },
     {
@@ -972,6 +2001,10 @@
           "ingredient": "banana",
           "amount": 1
         }
+      ],
+      "main": [
+        "tuna",
+        "potatoes"
       ]
     },
     {
@@ -992,6 +2025,10 @@
           "ingredient": "yogurt",
           "amount": 150
         }
+      ],
+      "main": [
+        "chicken",
+        "buckwheat"
       ]
     },
     {
@@ -1012,6 +2049,10 @@
           "ingredient": "potatoes",
           "amount": 250
         }
+      ],
+      "main": [
+        "chicken",
+        "potatoes"
       ]
     },
     {
@@ -1032,6 +2073,11 @@
           "ingredient": "apple",
           "amount": 1
         }
+      ],
+      "main": [
+        "tuna",
+        "rice",
+        "apple"
       ]
     },
     {
@@ -1052,6 +2098,11 @@
           "ingredient": "nuts",
           "amount": 15
         }
+      ],
+      "main": [
+        "chicken",
+        "potatoes",
+        "nuts"
       ]
     },
     {
@@ -1072,6 +2123,10 @@
           "ingredient": "banana",
           "amount": 1
         }
+      ],
+      "main": [
+        "chicken",
+        "rice"
       ]
     },
     {
@@ -1092,6 +2147,10 @@
           "ingredient": "apple",
           "amount": 1
         }
+      ],
+      "main": [
+        "eggs",
+        "buckwheat"
       ]
     },
     {
@@ -1112,6 +2171,11 @@
           "ingredient": "potatoes",
           "amount": 260
         }
+      ],
+      "main": [
+        "chicken",
+        "cottage_cheese",
+        "potatoes"
       ]
     },
     {
@@ -1132,6 +2196,11 @@
           "ingredient": "potatoes",
           "amount": 250
         }
+      ],
+      "main": [
+        "tuna",
+        "eggs",
+        "potatoes"
       ]
     },
     {
@@ -1152,6 +2221,11 @@
           "ingredient": "apple",
           "amount": 1
         }
+      ],
+      "main": [
+        "chicken",
+        "buckwheat",
+        "apple"
       ]
     },
     {
@@ -1172,6 +2246,11 @@
           "ingredient": "nuts",
           "amount": 20
         }
+      ],
+      "main": [
+        "cottage_cheese",
+        "potatoes",
+        "nuts"
       ]
     },
     {
@@ -1192,6 +2271,11 @@
           "ingredient": "oats",
           "amount": 40
         }
+      ],
+      "main": [
+        "yogurt",
+        "banana",
+        "oats"
       ]
     },
     {
@@ -1212,6 +2296,10 @@
           "ingredient": "apple",
           "amount": 1
         }
+      ],
+      "main": [
+        "yogurt",
+        "banana"
       ]
     },
     {
@@ -1228,6 +2316,10 @@
           "ingredient": "banana",
           "amount": 1
         }
+      ],
+      "main": [
+        "cottage_cheese",
+        "banana"
       ]
     },
     {
@@ -1248,6 +2340,10 @@
           "ingredient": "apple",
           "amount": 1
         }
+      ],
+      "main": [
+        "yogurt",
+        "cottage_cheese"
       ]
     },
     {
@@ -1268,6 +2364,11 @@
           "ingredient": "nuts",
           "amount": 15
         }
+      ],
+      "main": [
+        "yogurt",
+        "banana",
+        "nuts"
       ]
     },
     {
@@ -1288,6 +2389,10 @@
           "ingredient": "yogurt",
           "amount": 150
         }
+      ],
+      "main": [
+        "eggs",
+        "yogurt"
       ]
     },
     {
@@ -1304,6 +2409,10 @@
           "ingredient": "yogurt",
           "amount": 150
         }
+      ],
+      "main": [
+        "banana",
+        "yogurt"
       ]
     },
     {
@@ -1324,6 +2433,10 @@
           "ingredient": "yogurt",
           "amount": 150
         }
+      ],
+      "main": [
+        "apple",
+        "oats"
       ]
     },
     {
@@ -1340,6 +2453,10 @@
           "ingredient": "apple",
           "amount": 1
         }
+      ],
+      "main": [
+        "cottage_cheese",
+        "apple"
       ]
     },
     {
@@ -1356,6 +2473,10 @@
           "ingredient": "yogurt",
           "amount": 150
         }
+      ],
+      "main": [
+        "eggs",
+        "yogurt"
       ]
     },
     {
@@ -1376,6 +2497,11 @@
           "ingredient": "nuts",
           "amount": 15
         }
+      ],
+      "main": [
+        "yogurt",
+        "banana",
+        "nuts"
       ]
     },
     {
@@ -1396,6 +2522,749 @@
           "ingredient": "nuts",
           "amount": 15
         }
+      ],
+      "main": [
+        "cottage_cheese",
+        "banana",
+        "nuts"
+      ]
+    },
+    {
+      "id": "breakfast_high_carb_3",
+      "slot": "BREAKFAST",
+      "profile": "HIGH_CARB",
+      "optional": false,
+      "ingredients": [
+        {
+          "ingredient": "oats",
+          "amount": 80
+        },
+        {
+          "ingredient": "soy_milk",
+          "amount": 250
+        },
+        {
+          "ingredient": "banana",
+          "amount": 1
+        }
+      ],
+      "main": [
+        "oats",
+        "soy_milk",
+        "banana"
+      ]
+    },
+    {
+      "id": "breakfast_high_carb_4",
+      "slot": "BREAKFAST",
+      "profile": "HIGH_CARB",
+      "optional": false,
+      "ingredients": [
+        {
+          "ingredient": "bread",
+          "amount": 120
+        },
+        {
+          "ingredient": "chickpeas",
+          "amount": 100
+        },
+        {
+          "ingredient": "tomatoes",
+          "amount": 120
+        }
+      ],
+      "main": [
+        "bread",
+        "chickpeas"
+      ]
+    },
+    {
+      "id": "breakfast_high_protein_3",
+      "slot": "BREAKFAST",
+      "profile": "HIGH_PROTEIN",
+      "optional": false,
+      "ingredients": [
+        {
+          "ingredient": "eggs",
+          "amount": 3
+        },
+        {
+          "ingredient": "tofu",
+          "amount": 150
+        },
+        {
+          "ingredient": "tomatoes",
+          "amount": 100
+        }
+      ],
+      "main": [
+        "eggs",
+        "tofu"
+      ]
+    },
+    {
+      "id": "breakfast_high_protein_4",
+      "slot": "BREAKFAST",
+      "profile": "HIGH_PROTEIN",
+      "optional": false,
+      "ingredients": [
+        {
+          "ingredient": "tofu",
+          "amount": 200
+        },
+        {
+          "ingredient": "bread",
+          "amount": 90
+        },
+        {
+          "ingredient": "courgette",
+          "amount": 100
+        }
+      ],
+      "main": [
+        "tofu",
+        "bread"
+      ]
+    },
+    {
+      "id": "breakfast_balanced_3",
+      "slot": "BREAKFAST",
+      "profile": "BALANCED",
+      "optional": false,
+      "ingredients": [
+        {
+          "ingredient": "oats",
+          "amount": 70
+        },
+        {
+          "ingredient": "soy_milk",
+          "amount": 250
+        },
+        {
+          "ingredient": "apple",
+          "amount": 1
+        },
+        {
+          "ingredient": "nuts",
+          "amount": 10
+        }
+      ],
+      "main": [
+        "oats",
+        "soy_milk"
+      ]
+    },
+    {
+      "id": "breakfast_balanced_4",
+      "slot": "BREAKFAST",
+      "profile": "BALANCED",
+      "optional": false,
+      "ingredients": [
+        {
+          "ingredient": "bread",
+          "amount": 80
+        },
+        {
+          "ingredient": "eggs",
+          "amount": 2
+        },
+        {
+          "ingredient": "cauliflower",
+          "amount": 100
+        }
+      ],
+      "main": [
+        "bread",
+        "eggs"
+      ]
+    },
+    {
+      "id": "breakfast_balanced_5",
+      "slot": "BREAKFAST",
+      "profile": "BALANCED",
+      "optional": false,
+      "ingredients": [
+        {
+          "ingredient": "lentils",
+          "amount": 250
+        },
+        {
+          "ingredient": "bread",
+          "amount": 70
+        },
+        {
+          "ingredient": "tomatoes",
+          "amount": 100
+        }
+      ],
+      "main": [
+        "lentils",
+        "bread"
+      ]
+    },
+    {
+      "id": "lunch_high_carb_3",
+      "slot": "LUNCH",
+      "profile": "HIGH_CARB",
+      "optional": false,
+      "ingredients": [
+        {
+          "ingredient": "pasta",
+          "amount": 130
+        },
+        {
+          "ingredient": "chicken",
+          "amount": 120
+        },
+        {
+          "ingredient": "tomatoes",
+          "amount": 150
+        }
+      ],
+      "main": [
+        "pasta",
+        "chicken"
+      ]
+    },
+    {
+      "id": "lunch_high_carb_4",
+      "slot": "LUNCH",
+      "profile": "HIGH_CARB",
+      "optional": false,
+      "ingredients": [
+        {
+          "ingredient": "rice",
+          "amount": 280
+        },
+        {
+          "ingredient": "salmon",
+          "amount": 100
+        },
+        {
+          "ingredient": "carrots",
+          "amount": 100
+        }
+      ],
+      "main": [
+        "rice",
+        "salmon"
+      ]
+    },
+    {
+      "id": "lunch_high_protein_3",
+      "slot": "LUNCH",
+      "profile": "HIGH_PROTEIN",
+      "optional": false,
+      "ingredients": [
+        {
+          "ingredient": "cod",
+          "amount": 220
+        },
+        {
+          "ingredient": "potatoes",
+          "amount": 350
+        },
+        {
+          "ingredient": "courgette",
+          "amount": 150
+        },
+        {
+          "ingredient": "bread",
+          "amount": 60
+        }
+      ],
+      "main": [
+        "cod",
+        "potatoes"
+      ]
+    },
+    {
+      "id": "lunch_high_protein_4",
+      "slot": "LUNCH",
+      "profile": "HIGH_PROTEIN",
+      "optional": false,
+      "ingredients": [
+        {
+          "ingredient": "chicken",
+          "amount": 180
+        },
+        {
+          "ingredient": "lentils",
+          "amount": 150
+        },
+        {
+          "ingredient": "tomatoes",
+          "amount": 150
+        },
+        {
+          "ingredient": "rice",
+          "amount": 100
+        }
+      ],
+      "main": [
+        "chicken",
+        "lentils"
+      ]
+    },
+    {
+      "id": "lunch_balanced_3",
+      "slot": "LUNCH",
+      "profile": "BALANCED",
+      "optional": false,
+      "ingredients": [
+        {
+          "ingredient": "salmon",
+          "amount": 140
+        },
+        {
+          "ingredient": "potatoes",
+          "amount": 300
+        },
+        {
+          "ingredient": "courgette",
+          "amount": 150
+        }
+      ],
+      "main": [
+        "salmon",
+        "potatoes"
+      ]
+    },
+    {
+      "id": "lunch_balanced_4",
+      "slot": "LUNCH",
+      "profile": "BALANCED",
+      "optional": false,
+      "ingredients": [
+        {
+          "ingredient": "chickpeas",
+          "amount": 200
+        },
+        {
+          "ingredient": "bread",
+          "amount": 100
+        },
+        {
+          "ingredient": "tomatoes",
+          "amount": 150
+        }
+      ],
+      "main": [
+        "chickpeas",
+        "bread"
+      ]
+    },
+    {
+      "id": "dinner_high_carb_3",
+      "slot": "DINNER",
+      "profile": "HIGH_CARB",
+      "optional": false,
+      "ingredients": [
+        {
+          "ingredient": "potatoes",
+          "amount": 400
+        },
+        {
+          "ingredient": "salmon",
+          "amount": 100
+        },
+        {
+          "ingredient": "courgette",
+          "amount": 150
+        }
+      ],
+      "main": [
+        "potatoes",
+        "salmon"
+      ]
+    },
+    {
+      "id": "dinner_high_carb_4",
+      "slot": "DINNER",
+      "profile": "HIGH_CARB",
+      "optional": false,
+      "ingredients": [
+        {
+          "ingredient": "pasta",
+          "amount": 140
+        },
+        {
+          "ingredient": "tuna",
+          "amount": 100
+        },
+        {
+          "ingredient": "tomatoes",
+          "amount": 150
+        }
+      ],
+      "main": [
+        "pasta",
+        "tuna"
+      ]
+    },
+    {
+      "id": "dinner_high_protein_3",
+      "slot": "DINNER",
+      "profile": "HIGH_PROTEIN",
+      "optional": false,
+      "ingredients": [
+        {
+          "ingredient": "cod",
+          "amount": 220
+        },
+        {
+          "ingredient": "cauliflower",
+          "amount": 200
+        },
+        {
+          "ingredient": "potatoes",
+          "amount": 250
+        },
+        {
+          "ingredient": "bread",
+          "amount": 60
+        }
+      ],
+      "main": [
+        "cod",
+        "cauliflower"
+      ]
+    },
+    {
+      "id": "dinner_high_protein_4",
+      "slot": "DINNER",
+      "profile": "HIGH_PROTEIN",
+      "optional": false,
+      "ingredients": [
+        {
+          "ingredient": "ham",
+          "amount": 100
+        },
+        {
+          "ingredient": "potatoes",
+          "amount": 400
+        },
+        {
+          "ingredient": "carrots",
+          "amount": 150
+        },
+        {
+          "ingredient": "bread",
+          "amount": 60
+        }
+      ],
+      "main": [
+        "ham",
+        "potatoes"
+      ]
+    },
+    {
+      "id": "dinner_balanced_3",
+      "slot": "DINNER",
+      "profile": "BALANCED",
+      "optional": false,
+      "ingredients": [
+        {
+          "ingredient": "tofu",
+          "amount": 180
+        },
+        {
+          "ingredient": "rice",
+          "amount": 200
+        },
+        {
+          "ingredient": "cauliflower",
+          "amount": 150
+        }
+      ],
+      "main": [
+        "tofu",
+        "rice"
+      ]
+    },
+    {
+      "id": "dinner_balanced_4",
+      "slot": "DINNER",
+      "profile": "BALANCED",
+      "optional": false,
+      "ingredients": [
+        {
+          "ingredient": "lentils",
+          "amount": 250
+        },
+        {
+          "ingredient": "potatoes",
+          "amount": 300
+        },
+        {
+          "ingredient": "tomatoes",
+          "amount": 150
+        }
+      ],
+      "main": [
+        "lentils",
+        "potatoes"
+      ]
+    },
+    {
+      "id": "post_workout_high_carb_3",
+      "slot": "POST_WORKOUT",
+      "profile": "HIGH_CARB",
+      "optional": false,
+      "ingredients": [
+        {
+          "ingredient": "oats",
+          "amount": 40
+        },
+        {
+          "ingredient": "milk",
+          "amount": 250
+        },
+        {
+          "ingredient": "banana",
+          "amount": 1
+        }
+      ],
+      "main": [
+        "oats",
+        "milk",
+        "banana"
+      ]
+    },
+    {
+      "id": "post_workout_high_carb_4",
+      "slot": "POST_WORKOUT",
+      "profile": "HIGH_CARB",
+      "optional": false,
+      "ingredients": [
+        {
+          "ingredient": "bread",
+          "amount": 100
+        },
+        {
+          "ingredient": "banana",
+          "amount": 1
+        }
+      ],
+      "main": [
+        "bread",
+        "banana"
+      ]
+    },
+    {
+      "id": "post_workout_high_protein_3",
+      "slot": "POST_WORKOUT",
+      "profile": "HIGH_PROTEIN",
+      "optional": false,
+      "ingredients": [
+        {
+          "ingredient": "tofu",
+          "amount": 200
+        },
+        {
+          "ingredient": "apple",
+          "amount": 1
+        }
+      ],
+      "main": [
+        "tofu",
+        "apple"
+      ]
+    },
+    {
+      "id": "post_workout_high_protein_4",
+      "slot": "POST_WORKOUT",
+      "profile": "HIGH_PROTEIN",
+      "optional": false,
+      "ingredients": [
+        {
+          "ingredient": "ham",
+          "amount": 80
+        },
+        {
+          "ingredient": "bread",
+          "amount": 80
+        },
+        {
+          "ingredient": "tomatoes",
+          "amount": 100
+        }
+      ],
+      "main": [
+        "ham",
+        "bread"
+      ]
+    },
+    {
+      "id": "post_workout_balanced_3",
+      "slot": "POST_WORKOUT",
+      "profile": "BALANCED",
+      "optional": false,
+      "ingredients": [
+        {
+          "ingredient": "salmon",
+          "amount": 80
+        },
+        {
+          "ingredient": "bread",
+          "amount": 70
+        },
+        {
+          "ingredient": "tomatoes",
+          "amount": 100
+        }
+      ],
+      "main": [
+        "salmon",
+        "bread"
+      ]
+    },
+    {
+      "id": "post_workout_balanced_4",
+      "slot": "POST_WORKOUT",
+      "profile": "BALANCED",
+      "optional": false,
+      "ingredients": [
+        {
+          "ingredient": "chickpeas",
+          "amount": 150
+        },
+        {
+          "ingredient": "banana",
+          "amount": 1
+        }
+      ],
+      "main": [
+        "chickpeas",
+        "banana"
+      ]
+    },
+    {
+      "id": "snack_high_carb_3",
+      "slot": "SNACK",
+      "profile": "HIGH_CARB",
+      "optional": false,
+      "ingredients": [
+        {
+          "ingredient": "bread",
+          "amount": 60
+        },
+        {
+          "ingredient": "banana",
+          "amount": 1
+        }
+      ],
+      "main": [
+        "bread",
+        "banana"
+      ]
+    },
+    {
+      "id": "snack_high_carb_4",
+      "slot": "SNACK",
+      "profile": "HIGH_CARB",
+      "optional": false,
+      "ingredients": [
+        {
+          "ingredient": "apple",
+          "amount": 1
+        },
+        {
+          "ingredient": "bread",
+          "amount": 60
+        },
+        {
+          "ingredient": "nuts",
+          "amount": 10
+        }
+      ],
+      "main": [
+        "apple",
+        "bread"
+      ]
+    },
+    {
+      "id": "snack_high_protein_3",
+      "slot": "SNACK",
+      "profile": "HIGH_PROTEIN",
+      "optional": false,
+      "ingredients": [
+        {
+          "ingredient": "tofu",
+          "amount": 150
+        },
+        {
+          "ingredient": "tomatoes",
+          "amount": 100
+        }
+      ],
+      "main": [
+        "tofu",
+        "tomatoes"
+      ]
+    },
+    {
+      "id": "snack_high_protein_4",
+      "slot": "SNACK",
+      "profile": "HIGH_PROTEIN",
+      "optional": false,
+      "ingredients": [
+        {
+          "ingredient": "ham",
+          "amount": 60
+        },
+        {
+          "ingredient": "bread",
+          "amount": 60
+        },
+        {
+          "ingredient": "tomatoes",
+          "amount": 100
+        }
+      ],
+      "main": [
+        "ham",
+        "bread"
+      ]
+    },
+    {
+      "id": "snack_balanced_3",
+      "slot": "SNACK",
+      "profile": "BALANCED",
+      "optional": false,
+      "ingredients": [
+        {
+          "ingredient": "chickpeas",
+          "amount": 120
+        },
+        {
+          "ingredient": "carrots",
+          "amount": 150
+        }
+      ],
+      "main": [
+        "chickpeas",
+        "carrots"
+      ]
+    },
+    {
+      "id": "snack_balanced_4",
+      "slot": "SNACK",
+      "profile": "BALANCED",
+      "optional": false,
+      "ingredients": [
+        {
+          "ingredient": "salmon",
+          "amount": 60
+        },
+        {
+          "ingredient": "bread",
+          "amount": 50
+        }
+      ],
+      "main": [
+        "salmon",
+        "bread"
       ]
     }
   ]

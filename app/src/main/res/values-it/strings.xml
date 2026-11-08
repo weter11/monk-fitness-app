@@ -294,6 +294,9 @@
     <string name="nutrition_step_prepare_dairy_base">Metti lo yogurt o la ricotta nella ciotola.</string>
     <string name="nutrition_step_finish_with_toppings">Aggiungi gli alimenti rimanenti e servi il pasto.</string>
     <string name="nutrition_step_finish_simple">Servi il pasto e mangialo mentre è caldo.</string>
+    <string name="nutrition_step_cook_pasta">Cuoci la pasta finché non è tenera.</string>
+    <string name="nutrition_step_grill_fish">Griglia il pesce finché non è cotto.</string>
+    <string name="nutrition_step_prepare_fresh">Prepara gli ingredienti freschi.</string>
     <string name="nutrition_breakfast_option_1">Fiocchi d\'avena con latte, banana, burro di arachidi e proteine del siero.</string>
     <string name="nutrition_breakfast_option_2">Uova, pane tostato integrale e yogurt greco.</string>
     <string name="nutrition_breakfast_option_3">Ricotta con frutti di bosco, miele e frutta secca mista.</string>
@@ -329,6 +332,16 @@
     <string name="nutrition_ingredient_spinach">Spinaci</string>
     <string name="nutrition_ingredient_cottage_cheese">Ricotta</string>
     <string name="nutrition_ingredient_nuts">Frutta secca</string>
+    <string name="nutrition_ingredient_courgette">Zucchine</string>
+    <string name="nutrition_ingredient_cauliflower">Cavolfiore</string>
+    <string name="nutrition_ingredient_lentils">Lenticchie</string>
+    <string name="nutrition_ingredient_chickpeas">Ceci</string>
+    <string name="nutrition_ingredient_salmon">Salmone</string>
+    <string name="nutrition_ingredient_cod">Merluzzo</string>
+    <string name="nutrition_ingredient_pasta">Pasta</string>
+    <string name="nutrition_ingredient_soy_milk">Latte di soia</string>
+    <string name="nutrition_ingredient_tofu">Tofu</string>
+    <string name="nutrition_ingredient_ham">Prosciutto cotto</string>
 
     <!-- Onboarding -->
     <string name="onboarding_title">Benvenuto in Monk Fitness</string>

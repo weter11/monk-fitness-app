@@ -152,11 +152,11 @@ class NutritionCatalogueValidationTest {
                 abs(kcal - runtime.calories) <= kcal * 0.02
             )
 
-            val legacy = legacyTotals.getValue(template.id)
-            val difference = (kcal - legacy.first) / legacy.first * 100.0
+            val legacy = legacyTotals[template.id]
             report.append(
-                "${template.id},${legacy.first},${"%.1f".format(kcal)},${"%+.1f".format(difference)}," +
-                    "${legacy.second},${"%.1f".format(protein)}\n"
+                "${template.id},${legacy?.first ?: ""},${"%.1f".format(kcal)}," +
+                    "${legacy?.let { "%+.1f".format((kcal - it.first) / it.first * 100.0) } ?: ""}," +
+                    "${legacy?.second ?: ""},${"%.1f".format(protein)}\n"
             )
         }
         println(report)

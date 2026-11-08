@@ -63,6 +63,9 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.material3.Icon
 import androidx.compose.material3.FilterChip
 import androidx.compose.ui.Alignment
+import com.monkfitness.app.data.model.NutritionNaming
+import com.monkfitness.app.ui.nutrition.nutritionDishTitle
+import com.monkfitness.app.ui.nutrition.rememberNutritionNaming
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Settings
 
@@ -91,10 +94,14 @@ fun NutritionScreen(
     val showExpirationWarning by viewModel.shouldShowNutritionExpirationWarning.collectAsState()
     var showAvailableProductsDialog by remember { mutableStateOf(false) }
     val previewPlan by viewModel.previewNutritionPlan.collectAsState()
+    val storedMarket by viewModel.nutritionMarket.collectAsState()
+    val storedLanguage by viewModel.nutritionMarketLanguage.collectAsState()
+    val naming = rememberNutritionNaming(storedMarket, storedLanguage)
 
     if (previewPlan != null) {
         NutritionPreviewDialog(
             previewPlan = previewPlan!!,
+            naming = naming,
             currentPlan = plan,
             availableProducts = availableProducts,
             onDismiss = viewModel::clearPreviewCycle,
@@ -320,7 +327,8 @@ fun NutritionScreen(
                 NutritionDayCard(
                     day = day,
                     status = day.statusOn(todayDayNumber),
-                    dayCount = plan.days.size
+                    dayCount = plan.days.size,
+                    naming = naming
                 )
             }
         }
@@ -431,7 +439,7 @@ private fun dayStatusLine(day: NutritionDayPlan, status: NutritionDayStatus, day
 }
 
 @Composable
-private fun NutritionDayCard(day: NutritionDayPlan, status: NutritionDayStatus, dayCount: Int) {
+private fun NutritionDayCard(day: NutritionDayPlan, status: NutritionDayStatus, dayCount: Int, naming: NutritionNaming) {
     Card(modifier = Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)) {
         Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -458,18 +466,19 @@ private fun NutritionDayCard(day: NutritionDayPlan, status: NutritionDayStatus, 
                     color = MaterialTheme.colorScheme.secondary
                 )
             }
-            day.meals.forEach { meal -> NutritionMealCard(meal = meal) }
+            day.meals.forEach { meal -> NutritionMealCard(meal = meal, naming = naming) }
         }
     }
 }
 
 @Composable
-private fun NutritionMealCard(meal: NutritionMeal) {
+private fun NutritionMealCard(meal: NutritionMeal, naming: NutritionNaming) {
     Surface(modifier = Modifier.fillMaxWidth(), shape = MaterialTheme.shapes.large, color = MaterialTheme.colorScheme.surfaceVariant) {
         Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                 Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                    Text(text = stringResource(meal.type.labelRes), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                    Text(text = nutritionDishTitle(meal = meal, naming = naming), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                    Text(text = stringResource(meal.type.labelRes), style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.secondary)
                     Text(text = stringResource(meal.mealType.labelRes), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary)
                 }
                 if (meal.optional) {
@@ -566,6 +575,7 @@ private fun previewRangeLabel(days: Int): String = when (days) {
 @Composable
 fun NutritionPreviewDialog(
     previewPlan: NutritionPlan,
+    naming: NutritionNaming,
     currentPlan: NutritionPlan,
     availableProducts: Set<String>,
     onDismiss: () -> Unit,
@@ -767,7 +777,8 @@ fun NutritionPreviewDialog(
 
                             day.meals.forEach { meal ->
                                 Column(modifier = Modifier.padding(vertical = 4.dp)) {
-                                    Text(stringResource(meal.type.labelRes), style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold)
+                                    Text(nutritionDishTitle(meal = meal, naming = naming), style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold)
+                                    Text(stringResource(meal.type.labelRes), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.secondary)
                                     meal.ingredients.forEach { ingredientAmount ->
                                         val quantity = when (ingredientAmount.ingredient.unit) {
                                             NutritionQuantityUnit.GRAMS -> stringResource(R.string.nutrition_quantity_grams, ingredientAmount.amount)

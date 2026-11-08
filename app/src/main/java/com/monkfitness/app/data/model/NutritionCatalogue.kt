@@ -84,7 +84,21 @@ private val ingredientNameRes: Map<String, Int> = mapOf(
     "nutrition_ingredient_banana" to R.string.nutrition_ingredient_banana,
     "nutrition_ingredient_apple" to R.string.nutrition_ingredient_apple,
     "nutrition_ingredient_nuts" to R.string.nutrition_ingredient_nuts,
-    "nutrition_ingredient_tuna" to R.string.nutrition_ingredient_tuna
+    "nutrition_ingredient_tuna" to R.string.nutrition_ingredient_tuna,
+    "nutrition_ingredient_carrots" to R.string.nutrition_ingredient_carrots,
+    "nutrition_ingredient_tomatoes" to R.string.nutrition_ingredient_tomatoes,
+    "nutrition_ingredient_courgette" to R.string.nutrition_ingredient_courgette,
+    "nutrition_ingredient_cauliflower" to R.string.nutrition_ingredient_cauliflower,
+    "nutrition_ingredient_lentils" to R.string.nutrition_ingredient_lentils,
+    "nutrition_ingredient_chickpeas" to R.string.nutrition_ingredient_chickpeas,
+    "nutrition_ingredient_salmon" to R.string.nutrition_ingredient_salmon,
+    "nutrition_ingredient_cod" to R.string.nutrition_ingredient_cod,
+    "nutrition_ingredient_pasta" to R.string.nutrition_ingredient_pasta,
+    "nutrition_ingredient_whole_grain_bread" to R.string.nutrition_ingredient_whole_grain_bread,
+    "nutrition_ingredient_soy_milk" to R.string.nutrition_ingredient_soy_milk,
+    "nutrition_ingredient_tofu" to R.string.nutrition_ingredient_tofu,
+    "nutrition_ingredient_ham" to R.string.nutrition_ingredient_ham,
+    "nutrition_ingredient_milk" to R.string.nutrition_ingredient_milk
 )
 
 internal class ParsedNutritionCatalogue(
@@ -117,6 +131,14 @@ object NutritionCatalogue {
 
     internal val templatesById: Map<String, NutritionMealTemplate>
         get() = parsed().templatesById
+
+    /** How many foods the catalogue knows, for the statistics screen the planner preps for. */
+    val ingredientCount: Int
+        get() = parsed().ingredients.size
+
+    /** How many dishes a cycle can draw from, counted the same way. */
+    val dishCount: Int
+        get() = parsed().templates.size
 
     /** Loads [json] once; a later call is ignored, so the first parse is the catalogue. */
     fun load(json: String) {
@@ -164,7 +186,9 @@ internal fun parseCatalogue(json: String): ParsedNutritionCatalogue {
             },
             gramsPerPiece = if (unit == NutritionQuantityUnit.PIECES) entry.number("pieceGrams").toInt() else null,
             pieceSource = entry.sourceRefOrNull("pieceSource"),
-            names = entry.objOrNull("names")?.let(::namesOf).orEmpty()
+            names = entry.objOrNull("names")?.let(::namesOf).orEmpty(),
+            pork = entry["pork"] as? Boolean ?: false,
+            lactose = entry["lactose"] as? Boolean ?: false
         )
     }
     val byKey = ingredients.associateBy { it.key }
@@ -176,11 +200,23 @@ internal fun parseCatalogue(json: String): ParsedNutritionCatalogue {
             val ingredient = byKey[key] ?: error("catalogue: template ${entry.string("id")} names unknown ingredient $key")
             NutritionIngredientAmount(ingredient, amount.number("amount").toInt())
         }
+        val main = (entry["main"] as? List<*>)?.map { it as? String ?: error("catalogue: a main ingredient must be a string") }
+            ?: error("catalogue: template ${entry.string("id")} has no main ingredients")
+        require(main.size in 2..3) { "catalogue: template ${entry.string("id")} is named after ${main.size} ingredients" }
+        main.forEach { key ->
+            require(amounts.any { it.ingredient.key == key }) {
+                "catalogue: template ${entry.string("id")} is named after $key, which it does not contain"
+            }
+            require(key in NUTRITION_NAME_ORDER) {
+                "catalogue: $key has no place in the name order, so its dishes would read differently"
+            }
+        }
         NutritionMealTemplate(
             id = entry.string("id"),
             type = entry.enumValue("slot"),
             mealType = entry.enumValue("profile"),
             ingredients = amounts,
+            mainIngredientKeys = main,
             calories = amounts.sumOf { it.ingredient.kcalFor(it.amount) }.roundToInt(),
             proteinGrams = amounts.sumOf { it.ingredient.proteinFor(it.amount) }.roundToInt(),
             optional = entry["optional"] as? Boolean ?: false

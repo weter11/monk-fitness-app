@@ -32,6 +32,9 @@ import com.monkfitness.app.R
 import com.monkfitness.app.data.model.NutritionDayPlan
 import com.monkfitness.app.data.model.NutritionIngredientAmount
 import com.monkfitness.app.data.model.NutritionMeal
+import com.monkfitness.app.data.model.NutritionNaming
+import com.monkfitness.app.ui.nutrition.nutritionDishTitle
+import com.monkfitness.app.ui.nutrition.rememberNutritionNaming
 import com.monkfitness.app.viewmodel.MainViewModel
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -43,6 +46,9 @@ fun NutritionTodayScreen(
     val todayPlan by viewModel.todayNutritionPlan.collectAsState()
     val activeCycle by viewModel.activeMealCycle.collectAsState()
     val pendingCycle by viewModel.pendingMealCycle.collectAsState()
+    val storedMarket by viewModel.nutritionMarket.collectAsState()
+    val storedLanguage by viewModel.nutritionMarketLanguage.collectAsState()
+    val naming = rememberNutritionNaming(storedMarket, storedLanguage)
 
     Scaffold(
         topBar = {
@@ -81,6 +87,7 @@ fun NutritionTodayScreen(
                 day.meals.forEach { meal ->
                     NutritionTodayMealCard(
                         meal = meal,
+                        naming = naming,
                         onReplace = { viewModel.replaceNutritionMeal(day.programDay, meal.type) }
                     )
                 }
@@ -120,11 +127,17 @@ private fun NutritionTodaySummaryCard(
 @Composable
 private fun NutritionTodayMealCard(
     meal: NutritionMeal,
+    naming: NutritionNaming,
     onReplace: () -> Unit
 ) {
     Surface(modifier = Modifier.fillMaxWidth(), shape = MaterialTheme.shapes.large, color = MaterialTheme.colorScheme.surfaceVariant) {
         Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            Text(text = stringResource(meal.type.labelRes), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+            Text(
+                text = nutritionDishTitle(meal = meal, naming = naming),
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold
+            )
+            Text(text = stringResource(meal.type.labelRes), style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.secondary)
             Text(text = stringResource(meal.mealType.labelRes), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary)
             Text(text = stringResource(R.string.nutrition_today_foods), style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold)
             meal.ingredients.forEach { ingredient ->
@@ -149,3 +162,4 @@ private fun todayIngredientText(ingredientAmount: NutritionIngredientAmount): St
         stringResource(ingredientAmount.ingredient.preparationStyle.labelRes)
     )
 }
+

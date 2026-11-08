@@ -294,6 +294,9 @@
     <string name="nutrition_step_prepare_dairy_base">Put the yogurt or cottage cheese into a bowl.</string>
     <string name="nutrition_step_finish_with_toppings">Add the remaining foods and serve the meal.</string>
     <string name="nutrition_step_finish_simple">Serve the meal and eat while warm.</string>
+    <string name="nutrition_step_cook_pasta">Cook the pasta until tender.</string>
+    <string name="nutrition_step_grill_fish">Grill the fish until fully cooked.</string>
+    <string name="nutrition_step_prepare_fresh">Prepare the fresh ingredients.</string>
     <string name="nutrition_breakfast_option_1">Oatmeal with milk, banana, peanut butter, and whey protein.</string>
     <string name="nutrition_breakfast_option_2">Eggs, whole-grain toast, and Greek yogurt.</string>
     <string name="nutrition_breakfast_option_3">Cottage cheese with berries, honey, and mixed nuts.</string>
@@ -329,6 +332,16 @@
     <string name="nutrition_ingredient_spinach">Spinach</string>
     <string name="nutrition_ingredient_cottage_cheese">Cottage cheese</string>
     <string name="nutrition_ingredient_nuts">Nuts</string>
+    <string name="nutrition_ingredient_courgette">Courgette</string>
+    <string name="nutrition_ingredient_cauliflower">Cauliflower</string>
+    <string name="nutrition_ingredient_lentils">Lentils</string>
+    <string name="nutrition_ingredient_chickpeas">Chickpeas</string>
+    <string name="nutrition_ingredient_salmon">Salmon</string>
+    <string name="nutrition_ingredient_cod">Cod</string>
+    <string name="nutrition_ingredient_pasta">Pasta</string>
+    <string name="nutrition_ingredient_soy_milk">Soy milk</string>
+    <string name="nutrition_ingredient_tofu">Tofu</string>
+    <string name="nutrition_ingredient_ham">Ham</string>
 
     <!-- Onboarding -->
     <string name="onboarding_title">Welcome to Monk Fitness</string>
