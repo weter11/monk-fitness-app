@@ -294,6 +294,9 @@
     <string name="nutrition_step_prepare_dairy_base">Pon el yogur o el requesón en un bol.</string>
     <string name="nutrition_step_finish_with_toppings">Añade los alimentos restantes y sirve la comida.</string>
     <string name="nutrition_step_finish_simple">Sirve la comida y cómela mientras esté caliente.</string>
+    <string name="nutrition_step_cook_pasta">Cuece la pasta hasta que esté al dente.</string>
+    <string name="nutrition_step_grill_fish">Asa el pescado hasta que esté hecho.</string>
+    <string name="nutrition_step_prepare_fresh">Prepara los ingredientes frescos.</string>
     <string name="nutrition_breakfast_option_1">Avena con leche, plátano, mantequilla de cacahuete y proteína de suero.</string>
     <string name="nutrition_breakfast_option_2">Huevos, tostada integral y yogur griego.</string>
     <string name="nutrition_breakfast_option_3">Requesón con frutos rojos, miel y frutos secos variados.</string>
@@ -329,6 +332,16 @@
     <string name="nutrition_ingredient_spinach">Espinacas</string>
     <string name="nutrition_ingredient_cottage_cheese">Requesón</string>
     <string name="nutrition_ingredient_nuts">Frutos secos</string>
+    <string name="nutrition_ingredient_courgette">Calabacín</string>
+    <string name="nutrition_ingredient_cauliflower">Coliflor</string>
+    <string name="nutrition_ingredient_lentils">Lentejas</string>
+    <string name="nutrition_ingredient_chickpeas">Garbanzos</string>
+    <string name="nutrition_ingredient_salmon">Salmón</string>
+    <string name="nutrition_ingredient_cod">Bacalao</string>
+    <string name="nutrition_ingredient_pasta">Pasta</string>
+    <string name="nutrition_ingredient_soy_milk">Leche de soja</string>
+    <string name="nutrition_ingredient_tofu">Tofu</string>
+    <string name="nutrition_ingredient_ham">Jamón</string>
 
     <!-- Onboarding -->
     <string name="onboarding_title">Bienvenido a Monk Fitness</string>

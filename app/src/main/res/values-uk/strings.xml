@@ -294,6 +294,9 @@
     <string name="nutrition_step_prepare_dairy_base">Покладіть йогурт або сир у миску.</string>
     <string name="nutrition_step_finish_with_toppings">Додайте решту продуктів і подавайте.</string>
     <string name="nutrition_step_finish_simple">Подавайте страву і їжте, поки вона тепла.</string>
+    <string name="nutrition_step_cook_pasta">Відваріть пасту до готовності.</string>
+    <string name="nutrition_step_grill_fish">Обсмажте рибу на грилі до готовності.</string>
+    <string name="nutrition_step_prepare_fresh">Підготуйте свіжі продукти.</string>
     <string name="nutrition_breakfast_option_1">Вівсянка на молоці з бананом, арахісовою пастою та сироватковим протеїном.</string>
     <string name="nutrition_breakfast_option_2">Яйця, цільнозерновий тост та грецький йогурт.</string>
     <string name="nutrition_breakfast_option_3">Сир з ягодами, медом та сумішшю горіхів.</string>
@@ -329,6 +332,16 @@
     <string name="nutrition_ingredient_spinach">Шпинат</string>
     <string name="nutrition_ingredient_cottage_cheese">Кисломолочний сир</string>
     <string name="nutrition_ingredient_nuts">Горіхи</string>
+    <string name="nutrition_ingredient_courgette">Кабачки</string>
+    <string name="nutrition_ingredient_cauliflower">Цвітна капуста</string>
+    <string name="nutrition_ingredient_lentils">Сочевиця</string>
+    <string name="nutrition_ingredient_chickpeas">Нут</string>
+    <string name="nutrition_ingredient_salmon">Лосось</string>
+    <string name="nutrition_ingredient_cod">Тріска</string>
+    <string name="nutrition_ingredient_pasta">Паста</string>
+    <string name="nutrition_ingredient_soy_milk">Соєве молоко</string>
+    <string name="nutrition_ingredient_tofu">Тофу</string>
+    <string name="nutrition_ingredient_ham">Шинка</string>
 
     <!-- Onboarding -->
     <string name="onboarding_title">Ласкаво просимо до Monk Fitness</string>

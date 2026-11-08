@@ -72,7 +72,11 @@ data class NutritionIngredient(
     val gramsPerPiece: Int? = null,
     val pieceSource: NutritionSourceRef? = null,
     /** The market's own word for this ingredient, by language tag; empty when none is known. */
-    val names: Map<String, NutritionIngredientName> = emptyMap()
+    val names: Map<String, NutritionIngredientName> = emptyMap(),
+    /** The food is pork, so a no-pork plan must leave it out. */
+    val pork: Boolean = false,
+    /** The food carries lactose, so a lactose-free plan must leave it out. */
+    val lactose: Boolean = false
 )
 
 data class NutritionIngredientAmount(
@@ -195,6 +199,8 @@ internal data class NutritionMealTemplate(
     val type: NutritionMealType,
     val mealType: MealType,
     val ingredients: List<NutritionIngredientAmount>,
+    /** The two or three ingredients the dish is named after, in the order the name reads. */
+    val mainIngredientKeys: List<String>,
     val calories: Int,
     val proteinGrams: Int,
     val optional: Boolean = false
@@ -225,6 +231,20 @@ private val mealsPool: Map<MealType, List<NutritionMealTemplate>>
 val nutritionIngredientsByKey: Map<String, NutritionIngredient>
     get() = NutritionCatalogue.ingredientsByKey
 
+/**
+ * The ingredients a dish is named after. A meal stored before this data existed has no main list of
+ * its own, so it falls back to its first three ingredients and still reads as a dish.
+ */
+fun nutritionDishIngredientKeys(meal: NutritionMeal): List<String> =
+    NutritionCatalogue.templatesById[meal.templateId]?.mainIngredientKeys?.takeIf { it.isNotEmpty() }
+        ?: meal.ingredients.map { it.ingredient.key }.take(3)
+
+/** "A + B + C": names joined by a language-neutral separator, so no language's grammar leaks in. */
+fun nutritionDishName(names: List<String>): String =
+    names.map { it.trim() }.filter { it.isNotEmpty() }.joinToString(NUTRITION_DISH_NAME_SEPARATOR)
+
+internal const val NUTRITION_DISH_NAME_SEPARATOR = " + "
+
 enum class NutritionGenerationIssue(@StringRes val messageRes: Int) {
     NOT_ENOUGH_PROTEIN(R.string.nutrition_not_enough_protein_sources),
     NOT_ENOUGH_CARBS(R.string.nutrition_not_enough_carbs),
@@ -243,6 +263,38 @@ fun generateNutritionPlan(
     cycleId: Long = 0,
     previousPlan: NutritionPlan? = null,
     workoutTypeForDay: (Int) -> WorkoutType = ::defaultWorkoutTypeForDay
+): NutritionPlan = generateNutritionPlan(
+    seed = seed,
+    startDay = startDay,
+    daysCount = daysCount,
+    weightKg = weightKg,
+    heightCm = heightCm,
+    excludedIngredientKeys = excludedIngredientKeys,
+    replacements = replacements,
+    preferredIngredientKeys = preferredIngredientKeys,
+    cycleId = cycleId,
+    previousPlan = previousPlan,
+    workoutTypeForDay = workoutTypeForDay,
+    templateIds = null
+)
+
+/**
+ * [templateIds] limits selection to a named set, so a fixture recorded from an earlier catalogue can be
+ * replayed against the templates that existed then. Null means the whole catalogue.
+ */
+internal fun generateNutritionPlan(
+    seed: Int,
+    startDay: Int,
+    daysCount: Int,
+    weightKg: Int?,
+    heightCm: Int?,
+    excludedIngredientKeys: Set<String>,
+    replacements: Map<String, String>,
+    preferredIngredientKeys: Set<String>,
+    cycleId: Long,
+    previousPlan: NutritionPlan?,
+    workoutTypeForDay: (Int) -> WorkoutType,
+    templateIds: Set<String>?
 ): NutritionPlan {
     val base = seed.absoluteValue
     val safeStartDay = startDay.coerceIn(1, 56)
@@ -251,6 +303,7 @@ fun generateNutritionPlan(
         seed = base,
         excludedIngredientKeys = excludedIngredientKeys,
         preferredIngredientKeys = preferredIngredientKeys,
+        templateIds = templateIds,
         previousPlan = previousPlan
     )
 
@@ -267,7 +320,7 @@ fun generateNutritionPlan(
             val replacementKey = nutritionReplacementKey(programDay, slot)
             val replacementTemplateId = replacements[replacementKey]
             val explicit = replacementTemplateId?.let { id ->
-                templatesFor(slot, mealType, excludedIngredientKeys).firstOrNull { it.id == id }
+                templatesFor(slot, mealType, excludedIngredientKeys, templateIds).firstOrNull { it.id == id }
             }
             if (explicit != null) {
                 selection.record(slot, explicit)
@@ -344,13 +397,20 @@ fun getTodayCookingInstructionResIds(meal: NutritionMeal): List<Int> {
         "rice" in ingredientKeys -> R.string.nutrition_step_cook_rice
         "buckwheat" in ingredientKeys -> R.string.nutrition_step_cook_buckwheat
         "potatoes" in ingredientKeys -> R.string.nutrition_step_boil_potatoes
+        "pasta" in ingredientKeys -> R.string.nutrition_step_cook_pasta
         else -> null
     }
     val proteinStep = when {
         "chicken" in ingredientKeys -> R.string.nutrition_step_grill_chicken
         "eggs" in ingredientKeys -> R.string.nutrition_step_boil_eggs
         "tuna" in ingredientKeys -> R.string.nutrition_step_prepare_tuna
+        "salmon" in ingredientKeys || "cod" in ingredientKeys -> R.string.nutrition_step_grill_fish
         else -> null
+    }
+    val freshStep = if (ingredientKeys.any { it in NUTRITION_FRESH_INGREDIENTS }) {
+        R.string.nutrition_step_prepare_fresh
+    } else {
+        null
     }
 
     if (carbStep != null) {
@@ -359,18 +419,31 @@ fun getTodayCookingInstructionResIds(meal: NutritionMeal): List<Int> {
     if (proteinStep != null) {
         steps += proteinStep
     }
-    if (steps.isEmpty() && ingredientKeys.any { it == "yogurt" || it == "cottage_cheese" }) {
+    // Nothing to cook yet, so the base of the dish is what the cook starts with.
+    if (steps.isEmpty() && ingredientKeys.any { it in NUTRITION_DAIRY_BASES }) {
         steps += R.string.nutrition_step_prepare_dairy_base
+    }
+    if (steps.isEmpty() && freshStep != null) {
+        steps += freshStep
     }
 
     steps += when {
-        ingredientKeys.any { it == "yogurt" || it == "cottage_cheese" || it == "banana" || it == "apple" || it == "nuts" } ->
+        ingredientKeys.any { it in NUTRITION_FINISHING_INGREDIENTS } ->
             R.string.nutrition_step_finish_with_toppings
         else -> R.string.nutrition_step_finish_simple
     }
 
     return steps.distinct().take(3)
 }
+
+private val NUTRITION_DAIRY_BASES = setOf("yogurt", "cottage_cheese", "milk")
+
+/** Eaten as they come, so a dish whose only step is serving is still dished up from something fresh. */
+private val NUTRITION_FRESH_INGREDIENTS =
+    setOf("carrots", "tomatoes", "courgette", "cauliflower", "banana", "apple")
+
+private val NUTRITION_FINISHING_INGREDIENTS =
+    setOf("yogurt", "cottage_cheese", "milk", "banana", "apple", "nuts")
 
 fun replaceMeal(
     meal: NutritionMeal,
@@ -432,6 +505,7 @@ private class NutritionSelection(
     private val seed: Int,
     private val excludedIngredientKeys: Set<String>,
     private val preferredIngredientKeys: Set<String>,
+    private val templateIds: Set<String>?,
     previousPlan: NutritionPlan?
 ) {
     private val usedBySlot = mutableMapOf<NutritionMealType, MutableSet<String>>()
@@ -453,7 +527,7 @@ private class NutritionSelection(
     ): NutritionMealTemplate? {
         val pool = pools.getOrPut(slot) {
             MealType.entries
-                .flatMap { profile -> templatesFor(slot, profile, excludedIngredientKeys) }
+                .flatMap { profile -> templatesFor(slot, profile, excludedIngredientKeys, templateIds) }
                 .distinctBy { it.id }
                 .sortedWith(
                     compareByDescending<NutritionMealTemplate> { preferenceScore(it, preferredIngredientKeys) }
@@ -495,10 +569,12 @@ private fun selectionRank(seed: Int, slot: NutritionMealType, templateId: String
 private fun templatesFor(
     mealType: NutritionMealType,
     replacementType: MealType,
-    excludedIngredientKeys: Set<String>
+    excludedIngredientKeys: Set<String>,
+    templateIds: Set<String>? = null
 ): List<NutritionMealTemplate> {
     return mealsPool[replacementType].orEmpty().filter { template ->
         template.type == mealType &&
+            (templateIds == null || template.id in templateIds) &&
             template.ingredients.none { it.ingredient.key in excludedIngredientKeys }
     }
 }
@@ -541,7 +617,7 @@ private fun normalizeNutritionWeight(weightKg: Int?, heightCm: Int?): Int {
     return 70
 }
 
-private fun defaultWorkoutTypeForDay(day: Int): WorkoutType = when ((day.coerceIn(1, 56) - 1) % 7) {
+internal fun defaultWorkoutTypeForDay(day: Int): WorkoutType = when ((day.coerceIn(1, 56) - 1) % 7) {
     0 -> WorkoutType.STRENGTH_A
     1 -> WorkoutType.MOBILITY
     2 -> WorkoutType.STRENGTH_B

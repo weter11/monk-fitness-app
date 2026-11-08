@@ -294,6 +294,9 @@
     <string name="nutrition_step_prepare_dairy_base">Coloque o iogurte ou o queijo cottage na tigela.</string>
     <string name="nutrition_step_finish_with_toppings">Adicione os demais alimentos e sirva a refeição.</string>
     <string name="nutrition_step_finish_simple">Sirva a refeição e coma enquanto está quente.</string>
+    <string name="nutrition_step_cook_pasta">Coza a massa até ficar tenra.</string>
+    <string name="nutrition_step_grill_fish">Grelhe o peixe até estar cozinhado.</string>
+    <string name="nutrition_step_prepare_fresh">Prepare os ingredientes frescos.</string>
     <string name="nutrition_breakfast_option_1">Aveia com leite, banana, pasta de amendoim e proteína de soro.</string>
     <string name="nutrition_breakfast_option_2">Ovos, torrada integral e iogurte grego.</string>
     <string name="nutrition_breakfast_option_3">Queijo cottage com frutas vermelhas, mel e castanhas variadas.</string>
@@ -329,6 +332,16 @@
     <string name="nutrition_ingredient_spinach">Espinafre</string>
     <string name="nutrition_ingredient_cottage_cheese">Queijo cottage</string>
     <string name="nutrition_ingredient_nuts">Castanhas</string>
+    <string name="nutrition_ingredient_courgette">Courgette</string>
+    <string name="nutrition_ingredient_cauliflower">Couve-flor</string>
+    <string name="nutrition_ingredient_lentils">Lentilhas</string>
+    <string name="nutrition_ingredient_chickpeas">Grão-de-bico</string>
+    <string name="nutrition_ingredient_salmon">Salmão</string>
+    <string name="nutrition_ingredient_cod">Bacalhau</string>
+    <string name="nutrition_ingredient_pasta">Massa</string>
+    <string name="nutrition_ingredient_soy_milk">Leite de soja</string>
+    <string name="nutrition_ingredient_tofu">Tofu</string>
+    <string name="nutrition_ingredient_ham">Presunto</string>
 
     <!-- Onboarding -->
     <string name="onboarding_title">Bem-vindo ao Monk Fitness</string>
