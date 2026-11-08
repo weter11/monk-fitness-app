@@ -242,7 +242,7 @@ class NutritionPlanTest {
             NutritionMealType.entries.forEach { slot ->
                 val picks = plan.days.mapNotNull { day -> day.meals.firstOrNull { it.type == slot }?.templateId }
                 if (picks.isEmpty()) return@forEach
-                assertEquals("slot $slot in a $days-day plan", minOf(picks.size, 6), picks.distinct().size)
+                assertEquals("slot $slot in a $days-day plan", picks.size, picks.distinct().size)
             }
         }
     }

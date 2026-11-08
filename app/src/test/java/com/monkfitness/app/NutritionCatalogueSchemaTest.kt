@@ -25,8 +25,8 @@ class NutritionCatalogueSchemaTest {
 
         val parsed = parseCatalogue(withUnknownMembers)
 
-        assertEquals(12, parsed.ingredients.size)
-        assertEquals(30, parsed.templates.size)
+        assertEquals(26, parsed.ingredients.size)
+        assertEquals(61, parsed.templates.size)
         assertEquals("171534", parsed.ingredientsByKey.getValue("chicken").source!!.itemId)
         assertEquals(
             NutritionCatalogue.templatesById.getValue("breakfast_high_carb_1").calories,

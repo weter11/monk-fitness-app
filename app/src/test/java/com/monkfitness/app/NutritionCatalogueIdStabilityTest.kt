@@ -24,7 +24,9 @@ class NutritionCatalogueIdStabilityTest {
 
         private val ingredientIds = listOf(
             "chicken", "eggs", "rice", "oats", "potatoes", "buckwheat",
-            "cottage_cheese", "yogurt", "banana", "apple", "nuts", "tuna"
+            "cottage_cheese", "yogurt", "banana", "apple", "nuts", "tuna",
+            "carrots", "tomatoes", "courgette", "cauliflower", "lentils", "chickpeas",
+            "salmon", "cod", "pasta", "bread", "soy_milk", "tofu", "ham", "milk"
         )
 
         private val templateIds = listOf(
@@ -42,7 +44,22 @@ class NutritionCatalogueIdStabilityTest {
             "post_workout_balanced_1", "post_workout_balanced_2",
             "snack_high_carb_1", "snack_high_carb_2",
             "snack_high_protein_1", "snack_high_protein_2",
-            "snack_balanced_1", "snack_balanced_2"
+            "snack_balanced_1", "snack_balanced_2",
+            "breakfast_high_carb_3", "breakfast_high_carb_4",
+            "breakfast_high_protein_3", "breakfast_high_protein_4",
+            "breakfast_balanced_3", "breakfast_balanced_4", "breakfast_balanced_5",
+            "lunch_high_carb_3", "lunch_high_carb_4",
+            "lunch_high_protein_3", "lunch_high_protein_4",
+            "lunch_balanced_3", "lunch_balanced_4",
+            "dinner_high_carb_3", "dinner_high_carb_4",
+            "dinner_high_protein_3", "dinner_high_protein_4",
+            "dinner_balanced_3", "dinner_balanced_4",
+            "post_workout_high_carb_3", "post_workout_high_carb_4",
+            "post_workout_high_protein_3", "post_workout_high_protein_4",
+            "post_workout_balanced_3", "post_workout_balanced_4",
+            "snack_high_carb_3", "snack_high_carb_4",
+            "snack_high_protein_3", "snack_high_protein_4",
+            "snack_balanced_3", "snack_balanced_4"
         )
     }
 

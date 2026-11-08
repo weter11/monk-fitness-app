@@ -1,5 +1,6 @@
 package com.monkfitness.app
 
+import com.monkfitness.app.data.model.defaultWorkoutTypeForDay
 import com.monkfitness.app.data.model.generateNutritionPlan
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
@@ -17,6 +18,28 @@ class NutritionPlanSelectionParityTest {
         @BeforeClass
         @JvmStatic
         fun load() = NutritionCatalogueFixture.load()
+
+        /**
+         * The fixture was recorded when these thirty were the whole catalogue. The pool is narrowed to
+         * them so the comparison is of selection, not of which dishes the wider catalogue now offers.
+         */
+        private val LEGACY_TEMPLATE_IDS = setOf(
+            "breakfast_high_carb_1", "breakfast_high_carb_2",
+            "breakfast_high_protein_1", "breakfast_high_protein_2",
+            "breakfast_balanced_1", "breakfast_balanced_2",
+            "lunch_high_carb_1", "lunch_high_carb_2",
+            "lunch_high_protein_1", "lunch_high_protein_2",
+            "lunch_balanced_1", "lunch_balanced_2",
+            "dinner_high_carb_1", "dinner_high_carb_2",
+            "dinner_high_protein_1", "dinner_high_protein_2",
+            "dinner_balanced_1", "dinner_balanced_2",
+            "post_workout_high_carb_1", "post_workout_high_carb_2",
+            "post_workout_high_protein_1", "post_workout_high_protein_2",
+            "post_workout_balanced_1", "post_workout_balanced_2",
+            "snack_high_carb_1", "snack_high_carb_2",
+            "snack_high_protein_1", "snack_high_protein_2",
+            "snack_balanced_1", "snack_balanced_2"
+        )
     }
 
     @Test
@@ -38,7 +61,14 @@ class NutritionPlanSelectionParityTest {
                 startDay = startDay,
                 daysCount = days,
                 weightKg = 80,
-                excludedIngredientKeys = exclusions
+                heightCm = null,
+                excludedIngredientKeys = exclusions,
+                replacements = emptyMap(),
+                preferredIngredientKeys = emptySet(),
+                cycleId = 0L,
+                previousPlan = null,
+                workoutTypeForDay = ::defaultWorkoutTypeForDay,
+                templateIds = LEGACY_TEMPLATE_IDS
             )
             val actual = plan.days.flatMap { day ->
                 day.meals.map { meal -> "${meal.type.key}:${meal.templateId}" }

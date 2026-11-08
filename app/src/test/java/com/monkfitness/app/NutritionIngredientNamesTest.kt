@@ -65,7 +65,11 @@ class NutritionIngredientNamesTest {
         )
 
         /** Foods bought by weight or by volume: one word covers any amount of them. */
-        private val MASS = listOf("chicken", "rice", "oats", "buckwheat", "cottage_cheese", "yogurt", "tuna")
+        private val MASS = listOf(
+            "chicken", "rice", "oats", "buckwheat", "cottage_cheese", "yogurt", "tuna",
+            "carrots", "tomatoes", "courgette", "cauliflower", "lentils", "chickpeas",
+            "salmon", "cod", "pasta", "bread", "soy_milk", "tofu", "ham", "milk"
+        )
 
         @BeforeClass
         @JvmStatic
@@ -94,7 +98,7 @@ class NutritionIngredientNamesTest {
 
     @Test
     fun everyIngredientIsNamedInEveryPilotLanguage() {
-        assertEquals(12, catalogue.ingredients.size)
+        assertEquals(26, catalogue.ingredients.size)
         catalogue.ingredients.forEach { ingredient ->
             assertTrue(
                 "${ingredient.key}: names ${ingredient.names.keys} are not the pilot languages",
