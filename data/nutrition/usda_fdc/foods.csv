@@ -1,13 +1,27 @@
 fdc_id,description,data_type
 168878,"Rice, white, long-grain, regular, enriched, cooked",sr_legacy_food
+169291,"Squash, summer, zucchini, includes skin, raw",sr_legacy_food
+169736,"Pasta, dry, enriched",sr_legacy_food
+169986,"Cauliflower, raw",sr_legacy_food
+170393,"Carrots, raw",sr_legacy_food
 170440,"Potatoes, boiled, cooked without skin, flesh, without salt",sr_legacy_food
+170457,"Tomatoes, red, ripe, raw, year round average",sr_legacy_food
 170585,"Nuts, mixed nuts, dry roasted, with peanuts, without salt added",sr_legacy_food
 170686,"Buckwheat groats, roasted, cooked",sr_legacy_food
+171267,"Milk, reduced fat, fluid, 2% milkfat, with added vitamin A and vitamin D",sr_legacy_food
 171284,"Yogurt, plain, whole milk",sr_legacy_food
 171534,"Chicken, broiler or fryers, breast, skinless, boneless, meat only, cooked, grilled",sr_legacy_food
 171688,"Apples, raw, with skin (Includes foods for USDA's Food Distribution Program)",sr_legacy_food
+171955,"Fish, cod, Atlantic, raw",sr_legacy_food
 171986,"Fish, tuna, light, canned in water, without salt, drained solids",sr_legacy_food
 172182,"Cheese, cottage, lowfat, 2% milkfat",sr_legacy_food
+172421,"Lentils, mature seeds, cooked, boiled, without salt",sr_legacy_food
+172456,"Soymilk, original and vanilla, with added calcium, vitamins A and D",sr_legacy_food
+172475,"Tofu, raw, firm, prepared with calcium sulfate",sr_legacy_food
+172688,"Bread, whole-wheat, commercially prepared",sr_legacy_food
 173424,"Egg, whole, cooked, hard-boiled",sr_legacy_food
+173757,"Chickpeas (garbanzo beans, bengal gram), mature seeds, cooked, boiled, without salt",sr_legacy_food
+173863,"Ham, sliced, pre-packaged, deli meat (96%fat free, water added)",sr_legacy_food
 173904,"Cereals, oats, regular and quick, not fortified, dry",sr_legacy_food
 173944,"Bananas, raw",sr_legacy_food
+175167,"Fish, salmon, Atlantic, farmed, raw",sr_legacy_food
