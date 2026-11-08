@@ -268,6 +268,10 @@
     <string name="nutrition_plan_days_7">7 giorni</string>
     <string name="nutrition_exclusions">Alimenti esclusi</string>
     <string name="nutrition_exclusions_desc">I pasti e le sostituzioni escluderanno gli alimenti che selezioni.</string>
+    <string name="nutrition_no_pork">Senza maiale</string>
+    <string name="nutrition_lactose_free">Senza lattosio</string>
+    <string name="nutrition_dietary_filters_helper">Questi filtri usano l\'elenco degli ingredienti dell\'app e non sono una garanzia contro allergie né un\'indicazione medica: gli ingredienti nascosti, come il latte nel pane, non vengono tracciati.</string>
+    <string name="nutrition_dietary_filters_next_cycle">Si applica dal ciclo successivo; il ciclo attuale mantiene i suoi pasti.</string>
     <string name="show_excluded_products_nutrition">Mostra gli alimenti esclusi nella schermata Nutrizione</string>
     <string name="diet_restrictions_summary">Restrizioni alimentari: %1$s</string>
     <string name="diet_restrictions_none">Nessuna</string>

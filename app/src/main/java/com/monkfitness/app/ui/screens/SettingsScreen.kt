@@ -76,6 +76,9 @@ fun SettingsScreen(
     val userPreferences by viewModel.userPreferences.collectAsState()
     val nutritionCycleLength by viewModel.nutritionCycleLength.collectAsState()
     val showExcludedProductsInNutrition by viewModel.showExcludedProductsInNutrition.collectAsState()
+    val nutritionNoPork by viewModel.nutritionNoPork.collectAsState()
+    val nutritionLactoseFree by viewModel.nutritionLactoseFree.collectAsState()
+    val nutritionFiltersApplyFromNextCycle by viewModel.nutritionFiltersApplyFromNextCycle.collectAsState()
     val storedMarket by viewModel.nutritionMarket.collectAsState()
     val storedLanguage by viewModel.nutritionMarketLanguage.collectAsState()
     val libraryStats by viewModel.libraryStats.collectAsState()
@@ -225,6 +228,30 @@ fun SettingsScreen(
                 checked = showExcludedProductsInNutrition,
                 onCheckedChange = viewModel::setShowExcludedProductsInNutrition
             )
+            SettingSwitchRow(
+                title = stringResource(R.string.nutrition_no_pork),
+                checked = nutritionNoPork,
+                onCheckedChange = viewModel::setNutritionNoPork
+            )
+            SettingSwitchRow(
+                title = stringResource(R.string.nutrition_lactose_free),
+                checked = nutritionLactoseFree,
+                onCheckedChange = viewModel::setNutritionLactoseFree
+            )
+            Text(
+                text = stringResource(R.string.nutrition_dietary_filters_helper),
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.secondary
+            )
+            // A stored cycle keeps the meals it was planned with, so the note states when a filter applies
+            // rather than letting the toggle read as if it had already changed today's plan.
+            if (nutritionFiltersApplyFromNextCycle) {
+                Text(
+                    text = stringResource(R.string.nutrition_dietary_filters_next_cycle),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.primary
+                )
+            }
 
             // Which country's shops the shopping list is written for. A list rather than a guess
             // from where the phone is: the region only preselects, it never decides.

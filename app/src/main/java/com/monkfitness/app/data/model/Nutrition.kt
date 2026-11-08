@@ -222,6 +222,27 @@ internal data class NutritionMealTemplate(
 val nutritionExclusionIngredients: List<NutritionIngredient>
     get() = NutritionCatalogue.ingredients
 
+/**
+ * The exclusion set a dietary filter adds: the foods of the one ingredient list that carry the tag.
+ *
+ * It is added to the user's own exclusions rather than kept apart, so a filtered food and a manually
+ * excluded one take the same path through selection, replacement and the shopping list.
+ */
+fun nutritionDietaryExcludedKeys(noPork: Boolean = false, lactoseFree: Boolean = false): Set<String> {
+    if (!noPork && !lactoseFree) return emptySet()
+    return NutritionCatalogue.ingredients
+        .filter { ingredient -> (noPork && ingredient.pork) || (lactoseFree && ingredient.lactose) }
+        .map { it.key }
+        .toSet()
+}
+
+/** Every food a new plan must leave out: the user's own exclusions plus what the filters tag. */
+fun nutritionExcludedFoodKeys(
+    manualExcludedKeys: Set<String>,
+    noPork: Boolean,
+    lactoseFree: Boolean
+): Set<String> = manualExcludedKeys + nutritionDietaryExcludedKeys(noPork, lactoseFree)
+
 private val nutritionMealTemplates: List<NutritionMealTemplate>
     get() = NutritionCatalogue.templates
 
