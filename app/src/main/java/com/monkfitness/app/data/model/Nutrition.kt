@@ -205,17 +205,23 @@ internal data class NutritionMealTemplate(
     val proteinGrams: Int,
     val optional: Boolean = false
 ) {
-    fun toMeal(scale: Float = 1f, cycleId: Long = 0): NutritionMeal = NutritionMeal(
+    /** A meal priced from the amounts actually served, so its numbers never drift from its food. */
+    fun toMeal(scaled: List<NutritionIngredientAmount>, cycleId: Long): NutritionMeal = NutritionMeal(
         templateId = id,
         type = type,
         mealType = mealType,
-        ingredients = ingredients.map { ingredientAmount ->
-            ingredientAmount.copy(amount = scaleAmount(ingredientAmount.amount, ingredientAmount.ingredient.unit, scale))
-        },
-        calories = (calories * scale).roundToInt(),
-        proteinGrams = (proteinGrams * scale).roundToInt(),
+        ingredients = scaled,
+        calories = scaled.sumOf { it.ingredient.kcalFor(it.amount) }.roundToInt(),
+        proteinGrams = scaled.sumOf { it.ingredient.proteinFor(it.amount) }.roundToInt(),
         optional = optional,
         cycleId = cycleId
+    )
+
+    fun toMeal(scale: Float = 1f, cycleId: Long = 0): NutritionMeal = toMeal(
+        ingredients.map { ingredientAmount ->
+            ingredientAmount.copy(amount = scaleAmount(ingredientAmount.amount, ingredientAmount.ingredient.unit, scale))
+        },
+        cycleId
     )
 }
 
@@ -375,8 +381,13 @@ internal fun generateNutritionPlan(
             }
         }
 
-        val baseCalories = meals.sumOf { it.calories }.coerceAtLeast(1)
-        val scale = (targetCalories.toFloat() / baseCalories.toFloat()).coerceIn(0.85f, 1.35f)
+        val proteinGoal = calculateMuscleGainNutritionTargets(
+            weightKg = weightKg,
+            heightCm = heightCm,
+            dayType = dayType
+        ).proteinMaxGrams - PROTEIN_HEADROOM_GRAMS
+
+        val portions = scaleDay(meals, targetCalories, proteinGoal)
 
         NutritionDayPlan(
             dayNumber = index + 1,
@@ -384,7 +395,9 @@ internal fun generateNutritionPlan(
             week = week,
             dayType = dayType,
             targetCalories = targetCalories,
-            meals = meals.map { it.toMeal(scale, cycleId) }
+            meals = meals.mapIndexed { mealIndex, template ->
+                template.toMeal(portions.getOrElse(mealIndex) { template.ingredients }, cycleId)
+            }
         )
     }
 
@@ -535,6 +548,221 @@ private fun slotsForDayType(dayType: NutritionDayType): List<NutritionMealType> 
         NutritionMealType.DINNER,
         NutritionMealType.SNACK
     )
+}
+
+/**
+ * How far a day's portions may move: the day as a whole, the protein foods, everything else, and any one
+ * food. A day reaches its calorie target by portioning, never by serving an implausible amount of one
+ * food — no food is more than [TEMPLATE_MULTIPLE] of its own recipe, and no meal is either.
+ */
+private const val DAY_SCALE_MIN = 0.85f
+private const val DAY_SCALE_MAX = 2.6f
+private const val PROTEIN_SCALE_MIN = 0.25f
+private const val PROTEIN_SCALE_MAX = 2.5f
+private const val ENERGY_SCALE_MIN = 0.5f
+private const val ENERGY_SCALE_MAX = 3.5f
+private const val TEMPLATE_MULTIPLE = 3.5f
+
+/** Protein is aimed this far below the top of the range, so 5 g rounding cannot push a day past it. */
+private const val PROTEIN_HEADROOM_GRAMS = 8
+
+/** The most of one food a single portion may serve, in the ingredient's own unit (g, ml or pieces). */
+internal val NUTRITION_PORTION_CEILING: Map<String, Int> = mapOf(
+    "chicken" to 320,
+    "tuna" to 250,
+    "salmon" to 250,
+    "cod" to 300,
+    "tofu" to 350,
+    "ham" to 200,
+    "cottage_cheese" to 600,
+    "yogurt" to 700,
+    "milk" to 800,
+    "soy_milk" to 800,
+    "rice" to 850,
+    "oats" to 300,
+    "potatoes" to 1000,
+    "buckwheat" to 800,
+    "pasta" to 500,
+    "bread" to 450,
+    "lentils" to 700,
+    "chickpeas" to 700,
+    "nuts" to 60,
+    "carrots" to 450,
+    "tomatoes" to 350,
+    "courgette" to 350,
+    "cauliflower" to 450,
+    "eggs" to 4,
+    "banana" to 2,
+    "apple" to 2
+)
+
+/** One food in one dish, with the amount the recipe calls for and the amount being served. */
+private class ScaledPortion(
+    val ingredient: NutritionIngredient,
+    val recipeAmount: Int,
+    var amount: Int
+)
+
+private fun portionCeiling(ingredient: NutritionIngredient, recipeAmount: Int): Int {
+    val ceiling = NUTRITION_PORTION_CEILING[ingredient.key] ?: Int.MAX_VALUE
+    if (ingredient.unit == NutritionQuantityUnit.PIECES) return ceiling
+    // 5 g steps, so a scaled amount can never land between two steps and read as a stricter cap than it is.
+    val multiple = ((recipeAmount * TEMPLATE_MULTIPLE) / 5f).toInt() * 5
+    return minOf(ceiling, maxOf(multiple, 5))
+}
+
+private fun scaledAmount(ingredient: NutritionIngredient, recipeAmount: Int, scale: Float): Int {
+    val ceiling = portionCeiling(ingredient, recipeAmount)
+    return when (ingredient.unit) {
+        NutritionQuantityUnit.PIECES -> (recipeAmount * scale).roundToInt().coerceIn(1, ceiling)
+        NutritionQuantityUnit.GRAMS,
+        NutritionQuantityUnit.MILLILITERS -> (((recipeAmount * scale) / 5f).roundToInt() * 5).coerceIn(5, ceiling)
+    }
+}
+
+private fun NutritionIngredient.isProteinFood(): Boolean = group == NutritionShoppingGroup.PROTEIN
+
+/** Protein per calorie, which is the order the leftover energy is handed out in. */
+private fun NutritionIngredient.proteinDensity(): Double {
+    val nutrients = nutrientsPer100g ?: return 0.0
+    return if (nutrients.kcal <= 0.0) 0.0 else nutrients.proteinGrams / nutrients.kcal
+}
+
+private fun List<List<ScaledPortion>>.kcalOfDay(): Double =
+    sumOf { meal -> meal.sumOf { it.ingredient.kcalFor(it.amount) } }
+
+private fun List<List<ScaledPortion>>.proteinOfDay(): Double =
+    sumOf { meal -> meal.sumOf { it.ingredient.proteinFor(it.amount) } }
+
+private fun scaleMeal(meal: NutritionMealTemplate, proteinScale: Float, energyScale: Float): List<ScaledPortion> =
+    meal.ingredients.map { amount ->
+        val scale = if (amount.ingredient.isProteinFood()) proteinScale else energyScale
+        ScaledPortion(amount.ingredient, amount.amount, scaledAmount(amount.ingredient, amount.amount, scale))
+    }
+
+/**
+ * Hands the day's remaining calories to the meals that can take them, and within a meal to the foods
+ * lowest in protein per calorie — so a day that needs more energy gets it from the rice and the potatoes
+ * before it gets it from the chicken, and no single meal swallows the whole gap.
+ */
+private fun List<List<ScaledPortion>>.fillDay(delta: Double) {
+    val growing = delta > 0
+    var remaining = delta
+    repeat(3) {
+        if (abs(remaining) <= 1.0) return
+        val roomPerMeal = map { meal -> meal.kcalRoom(growing) }
+        if (roomPerMeal.sum() <= 0.0) return
+        // Each dish grows in proportion to its own size, so a big lunch stays the big meal of the day.
+        val sizePerMeal = map { meal -> meal.sumOf { it.ingredient.kcalFor(it.recipeAmount) } }
+        val totalSize = sizePerMeal.sum().takeIf { it > 0.0 } ?: return
+        var moved = 0.0
+        forEachIndexed { index, meal ->
+            val want = minOf(roomPerMeal[index], abs(remaining) * sizePerMeal[index] / totalSize)
+            if (want > 1.0) moved += meal.fillWithin(want, growing)
+        }
+        if (moved <= 0.5) return
+        remaining -= if (growing) moved else -moved
+    }
+}
+
+/** Energy a meal can still take (or give back) without any one food leaving its own limits. */
+private fun List<ScaledPortion>.kcalRoom(growing: Boolean): Double =
+    sumOf { portion ->
+        if (portion.ingredient.unit == NutritionQuantityUnit.PIECES) {
+            0.0
+        } else {
+            val room = if (growing) portionCeiling(portion.ingredient, portion.recipeAmount) - portion.amount
+            else portion.amount - 5
+            if (room < 5) 0.0 else abs(portion.ingredient.kcalFor(room))
+        }
+    }
+
+private fun List<ScaledPortion>.fillWithin(wantKcal: Double, growing: Boolean): Double {
+    val order = withIndex()
+        .filter { (_, portion) -> portion.ingredient.unit != NutritionQuantityUnit.PIECES }
+        .sortedBy { (_, portion) -> portion.ingredient.proteinDensity() }
+        .map { (index, _) -> index }
+        .let { if (growing) it else it.asReversed() }
+    var remaining = if (growing) wantKcal else -wantKcal
+    var moved = 0.0
+    order.forEach { index ->
+        if (abs(remaining) <= 1.0) return@forEach
+        val portion = this[index]
+        val room = if (growing) portionCeiling(portion.ingredient, portion.recipeAmount) - portion.amount
+        else portion.amount - 5
+        if (room < 5) return@forEach
+        val stepKcal = portion.ingredient.kcalFor(5)
+        if (stepKcal <= 0.0) return@forEach
+        val steps = minOf(room / 5, (abs(remaining) / stepKcal).toInt())
+        if (steps <= 0) return@forEach
+        portion.amount += if (growing) steps * 5 else -steps * 5
+        val change = steps * stepKcal
+        moved += change
+        remaining -= if (growing) change else -change
+    }
+    return moved
+}
+
+/**
+ * Portions one day so its meals land on [targetCalories] and its protein lands at the top of the day's
+ * range, or as near to it as the dishes allow.
+ *
+ * Calories come first: being short of the day's energy is the failure a user feels, while protein above
+ * its range is what a dish set this protein-dense can do without turning a meal into a plate of rice.
+ * The two scales are solved together — move the protein foods one way and the day rebalances the rest —
+ * so the dish keeps its shape instead of becoming a different dish.
+ */
+private fun scaleDay(
+    meals: List<NutritionMealTemplate>,
+    targetCalories: Int,
+    proteinGoalGrams: Int
+): List<List<NutritionIngredientAmount>> {
+    if (meals.isEmpty()) return emptyList()
+
+    val proteinKcal = meals.sumOf { meal ->
+        meal.ingredients.filter { it.ingredient.isProteinFood() }.sumOf { it.ingredient.kcalFor(it.amount) }
+    }
+    val energyKcal = meals.sumOf { meal ->
+        meal.ingredients.filterNot { it.ingredient.isProteinFood() }.sumOf { it.ingredient.kcalFor(it.amount) }
+    }
+    val proteinGrams = meals.sumOf { meal ->
+        meal.ingredients.filter { it.ingredient.isProteinFood() }.sumOf { it.ingredient.proteinFor(it.amount) }
+    }
+    val energyProteinGrams = meals.sumOf { meal ->
+        meal.ingredients.filterNot { it.ingredient.isProteinFood() }.sumOf { it.ingredient.proteinFor(it.amount) }
+    }
+    if (proteinKcal + energyKcal <= 0.0) return emptyList()
+
+    val dayScale = (targetCalories / (proteinKcal + energyKcal)).toFloat().coerceIn(DAY_SCALE_MIN, DAY_SCALE_MAX)
+    var proteinScale = dayScale
+    var energyScale = dayScale
+    repeat(6) {
+        if (proteinGrams > 0.0) {
+            proteinScale = ((proteinGoalGrams - energyScale * energyProteinGrams) / proteinGrams)
+                .toFloat().coerceIn(PROTEIN_SCALE_MIN, PROTEIN_SCALE_MAX)
+        }
+        if (energyKcal > 0.0) {
+            energyScale = ((targetCalories - proteinScale * proteinKcal) / energyKcal)
+                .toFloat().coerceIn(ENERGY_SCALE_MIN, ENERGY_SCALE_MAX)
+        }
+    }
+
+    var portions = meals.map { scaleMeal(it, proteinScale, energyScale) }
+    if (portions.kcalOfDay() < targetCalories - 2) {
+        portions.fillDay(targetCalories - portions.kcalOfDay())
+        if (portions.kcalOfDay() < targetCalories - 2 && proteinKcal > 0.0) {
+            val toppedUp = (proteinScale + (targetCalories - portions.kcalOfDay()) / proteinKcal)
+                .toFloat().coerceIn(proteinScale, PROTEIN_SCALE_MAX)
+            portions = meals.map { scaleMeal(it, toppedUp, energyScale) }
+            if (portions.kcalOfDay() < targetCalories - 2) {
+                portions.fillDay(targetCalories - portions.kcalOfDay())
+            }
+        }
+    } else if (portions.kcalOfDay() > targetCalories + 2) {
+        portions.fillDay(targetCalories - portions.kcalOfDay())
+    }
+
+    return portions.map { meal -> meal.map { NutritionIngredientAmount(it.ingredient, it.amount) } }
 }
 
 /**

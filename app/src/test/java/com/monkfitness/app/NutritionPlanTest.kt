@@ -140,7 +140,7 @@ class NutritionPlanTest {
     }
 
     @Test
-    fun testReplacementKeepsMealTypeAndProfileCloseToOriginalCalories() {
+    fun testReplacementKeepsMealTypeAndProfileAndTheDayOnItsTarget() {
         val originalPlan = generateNutritionPlan(seed = 0, startDay = 1, daysCount = 3, weightKg = 80)
         val originalDay = originalPlan.days.first()
         val originalMeal = originalDay.meals.first { it.type == NutritionMealType.BREAKFAST }
@@ -155,12 +155,18 @@ class NutritionPlanTest {
             weightKg = 80,
             replacements = mapOf(nutritionReplacementKey(originalDay.programDay, originalMeal.type) to replacementId)
         )
-        val replacedMeal = replacedPlan.days.first().meals.first { it.type == NutritionMealType.BREAKFAST }
+        val replacedDay = replacedPlan.days.first()
+        val replacedMeal = replacedDay.meals.first { it.type == NutritionMealType.BREAKFAST }
 
         assertNotEquals(originalMeal.templateId, replacedMeal.templateId)
         assertEquals(originalMeal.type, replacedMeal.type)
         assertEquals(originalMeal.mealType, replacedMeal.mealType)
-        assertTrue(kotlin.math.abs(originalMeal.calories - replacedMeal.calories) <= 100)
+        // The dish is portioned with the rest of the day, so a lighter dish takes fewer of the day's
+        // calories; what the swap must not cost is the day itself.
+        assertTrue(
+            "replaced day ${replacedDay.totalCalories} against ${replacedDay.targetCalories}",
+            kotlin.math.abs(replacedDay.targetCalories - replacedDay.totalCalories) * 100 <= replacedDay.targetCalories * 7
+        )
     }
 
     @Test
@@ -343,10 +349,11 @@ class NutritionPlanTest {
                     assertEquals(day.targetCalories - day.totalCalories, gap)
                     assertTrue(kotlin.math.abs(gap) * 100 > day.targetCalories * 5)
                 }
-                if (weight == 90) {
-                    assertNotNull("90 kg day ${day.dayType} must state the gap", gap)
-                    assertTrue(gap!! > 0)
-                }
+                // A planned day is portioned onto its target, so the gap it used to state is no longer there.
+                assertTrue(
+                    "weight $weight day $startDay: ${day.totalCalories} against ${day.targetCalories}",
+                    kotlin.math.abs(day.targetCalories - day.totalCalories) * 100 <= day.targetCalories * 7
+                )
             }
         }
     }
