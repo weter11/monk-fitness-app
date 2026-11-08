@@ -3,6 +3,7 @@ package com.monkfitness.app
 import com.monkfitness.app.data.model.NutritionMeal
 import com.monkfitness.app.data.model.NutritionMealType
 import com.monkfitness.app.data.model.MealType
+import com.monkfitness.app.data.model.NUTRITION_NAME_ORDER
 import com.monkfitness.app.data.model.nutritionDishIngredientKeys
 import com.monkfitness.app.data.model.nutritionDishName
 import com.monkfitness.app.data.model.nutritionIngredientsByKey
@@ -59,6 +60,52 @@ class NutritionDishNameTest {
             assertTrue("a name lost its separator: $name", name.contains(" + ") || !name.contains("+"))
             assertTrue("a name reads as a sentence: $name", !name.contains(" with "))
         }
+    }
+
+    @Test
+    fun aDishNameReadsInTheNameOrderNotInTheOrderItWasWritten() {
+        // The recipe's own order is authoring order: the same foods must read the same everywhere.
+        catalogue.templates.forEach { template ->
+            val meal = mealOf(template.id)
+            val expected = NUTRITION_NAME_ORDER.filter { it in template.mainIngredientKeys }
+            assertEquals("${template.id} still reads in authoring order", expected, nutritionDishIngredientKeys(meal))
+        }
+    }
+
+    @Test
+    fun twoDishesInOneSlotAreNeverNamedAfterTheSameFoods() {
+        // Two cards in one slot must not read the same; that is what made "Rice + Salmon" and
+        // "Salmon + Rice" look like a bug to the shopper.
+        catalogue.templates.groupBy { it.type }.forEach { (slot, templates) ->
+            templates.groupBy { it.mainIngredientKeys.toSet() }
+                .filterValues { it.size > 1 }
+                .forEach { (foods, duplicates) ->
+                    throw AssertionError("$slot: ${duplicates.map { it.id }} are all named after $foods")
+                }
+        }
+    }
+
+    @Test
+    fun twoDishesInOneSlotAreNeverTheSameRecipe() {
+        catalogue.templates.groupBy { it.type }.forEach { (slot, templates) ->
+            templates.groupBy { template -> template.ingredients.map { it.ingredient.key }.toSet() }
+                .filterValues { it.size > 1 }
+                .forEach { (foods, duplicates) ->
+                    throw AssertionError("$slot: ${duplicates.map { it.id }} are the same dish: $foods")
+                }
+        }
+    }
+
+    private fun mealOf(templateId: String): NutritionMeal {
+        val template = catalogue.templatesById.getValue(templateId)
+        return NutritionMeal(
+            templateId = template.id,
+            type = template.type,
+            mealType = template.mealType,
+            ingredients = template.ingredients,
+            calories = template.calories,
+            proteinGrams = template.proteinGrams
+        )
     }
 
     @Test

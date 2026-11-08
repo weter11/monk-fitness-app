@@ -232,18 +232,38 @@ val nutritionIngredientsByKey: Map<String, NutritionIngredient>
     get() = NutritionCatalogue.ingredientsByKey
 
 /**
- * The ingredients a dish is named after. A meal stored before this data existed has no main list of
- * its own, so it falls back to its first three ingredients and still reads as a dish.
+ * The ingredients a dish is named after, in the one order a name reads in: the protein the dish is built
+ * around, then the staple, then produce, then the fat that finishes it. A recipe's own order is authoring
+ * order and must not change the name — the same set of foods has to read the same wherever it appears.
+ *
+ * A meal stored before this data existed has no main list of its own, so it falls back to its first three
+ * ingredients and still reads as a dish.
  */
-fun nutritionDishIngredientKeys(meal: NutritionMeal): List<String> =
-    NutritionCatalogue.templatesById[meal.templateId]?.mainIngredientKeys?.takeIf { it.isNotEmpty() }
+fun nutritionDishIngredientKeys(meal: NutritionMeal): List<String> {
+    val keys = NutritionCatalogue.templatesById[meal.templateId]?.mainIngredientKeys
+        ?.takeIf { it.isNotEmpty() }
         ?: meal.ingredients.map { it.ingredient.key }.take(3)
+    return keys.sortedBy { key -> NUTRITION_NAME_ORDER.indexOf(key).let { if (it < 0) Int.MAX_VALUE else it } }
+}
 
 /** "A + B + C": names joined by a language-neutral separator, so no language's grammar leaks in. */
 fun nutritionDishName(names: List<String>): String =
     names.map { it.trim() }.filter { it.isNotEmpty() }.joinToString(NUTRITION_DISH_NAME_SEPARATOR)
 
 internal const val NUTRITION_DISH_NAME_SEPARATOR = " + "
+
+/** Every food the app knows, in name order; the parser refuses a catalogue with a food missing from it. */
+internal val NUTRITION_NAME_ORDER: List<String> = listOf(
+    // the protein the dish is built around
+    "chicken", "eggs", "tuna", "salmon", "cod", "ham", "tofu",
+    "cottage_cheese", "yogurt", "milk", "soy_milk",
+    // the staple or pulse that carries it
+    "lentils", "chickpeas", "rice", "pasta", "oats", "buckwheat", "potatoes", "bread",
+    // the produce
+    "carrots", "tomatoes", "courgette", "cauliflower", "banana", "apple",
+    // the fat that finishes it
+    "nuts"
+)
 
 enum class NutritionGenerationIssue(@StringRes val messageRes: Int) {
     NOT_ENOUGH_PROTEIN(R.string.nutrition_not_enough_protein_sources),

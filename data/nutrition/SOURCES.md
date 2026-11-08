@@ -83,10 +83,15 @@ German nouns capitalised — so a vocabulary label that arrives capitalised is l
 Foods bought by the piece are stored in the plural (`eieren`, `pommes de terre`, `яйца`, `Eier`) and
 carry `inflectedFrom`, the singular the cited label spells. A reader can therefore still check the
 plural against the row: the validator compares `inflectedFrom` to the cited term, folding case and the
-œ ligature. Foods bought by weight (`chicken`, `rice`, `oats`, `buckwheat`, `cottage_cheese`,
-`yogurt`, `tuna`, and every vegetable, pulse, fish, pasta, bread, drink and dairy item added later)
-keep one form and carry no `inflectedFrom`. An `unverified` plural that the app wrote itself
-(`noten`, `картофи`, `ядки`, `Nüsse`) has no label to point at and so carries none.
+œ ligature.
+
+A vegetable or pulse is counted the same way — `wortelen`, `carottes`, `моркови`, `Karotten` beside
+`eieren` — while a food you ask for by weight or by the glass (`cauliflower`, `salmon`, `cod`, `pasta`,
+`bread`, `soy milk`, `tofu`, `ham`, `milk`) keeps one form and carries no `inflectedFrom`. Two of the
+plurals are collective in Bulgarian (`леща`, `нахут`) and one is invariant in German (`Zucchini`), so
+the plural is the label itself; and Dutch tomatoes cite an alias that is already plural. An
+`unverified` plural the app wrote itself (`noten`, `картофи`, `ядки`, `Nüsse`) has no label to point at
+and so carries none.
 
 French eggs are the one place the app deliberately departs from the source's spelling: AGROVOC types
 `oeuf`, French writes `œuf`, and the row shows `Œufs`. The `note` on that entry says so.

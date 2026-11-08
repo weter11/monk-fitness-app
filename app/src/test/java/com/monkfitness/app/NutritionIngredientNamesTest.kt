@@ -61,14 +61,43 @@ class NutritionIngredientNamesTest {
                 "fr" to ("fruits à coque" to "fruit à coque"),
                 "bg" to ("ядки" to null),
                 "de" to ("Nüsse" to null)
+            ),
+            "carrots" to mapOf(
+                "nl" to ("wortelen" to "wortel"),
+                "fr" to ("carottes" to "carotte"),
+                "bg" to ("моркови" to "морков"),
+                "de" to ("Karotten" to "Karotte")
+            ),
+            "tomatoes" to mapOf(
+                "nl" to ("tomaten" to null),
+                "fr" to ("tomates" to "tomate"),
+                "bg" to ("домати" to "домат"),
+                "de" to ("Tomaten" to "Tomate")
+            ),
+            "courgette" to mapOf(
+                "nl" to ("courgettes" to "courgette"),
+                "fr" to ("courgettes" to "courgette"),
+                "bg" to ("тиквички" to "тиквичка"),
+                "de" to ("Zucchini" to "Zucchini")
+            ),
+            "lentils" to mapOf(
+                "nl" to ("linzen" to "linze"),
+                "fr" to ("lentilles" to "lentille"),
+                "bg" to ("леща" to null),
+                "de" to ("Linsen" to "Linse")
+            ),
+            "chickpeas" to mapOf(
+                "nl" to ("kikkererwten" to "kikkererwt"),
+                "fr" to ("pois chiches" to "pois chiche"),
+                "bg" to ("нахут" to null),
+                "de" to ("Kichererbsen" to "Kichererbse")
             )
         )
 
         /** Foods bought by weight or by volume: one word covers any amount of them. */
         private val MASS = listOf(
             "chicken", "rice", "oats", "buckwheat", "cottage_cheese", "yogurt", "tuna",
-            "carrots", "tomatoes", "courgette", "cauliflower", "lentils", "chickpeas",
-            "salmon", "cod", "pasta", "bread", "soy_milk", "tofu", "ham", "milk"
+            "cauliflower", "salmon", "cod", "pasta", "bread", "soy_milk", "tofu", "ham", "milk"
         )
 
         @BeforeClass

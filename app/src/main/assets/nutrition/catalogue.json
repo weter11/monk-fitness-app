@@ -860,44 +860,48 @@
       "lactose": false,
       "names": {
         "nl": {
-          "name": "wortel",
+          "name": "wortelen",
           "trust": "sourced",
           "source": {
             "database": "Wikidata",
             "id": "Q81",
             "term": "prefLabel",
             "licence": "CC0 1.0"
-          }
+          },
+          "inflectedFrom": "wortel"
         },
         "fr": {
-          "name": "carotte",
+          "name": "carottes",
           "trust": "sourced",
           "source": {
             "database": "AGROVOC",
             "id": "c_9640",
             "term": "prefLabel",
             "licence": "CC BY 4.0"
-          }
+          },
+          "inflectedFrom": "carotte"
         },
         "bg": {
-          "name": "морков",
+          "name": "моркови",
           "trust": "sourced",
           "source": {
             "database": "Wikidata",
             "id": "Q81",
             "term": "prefLabel",
             "licence": "CC0 1.0"
-          }
+          },
+          "inflectedFrom": "морков"
         },
         "de": {
-          "name": "Karotte",
+          "name": "Karotten",
           "trust": "sourced",
           "source": {
             "database": "Wikidata",
             "id": "Q81",
             "term": "prefLabel",
             "licence": "CC0 1.0"
-          }
+          },
+          "inflectedFrom": "Karotte"
         }
       }
     },
@@ -940,34 +944,37 @@
           "note": "Wikidata's label names the plant; the shop word is the fruit's plural alias."
         },
         "fr": {
-          "name": "tomate",
+          "name": "tomates",
           "trust": "sourced",
           "source": {
             "database": "AGROVOC",
             "id": "c_7805",
             "term": "prefLabel",
             "licence": "CC BY 4.0"
-          }
+          },
+          "inflectedFrom": "tomate"
         },
         "bg": {
-          "name": "домат",
+          "name": "домати",
           "trust": "sourced",
           "source": {
             "database": "Wikidata",
             "id": "Q23501",
             "term": "prefLabel",
             "licence": "CC0 1.0"
-          }
+          },
+          "inflectedFrom": "домат"
         },
         "de": {
-          "name": "Tomate",
+          "name": "Tomaten",
           "trust": "sourced",
           "source": {
             "database": "Wikidata",
             "id": "Q23501",
             "term": "prefLabel",
             "licence": "CC0 1.0"
-          }
+          },
+          "inflectedFrom": "Tomate"
         }
       }
     },
@@ -999,34 +1006,37 @@
       "lactose": false,
       "names": {
         "nl": {
-          "name": "courgette",
+          "name": "courgettes",
           "trust": "sourced",
           "source": {
             "database": "Wikidata",
             "id": "Q7533",
             "term": "prefLabel",
             "licence": "CC0 1.0"
-          }
+          },
+          "inflectedFrom": "courgette"
         },
         "fr": {
-          "name": "courgette",
+          "name": "courgettes",
           "trust": "sourced",
           "source": {
             "database": "AGROVOC",
             "id": "c_12414",
             "term": "prefLabel",
             "licence": "CC BY 4.0"
-          }
+          },
+          "inflectedFrom": "courgette"
         },
         "bg": {
-          "name": "тиквичка",
+          "name": "тиквички",
           "trust": "sourced",
           "source": {
             "database": "Wikidata",
             "id": "Q7533",
             "term": "prefLabel",
             "licence": "CC0 1.0"
-          }
+          },
+          "inflectedFrom": "тиквичка"
         },
         "de": {
           "name": "Zucchini",
@@ -1036,7 +1046,8 @@
             "id": "Q7533",
             "term": "prefLabel",
             "licence": "CC0 1.0"
-          }
+          },
+          "inflectedFrom": "Zucchini"
         }
       }
     },
@@ -1137,24 +1148,26 @@
       "lactose": false,
       "names": {
         "nl": {
-          "name": "linze",
+          "name": "linzen",
           "trust": "sourced",
           "source": {
             "database": "Wikidata",
             "id": "Q61505177",
             "term": "prefLabel",
             "licence": "CC0 1.0"
-          }
+          },
+          "inflectedFrom": "linze"
         },
         "fr": {
-          "name": "lentille",
+          "name": "lentilles",
           "trust": "sourced",
           "source": {
             "database": "AGROVOC",
             "id": "c_12140",
             "term": "prefLabel",
             "licence": "CC BY 4.0"
-          }
+          },
+          "inflectedFrom": "lentille"
         },
         "bg": {
           "name": "леща",
@@ -1163,14 +1176,15 @@
           "note": "Wikidata holds no Bulgarian label for the lentil."
         },
         "de": {
-          "name": "Linse",
+          "name": "Linsen",
           "trust": "sourced",
           "source": {
             "database": "Wikidata",
             "id": "Q61505177",
             "term": "prefLabel",
             "licence": "CC0 1.0"
-          }
+          },
+          "inflectedFrom": "Linse"
         }
       }
     },
@@ -1203,24 +1217,26 @@
       "lactose": false,
       "names": {
         "nl": {
-          "name": "kikkererwt",
+          "name": "kikkererwten",
           "trust": "sourced",
           "source": {
             "database": "Wikidata",
             "id": "Q21156930",
             "term": "prefLabel",
             "licence": "CC0 1.0"
-          }
+          },
+          "inflectedFrom": "kikkererwt"
         },
         "fr": {
-          "name": "pois chiche",
+          "name": "pois chiches",
           "trust": "sourced",
           "source": {
             "database": "AGROVOC",
             "id": "c_9785",
             "term": "prefLabel",
             "licence": "CC BY 4.0"
-          }
+          },
+          "inflectedFrom": "pois chiche"
         },
         "bg": {
           "name": "нахут",
@@ -1233,14 +1249,15 @@
           }
         },
         "de": {
-          "name": "Kichererbse",
+          "name": "Kichererbsen",
           "trust": "sourced",
           "source": {
             "database": "Wikidata",
             "id": "Q21156930",
             "term": "prefLabel",
             "licence": "CC0 1.0"
-          }
+          },
+          "inflectedFrom": "Kichererbse"
         }
       }
     },
@@ -1609,14 +1626,15 @@
       "lactose": false,
       "names": {
         "nl": {
-          "name": "tofoe",
+          "name": "tofu",
           "trust": "sourced",
           "source": {
             "database": "Wikidata",
             "id": "Q177378",
-            "term": "prefLabel",
+            "term": "alias",
             "licence": "CC0 1.0"
-          }
+          },
+          "note": "Albert Heijn, Jumbo and Delhaize all print the loan word \"tofu\"; Wikidata's Dutch label is the alternative spelling \"tofoe\"."
         },
         "fr": {
           "name": "tofu",
@@ -2667,8 +2685,8 @@
       "optional": false,
       "ingredients": [
         {
-          "ingredient": "chickpeas",
-          "amount": 150
+          "ingredient": "lentils",
+          "amount": 250
         },
         {
           "ingredient": "bread",
@@ -2680,7 +2698,7 @@
         }
       ],
       "main": [
-        "chickpeas",
+        "lentils",
         "bread"
       ]
     },
@@ -2799,17 +2817,17 @@
           "amount": 140
         },
         {
-          "ingredient": "rice",
-          "amount": 200
+          "ingredient": "potatoes",
+          "amount": 300
         },
         {
-          "ingredient": "cauliflower",
-          "amount": 120
+          "ingredient": "courgette",
+          "amount": 150
         }
       ],
       "main": [
         "salmon",
-        "rice"
+        "potatoes"
       ]
     },
     {

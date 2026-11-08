@@ -207,6 +207,9 @@ internal fun parseCatalogue(json: String): ParsedNutritionCatalogue {
             require(amounts.any { it.ingredient.key == key }) {
                 "catalogue: template ${entry.string("id")} is named after $key, which it does not contain"
             }
+            require(key in NUTRITION_NAME_ORDER) {
+                "catalogue: $key has no place in the name order, so its dishes would read differently"
+            }
         }
         NutritionMealTemplate(
             id = entry.string("id"),
