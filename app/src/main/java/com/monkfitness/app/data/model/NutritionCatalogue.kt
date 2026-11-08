@@ -229,15 +229,15 @@ internal fun parseCatalogue(json: String): ParsedNutritionCatalogue {
 
 internal const val SUPPORTED_SCHEMA_VERSION = 1
 
-private fun NutritionIngredient.gramsFor(amount: Int): Double = when (unit) {
+internal fun NutritionIngredient.gramsFor(amount: Int): Double = when (unit) {
     NutritionQuantityUnit.PIECES -> (amount * (gramsPerPiece ?: error("no piece weight for $key"))).toDouble()
     NutritionQuantityUnit.GRAMS, NutritionQuantityUnit.MILLILITERS -> amount.toDouble()
 }
 
-private fun NutritionIngredient.kcalFor(amount: Int): Double =
+internal fun NutritionIngredient.kcalFor(amount: Int): Double =
     gramsFor(amount) * (nutrientsPer100g ?: error("no nutrients for $key")).kcal / 100.0
 
-private fun NutritionIngredient.proteinFor(amount: Int): Double =
+internal fun NutritionIngredient.proteinFor(amount: Int): Double =
     gramsFor(amount) * (nutrientsPer100g ?: error("no nutrients for $key")).proteinGrams / 100.0
 
 private fun Map<*, *>.string(name: String): String =
