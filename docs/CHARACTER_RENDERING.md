@@ -152,7 +152,7 @@ no device in the build environment.
 
 ## 9. Known costs and risks
 
-1. **APK size.** Filament JNI adds ~7.4 MB of arm64 native code and the test GLB 2.0 MB. Disabled by
+1. **APK size.** Filament JNI adds ~6.0 MB of arm64 native code and the test GLB 2.0 MB. Disabled by
    default but still packaged. A dynamic feature module or flavor split is the next packaging step.
 2. **Two heroes, one slot.** The expanded session demo and the session preview are never live at
    the same time by construction (only the dialog passes `liveCharacter = true`), but a future screen
