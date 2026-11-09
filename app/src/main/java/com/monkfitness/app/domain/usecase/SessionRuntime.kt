@@ -25,6 +25,7 @@ import com.monkfitness.app.domain.workout.SessionRefusal
 import com.monkfitness.app.domain.workout.SessionRuntimeResult
 import com.monkfitness.app.domain.workout.SessionStatus
 import com.monkfitness.app.domain.workout.SetResult
+import com.monkfitness.app.domain.workout.isPerformedAmount
 import com.monkfitness.app.domain.workout.WorkoutSession
 import com.monkfitness.app.domain.workout.WorkoutSessionSnapshot
 import java.time.LocalDate
@@ -207,6 +208,12 @@ class SessionRuntime(
                     completedReps = completedReps,
                     durationSeconds = durationSeconds
                 )
+            )
+        }
+        val measuredAmount = if (durationSeconds > 0) durationSeconds else completedReps
+        if (!isPerformedAmount(measuredAmount)) {
+            return@sessionOutcome refused(
+                SessionRefusal.SetAmountIsNotAMeasurement(sessionExerciseId, measuredAmount)
             )
         }
 

@@ -2,6 +2,7 @@ package com.monkfitness.app.domain.progress
 
 import com.monkfitness.app.domain.prescription.PrescriptionDimension
 import com.monkfitness.app.domain.program.SlotStatus
+import com.monkfitness.app.domain.workout.isMeasuredSet
 import java.time.ZoneId
 
 /**
@@ -64,7 +65,9 @@ class ProgressCalculator(private val zone: ZoneId = ZoneId.systemDefault()) {
      *    cancelled attempt's elapsed time is not a workout duration and stays visible in [history].
      *  * series and volumes are built over the scope's whole history, grouped by [ComparableContext] —
      *    one exercise in one unit. A dimension with no unit contract produces neither and appears in
-     *    [deferred] instead of as a zero.
+     *    [deferred] instead of as a zero. The per-attempt, per-week and per-exercise volumes are the
+     *    exception: they are measured inside [window], because "how much work in these four weeks" is
+     *    a question about a span.
      *  * exposure survives its session's status: every confirmed set is an observation, including the
      *    sets of a later-cancelled or still-running attempt, carrying
      *    [PerformanceObservation.sessionStatus] so a reader can filter. Dropping them would erase work
@@ -88,17 +91,22 @@ class ProgressCalculator(private val zone: ZoneId = ZoneId.systemDefault()) {
                     emptyList()
                 } else {
                     val context = ComparableContext(occurrence.exerciseId, occurrence.prescription.dimension)
-                    occurrence.results.map { set ->
-                        context to PerformanceObservation(
-                            programId = session.programId,
-                            sessionId = session.sessionId,
-                            sessionStatus = session.status,
-                            setIndex = set.setIndex,
-                            performedAt = set.performedAt,
-                            repetitions = set.completedReps,
-                            seconds = set.durationSeconds
-                        )
-                    }
+                    occurrence.results
+                        // A placeholder ("until failure" confirmed as written) is not work; dropping
+                        // it here keeps it out of every measure derived from these observations —
+                        // records, volumes and adaptive evidence — rather than hiding it at display.
+                        .filter { set -> set.isMeasuredSet() }
+                        .map { set ->
+                            context to PerformanceObservation(
+                                programId = session.programId,
+                                sessionId = session.sessionId,
+                                sessionStatus = session.status,
+                                setIndex = set.setIndex,
+                                performedAt = set.performedAt,
+                                repetitions = set.completedReps,
+                                seconds = set.durationSeconds
+                            )
+                        }
                 }
             }
         }
@@ -108,6 +116,62 @@ class ProgressCalculator(private val zone: ZoneId = ZoneId.systemDefault()) {
                 ExercisePerformanceSeries(context, own.sortedWith(PerformanceObservation.ORDER))
             }
             .sortedWith(TrainingProgress.ORDER)
+
+        // Volume is windowed while a series is cumulative: "how much work was done in the last
+        // four weeks" is a question about a span, and a series is the whole history of a context.
+        val startedOn = facts.sessions.associate { session -> session.sessionId to session.startedAt }
+        val dated = observations.map { (context, observation) ->
+            Triple(context, observation, observation.performedAt.atZone(zone).toLocalDate())
+        }.filter { (_, _, date) -> window.contains(date) }
+
+        val sessionVolumes = dated
+            .groupBy { (_, observation, _) -> observation.sessionId }
+            .map { (sessionId, own) ->
+                val first = own.first().second
+                SessionVolume(
+                    sessionId = sessionId,
+                    programId = first.programId,
+                    // A session's start is the stored fact; a set's clock reading is not the attempt.
+                    startedOn = requireNotNull(startedOn[sessionId]).atZone(zone).toLocalDate(),
+                    repetitions = own.sumOf { (_, observation, _) -> observation.repetitions },
+                    seconds = own.sumOf { (_, observation, _) -> observation.seconds },
+                    performedSets = own.size
+                )
+            }
+            .sortedWith(compareByDescending<SessionVolume> { it.startedOn }.thenBy { it.sessionId.value })
+
+        val weekVolumes = dated
+            .groupBy { (_, _, date) -> weekStartOf(date) }
+            .map { (week, own) ->
+                WeekVolume(
+                    weekStart = week,
+                    repetitions = own.sumOf { (_, observation, _) -> observation.repetitions },
+                    seconds = own.sumOf { (_, observation, _) -> observation.seconds },
+                    performedSets = own.size
+                )
+            }
+            .sortedBy { it.weekStart }
+
+        val exerciseVolumes = dated
+            .groupBy { (context, _, _) -> context }
+            .map { (context, own) ->
+                ExerciseVolume(
+                    exerciseId = context.exerciseId,
+                    dimension = context.dimension,
+                    repetitions = if (context.dimension == PrescriptionDimension.REP_BASED) {
+                        own.sumOf { (_, observation, _) -> observation.repetitions }
+                    } else {
+                        null
+                    },
+                    seconds = if (context.dimension == PrescriptionDimension.TIME_BASED) {
+                        own.sumOf { (_, observation, _) -> observation.seconds }
+                    } else {
+                        null
+                    },
+                    performedSets = own.size
+                )
+            }
+            .sortedWith(compareBy({ it.exerciseId }, { it.dimension.ordinal }))
 
         return TrainingProgress(
             scope = facts.scope,
@@ -123,6 +187,9 @@ class ProgressCalculator(private val zone: ZoneId = ZoneId.systemDefault()) {
             ),
             series = series,
             volumes = series.map { own -> volumeOf(own) }.sortedWith(TrainingProgress.VOLUME_ORDER),
+            sessionVolumes = sessionVolumes,
+            weekVolumes = weekVolumes,
+            exerciseVolumes = exerciseVolumes,
             streaks = streaks(facts),
             deferred = DEFERRED_MEASURES
         )

@@ -58,11 +58,15 @@ import com.github.mikephil.charting.data.LineDataSet
 import com.github.mikephil.charting.formatter.IndexAxisValueFormatter
 import com.monkfitness.app.R
 import com.monkfitness.app.data.model.BodyWeightEntry
+import com.monkfitness.app.data.model.LibraryCounts
 import com.monkfitness.app.domain.prescription.PrescriptionDimension
 import com.monkfitness.app.domain.program.LifecycleStatus
 import com.monkfitness.app.domain.workout.SessionStatus
 import com.monkfitness.app.data.model.Equipment
 import com.monkfitness.app.data.model.Exercise
+import com.monkfitness.app.ui.programs.ProgressExerciseVolumeRowUi
+import com.monkfitness.app.ui.programs.ProgressSessionVolumeRowUi
+import com.monkfitness.app.ui.programs.ProgressWeekVolumeRowUi
 import com.monkfitness.app.viewmodel.MainViewModel
 import java.time.LocalDate
 import java.util.Locale
@@ -76,6 +80,7 @@ fun ProgressScreen(viewModel: MainViewModel) {
     val postureProgressList by viewModel.postureProgress.collectAsState()
     val bodyWeightHistory by viewModel.bodyWeightHistory.collectAsState()
     val latestBodyWeight by viewModel.latestBodyWeight.collectAsState()
+    val libraryCounts by viewModel.libraryCounts.collectAsState()
 
     LaunchedEffect(viewModel) {
         viewModel.refreshProgress()
@@ -171,6 +176,10 @@ fun ProgressScreen(viewModel: MainViewModel) {
 
             Spacer(modifier = Modifier.height(24.dp))
 
+            LibraryCountsCard(counts = libraryCounts)
+
+            Spacer(modifier = Modifier.height(24.dp))
+
             ProgressLineCard(
                 title = stringResource(R.string.progress_calendar_title),
                 lines = if (progressState.hasOpportunities) {
@@ -239,23 +248,39 @@ fun ProgressScreen(viewModel: MainViewModel) {
 
             Spacer(modifier = Modifier.height(24.dp))
 
+            VolumeCard(
+                sessions = progressState.volumeSessions,
+                weeks = progressState.volumeWeeks,
+                exercises = progressState.volumeExercises,
+                hasVolume = progressState.hasVolume
+            )
+
+            Spacer(modifier = Modifier.height(24.dp))
+
             ProgressLineCard(
                 title = stringResource(R.string.progress_performance_title),
-                lines = progressState.performance.take(8).map { row ->
-                    if (row.dimension == PrescriptionDimension.TIME_BASED) {
-                        stringResource(
-                            R.string.progress_performance_time_row,
-                            row.exerciseId,
-                            row.observations,
-                            row.best
-                        )
+                lines = progressState.performance.mapNotNull { row ->
+                    val name = if (row.nameRes != 0) {
+                        stringResource(row.nameRes)
                     } else {
-                        stringResource(
-                            R.string.progress_performance_rep_row,
-                            row.exerciseId,
-                            row.observations,
-                            row.best
-                        )
+                        stringResource(R.string.progress_unknown_exercise)
+                    }
+                    row.best?.let { best ->
+                        if (row.dimension == PrescriptionDimension.TIME_BASED) {
+                            stringResource(
+                                R.string.progress_performance_time_row,
+                                name,
+                                row.observations,
+                                best
+                            )
+                        } else {
+                            stringResource(
+                                R.string.progress_performance_rep_row,
+                                name,
+                                row.observations,
+                                best
+                            )
+                        }
                     }
                 },
                 emptyText = stringResource(R.string.progress_performance_empty)
@@ -405,6 +430,165 @@ private fun formatDuration(seconds: Double?): String {
     if (seconds == null || !seconds.isFinite() || seconds <= 0.0) return "--"
     val total = seconds.toLong()
     return String.format(Locale.US, "%d:%02d", total / 60, total % 60)
+}
+
+/**
+ * The app's own size: how many exercises the engine can animate, and how many foods and dishes the
+ * nutrition catalogue ships. Every number is derived from a registry, so adding an item changes the
+ * card without a second place to edit.
+ */
+@Composable
+private fun LibraryCountsCard(counts: LibraryCounts) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+    ) {
+        Column(
+            modifier = Modifier.padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            Text(
+                text = stringResource(R.string.library_counts_title),
+                style = MaterialTheme.typography.titleLarge,
+                fontWeight = FontWeight.Bold
+            )
+            LibraryCountRow(
+                label = stringResource(R.string.library_counts_exercises),
+                value = counts.animatedExercises
+            )
+            LibraryCountRow(
+                label = stringResource(R.string.library_counts_foods),
+                value = counts.foods
+            )
+            LibraryCountRow(
+                label = stringResource(R.string.library_counts_dishes),
+                value = counts.dishes
+            )
+        }
+    }
+}
+
+@Composable
+private fun LibraryCountRow(label: String, value: Int) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalAlignment = Alignment.Top
+    ) {
+        Text(
+            text = label,
+            style = MaterialTheme.typography.bodyMedium,
+            modifier = Modifier.weight(1f)
+        )
+        Text(
+            text = value.toString(),
+            style = MaterialTheme.typography.bodyMedium,
+            fontWeight = FontWeight.Bold,
+            textAlign = TextAlign.End
+        )
+    }
+}
+
+/**
+ * Training volume over the layer's window: per attempt, per calendar week and per exercise, each in
+ * the unit it was performed in. Repetitions and seconds are printed side by side and never added, and
+ * there is no number at all until a measured set exists.
+ */
+@Composable
+private fun VolumeCard(
+    sessions: List<ProgressSessionVolumeRowUi>,
+    weeks: List<ProgressWeekVolumeRowUi>,
+    exercises: List<ProgressExerciseVolumeRowUi>,
+    hasVolume: Boolean
+) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+    ) {
+        Column(
+            modifier = Modifier.padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            Text(
+                text = stringResource(R.string.progress_volume_title),
+                style = MaterialTheme.typography.titleLarge,
+                fontWeight = FontWeight.Bold
+            )
+            Text(
+                text = stringResource(R.string.progress_volume_window),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.secondary
+            )
+            if (!hasVolume) {
+                Text(
+                    text = stringResource(R.string.progress_volume_empty),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.secondary
+                )
+            } else {
+                VolumeSection(
+                    title = stringResource(R.string.progress_volume_by_week),
+                    rows = weeks.map { week ->
+                        stringResource(
+                            R.string.progress_volume_week_row,
+                            week.weekStart.toString(),
+                            volumeAmount(week.repetitions, week.seconds)
+                        )
+                    }
+                )
+                VolumeSection(
+                    title = stringResource(R.string.progress_volume_by_exercise),
+                    rows = exercises.map { exercise ->
+                        val name = if (exercise.nameRes != 0) {
+                            stringResource(exercise.nameRes)
+                        } else {
+                            stringResource(R.string.progress_unknown_exercise)
+                        }
+                        stringResource(
+                            R.string.progress_volume_exercise_row,
+                            name,
+                            volumeAmount(exercise.repetitions ?: 0, exercise.seconds ?: 0)
+                        )
+                    }
+                )
+                VolumeSection(
+                    title = stringResource(R.string.progress_volume_recent_sessions),
+                    rows = sessions.map { session ->
+                        stringResource(
+                            R.string.progress_volume_session_row,
+                            session.startedOn.toString(),
+                            volumeAmount(session.repetitions, session.seconds)
+                        )
+                    }
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun VolumeSection(title: String, rows: List<String>) {
+    if (rows.isEmpty()) return
+    Text(
+        text = title,
+        style = MaterialTheme.typography.titleSmall,
+        fontWeight = FontWeight.Bold,
+        color = MaterialTheme.colorScheme.primary
+    )
+    rows.forEach { row ->
+        Text(text = row, style = MaterialTheme.typography.bodyMedium)
+    }
+}
+
+/** One volume in its own units: repetitions, seconds, or both — never one added number. */
+@Composable
+private fun volumeAmount(repetitions: Int, seconds: Int): String = when {
+    repetitions > 0 && seconds > 0 ->
+        stringResource(R.string.progress_volume_reps_and_seconds, repetitions, seconds)
+
+    repetitions > 0 -> stringResource(R.string.progress_volume_reps, repetitions)
+    seconds > 0 -> stringResource(R.string.progress_volume_seconds, seconds)
+    else -> stringResource(R.string.progress_volume_empty)
 }
 
 /**

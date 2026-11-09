@@ -4,6 +4,7 @@ import com.monkfitness.app.domain.common.ProgramId
 import com.monkfitness.app.domain.common.SessionId
 import com.monkfitness.app.domain.prescription.PrescriptionDimension
 import com.monkfitness.app.domain.workout.SessionStatus
+import com.monkfitness.app.domain.workout.isPerformedAmount
 import java.time.Instant
 
 /**
@@ -63,6 +64,10 @@ data class PerformanceObservation(
         require((repetitions > 0) != (seconds > 0)) {
             "an observation is measured in repetitions or in time, and a set that was not performed is " +
                 "absent rather than observed as zero: reps=$repetitions seconds=$seconds"
+        }
+        require(isPerformedAmount(if (seconds > 0) seconds else repetitions)) {
+            "a placeholder is not an observation: reps=$repetitions seconds=$seconds; a stored set " +
+                "with a placeholder amount is excluded before it reaches this value"
         }
     }
 

@@ -27,6 +27,7 @@ import com.monkfitness.app.domain.prescription.RepPrescription
 import com.monkfitness.app.domain.program.SlotStatus
 import com.monkfitness.app.domain.workout.AdaptiveCompletion
 import com.monkfitness.app.domain.workout.AdaptiveOutcome
+import com.monkfitness.app.domain.workout.PLACEHOLDER_PERFORMED_AMOUNT
 import com.monkfitness.app.domain.workout.SessionRefusal
 import com.monkfitness.app.domain.workout.SessionRuntimeResult
 import com.monkfitness.app.domain.workout.SessionStatus
@@ -738,6 +739,23 @@ class SessionRuntimeTest {
         assertEquals("the persisted observation is the actual held time", "22", stored["durationSeconds"])
         assertEquals(22, after.exercises.single { it.exerciseId == "plank" }.results.single().durationSeconds)
         assertEquals("the frozen prescription remains separate", 30, after.exercises.single { it.exerciseId == "plank" }.prescription.targetForSet(1))
+    }
+
+    @Test
+    fun aPlaceholderAmountIsRefusedWithoutWritingASetLog() = runBlocking {
+        val (session, occurrence) = startedWithOneSet()
+        val before = rig.storedSets(occurrence.value).size
+
+        val refusal = SessionFixture.refusalOf(
+            rig.runtime.confirmSet(
+                session.sessionId,
+                occurrence,
+                completedReps = PLACEHOLDER_PERFORMED_AMOUNT
+            )
+        )
+
+        assertTrue(refusal is SessionRefusal.SetAmountIsNotAMeasurement)
+        assertEquals("the placeholder leaves no row behind", before, rig.storedSets(occurrence.value).size)
     }
 
     @Test

@@ -11,7 +11,10 @@ import com.monkfitness.app.domain.prescription.PrescriptionDimension
  *
  * [frequency] and [averageSessionDuration] cover the scope's completed workouts inside [window];
  * [series], [volumes] and [streaks] cover the scope's whole recorded history (streaks per Program);
- * [deferred] is nothing, because those measures are not computed and the value says so.
+ * [sessionVolumes], [weekVolumes] and [exerciseVolumes] are the windowed measures — the same facts,
+ * but only the sets performed inside [window], because a volume over a span is not a cumulative
+ * description of everything ever recorded. [deferred] is nothing, because those measures are not
+ * computed and the value says so.
  *
  * The window is deliberately not applied to the history-derived measures: a series and a volume are
  * cumulative descriptions of what has been recorded, while a rate is only readable against a span.
@@ -24,6 +27,12 @@ data class TrainingProgress(
     val averageSessionDuration: AverageSessionDuration,
     val series: List<ExercisePerformanceSeries>,
     val volumes: List<ContextVolume>,
+    /** Per-attempt volume inside [window], newest first. */
+    val sessionVolumes: List<SessionVolume> = emptyList(),
+    /** Per-calendar-week volume inside [window], oldest first; a week with no set is absent. */
+    val weekVolumes: List<WeekVolume> = emptyList(),
+    /** Per-exercise volume inside [window], in the exercise's own unit. */
+    val exerciseVolumes: List<ExerciseVolume> = emptyList(),
     val streaks: List<ProgramStreak>,
     val deferred: List<DeferredMeasure>
 ) {
@@ -48,6 +57,24 @@ data class TrainingProgress(
         require(volumes == volumes.sortedWith(VOLUME_ORDER)) {
             "the volumes are in a deterministic order: ${volumes.map { it.context }}"
         }
+        require(sessionVolumes.map { it.sessionId }.toSet().size == sessionVolumes.size) {
+            "one volume per attempt: ${sessionVolumes.map { it.sessionId.value }}"
+        }
+        require(sessionVolumes == sessionVolumes.sortedWith(SESSION_VOLUME_ORDER)) {
+            "attempt volumes are newest first: ${sessionVolumes.map { it.sessionId.value }}"
+        }
+        require(weekVolumes.map { it.weekStart }.toSet().size == weekVolumes.size) {
+            "one volume per calendar week: ${weekVolumes.map { it.weekStart }}"
+        }
+        require(weekVolumes == weekVolumes.sortedBy { it.weekStart }) {
+            "weeks are chronological: ${weekVolumes.map { it.weekStart }}"
+        }
+        require(exerciseVolumes.map { it.exerciseId to it.dimension }.toSet().size == exerciseVolumes.size) {
+            "one volume per exercise and unit: ${exerciseVolumes.map { "${it.exerciseId}/${it.dimension}" }}"
+        }
+        require(exerciseVolumes == exerciseVolumes.sortedWith(EXERCISE_VOLUME_ORDER)) {
+            "exercise volumes are in a deterministic order: ${exerciseVolumes.map { it.exerciseId }}"
+        }
         require(deferred.map { it.measure }.toSet().size == deferred.size) {
             "a measure is reported as deferred once: ${deferred.map { it.measure }}"
         }
@@ -55,6 +82,10 @@ data class TrainingProgress(
             "the rate-like measures share one window: frequency=${frequency.window} window=$window"
         }
     }
+
+    /** Whether the window holds any performed set at all — what an empty state is drawn from. */
+    val hasVolume: Boolean
+        get() = sessionVolumes.isNotEmpty()
 
     fun seriesOf(exerciseId: String, dimension: PrescriptionDimension): ExercisePerformanceSeries? =
         series.firstOrNull { it.context == ComparableContext(exerciseId, dimension) }
@@ -79,5 +110,13 @@ data class TrainingProgress(
         /** The same order, keyed by the same contexts. */
         val VOLUME_ORDER: Comparator<ContextVolume> =
             compareBy({ it.context.exerciseId }, { it.context.dimension.ordinal })
+
+        /** Newest attempt first, the identity as the tiebreak so two attempts on one day stay ordered. */
+        val SESSION_VOLUME_ORDER: Comparator<SessionVolume> =
+            compareByDescending<SessionVolume> { it.startedOn }.thenBy { it.sessionId.value }
+
+        /** Exercise first, then the dimension's declaration order — the same order as a series. */
+        val EXERCISE_VOLUME_ORDER: Comparator<ExerciseVolume> =
+            compareBy({ it.exerciseId }, { it.dimension.ordinal })
     }
 }

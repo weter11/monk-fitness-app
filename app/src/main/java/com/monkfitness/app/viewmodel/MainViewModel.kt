@@ -19,7 +19,9 @@ import com.monkfitness.app.data.model.BiologicalSex
 import com.monkfitness.app.data.model.BodyWeightEntry
 import com.monkfitness.app.data.model.Equipment
 import com.monkfitness.app.data.model.Exercise
+import com.monkfitness.app.data.model.LibraryCounts
 import com.monkfitness.app.data.model.LibraryStats
+import com.monkfitness.app.data.model.NutritionCatalogue
 import com.monkfitness.app.data.model.ExerciseCategory
 import com.monkfitness.app.data.model.ExerciseSubCategory
 import com.monkfitness.app.data.model.FlexibilityTrainingType
@@ -54,6 +56,7 @@ import com.monkfitness.app.data.model.validateAvailableProductSelection
 import com.monkfitness.app.data.repository.NutritionRepository
 import com.monkfitness.app.data.repository.PostureRepository
 import com.monkfitness.app.domain.usecase.WorkoutGenerator
+import com.monkfitness.app.poses.PoseRegistry
 import com.monkfitness.app.language.AppLanguage
 import com.monkfitness.app.language.AppLanguageManager
 import com.monkfitness.app.platform.ProgramShareSheet
@@ -104,6 +107,13 @@ import kotlin.math.roundToInt
 class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     private val workoutGenerator = WorkoutGenerator()
+
+    /**
+     * The app's one exercise-name mechanism: an id resolves to the resource its catalogue entry
+     * carries, and an id the catalogue no longer ships resolves to `0` rather than to itself.
+     */
+    private val exerciseNameRes: Map<String, Int> =
+        workoutGenerator.getExerciseLibrary().associate { exercise -> exercise.id to exercise.nameRes }
 
     /**
      * The settings store plus the two retained global stores — the nutrition tables and the posture /
@@ -163,7 +173,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         )
         programProgress = ProgramProgressController(
             lifecycle = container.programLifecycleService,
-            progress = container.programProgressService
+            progress = container.programProgressService,
+            exerciseNameRes = { exerciseId -> exerciseNameRes[exerciseId] ?: 0 }
         )
         programSession = ProgramSessionController(
             runtime = container.sessionRuntime,
@@ -359,6 +370,19 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     val libraryStats = flowOf(workoutGenerator.getLibraryStats()).stateIn(
         viewModelScope, SharingStarted.WhileSubscribed(5000),
         LibraryStats(0, 0, 0, 0, 0, 0)
+    )
+
+    /** The "In the app" card's three counts, derived from the exercise and nutrition registries. */
+    val libraryCounts = flowOf(
+        LibraryCounts.of(
+            exercises = workoutGenerator.getExerciseLibrary(),
+            dedicatedAnimationIds = PoseRegistry.getDedicatedAnimationIds(),
+            ingredients = NutritionCatalogue.ingredients,
+            templates = NutritionCatalogue.templates
+        )
+    ).stateIn(
+        viewModelScope, SharingStarted.WhileSubscribed(5000),
+        LibraryCounts(0, 0, 0)
     )
 
     private val _bodyWeightErrorEvents = MutableSharedFlow<String>(extraBufferCapacity = 1)
