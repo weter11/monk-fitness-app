@@ -9,7 +9,6 @@ import com.monkfitness.app.data.model.NutritionMealType
 import com.monkfitness.app.data.model.NutritionPlan
 import com.monkfitness.app.data.model.NutritionQuantityUnit
 import com.monkfitness.app.data.model.NutritionTargets
-import com.monkfitness.app.data.model.calculateMuscleGainNutritionTargets
 import com.monkfitness.app.data.model.generateNutritionPlan
 import com.monkfitness.app.data.model.kcalFor
 import com.monkfitness.app.data.model.mealEntitiesToNutritionPlan
@@ -39,7 +38,19 @@ class NutritionDayAccuracyTest {
     companion object {
         private val SEEDS = 0 until 24
         private val DAY_COUNTS = listOf(1, 3, 7)
-        private val WEIGHTS = listOf(55, 80, 110)
+
+        /**
+         * The bodies the matrix plans for: a light, a typical and a heavy man still gaining, the same man
+         * at the 59 kg start of the product's own example, and one at his 70 kg goal — where the plan
+         * maintains instead of gaining.
+         */
+        private val PROFILES = listOf(
+            NutritionProfiles.man(55),
+            NutritionProfiles.man(59),
+            NutritionProfiles.man(70, goalWeightKg = 70),
+            NutritionProfiles.man(80),
+            NutritionProfiles.man(110)
+        )
         private val FILTERS = listOf(
             "none" to (false to false),
             "no pork" to (true to false),
@@ -57,21 +68,22 @@ class NutritionDayAccuracyTest {
             SEEDS.forEach { seed ->
                 DAY_COUNTS.forEach { dayCount ->
                     FILTERS.forEach { (name, flags) ->
-                        WEIGHTS.forEach { weight ->
+                        PROFILES.forEach { profile ->
+                            val energy = NutritionProfiles.energy(profile)
                             val plan = generateNutritionPlan(
                                 seed = seed,
                                 startDay = 1,
                                 daysCount = dayCount,
-                                weightKg = weight,
+                                energy = energy,
                                 excludedIngredientKeys = nutritionDietaryExcludedKeys(flags.first, flags.second)
                             )
-                            val key = "seed $seed, $dayCount days, $name, ${weight}kg"
+                            val key = "seed $seed, $dayCount days, $name, ${profile.weightKg}kg"
                             plan.days.forEach { day ->
                                 days += MeasuredDay(
                                     planKey = key,
-                                    weight = weight,
+                                    weight = profile.weightKg ?: 0,
                                     day = day,
-                                    targets = calculateMuscleGainNutritionTargets(weight, null, day.dayType)
+                                    targets = energy.targetsFor(day.dayType)
                                 )
                             }
                         }
@@ -86,6 +98,18 @@ class NutritionDayAccuracyTest {
     fun everyDayLandsWithinTheCalorieTolerance() {
         val off = measured.map { abs(it.day.totalCalories - it.day.targetCalories).toDouble() / it.day.targetCalories }
         val withinSeven = off.count { it <= 0.07 } * 100.0 / off.size
+
+        val report = StringBuilder("profile,days,within_7_percent,worst_percent\n")
+        measured.groupBy { it.weight }.toSortedMap().forEach { (weight, days) ->
+            val deviations = days.map { abs(it.day.totalCalories - it.day.targetCalories).toDouble() / it.day.targetCalories }
+            report.append(
+                "$weight,${days.size},%.1f,%.1f\n".format(
+                    deviations.count { it <= 0.07 } * 100.0 / deviations.size,
+                    deviations.max() * 100
+                )
+            )
+        }
+        println(report)
 
         assertTrue("only $withinSeven% of days are within 7 % of their target", withinSeven >= 90.0)
         assertTrue("the worst day is ${off.max() * 100} % off its target", off.max() <= 0.12)
@@ -111,6 +135,13 @@ class NutritionDayAccuracyTest {
         val meanOff = measured.map {
             abs(it.day.totalProteinGrams - (it.targets.proteinMinGrams + it.targets.proteinMaxGrams) / 2.0)
         }.average()
+
+        val report = StringBuilder("profile,days,protein_in_range_percent\n")
+        measured.groupBy { it.weight }.toSortedMap().forEach { (weight, days) ->
+            val inside = days.count { it.day.totalProteinGrams in it.targets.proteinMinGrams..it.targets.proteinMaxGrams }
+            report.append("$weight,${days.size},%.1f\n".format(inside * 100.0 / days.size))
+        }
+        println(report)
 
         assertTrue("protein is inside its range on only $share% of days", share >= 80.0)
         assertTrue("protein is $meanOff g from the middle of its range on average", meanOff <= 15.0)
@@ -155,7 +186,7 @@ class NutritionDayAccuracyTest {
     @Test
     fun everyDishIsServedOncePerSlotInsideACycle() {
         SEEDS.forEach { seed ->
-            val plan = generateNutritionPlan(seed = seed, startDay = 1, daysCount = 7, weightKg = 80)
+            val plan = generateNutritionPlan(seed = seed, startDay = 1, daysCount = 7, energy = NutritionProfiles.energy(NutritionProfiles.man(80)))
             NutritionMealType.entries.forEach { slot ->
                 val picks = plan.days.mapNotNull { day -> day.meals.firstOrNull { it.type == slot }?.templateId }
                 assertEquals("seed $seed: slot $slot repeats a dish", picks.size, picks.distinct().size)
@@ -166,8 +197,8 @@ class NutritionDayAccuracyTest {
     @Test
     fun theSameSeedBuildsTheSamePlan() {
         SEEDS.forEach { seed ->
-            val first = planSignature(generateNutritionPlan(seed = seed, startDay = 1, daysCount = 7, weightKg = 80))
-            val second = planSignature(generateNutritionPlan(seed = seed, startDay = 1, daysCount = 7, weightKg = 80))
+            val first = planSignature(generateNutritionPlan(seed = seed, startDay = 1, daysCount = 7, energy = NutritionProfiles.energy(NutritionProfiles.man(80))))
+            val second = planSignature(generateNutritionPlan(seed = seed, startDay = 1, daysCount = 7, energy = NutritionProfiles.energy(NutritionProfiles.man(80))))
             assertEquals("seed $seed: the same seed built two different plans", first, second)
         }
     }
@@ -210,7 +241,7 @@ class NutritionDayAccuracyTest {
     @Test
     fun theShoppingListSellsExactlyWhatTheMealsServe() {
         SEEDS.take(6).forEach { seed ->
-            val plan = generateNutritionPlan(seed = seed, startDay = 1, daysCount = 7, weightKg = 110)
+            val plan = generateNutritionPlan(seed = seed, startDay = 1, daysCount = 7, energy = NutritionProfiles.energy(NutritionProfiles.man(110)))
             val served = plan.days.flatMap { it.meals }.flatMap { it.ingredients }
                 .groupBy { it.ingredient.key }
                 .mapValues { (_, amounts) -> amounts.sumOf { it.amount } }
@@ -227,11 +258,11 @@ class NutritionDayAccuracyTest {
      */
     @Test
     fun aStoredCycleKeepsTheNumbersItWasSavedWith() {
-        val stored = generateNutritionPlan(seed = 11, startDay = 1, daysCount = 3, weightKg = 110)
+        val stored = generateNutritionPlan(seed = 11, startDay = 1, daysCount = 3, energy = NutritionProfiles.energy(NutritionProfiles.man(110)))
         val entities = stored.toMealEntities(7L)
 
         // Build another cycle at another weight, which must not touch what is already stored.
-        generateNutritionPlan(seed = 12, startDay = 1, daysCount = 3, weightKg = 55)
+        generateNutritionPlan(seed = 12, startDay = 1, daysCount = 3, energy = NutritionProfiles.energy(NutritionProfiles.man(55)))
 
         val reloaded = mealEntitiesToNutritionPlan(7L, entities)
         assertEquals(NutritionCalorieBasis.PLANNED_TOTAL, reloaded.days.first().calorieBasis)

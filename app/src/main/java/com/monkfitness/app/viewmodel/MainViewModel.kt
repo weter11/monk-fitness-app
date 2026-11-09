@@ -15,6 +15,7 @@ import androidx.lifecycle.viewModelScope
 import com.monkfitness.app.R
 import com.monkfitness.app.MonkFitnessApplication
 import com.monkfitness.app.data.local.SettingsManager
+import com.monkfitness.app.data.model.BiologicalSex
 import com.monkfitness.app.data.model.BodyWeightEntry
 import com.monkfitness.app.data.model.Equipment
 import com.monkfitness.app.data.model.Exercise
@@ -33,11 +34,20 @@ import com.monkfitness.app.data.model.NutritionPlan
 import com.monkfitness.app.data.model.UserPreferences
 import com.monkfitness.app.data.model.Workout
 import com.monkfitness.app.data.model.applyDifficultyAdjustment
-import com.monkfitness.app.data.model.calculateMuscleGainNutritionTargets
+import com.monkfitness.app.data.model.NUTRITION_WEIGH_IN_WINDOW_DAYS
+import com.monkfitness.app.data.model.NutritionDayEnergy
+import com.monkfitness.app.data.model.NutritionEnergyOutcome
+import com.monkfitness.app.data.model.NutritionEnergyPlan
+import com.monkfitness.app.data.model.NutritionProfile
+import com.monkfitness.app.data.model.NutritionProfileField
 import com.monkfitness.app.data.model.mealEntitiesToNutritionPlan
 import com.monkfitness.app.data.model.nutritionCycleDayNumber
 import com.monkfitness.app.data.model.nutritionExcludedFoodKeys
+import com.monkfitness.app.data.model.nutritionEnergyOutcome
 import com.monkfitness.app.data.model.nutritionExclusionIngredients
+import com.monkfitness.app.data.model.nutritionProfileError
+import com.monkfitness.app.data.model.nutritionReportionNeeded
+import com.monkfitness.app.data.model.reportionNutritionPlan
 import com.monkfitness.app.data.model.toMealEntities
 import com.monkfitness.app.data.model.toShoppingItemEntities
 import com.monkfitness.app.data.model.validateAvailableProductSelection
@@ -701,12 +711,12 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             val dummyCycleId = -999L
             val preferredIngredientKeys = nutritionAvailableProducts.value
             val validPreferredKeys = if (validateAvailableProductSelection(preferredIngredientKeys) == null) preferredIngredientKeys else emptySet()
+            val energy = nutritionEnergyForGeneration() ?: return@launch
             val plan = generateNutritionPlan(
                 seed = cycleStartDate.toEpochDay().toInt(),
+                energy = energy,
                 startDay = TrackCalendar.cappedDay(trackStartDate.first(), cycleStartDate),
                 daysCount = safeDuration,
-                weightKg = nutritionWeight.value.toIntOrNull(),
-                heightCm = nutritionHeight.value.toIntOrNull(),
                 excludedIngredientKeys = effectiveExcludedFoodKeys(),
                 preferredIngredientKeys = validPreferredKeys,
                 cycleId = dummyCycleId,
@@ -907,7 +917,12 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope, SharingStarted.WhileSubscribed(5000), ""
     )
 
+    /**
+     * Stores [weight] only when the range accepts it: a refused value never reaches the store, so the
+     * targets are never computed from a body the user did not type.
+     */
     fun setNutritionWeight(weight: String) {
+        if (nutritionProfileError(NutritionProfileField.WEIGHT, weight) != null) return
         viewModelScope.launch {
             settingsManager.setNutritionWeight(weight)
         }
@@ -918,8 +933,41 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     )
 
     fun setNutritionHeight(height: String) {
+        if (nutritionProfileError(NutritionProfileField.HEIGHT, height) != null) return
         viewModelScope.launch {
             settingsManager.setNutritionHeight(height)
+        }
+    }
+
+    val nutritionAge = settingsManager.nutritionAgeFlow.stateIn(
+        viewModelScope, SharingStarted.WhileSubscribed(5000), ""
+    )
+
+    fun setNutritionAge(age: String) {
+        if (nutritionProfileError(NutritionProfileField.AGE, age) != null) return
+        viewModelScope.launch {
+            settingsManager.setNutritionAge(age)
+        }
+    }
+
+    val nutritionSex = settingsManager.nutritionSexFlow.stateIn(
+        viewModelScope, SharingStarted.WhileSubscribed(5000), null
+    )
+
+    fun setNutritionSex(sex: BiologicalSex) {
+        viewModelScope.launch {
+            settingsManager.setNutritionSex(sex)
+        }
+    }
+
+    val nutritionGoalWeight = settingsManager.nutritionGoalWeightFlow.stateIn(
+        viewModelScope, SharingStarted.WhileSubscribed(5000), ""
+    )
+
+    fun setNutritionGoalWeight(weight: String) {
+        if (nutritionProfileError(NutritionProfileField.GOAL_WEIGHT, weight) != null) return
+        viewModelScope.launch {
+            settingsManager.setNutritionGoalWeight(weight)
         }
     }
 
@@ -1063,21 +1111,78 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         plan.days.firstOrNull { it.dayNumber == dayNumber }
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
 
-    val currentNutritionTargets = combine(
+    /** The profile the energy model reads, as stored: a field the user has not given is null. */
+    val nutritionProfile: StateFlow<NutritionProfile> = combine(
         nutritionWeight,
         nutritionHeight,
-        todayNutritionPlan
-    ) { weight, height, dayPlan ->
-        calculateMuscleGainNutritionTargets(
+        nutritionAge,
+        nutritionSex,
+        nutritionGoalWeight
+    ) { weight, height, age, sex, goal ->
+        NutritionProfile(
             weightKg = weight.toIntOrNull(),
             heightCm = height.toIntOrNull(),
-            dayType = dayPlan?.dayType ?: NutritionDayType.TRAINING
+            ageYears = age.toIntOrNull(),
+            sex = sex,
+            goalWeightKg = goal.toIntOrNull()
         )
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), NutritionProfile())
+
+    /**
+     * The energy model for the stored profile and the Progress screen's weigh-ins, or the reason it cannot
+     * answer yet. Generation and the targets card both read this one outcome.
+     */
+    val nutritionEnergy: StateFlow<NutritionEnergyOutcome> = combine(
+        nutritionProfile,
+        bodyWeightHistory,
+        currentDate
+    ) { profile, weighIns, today ->
+        nutritionEnergyOutcome(profile, weighIns, today)
     }.stateIn(
         viewModelScope,
         SharingStarted.WhileSubscribed(5000),
-        calculateMuscleGainNutritionTargets(weightKg = null, heightCm = null)
+        NutritionEnergyOutcome.IncompleteProfile
     )
+
+    /** Today's targets with the numbers behind them, or null while the profile cannot support any. */
+    val todayNutritionEnergy: StateFlow<NutritionDayEnergy?> = combine(
+        nutritionEnergy,
+        todayNutritionPlan
+    ) { energy, dayPlan ->
+        (energy as? NutritionEnergyOutcome.Ready)?.plan?.forDay(dayPlan?.dayType ?: NutritionDayType.TRAINING)
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
+
+    /**
+     * True when the cycle's first remaining day was portioned for a target today's body no longer asks
+     * for: the days still to come can be re-portioned, the days already eaten cannot.
+     */
+    val nutritionReportionOffered: StateFlow<Boolean> = combine(
+        nutritionPlan,
+        nutritionEnergy,
+        nutritionTodayDayNumber
+    ) { plan, outcome, todayDayNumber ->
+        val energy = (outcome as? NutritionEnergyOutcome.Ready)?.plan ?: return@combine false
+        if (todayDayNumber == null) return@combine false
+        val firstFuture = plan.days.firstOrNull { it.dayNumber > todayDayNumber } ?: return@combine false
+        nutritionReportionNeeded(
+            storedDayCalories = firstFuture.totalCalories,
+            targetCalories = energy.targetsFor(firstFuture.dayType).dailyCalories
+        )
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), false)
+
+    private val _nutritionProfilePrompt = MutableStateFlow(false)
+
+    /** Set when a generate action found the profile incomplete, so the screen opens the profile fields. */
+    val nutritionProfilePrompt = _nutritionProfilePrompt.asStateFlow()
+
+    /** The "complete your profile" card's own action: open the fields, no snackbar needed. */
+    fun requestNutritionProfilePrompt() {
+        _nutritionProfilePrompt.value = true
+    }
+
+    fun dismissNutritionProfilePrompt() {
+        _nutritionProfilePrompt.value = false
+    }
 
     val shouldShowNutritionExpirationWarning = combine(
         activeMealCycle,
@@ -1356,6 +1461,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         autoGenerated: Boolean
     ) {
         val safeDuration = durationDays.coerceIn(1, 7)
+        val energy = nutritionEnergyForGeneration(prompt = !autoGenerated) ?: return
         val today = currentDate.value
         val active = activeMealCycle.value
         val pending = pendingMealCycle.value
@@ -1378,10 +1484,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         val validPreferredKeys = if (validateAvailableProductSelection(preferredIngredientKeys) == null) preferredIngredientKeys else emptySet()
         val plan = generateNutritionPlan(
             seed = cycleStartDate.toEpochDay().toInt(),
+            energy = energy,
             startDay = TrackCalendar.cappedDay(trackStartDate.first(), cycleStartDate),
             daysCount = safeDuration,
-            weightKg = nutritionWeight.value.toIntOrNull(),
-            heightCm = nutritionHeight.value.toIntOrNull(),
             excludedIngredientKeys = effectiveExcludedFoodKeys(),
             preferredIngredientKeys = validPreferredKeys,
             cycleId = cycleId,
@@ -1389,6 +1494,68 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         )
         nutritionRepository.replaceCycleMeals(cycleId, plan.toMealEntities(cycleId), plan.toShoppingItemEntities(cycleId))
         settingsManager.dismissNutritionWarningFor(null)
+    }
+
+    /**
+     * The energy model read from storage at the moment a cycle is built.
+     *
+     * A generation must not run on a screen's last emitted value: the cycle auto-started at launch has no
+     * screen behind it at all. When the profile cannot support a plan the reason is shown instead, and
+     * [prompt] decides whether the screen is asked to open the profile fields — an automatic restart
+     * stays quiet, a tap on Generate does not.
+     */
+    private suspend fun nutritionEnergyForGeneration(prompt: Boolean = true): NutritionEnergyPlan? {
+        val outcome = nutritionEnergySnapshot()
+        if (outcome is NutritionEnergyOutcome.Ready) return outcome.plan
+        if (prompt) {
+            _nutritionProfilePrompt.value = true
+            _nutritionMessageEvents.tryEmit(
+                when (outcome) {
+                    NutritionEnergyOutcome.Underage -> R.string.nutrition_profile_adults_only
+                    else -> R.string.nutrition_profile_incomplete_title
+                }
+            )
+        }
+        return null
+    }
+
+    private suspend fun nutritionEnergySnapshot(): NutritionEnergyOutcome {
+        val today = currentDate.value
+        val profile = NutritionProfile(
+            weightKg = settingsManager.nutritionWeightFlow.first().toIntOrNull(),
+            heightCm = settingsManager.nutritionHeightFlow.first().toIntOrNull(),
+            ageYears = settingsManager.nutritionAgeFlow.first().toIntOrNull(),
+            sex = settingsManager.nutritionSexFlow.first(),
+            goalWeightKg = settingsManager.nutritionGoalWeightFlow.first().toIntOrNull()
+        )
+        val weighIns = nutritionRepository.getBodyWeightEntriesSince(
+            today.minusDays(NUTRITION_WEIGH_IN_WINDOW_DAYS).toString()
+        ).first()
+        return nutritionEnergyOutcome(profile, weighIns, today)
+    }
+
+    /**
+     * Re-portions the days still to come onto today's target, keeping their dishes.
+     *
+     * A past day and a day already logged are records of what was eaten and are left exactly as stored.
+     */
+    fun reportionNutritionCycle() {
+        viewModelScope.launch {
+            val cycle = activeMealCycle.value ?: return@launch
+            val todayDayNumber = nutritionTodayDayNumber.value ?: return@launch
+            val energy = (nutritionEnergySnapshot() as? NutritionEnergyOutcome.Ready)?.plan ?: return@launch
+            val updated = reportionNutritionPlan(
+                stored = nutritionPlan.value,
+                todayDayNumber = todayDayNumber,
+                energy = energy,
+                excludedIngredientKeys = effectiveExcludedFoodKeys()
+            )
+            nutritionRepository.replaceCycleMeals(
+                cycle.id,
+                updated.toMealEntities(cycle.id),
+                updated.toShoppingItemEntities(cycle.id)
+            )
+        }
     }
 
     private fun mealCycleEndDate(cycle: MealCycle): LocalDate {

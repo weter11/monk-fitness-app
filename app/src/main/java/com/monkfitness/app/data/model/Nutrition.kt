@@ -300,10 +300,9 @@ enum class NutritionGenerationIssue(@StringRes val messageRes: Int) {
 
 fun generateNutritionPlan(
     seed: Int,
+    energy: NutritionEnergyPlan,
     startDay: Int = 1,
     daysCount: Int = 3,
-    weightKg: Int?,
-    heightCm: Int? = null,
     excludedIngredientKeys: Set<String> = emptySet(),
     replacements: Map<String, String> = emptyMap(),
     preferredIngredientKeys: Set<String> = emptySet(),
@@ -312,10 +311,9 @@ fun generateNutritionPlan(
     workoutTypeForDay: (Int) -> WorkoutType = ::defaultWorkoutTypeForDay
 ): NutritionPlan = generateNutritionPlan(
     seed = seed,
+    energy = energy,
     startDay = startDay,
     daysCount = daysCount,
-    weightKg = weightKg,
-    heightCm = heightCm,
     excludedIngredientKeys = excludedIngredientKeys,
     replacements = replacements,
     preferredIngredientKeys = preferredIngredientKeys,
@@ -331,10 +329,9 @@ fun generateNutritionPlan(
  */
 internal fun generateNutritionPlan(
     seed: Int,
+    energy: NutritionEnergyPlan,
     startDay: Int,
     daysCount: Int,
-    weightKg: Int?,
-    heightCm: Int?,
     excludedIngredientKeys: Set<String>,
     replacements: Map<String, String>,
     preferredIngredientKeys: Set<String>,
@@ -353,12 +350,14 @@ internal fun generateNutritionPlan(
         templateIds = templateIds,
         previousPlan = previousPlan
     )
+    // The day's protein lands this far under the top of its range, so no rounding can push it over.
+    val proteinGoal = energy.proteinMaxGrams - PROTEIN_HEADROOM_GRAMS
 
     val days = (0 until safeDaysCount).map { index ->
         val programDay = (safeStartDay + index).coerceAtMost(NUTRITION_PROGRAM_DAY_CAP)
         val week = ((programDay - 1) / 7) + 1
         val dayType = resolveNutritionDayType(workoutTypeForDay(programDay))
-        val targetCalories = calculateTargetCalories(weightKg = weightKg, heightCm = heightCm, dayType = dayType)
+        val targetCalories = energy.targetsFor(dayType).dailyCalories
         val slots = slotsForDayType(dayType)
         val rotation = base + index + (programDay * 3)
 
@@ -366,8 +365,16 @@ internal fun generateNutritionPlan(
             val mealType = MealType.entries[(rotation + slotIndex) % MealType.entries.size]
             val replacementKey = nutritionReplacementKey(programDay, slot)
             val replacementTemplateId = replacements[replacementKey]
+            // A pinned dish is pinned: the day's own profile rotation must not stop the dish a stored
+            // day already serves from being found again.
             val explicit = replacementTemplateId?.let { id ->
                 templatesFor(slot, mealType, excludedIngredientKeys, templateIds).firstOrNull { it.id == id }
+                    ?: nutritionMealTemplates.firstOrNull { template ->
+                        template.id == id &&
+                            template.type == slot &&
+                            (templateIds == null || id in templateIds) &&
+                            template.ingredients.none { it.ingredient.key in excludedIngredientKeys }
+                    }
             }
             if (explicit != null) {
                 selection.record(slot, explicit)
@@ -380,12 +387,6 @@ internal fun generateNutritionPlan(
                 )
             }
         }
-
-        val proteinGoal = calculateMuscleGainNutritionTargets(
-            weightKg = weightKg,
-            heightCm = heightCm,
-            dayType = dayType
-        ).proteinMaxGrams - PROTEIN_HEADROOM_GRAMS
 
         val portions = scaleDay(meals, targetCalories, proteinGoal)
 
@@ -404,33 +405,55 @@ internal fun generateNutritionPlan(
     return NutritionPlan(days = days, cycleId = cycleId)
 }
 
-fun generateThreeDayMuscleGainPlan(
-    seed: Int,
-    startDay: Int = 1,
-    workoutTypeForDay: (Int) -> WorkoutType = ::defaultWorkoutTypeForDay
-): NutritionPlan = generateNutritionPlan(
-    seed = seed,
-    startDay = startDay,
-    daysCount = 3,
-    weightKg = null,
-    heightCm = null,
-    workoutTypeForDay = workoutTypeForDay
-)
+/**
+ * Re-portions the days after [todayDayNumber] onto [energy], keeping every dish those days already serve.
+ *
+ * A past day is a record of what was eaten and is never rebuilt; only future days are. Dishes are pinned
+ * by the replacement map, so the portions move to the new target and the menu stays the one the user
+ * chose.
+ */
+fun reportionNutritionPlan(
+    stored: NutritionPlan,
+    todayDayNumber: Int?,
+    energy: NutritionEnergyPlan,
+    excludedIngredientKeys: Set<String> = emptySet()
+): NutritionPlan {
+    if (todayDayNumber == null) return stored
+    val firstFutureIndex = stored.days.indexOfFirst { it.dayNumber > todayDayNumber }
+    if (firstFutureIndex < 0) return stored
 
-fun calculateMuscleGainNutritionTargets(
-    weightKg: Int?,
-    heightCm: Int?,
-    dayType: NutritionDayType = NutritionDayType.TRAINING
-): NutritionTargets {
-    val normalizedWeight = normalizeNutritionWeight(weightKg, heightCm)
-    val dailyCalories = calculateTargetCalories(weightKg = weightKg, heightCm = heightCm, dayType = dayType)
-    val proteinTarget = (normalizedWeight * 2f).roundToInt().coerceIn(110, 190)
-
-    return NutritionTargets(
-        dailyCalories = dailyCalories,
-        proteinMinGrams = (proteinTarget - 10).coerceAtLeast(100),
-        proteinMaxGrams = proteinTarget + 10
+    val future = stored.days.drop(firstFutureIndex)
+    val pinnedDishes = future.flatMap { day ->
+        day.meals.map { meal -> nutritionReplacementKey(day.programDay, meal.type) to meal.templateId }
+    }.toMap()
+    val rebuilt = generateNutritionPlan(
+        seed = future.first().programDay,
+        energy = energy,
+        startDay = future.first().programDay,
+        daysCount = future.size,
+        excludedIngredientKeys = excludedIngredientKeys,
+        replacements = pinnedDishes,
+        cycleId = stored.cycleId
     )
+
+    return stored.copy(
+        days = stored.days.mapIndexed { index, day ->
+            if (index < firstFutureIndex) return@mapIndexed day
+            val rebuiltDay = rebuilt.days.getOrNull(index - firstFutureIndex) ?: return@mapIndexed day
+            val meals = rebuiltDay.meals.map { it.copy(cycleId = stored.cycleId) }
+            if (day.calorieBasis == NutritionCalorieBasis.PLANNED_TOTAL) {
+                day.copy(meals = meals, targetCalories = meals.sumOf { it.calories })
+            } else {
+                day.copy(meals = meals)
+            }
+        }
+    )
+}
+
+/** Whether a stored cycle's day is far enough from today's target to be worth re-portioning. */
+fun nutritionReportionNeeded(storedDayCalories: Int, targetCalories: Int): Boolean {
+    if (storedDayCalories <= 0 || targetCalories <= 0) return false
+    return abs(targetCalories - storedDayCalories) * 100 > targetCalories * 5
 }
 
 fun calculateNutritionCompletionPercent(
@@ -857,33 +880,6 @@ private fun resolveNutritionDayType(workoutType: WorkoutType): NutritionDayType 
     WorkoutType.POSTURE_MOBILITY -> NutritionDayType.LIGHT
 
     WorkoutType.REST -> NutritionDayType.REST
-}
-
-private fun calculateTargetCalories(
-    weightKg: Int?,
-    heightCm: Int?,
-    dayType: NutritionDayType
-): Int {
-    val normalizedWeight = normalizeNutritionWeight(weightKg, heightCm)
-    val baseCalories = (normalizedWeight * 35) + 300
-    val adjustment = when (dayType) {
-        NutritionDayType.TRAINING -> 200
-        NutritionDayType.LIGHT -> 0
-        NutritionDayType.REST -> -100
-    }
-    return (baseCalories + adjustment).coerceAtLeast(1800)
-}
-
-private fun normalizeNutritionWeight(weightKg: Int?, heightCm: Int?): Int {
-    val safeWeight = weightKg?.takeIf { it in 35..220 }
-    if (safeWeight != null) return safeWeight
-
-    val safeHeight = heightCm?.takeIf { it in 120..230 }
-    if (safeHeight != null) {
-        return (safeHeight - 100).coerceIn(50, 120)
-    }
-
-    return 70
 }
 
 internal fun defaultWorkoutTypeForDay(day: Int): WorkoutType = when ((day.coerceIn(1, 56) - 1) % 7) {
