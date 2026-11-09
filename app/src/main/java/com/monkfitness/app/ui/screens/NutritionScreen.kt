@@ -2,6 +2,8 @@ package com.monkfitness.app.ui.screens
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -30,6 +32,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
@@ -777,7 +780,7 @@ private fun NutritionMealCard(meal: NutritionMeal, naming: NutritionNaming) {
     Surface(modifier = Modifier.fillMaxWidth(), shape = MaterialTheme.shapes.large, color = MaterialTheme.colorScheme.surfaceVariant) {
         Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                     Text(text = nutritionDishTitle(meal = meal, naming = naming), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
                     Text(text = stringResource(meal.type.labelRes), style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.secondary)
                     Text(text = stringResource(meal.mealType.labelRes), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary)
@@ -873,6 +876,44 @@ private fun previewRangeLabel(days: Int): String = when (days) {
     else -> stringResource(R.string.nutrition_plan_days_7)
 }
 
+/**
+ * One label/value line in the preview's summary and comparison blocks.
+ *
+ * The two halves share the width instead of pushing the value past the row's edge: at font scale 1.5
+ * a long translated label and a long value cannot both stay on one line, and a `SpaceBetween` row
+ * with an unmeasured value is what sent the value off-screen. Both wrap inside their own half, and
+ * the value stays right-aligned on the lines it occupies.
+ */
+@Composable
+private fun PreviewSummaryRow(
+    label: String,
+    value: String,
+    small: Boolean = false,
+    valueColor: Color = Color.Unspecified
+) {
+    val style = if (small) MaterialTheme.typography.bodySmall else MaterialTheme.typography.bodyMedium
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalAlignment = Alignment.Top
+    ) {
+        Text(
+            text = label,
+            style = style,
+            modifier = Modifier.weight(1f)
+        )
+        Text(
+            text = value,
+            style = style,
+            fontWeight = FontWeight.Bold,
+            color = valueColor,
+            textAlign = TextAlign.End,
+            modifier = Modifier.weight(1f)
+        )
+    }
+}
+
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun NutritionPreviewDialog(
     previewPlan: NutritionPlan,
@@ -917,16 +958,23 @@ fun NutritionPreviewDialog(
             ) {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text(stringResource(R.string.nutrition_preview_duration_title), style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
-                    Row(
+                    FlowRow(
                         modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
                         listOf(1, 3, 7).forEach { days ->
                             val isSelected = previewPlan.days.size == days
                             FilterChip(
                                 selected = isSelected,
                                 onClick = { onRangeSelect(days) },
-                                label = { Text(previewRangeLabel(days)) }
+                                label = {
+                                    Text(
+                                        text = previewRangeLabel(days),
+                                        maxLines = 1,
+                                        softWrap = false
+                                    )
+                                }
                             )
                         }
                     }
@@ -961,47 +1009,52 @@ fun NutritionPreviewDialog(
                     Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                         Text(stringResource(R.string.nutrition_preview_summary_title), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
 
-                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                            Text(stringResource(R.string.nutrition_preview_duration), style = MaterialTheme.typography.bodyMedium)
-                            Text(previewRangeLabel(previewPlan.days.size), style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold)
-                        }
-                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                            Text(stringResource(R.string.nutrition_preview_recipes), style = MaterialTheme.typography.bodyMedium)
-                            Text("${totalRecipes.size}", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold)
-                        }
-                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                            Text(stringResource(R.string.nutrition_preview_unique_recipes), style = MaterialTheme.typography.bodyMedium)
-                            Text("${uniqueRecipesCount}", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold)
-                        }
-                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                            Text(stringResource(R.string.nutrition_preview_repeated_recipes), style = MaterialTheme.typography.bodyMedium)
-                            Text("${repeatedRecipesCount}", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold)
-                        }
-                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                            Text(stringResource(R.string.nutrition_preview_products_required), style = MaterialTheme.typography.bodyMedium)
-                            Text("${shoppingItems.size}", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold)
-                        }
-                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                            Text(stringResource(R.string.nutrition_preview_already_available), style = MaterialTheme.typography.bodyMedium)
-                            Text("$availableCount", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold)
-                        }
-                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                            Text(stringResource(R.string.nutrition_preview_need_to_buy), style = MaterialTheme.typography.bodyMedium)
-                            Text("$missingCount", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold)
-                        }
-                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                            Text(stringResource(R.string.nutrition_preview_variety_score), style = MaterialTheme.typography.bodyMedium)
-                            Text(varietyIndicator, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold, color = varietyColor)
-                        }
-                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                            Text(stringResource(R.string.nutrition_preview_shopping_status), style = MaterialTheme.typography.bodyMedium)
-                            Text(
-                                text = if (missingCount == 0) shoppingIndicator else stringResource(R.string.nutrition_preview_shopping_status_missing, shoppingIndicator, missingCount),
-                                style = MaterialTheme.typography.bodyMedium,
-                                fontWeight = FontWeight.Bold,
-                                color = shoppingIndicatorColor
-                            )
-                        }
+                        PreviewSummaryRow(
+                            label = stringResource(R.string.nutrition_preview_duration),
+                            value = previewRangeLabel(previewPlan.days.size)
+                        )
+                        PreviewSummaryRow(
+                            label = stringResource(R.string.nutrition_preview_recipes),
+                            value = "${totalRecipes.size}"
+                        )
+                        PreviewSummaryRow(
+                            label = stringResource(R.string.nutrition_preview_unique_recipes),
+                            value = "${uniqueRecipesCount}"
+                        )
+                        PreviewSummaryRow(
+                            label = stringResource(R.string.nutrition_preview_repeated_recipes),
+                            value = "${repeatedRecipesCount}"
+                        )
+                        PreviewSummaryRow(
+                            label = stringResource(R.string.nutrition_preview_products_required),
+                            value = "${shoppingItems.size}"
+                        )
+                        PreviewSummaryRow(
+                            label = stringResource(R.string.nutrition_preview_already_available),
+                            value = "$availableCount"
+                        )
+                        PreviewSummaryRow(
+                            label = stringResource(R.string.nutrition_preview_need_to_buy),
+                            value = "$missingCount"
+                        )
+                        PreviewSummaryRow(
+                            label = stringResource(R.string.nutrition_preview_variety_score),
+                            value = varietyIndicator,
+                            valueColor = varietyColor
+                        )
+                        PreviewSummaryRow(
+                            label = stringResource(R.string.nutrition_preview_shopping_status),
+                            value = if (missingCount == 0) {
+                                shoppingIndicator
+                            } else {
+                                stringResource(
+                                    R.string.nutrition_preview_shopping_status_missing,
+                                    shoppingIndicator,
+                                    missingCount
+                                )
+                            },
+                            valueColor = shoppingIndicatorColor
+                        )
 
                         if (currentPlan.days.isNotEmpty()) {
                             val currentRecipes = currentPlan.days.flatMap { it.meals }
@@ -1025,30 +1078,40 @@ fun NutritionPreviewDialog(
 
                             Text(stringResource(R.string.nutrition_preview_comparison_title), style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
 
-                            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                                Text(stringResource(R.string.nutrition_preview_new_recipes), style = MaterialTheme.typography.bodySmall)
-                                Text("+$newRecipesCount", style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Bold)
-                            }
-                            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                                Text(stringResource(R.string.nutrition_preview_repeated_from_previous), style = MaterialTheme.typography.bodySmall)
-                                Text("$repeatedFromPrevCount", style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Bold)
-                            }
-                            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                                Text(stringResource(R.string.nutrition_preview_new_ingredients), style = MaterialTheme.typography.bodySmall)
-                                Text("$newIngredientsCount", style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Bold)
-                            }
-                            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                                Text(stringResource(R.string.nutrition_preview_ingredients_stocked), style = MaterialTheme.typography.bodySmall)
-                                Text("$availableCount", style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Bold)
-                            }
-                            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                                Text(stringResource(R.string.nutrition_preview_missing_ingredients), style = MaterialTheme.typography.bodySmall)
-                                Text("$missingCount", style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Bold)
-                            }
-                            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                                Text(stringResource(R.string.nutrition_preview_avg_daily_calories), style = MaterialTheme.typography.bodySmall)
-                                Text(stringResource(R.string.nutrition_preview_calories_comparison, previewAvg, currentAvg), style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Bold)
-                            }
+                            PreviewSummaryRow(
+                                label = stringResource(R.string.nutrition_preview_new_recipes),
+                                value = "+$newRecipesCount",
+                                small = true
+                            )
+                            PreviewSummaryRow(
+                                label = stringResource(R.string.nutrition_preview_repeated_from_previous),
+                                value = "$repeatedFromPrevCount",
+                                small = true
+                            )
+                            PreviewSummaryRow(
+                                label = stringResource(R.string.nutrition_preview_new_ingredients),
+                                value = "$newIngredientsCount",
+                                small = true
+                            )
+                            PreviewSummaryRow(
+                                label = stringResource(R.string.nutrition_preview_ingredients_stocked),
+                                value = "$availableCount",
+                                small = true
+                            )
+                            PreviewSummaryRow(
+                                label = stringResource(R.string.nutrition_preview_missing_ingredients),
+                                value = "$missingCount",
+                                small = true
+                            )
+                            PreviewSummaryRow(
+                                label = stringResource(R.string.nutrition_preview_avg_daily_calories),
+                                value = stringResource(
+                                    R.string.nutrition_preview_calories_comparison,
+                                    previewAvg,
+                                    currentAvg
+                                ),
+                                small = true
+                            )
                         }
                     }
                 }
@@ -1126,7 +1189,11 @@ fun NutritionPreviewDialog(
                                         horizontalArrangement = Arrangement.SpaceBetween,
                                         verticalAlignment = Alignment.CenterVertically
                                     ) {
-                                        Text("• ${stringResource(item.ingredient.nameRes)} — $quantity", style = MaterialTheme.typography.bodySmall)
+                                        Text(
+                                            text = "• ${stringResource(item.ingredient.nameRes)} — $quantity",
+                                            style = MaterialTheme.typography.bodySmall,
+                                            modifier = Modifier.weight(1f)
+                                        )
                                         Row(horizontalArrangement = Arrangement.spacedBy(4.dp), verticalAlignment = Alignment.CenterVertically) {
                                             Text(icon, style = MaterialTheme.typography.bodySmall, color = color, fontWeight = FontWeight.Bold)
                                             Text(

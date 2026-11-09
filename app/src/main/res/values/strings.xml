@@ -1238,4 +1238,21 @@
     <string name="programs_preferred_choose">Choose an exercise to prefer</string>
     <string name="programs_preferred_position">%1$d. %2$s</string>
     <string name="programs_change_preferred_exercises">preferred exercises</string>
+    <string name="progress_volume_title">Training volume</string>
+    <string name="progress_volume_window">Last 4 weeks</string>
+    <string name="progress_volume_empty">No measured set was recorded in the last 4 weeks.</string>
+    <string name="progress_volume_by_week">By week</string>
+    <string name="progress_volume_by_exercise">By exercise</string>
+    <string name="progress_volume_recent_sessions">Sessions</string>
+    <string name="progress_volume_week_row">Week of %1$s — %2$s</string>
+    <string name="progress_volume_exercise_row">%1$s — %2$s</string>
+    <string name="progress_volume_session_row">%1$s — %2$s</string>
+    <string name="progress_volume_reps">%1$d reps</string>
+    <string name="progress_volume_seconds">%1$d s</string>
+    <string name="progress_volume_reps_and_seconds">%1$d reps · %2$d s</string>
+    <string name="progress_unknown_exercise">Unknown exercise</string>
+    <string name="library_counts_title">In the app</string>
+    <string name="library_counts_exercises">Animated exercises</string>
+    <string name="library_counts_foods">Foods</string>
+    <string name="library_counts_dishes">Dishes</string>
 </resources>

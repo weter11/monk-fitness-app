@@ -37,9 +37,34 @@ data class ProgressHistoryRowUi(
  */
 data class ProgressPerformanceRowUi(
     val exerciseId: String,
+    /** The catalogue's name resource; `0` when the id is no longer shipped. */
+    val nameRes: Int,
     val dimension: PrescriptionDimension,
     val observations: Int,
-    val best: Int
+    /** The best single set in the row's own unit, or `null` when nothing measured was recorded. */
+    val best: Int?
+)
+
+/** One exercise's volume in the window, in the unit it was performed in. */
+data class ProgressExerciseVolumeRowUi(
+    val exerciseId: String,
+    val nameRes: Int,
+    val repetitions: Int?,
+    val seconds: Int?
+)
+
+/** One calendar week's volume: two units, never one number. */
+data class ProgressWeekVolumeRowUi(
+    val weekStart: LocalDate,
+    val repetitions: Int,
+    val seconds: Int
+)
+
+/** One attempt's volume: two units, never one number. */
+data class ProgressSessionVolumeRowUi(
+    val startedOn: LocalDate,
+    val repetitions: Int,
+    val seconds: Int
 )
 
 data class ProgressStreakRowUi(
@@ -66,6 +91,11 @@ data class ProgramProgressUiState(
     val streaks: List<ProgressStreakRowUi> = emptyList(),
     val history: List<ProgressHistoryRowUi> = emptyList(),
     val performance: List<ProgressPerformanceRowUi> = emptyList(),
+    /** Volume inside the layer's window (four weeks by default), in three views. */
+    val volumeSessions: List<ProgressSessionVolumeRowUi> = emptyList(),
+    val volumeWeeks: List<ProgressWeekVolumeRowUi> = emptyList(),
+    val volumeExercises: List<ProgressExerciseVolumeRowUi> = emptyList(),
+    val hasVolume: Boolean = false,
     /** The measures the layer lists that the target facts cannot carry yet, reported as such. */
     val deferred: List<DeferredMeasure> = emptyList(),
     val notice: ProgramNotice? = null
@@ -98,7 +128,9 @@ data class ProgramProgressUiState(
  */
 class ProgramProgressController(
     private val lifecycle: ProgramLifecycleService,
-    private val progress: ProgramProgressService
+    private val progress: ProgramProgressService,
+    /** Resolves an exercise id through the catalogue's own name resources; `0` means removed. */
+    private val exerciseNameRes: (String) -> Int = { 0 }
 ) {
 
     private val mutableState = MutableStateFlow(ProgramProgressUiState())
@@ -168,15 +200,42 @@ class ProgramProgressController(
                 },
                 performance = training.series
                     .filter { series -> series.context.dimension.hasComparableUnit }
+                    // A record needs a name the app can show: an id the catalogue no longer ships is
+                    // reported in volume with a fallback label but never as somebody's best set.
+                    .filter { series -> exerciseNameRes(series.context.exerciseId) != 0 }
                     .map { series ->
                         ProgressPerformanceRowUi(
                             exerciseId = series.context.exerciseId,
+                            nameRes = exerciseNameRes(series.context.exerciseId),
                             dimension = series.context.dimension,
                             observations = series.observations.size,
                             best = bestOf(series.observations)
                         )
                     }
                     .sortedByDescending { row -> row.observations },
+                volumeSessions = training.sessionVolumes.map { volume ->
+                    ProgressSessionVolumeRowUi(
+                        startedOn = volume.startedOn,
+                        repetitions = volume.repetitions,
+                        seconds = volume.seconds
+                    )
+                },
+                volumeWeeks = training.weekVolumes.map { volume ->
+                    ProgressWeekVolumeRowUi(
+                        weekStart = volume.weekStart,
+                        repetitions = volume.repetitions,
+                        seconds = volume.seconds
+                    )
+                },
+                volumeExercises = training.exerciseVolumes.map { volume ->
+                    ProgressExerciseVolumeRowUi(
+                        exerciseId = volume.exerciseId,
+                        nameRes = exerciseNameRes(volume.exerciseId),
+                        repetitions = volume.repetitions,
+                        seconds = volume.seconds
+                    )
+                },
+                hasVolume = training.hasVolume,
                 deferred = training.deferred
             )
         } catch (failure: Throwable) {
@@ -189,16 +248,16 @@ class ProgramProgressController(
     }
 
     /**
-     * The best observation of a series, in the series' **own** unit.
-     *
-     * Not a personal record: `PROGRAM_PR` needs a comparable progression context the facts do not carry, and
-     * the layer reports it as deferred for exactly that reason. This is *"the best set of this exercise
-     * this Program recorded"*, which is what the observations do support.
+     * The best observation of a series, in the series' **own** unit, or `null` when nothing measured
+     * was recorded. Not a personal record: `PROGRAM_PR` needs a comparable progression context the
+     * facts do not carry, and the layer reports it as deferred for exactly that reason. This is
+     * *"the best set of this exercise this Program recorded"*, which is what the observations support.
      */
-    private fun bestOf(observations: List<com.monkfitness.app.domain.progress.PerformanceObservation>): Int =
-        observations.maxOfOrNull { observation ->
-            if (observation.isRepetitionObservation) observation.repetitions else observation.seconds
-        } ?: 0
+    private fun bestOf(
+        observations: List<com.monkfitness.app.domain.progress.PerformanceObservation>
+    ): Int? = observations.maxOfOrNull { observation ->
+        if (observation.isRepetitionObservation) observation.repetitions else observation.seconds
+    }
 
     private fun empty() {
         mutableState.value = ProgramProgressUiState(loading = false, hasProgram = false)

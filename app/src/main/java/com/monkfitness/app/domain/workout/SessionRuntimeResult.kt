@@ -233,6 +233,19 @@ sealed interface SessionRefusal {
     }
 
     /**
+     * A placeholder amount is not a performance, so the one write path every confirmed set uses
+     * refuses it rather than letting it become a record, a volume or adaptive evidence.
+     */
+    data class SetAmountIsNotAMeasurement(
+        val sessionExerciseId: SessionExerciseId,
+        val amount: Int
+    ) : SessionRefusal {
+        override val message: String =
+            "the occurrence '${sessionExerciseId.value}' was confirmed with amount $amount, which is a " +
+                "placeholder rather than a measured set; confirm the work that was performed"
+    }
+
+    /**
      * Why an adaptive decision may not be recorded by one completion. The rule is one sentence — an
      * adaptive decision belongs to a future opportunity of the same Program and revision as the completion
      * it was taken on — and each member names one way a decision can fail it. They stay separate because

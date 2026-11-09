@@ -1238,4 +1238,21 @@
     <string name="programs_preferred_choose">Elige un ejercicio para preferir</string>
     <string name="programs_preferred_position">%1$d. %2$s — por preferencia</string>
     <string name="programs_change_preferred_exercises">ejercicios preferidos</string>
+    <string name="progress_volume_title">Volumen de entrenamiento</string>
+    <string name="progress_volume_window">Últimas 4 semanas</string>
+    <string name="progress_volume_empty">No se ha registrado ninguna serie medida en las últimas 4 semanas.</string>
+    <string name="progress_volume_by_week">Por semana</string>
+    <string name="progress_volume_by_exercise">Por ejercicio</string>
+    <string name="progress_volume_recent_sessions">Sesiones</string>
+    <string name="progress_volume_week_row">Semana del %1$s — %2$s</string>
+    <string name="progress_volume_exercise_row">%1$s — %2$s</string>
+    <string name="progress_volume_session_row">%1$s — %2$s</string>
+    <string name="progress_volume_reps">%1$d repeticiones</string>
+    <string name="progress_volume_seconds">%1$d s</string>
+    <string name="progress_volume_reps_and_seconds">%1$d repeticiones · %2$d s</string>
+    <string name="progress_unknown_exercise">Ejercicio desconocido</string>
+    <string name="library_counts_title">En la app</string>
+    <string name="library_counts_exercises">Ejercicios animados</string>
+    <string name="library_counts_foods">Alimentos</string>
+    <string name="library_counts_dishes">Platos</string>
 </resources>

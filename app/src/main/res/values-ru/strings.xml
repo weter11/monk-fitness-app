@@ -1231,4 +1231,21 @@
     <string name="programs_preferred_choose">Выберите упражнение, которое предпочитаете</string>
     <string name="programs_preferred_position">%1$d. %2$s — по предпочтению</string>
     <string name="programs_change_preferred_exercises">предпочитаемые упражнения</string>
+    <string name="progress_volume_title">Объём тренировки</string>
+    <string name="progress_volume_window">Последние 4 недели</string>
+    <string name="progress_volume_empty">За последние 4 недели нет ни одного измеренного подхода.</string>
+    <string name="progress_volume_by_week">По неделям</string>
+    <string name="progress_volume_by_exercise">По упражнениям</string>
+    <string name="progress_volume_recent_sessions">Сессии</string>
+    <string name="progress_volume_week_row">Неделя с %1$s — %2$s</string>
+    <string name="progress_volume_exercise_row">%1$s — %2$s</string>
+    <string name="progress_volume_session_row">%1$s — %2$s</string>
+    <string name="progress_volume_reps">%1$d повторов</string>
+    <string name="progress_volume_seconds">%1$d с</string>
+    <string name="progress_volume_reps_and_seconds">%1$d повторов · %2$d с</string>
+    <string name="progress_unknown_exercise">Неизвестное упражнение</string>
+    <string name="library_counts_title">В приложении</string>
+    <string name="library_counts_exercises">Анимированные упражнения</string>
+    <string name="library_counts_foods">Продукты</string>
+    <string name="library_counts_dishes">Блюда</string>
 </resources>
