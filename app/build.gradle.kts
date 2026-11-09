@@ -27,6 +27,10 @@ android {
         versionCode = ((System.currentTimeMillis() - 1735689600000L) / 60000).toInt()
         versionName = "1.0"
 
+        // Off unless a developer or device-validation build asks for the Filament character.
+        val filamentCharacter = (project.findProperty("monk.filamentCharacter") as String?)?.toBoolean() ?: false
+        buildConfigField("boolean", "FILAMENT_CHARACTER_ENABLED", filamentCharacter.toString())
+
         ndk {
             abiFilters += "arm64-v8a"
         }
@@ -62,6 +66,10 @@ android {
         // SkeletonPipeline.runStages — AGP 8 disables BuildConfig generation by default.
         buildConfig = true
     }
+    // gltfio memory-maps the character; a compressed asset cannot be mapped.
+    androidResources {
+        noCompress += "glb"
+    }
     packaging {
         resources {
             excludes += "/META-INF/{AL2.0,LGPL2.1}"
@@ -91,7 +99,12 @@ dependencies {
 
     implementation(libs.mp.android.chart)
 
+    implementation(libs.filament.android)
+    implementation(libs.filament.gltfio)
+
     testImplementation("junit:junit:4.13.2")
+    // GltfRig reads the GLB's JSON chunk directly, and Android's org.json is a stub on the JVM.
+    testImplementation("org.json:json:20240303")
     // Test-scope only: the Program System schema tests drive migrations and ownership behaviour on a
     // real SQLite engine, because this repository has no Robolectric and no instrumentation source
     // set (there is nowhere else for `androidx.room.testing`'s MigrationTestHelper to run). The app

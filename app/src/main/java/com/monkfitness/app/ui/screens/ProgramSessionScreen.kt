@@ -688,7 +688,8 @@ private fun ExpandedDemo(demo: Exercise, onDismiss: () -> Unit) {
                     Spacer(modifier = Modifier.height(16.dp))
                     ExerciseHeroMedia(
                         exercise = demo,
-                        height = (room * 0.65f).coerceAtLeast(160.dp)
+                        height = (room * 0.65f).coerceAtLeast(160.dp),
+                        liveCharacter = true
                     )
                     Spacer(modifier = Modifier.weight(1f))
                     Button(onClick = onDismiss, modifier = Modifier.fillMaxWidth()) {
