@@ -62,7 +62,7 @@ class NutritionFilterReadinessTest {
                     seed = seed,
                     startDay = 1,
                     daysCount = 7,
-                    weightKg = 80,
+                    energy = NutritionProfiles.energy(NutritionProfiles.man(80)),
                     excludedIngredientKeys = excluded
                 )
 

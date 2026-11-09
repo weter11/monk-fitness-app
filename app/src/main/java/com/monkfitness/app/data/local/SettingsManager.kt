@@ -9,6 +9,7 @@ import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.core.stringSetPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
+import com.monkfitness.app.data.model.BiologicalSex
 import com.monkfitness.app.data.model.Equipment
 import com.monkfitness.app.data.model.ExerciseSubCategory
 import com.monkfitness.app.data.model.FlexibilityTrainingType
@@ -50,6 +51,16 @@ class SettingsManager internal constructor(private val dataStore: DataStore<Pref
         val AVAILABLE_EQUIPMENT = stringSetPreferencesKey("available_equipment")
         val NUTRITION_WEIGHT = stringPreferencesKey("nutrition_weight")
         val NUTRITION_HEIGHT = stringPreferencesKey("nutrition_height")
+
+        /**
+         * The rest of the profile the energy model is computed from. Stored as typed, in the same shape
+         * as the weight and height beside them: a value the range refuses is never written, so a stored
+         * one is always a body the model can use.
+         */
+        val NUTRITION_AGE = stringPreferencesKey("nutrition_age")
+        val NUTRITION_SEX = stringPreferencesKey("nutrition_sex")
+        val NUTRITION_GOAL_WEIGHT = stringPreferencesKey("nutrition_goal_weight")
+
         val NUTRITION_PLAN_DAYS = intPreferencesKey("nutrition_plan_days")
         val NUTRITION_CYCLE_LENGTH = intPreferencesKey("nutrition_cycle_length")
         val NUTRITION_EXCLUDED_FOODS = stringSetPreferencesKey("nutrition_excluded_foods")
@@ -285,6 +296,37 @@ class SettingsManager internal constructor(private val dataStore: DataStore<Pref
     suspend fun setNutritionHeight(height: String) {
         dataStore.edit { preferences ->
             preferences[NUTRITION_HEIGHT] = height
+        }
+    }
+
+    val nutritionAgeFlow: Flow<String> = dataStore.data.map { preferences ->
+        preferences[NUTRITION_AGE] ?: ""
+    }
+
+    suspend fun setNutritionAge(age: String) {
+        dataStore.edit { preferences ->
+            preferences[NUTRITION_AGE] = age
+        }
+    }
+
+    /** The sex the resting-rate equation is fitted to, or `null` when the user has not said. */
+    val nutritionSexFlow: Flow<BiologicalSex?> = dataStore.data.map { preferences ->
+        preferences[NUTRITION_SEX]?.let { raw -> BiologicalSex.entries.firstOrNull { it.name == raw } }
+    }
+
+    suspend fun setNutritionSex(sex: BiologicalSex) {
+        dataStore.edit { preferences ->
+            preferences[NUTRITION_SEX] = sex.name
+        }
+    }
+
+    val nutritionGoalWeightFlow: Flow<String> = dataStore.data.map { preferences ->
+        preferences[NUTRITION_GOAL_WEIGHT] ?: ""
+    }
+
+    suspend fun setNutritionGoalWeight(weight: String) {
+        dataStore.edit { preferences ->
+            preferences[NUTRITION_GOAL_WEIGHT] = weight
         }
     }
 

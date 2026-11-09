@@ -2,7 +2,6 @@ package com.monkfitness.app
 
 import com.monkfitness.app.data.model.NutritionCatalogue
 import com.monkfitness.app.data.model.NutritionMealType
-import com.monkfitness.app.data.model.calculateMuscleGainNutritionTargets
 import com.monkfitness.app.data.model.generateNutritionPlan
 import com.monkfitness.app.data.model.nutritionDietaryExcludedKeys
 import com.monkfitness.app.data.model.nutritionIngredientsByKey
@@ -28,6 +27,9 @@ class NutritionDietaryFilterTest {
 
         private const val SEEDS = 24
         private const val WEIGHT_KG = 80
+
+        /** The one body this suite plans for, so every filter is compared on the same targets. */
+        private val ENERGY = NutritionProfiles.energy(NutritionProfiles.man(WEIGHT_KG))
 
         /** Plausible personal exclusions that still leave every slot a seven-day cycle needs. */
         private val MANUAL_EXCLUSIONS = setOf("pasta", "cod")
@@ -65,7 +67,7 @@ class NutritionDietaryFilterTest {
                         seed = seed,
                         startDay = 1,
                         daysCount = days,
-                        weightKg = WEIGHT_KG,
+                        energy = NutritionProfiles.energy(NutritionProfiles.man(WEIGHT_KG)),
                         excludedIngredientKeys = excluded
                     )
                     val where = "$name, seed $seed, $days days"
@@ -100,7 +102,7 @@ class NutritionDietaryFilterTest {
                 seed = seed,
                 startDay = 1,
                 daysCount = 7,
-                weightKg = WEIGHT_KG,
+                energy = NutritionProfiles.energy(NutritionProfiles.man(WEIGHT_KG)),
                 excludedIngredientKeys = excluded
             )
 
@@ -131,7 +133,7 @@ class NutritionDietaryFilterTest {
                 seed = seed,
                 startDay = 1,
                 daysCount = 1,
-                weightKg = WEIGHT_KG,
+                energy = NutritionProfiles.energy(NutritionProfiles.man(WEIGHT_KG)),
                 excludedIngredientKeys = lunchOnlyExclusions
             )
 
@@ -162,7 +164,7 @@ class NutritionDietaryFilterTest {
             seed = 0,
             startDay = 1,
             daysCount = 1,
-            weightKg = WEIGHT_KG,
+            energy = NutritionProfiles.energy(NutritionProfiles.man(WEIGHT_KG)),
             excludedIngredientKeys = everyFood
         )
 
@@ -212,15 +214,12 @@ class NutritionDietaryFilterTest {
                 seed = seed,
                 startDay = 1,
                 daysCount = 7,
-                weightKg = WEIGHT_KG,
+                energy = NutritionProfiles.energy(NutritionProfiles.man(WEIGHT_KG)),
                 excludedIngredientKeys = excludedIngredientKeys
             )
             plan.days.forEach { day ->
-                val proteinTarget = calculateMuscleGainNutritionTargets(
-                    weightKg = WEIGHT_KG,
-                    heightCm = null,
-                    dayType = day.dayType
-                ).let { (it.proteinMinGrams + it.proteinMaxGrams) / 2 }
+                val proteinTarget = ENERGY.targetsFor(day.dayType)
+                    .let { (it.proteinMinGrams + it.proteinMaxGrams) / 2 }
 
                 kcalDeviations += abs(day.totalCalories - day.targetCalories)
                 proteinDeviations += abs(day.totalProteinGrams - proteinTarget)

@@ -39,7 +39,16 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import com.monkfitness.app.R
 import kotlin.math.roundToInt
+import com.monkfitness.app.data.model.BiologicalSex
 import com.monkfitness.app.data.model.MealCycle
+import com.monkfitness.app.data.model.NutritionCalorieLimit
+import com.monkfitness.app.data.model.NutritionDayEnergy
+import com.monkfitness.app.data.model.NutritionEnergyOutcome
+import com.monkfitness.app.data.model.NutritionEnergyPhase
+import com.monkfitness.app.data.model.NutritionProfileError
+import com.monkfitness.app.data.model.NutritionProfileField
+import com.monkfitness.app.data.model.NutritionWeightSource
+import com.monkfitness.app.data.model.nutritionProfileError
 import com.monkfitness.app.data.model.NUTRITION_PROGRAM_DAY_CAP
 import com.monkfitness.app.data.model.NutritionDayPlan
 import com.monkfitness.app.data.model.NutritionDayStatus
@@ -81,6 +90,16 @@ fun NutritionScreen(
     val context = LocalContext.current
     val weightInput by viewModel.nutritionWeight.collectAsState()
     val heightInput by viewModel.nutritionHeight.collectAsState()
+    val ageInput by viewModel.nutritionAge.collectAsState()
+    val goalInput by viewModel.nutritionGoalWeight.collectAsState()
+    val sex by viewModel.nutritionSex.collectAsState()
+    val energyOutcome by viewModel.nutritionEnergy.collectAsState()
+    val todayEnergyState by viewModel.todayNutritionEnergy.collectAsState()
+    // A plain local, so the null check below narrows the type for the whole card.
+    val todayEnergy = todayEnergyState
+    val reportionOffered by viewModel.nutritionReportionOffered.collectAsState()
+    val profilePrompt by viewModel.nutritionProfilePrompt.collectAsState()
+    var showReportionDialog by remember { mutableStateOf(false) }
     val cycleLength by viewModel.nutritionCycleLength.collectAsState()
     val excludedFoods by viewModel.nutritionExcludedFoods.collectAsState()
     val nutritionNoPork by viewModel.nutritionNoPork.collectAsState()
@@ -91,7 +110,6 @@ fun NutritionScreen(
     val availableProducts by viewModel.nutritionAvailableProducts.collectAsState()
     val showExcludedProductsInNutrition by viewModel.showExcludedProductsInNutrition.collectAsState()
     val plan by viewModel.nutritionPlan.collectAsState()
-    val targets by viewModel.currentNutritionTargets.collectAsState()
     val currentTrackDay by viewModel.currentTrackDay.collectAsState()
     val activeCycle by viewModel.activeMealCycle.collectAsState()
     val pendingCycle by viewModel.pendingMealCycle.collectAsState()
@@ -103,6 +121,29 @@ fun NutritionScreen(
     val storedMarket by viewModel.nutritionMarket.collectAsState()
     val storedLanguage by viewModel.nutritionMarketLanguage.collectAsState()
     val naming = rememberNutritionNaming(storedMarket, storedLanguage)
+
+    if (showReportionDialog) {
+        AlertDialog(
+            onDismissRequest = { showReportionDialog = false },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        showReportionDialog = false
+                        viewModel.reportionNutritionCycle()
+                    }
+                ) {
+                    Text(stringResource(R.string.nutrition_reportion_confirm))
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showReportionDialog = false }) {
+                    Text(stringResource(R.string.cancel))
+                }
+            },
+            title = { Text(stringResource(R.string.nutrition_reportion_confirm_title)) },
+            text = { Text(stringResource(R.string.nutrition_reportion_confirm_body)) }
+        )
+    }
 
     if (previewPlan != null) {
         NutritionPreviewDialog(
@@ -161,29 +202,28 @@ fun NutritionScreen(
                 )
             }
 
-            Card(modifier = Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)) {
-                Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    Text(text = stringResource(R.string.nutrition_user_data), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                        OutlinedTextField(
-                            value = weightInput,
-                            onValueChange = { viewModel.setNutritionWeight(it.filter(Char::isDigit).take(3)) },
-                            modifier = Modifier.weight(1f),
-                            label = { Text(stringResource(R.string.nutrition_weight)) },
-                            singleLine = true,
-                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
-                        )
-                        OutlinedTextField(
-                            value = heightInput,
-                            onValueChange = { viewModel.setNutritionHeight(it.filter(Char::isDigit).take(3)) },
-                            modifier = Modifier.weight(1f),
-                            label = { Text(stringResource(R.string.nutrition_height_optional)) },
-                            singleLine = true,
-                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
-                        )
-                    }
-                }
+            when (energyOutcome) {
+                NutritionEnergyOutcome.IncompleteProfile -> ProfilePromptCard(
+                    onComplete = { viewModel.requestNutritionProfilePrompt() }
+                )
+                NutritionEnergyOutcome.Underage -> UnderageCard()
+                is NutritionEnergyOutcome.Ready -> Unit
             }
+
+            NutritionProfileCard(
+                weightInput = weightInput,
+                heightInput = heightInput,
+                ageInput = ageInput,
+                goalInput = goalInput,
+                sex = sex,
+                promptOpen = profilePrompt,
+                onWeightChange = viewModel::setNutritionWeight,
+                onHeightChange = viewModel::setNutritionHeight,
+                onAgeChange = viewModel::setNutritionAge,
+                onGoalChange = viewModel::setNutritionGoalWeight,
+                onSexChange = viewModel::setNutritionSex,
+                onDismissPrompt = viewModel::dismissNutritionProfilePrompt
+            )
 
             ActiveCycleCard(activeCycle = activeCycle, pendingCycle = pendingCycle)
 
@@ -191,15 +231,51 @@ fun NutritionScreen(
                 Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     Text(text = stringResource(R.string.nutrition_targets), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
                     val cycleDayNumber = todayDayNumber
+                    if (todayEnergy != null) {
+                        NutritionTargetRow(
+                            title = stringResource(R.string.nutrition_phase),
+                            value = phaseLabel(todayEnergy.phase),
+                            supporting = surplusLine(todayEnergy)
+                        )
+                        NutritionTargetRow(
+                            title = stringResource(R.string.nutrition_maintenance),
+                            value = stringResource(R.string.nutrition_kcal_format, todayEnergy.maintenanceCalories)
+                        )
+                        NutritionTargetRow(
+                            title = stringResource(R.string.nutrition_weight_progress_title),
+                            value = stringResource(
+                                R.string.nutrition_weight_progress,
+                                todayEnergy.currentWeightKg,
+                                todayEnergy.goalWeightKg
+                            ),
+                            supporting = weightSourceLabel(todayEnergy.weightSource)
+                        )
+                    }
                     NutritionTargetRow(
                         title = stringResource(R.string.nutrition_daily_calories),
                         value = todayPlan?.let { day ->
                             stringResource(R.string.nutrition_planned_totals, day.totalCalories, day.totalProteinGrams)
-                        } ?: stringResource(R.string.nutrition_kcal_format, targets.dailyCalories),
+                        } ?: todayEnergy?.let { energy ->
+                            stringResource(R.string.nutrition_kcal_format, energy.targets.dailyCalories)
+                        } ?: "—",
                         supporting = todayPlan?.let { day ->
-                            calorieTargetLine(targetCalories = targets.dailyCalories, deliveredCalories = day.totalCalories)
+                            todayEnergy?.let { energy ->
+                                calorieTargetLine(targetCalories = energy.targets.dailyCalories, deliveredCalories = day.totalCalories)
+                            }
                         }
                     )
+                    todayEnergy?.limit?.let { limit ->
+                        Text(
+                            text = stringResource(
+                                when (limit) {
+                                    NutritionCalorieLimit.FLOOR -> R.string.nutrition_calorie_floor_applied
+                                    NutritionCalorieLimit.CEILING -> R.string.nutrition_calorie_ceiling_applied
+                                }
+                            ),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.secondary
+                        )
+                    }
                     NutritionTargetRow(
                         title = stringResource(R.string.nutrition_current_program_day),
                         value = if (currentTrackDay >= NUTRITION_PROGRAM_DAY_CAP && cycleDayNumber != null && plan.days.isNotEmpty()) {
@@ -212,10 +288,16 @@ fun NutritionScreen(
                             )
                         }
                     )
-                    NutritionTargetRow(
-                        title = stringResource(R.string.nutrition_protein_target),
-                        value = stringResource(R.string.nutrition_protein_range_format, targets.proteinMinGrams, targets.proteinMaxGrams)
-                    )
+                    if (todayEnergy != null) {
+                        NutritionTargetRow(
+                            title = stringResource(R.string.nutrition_protein_target),
+                            value = stringResource(
+                                R.string.nutrition_protein_range_format,
+                                todayEnergy.targets.proteinMinGrams,
+                                todayEnergy.targets.proteinMaxGrams
+                            )
+                        )
+                    }
                     Text(
                         text = stringResource(R.string.nutrition_disclaimer),
                         style = MaterialTheme.typography.bodySmall,
@@ -226,6 +308,12 @@ fun NutritionScreen(
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.secondary
                     )
+                }
+            }
+
+            if (reportionOffered) {
+                OutlinedButton(onClick = { showReportionDialog = true }, modifier = Modifier.fillMaxWidth()) {
+                    Text(stringResource(R.string.nutrition_reportion_action))
                 }
             }
 
@@ -395,6 +483,213 @@ private fun ActiveCycleCard(activeCycle: MealCycle?, pendingCycle: MealCycle?) {
         }
     }
 }
+
+@Composable
+private fun ProfilePromptCard(onComplete: () -> Unit) {
+    Card(modifier = Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)) {
+        Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text(
+                text = stringResource(R.string.nutrition_profile_incomplete_title),
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold
+            )
+            Text(text = stringResource(R.string.nutrition_profile_incomplete_body), color = MaterialTheme.colorScheme.secondary)
+            Button(onClick = onComplete) {
+                Text(stringResource(R.string.nutrition_profile_incomplete_action))
+            }
+        }
+    }
+}
+
+@Composable
+private fun UnderageCard() {
+    Card(modifier = Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)) {
+        Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text(
+                text = stringResource(R.string.nutrition_profile_adults_only_title),
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold
+            )
+            Text(text = stringResource(R.string.nutrition_profile_adults_only), color = MaterialTheme.colorScheme.secondary)
+        }
+    }
+}
+
+/**
+ * The body the targets are computed from. Each field keeps what is being typed even while the range
+ * refuses it — the store only ever sees an accepted value, and the error under the field says why.
+ */
+@Composable
+private fun NutritionProfileCard(
+    weightInput: String,
+    heightInput: String,
+    ageInput: String,
+    goalInput: String,
+    sex: BiologicalSex?,
+    promptOpen: Boolean,
+    onWeightChange: (String) -> Unit,
+    onHeightChange: (String) -> Unit,
+    onAgeChange: (String) -> Unit,
+    onGoalChange: (String) -> Unit,
+    onSexChange: (BiologicalSex) -> Unit,
+    onDismissPrompt: () -> Unit
+) {
+    // The field keeps what is being typed; the store only answers when it holds something else. Keying
+    // the state on the stored value would rebuild it mid-edit and let the keyboard commit twice.
+    var weightText by remember { mutableStateOf(weightInput) }
+    var heightText by remember { mutableStateOf(heightInput) }
+    var ageText by remember { mutableStateOf(ageInput) }
+    var goalText by remember { mutableStateOf(goalInput) }
+    LaunchedEffect(weightInput) { if (weightInput != weightText) weightText = weightInput }
+    LaunchedEffect(heightInput) { if (heightInput != heightText) heightText = heightInput }
+    LaunchedEffect(ageInput) { if (ageInput != ageText) ageText = ageInput }
+    LaunchedEffect(goalInput) { if (goalInput != goalText) goalText = goalInput }
+
+    Card(modifier = Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)) {
+        Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            Text(text = stringResource(R.string.nutrition_user_data), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+            if (promptOpen) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = stringResource(R.string.nutrition_profile_incomplete_body),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.weight(1f)
+                    )
+                    TextButton(onClick = onDismissPrompt) {
+                        Text(stringResource(R.string.nutrition_later))
+                    }
+                }
+            }
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                NutritionNumberField(
+                    value = weightText,
+                    label = stringResource(R.string.nutrition_weight),
+                    error = profileFieldError(NutritionProfileField.WEIGHT, weightText),
+                    modifier = Modifier.weight(1f),
+                    onValueChange = { typed ->
+                        weightText = typed.filter(Char::isDigit).take(3)
+                        onWeightChange(weightText)
+                    }
+                )
+                NutritionNumberField(
+                    value = heightText,
+                    label = stringResource(R.string.nutrition_height),
+                    error = profileFieldError(NutritionProfileField.HEIGHT, heightText),
+                    modifier = Modifier.weight(1f),
+                    onValueChange = { typed ->
+                        heightText = typed.filter(Char::isDigit).take(3)
+                        onHeightChange(heightText)
+                    }
+                )
+            }
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                NutritionNumberField(
+                    value = ageText,
+                    label = stringResource(R.string.nutrition_age),
+                    error = profileFieldError(NutritionProfileField.AGE, ageText),
+                    modifier = Modifier.weight(1f),
+                    onValueChange = { typed ->
+                        ageText = typed.filter(Char::isDigit).take(3)
+                        onAgeChange(ageText)
+                    }
+                )
+                NutritionNumberField(
+                    value = goalText,
+                    label = stringResource(R.string.nutrition_goal_weight),
+                    error = profileFieldError(NutritionProfileField.GOAL_WEIGHT, goalText),
+                    modifier = Modifier.weight(1f),
+                    onValueChange = { typed ->
+                        goalText = typed.filter(Char::isDigit).take(3)
+                        onGoalChange(goalText)
+                    }
+                )
+            }
+            Text(text = stringResource(R.string.nutrition_sex), style = MaterialTheme.typography.bodyMedium)
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                FilterChip(
+                    selected = sex == BiologicalSex.MALE,
+                    onClick = { onSexChange(BiologicalSex.MALE) },
+                    label = { Text(stringResource(R.string.nutrition_sex_male)) }
+                )
+                FilterChip(
+                    selected = sex == BiologicalSex.FEMALE,
+                    onClick = { onSexChange(BiologicalSex.FEMALE) },
+                    label = { Text(stringResource(R.string.nutrition_sex_female)) }
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun NutritionNumberField(
+    value: String,
+    label: String,
+    error: String?,
+    modifier: Modifier = Modifier,
+    onValueChange: (String) -> Unit
+) {
+    OutlinedTextField(
+        value = value,
+        onValueChange = onValueChange,
+        modifier = modifier,
+        label = { Text(label) },
+        singleLine = true,
+        isError = error != null,
+        supportingText = if (error != null) {
+            { Text(error) }
+        } else {
+            null
+        },
+        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
+    )
+}
+
+@Composable
+private fun profileFieldError(field: NutritionProfileField, raw: String): String? =
+    when (nutritionProfileError(field, raw)) {
+        null -> null
+        NutritionProfileError.ADULTS_ONLY -> stringResource(R.string.nutrition_profile_adults_only)
+        NutritionProfileError.OUT_OF_RANGE -> stringResource(
+            when (field) {
+                NutritionProfileField.WEIGHT -> R.string.nutrition_error_weight
+                NutritionProfileField.HEIGHT -> R.string.nutrition_error_height
+                NutritionProfileField.AGE -> R.string.nutrition_error_age
+                NutritionProfileField.GOAL_WEIGHT -> R.string.nutrition_error_goal_weight
+            }
+        )
+    }
+
+@Composable
+private fun phaseLabel(phase: NutritionEnergyPhase): String = stringResource(
+    when (phase) {
+        NutritionEnergyPhase.GAIN -> R.string.nutrition_phase_gain
+        NutritionEnergyPhase.TAPER -> R.string.nutrition_phase_taper
+        NutritionEnergyPhase.MAINTAIN -> R.string.nutrition_phase_maintain
+    }
+)
+
+@Composable
+private fun surplusLine(energy: NutritionDayEnergy): String =
+    if (energy.surplusCalories > 0) {
+        stringResource(R.string.nutrition_surplus_over_maintenance, energy.surplusCalories)
+    } else {
+        stringResource(R.string.nutrition_surplus_none)
+    }
+
+@Composable
+private fun weightSourceLabel(source: NutritionWeightSource): String = stringResource(
+    when (source) {
+        NutritionWeightSource.SEVEN_DAY_AVERAGE -> R.string.nutrition_weight_source_average
+        NutritionWeightSource.LATEST_WEIGH_IN -> R.string.nutrition_weight_source_latest
+        NutritionWeightSource.SETTINGS -> R.string.nutrition_weight_source_settings
+    }
+)
 
 @Composable
 private fun NutritionTargetRow(title: String, value: String, supporting: String? = null) {

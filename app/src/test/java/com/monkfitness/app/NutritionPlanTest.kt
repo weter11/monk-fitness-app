@@ -64,7 +64,7 @@ class NutritionPlanTest {
             seed = 0,
             startDay = 1,
             daysCount = 1,
-            weightKg = 80,
+            energy = NutritionProfiles.energy(NutritionProfiles.man(80)),
             preferredIngredientKeys = setOf("eggs", "rice", "banana")
         )
 
@@ -77,8 +77,8 @@ class NutritionPlanTest {
     }
 
     @Test
-    fun testGeneratedPlanUsesWeightBasedCaloriesAndDayTypes() {
-        val plan = generateNutritionPlan(seed = 0, startDay = 1, daysCount = 3, weightKg = 80)
+    fun testGeneratedPlanPutsItsDaysOnTheEnergyModelsTargets() {
+        val plan = generateNutritionPlan(seed = 0, startDay = 1, daysCount = 3, energy = NutritionProfiles.energy(NutritionProfiles.man(80)))
 
         assertEquals(3, plan.days.size)
         assertEquals(listOf(1, 2, 3), plan.days.map { it.programDay })
@@ -86,16 +86,18 @@ class NutritionPlanTest {
             listOf(NutritionDayType.TRAINING, NutritionDayType.LIGHT, NutritionDayType.TRAINING),
             plan.days.map { it.dayType }
         )
-        assertEquals(listOf(3300, 3100, 3300), plan.days.map { it.targetCalories })
+        // An 80 kg, 180 cm, 30-year-old man: 1780 kcal at rest, 2759 at maintenance, +520 on a training
+        // day and +400 on a light one.
+        assertEquals(listOf(3279, 3159, 3279), plan.days.map { it.targetCalories })
         assertTrue(plan.days.first().meals.any { it.type == NutritionMealType.POST_WORKOUT })
         assertTrue(plan.days[1].meals.any { it.type == NutritionMealType.SNACK && it.optional })
     }
 
     @Test
     fun testPlanGenerationSupportsOneThreeAndSevenDays() {
-        assertEquals(1, generateNutritionPlan(seed = 0, startDay = 1, daysCount = 1, weightKg = 80).days.size)
-        assertEquals(3, generateNutritionPlan(seed = 0, startDay = 1, daysCount = 3, weightKg = 80).days.size)
-        assertEquals(7, generateNutritionPlan(seed = 0, startDay = 1, daysCount = 7, weightKg = 80).days.size)
+        assertEquals(1, generateNutritionPlan(seed = 0, startDay = 1, daysCount = 1, energy = NutritionProfiles.energy(NutritionProfiles.man(80))).days.size)
+        assertEquals(3, generateNutritionPlan(seed = 0, startDay = 1, daysCount = 3, energy = NutritionProfiles.energy(NutritionProfiles.man(80))).days.size)
+        assertEquals(7, generateNutritionPlan(seed = 0, startDay = 1, daysCount = 7, energy = NutritionProfiles.energy(NutritionProfiles.man(80))).days.size)
     }
 
     @Test
@@ -104,7 +106,7 @@ class NutritionPlanTest {
             seed = 0,
             startDay = 1,
             daysCount = 3,
-            weightKg = 80,
+            energy = NutritionProfiles.energy(NutritionProfiles.man(80)),
             excludedIngredientKeys = setOf("tuna", "nuts")
         )
 
@@ -124,7 +126,7 @@ class NutritionPlanTest {
             seed = 0,
             startDay = 1,
             daysCount = 3,
-            weightKg = 80,
+            energy = NutritionProfiles.energy(NutritionProfiles.man(80)),
             excludedIngredientKeys = setOf("chicken", "eggs", "tuna")
         )
 
@@ -141,7 +143,7 @@ class NutritionPlanTest {
 
     @Test
     fun testReplacementKeepsMealTypeAndProfileAndTheDayOnItsTarget() {
-        val originalPlan = generateNutritionPlan(seed = 0, startDay = 1, daysCount = 3, weightKg = 80)
+        val originalPlan = generateNutritionPlan(seed = 0, startDay = 1, daysCount = 3, energy = NutritionProfiles.energy(NutritionProfiles.man(80)))
         val originalDay = originalPlan.days.first()
         val originalMeal = originalDay.meals.first { it.type == NutritionMealType.BREAKFAST }
         val replacementId = findReplacementMealTemplateId(originalMeal, emptySet())
@@ -152,7 +154,7 @@ class NutritionPlanTest {
             seed = 0,
             startDay = 1,
             daysCount = 3,
-            weightKg = 80,
+            energy = NutritionProfiles.energy(NutritionProfiles.man(80)),
             replacements = mapOf(nutritionReplacementKey(originalDay.programDay, originalMeal.type) to replacementId)
         )
         val replacedDay = replacedPlan.days.first()
@@ -171,7 +173,7 @@ class NutritionPlanTest {
 
     @Test
     fun testShoppingListChangesAfterReplacement() {
-        val originalPlan = generateNutritionPlan(seed = 0, startDay = 1, daysCount = 3, weightKg = 80)
+        val originalPlan = generateNutritionPlan(seed = 0, startDay = 1, daysCount = 3, energy = NutritionProfiles.energy(NutritionProfiles.man(80)))
         val mealToReplace = originalPlan.days.first().meals.first { it.mealType == MealType.BALANCED }
         val replacementId = findReplacementMealTemplateId(mealToReplace, emptySet())
 
@@ -181,7 +183,7 @@ class NutritionPlanTest {
             seed = 0,
             startDay = 1,
             daysCount = 3,
-            weightKg = 80,
+            energy = NutritionProfiles.energy(NutritionProfiles.man(80)),
             replacements = mapOf(nutritionReplacementKey(originalPlan.days.first().programDay, mealToReplace.type) to replacementId)
         )
 
@@ -190,7 +192,7 @@ class NutritionPlanTest {
 
     @Test
     fun testTodayCompletionPercentUsesCurrentDayMeals() {
-        val today = generateNutritionPlan(seed = 0, startDay = 1, daysCount = 3, weightKg = 80).days.first()
+        val today = generateNutritionPlan(seed = 0, startDay = 1, daysCount = 3, energy = NutritionProfiles.energy(NutritionProfiles.man(80))).days.first()
 
         assertEquals(0, calculateNutritionCompletionPercent(today, emptySet()))
         assertEquals(50, calculateNutritionCompletionPercent(today, setOf("breakfast", "dinner")))
@@ -227,16 +229,16 @@ class NutritionPlanTest {
 
     @Test
     fun testSelectionIsDeterministicForTheSameSeed() {
-        val first = generateNutritionPlan(seed = 42, startDay = 1, daysCount = 7, weightKg = 80)
-        val second = generateNutritionPlan(seed = 42, startDay = 1, daysCount = 7, weightKg = 80)
+        val first = generateNutritionPlan(seed = 42, startDay = 1, daysCount = 7, energy = NutritionProfiles.energy(NutritionProfiles.man(80)))
+        val second = generateNutritionPlan(seed = 42, startDay = 1, daysCount = 7, energy = NutritionProfiles.energy(NutritionProfiles.man(80)))
 
         assertEquals(first.templateIds(), second.templateIds())
     }
 
     @Test
     fun testDifferentCyclesGetDifferentPlans() {
-        val first = generateNutritionPlan(seed = 100, startDay = 1, daysCount = 3, weightKg = 80)
-        val second = generateNutritionPlan(seed = 103, startDay = 1, daysCount = 3, weightKg = 80)
+        val first = generateNutritionPlan(seed = 100, startDay = 1, daysCount = 3, energy = NutritionProfiles.energy(NutritionProfiles.man(80)))
+        val second = generateNutritionPlan(seed = 103, startDay = 1, daysCount = 3, energy = NutritionProfiles.energy(NutritionProfiles.man(80)))
 
         assertNotEquals(first.templateIds(), second.templateIds())
     }
@@ -244,7 +246,7 @@ class NutritionPlanTest {
     @Test
     fun testSlotUsesEachTemplateBeforeRepeating() {
         listOf(3, 7).forEach { days ->
-            val plan = generateNutritionPlan(seed = 8, startDay = 1, daysCount = days, weightKg = 80)
+            val plan = generateNutritionPlan(seed = 8, startDay = 1, daysCount = days, energy = NutritionProfiles.energy(NutritionProfiles.man(80)))
             NutritionMealType.entries.forEach { slot ->
                 val picks = plan.days.mapNotNull { day -> day.meals.firstOrNull { it.type == slot }?.templateId }
                 if (picks.isEmpty()) return@forEach
@@ -255,7 +257,7 @@ class NutritionPlanTest {
 
     @Test
     fun testSlotDoesNotRepeatOnConsecutiveDays() {
-        val plan = generateNutritionPlan(seed = 9, startDay = 1, daysCount = 7, weightKg = 80)
+        val plan = generateNutritionPlan(seed = 9, startDay = 1, daysCount = 7, energy = NutritionProfiles.energy(NutritionProfiles.man(80)))
         val dailySlots = listOf(NutritionMealType.BREAKFAST, NutritionMealType.LUNCH, NutritionMealType.DINNER)
 
         dailySlots.forEach { slot ->
@@ -266,12 +268,12 @@ class NutritionPlanTest {
 
     @Test
     fun testConsecutiveThreeDayCyclesShareNoSlotPosition() {
-        val first = generateNutritionPlan(seed = 200, startDay = 1, daysCount = 3, weightKg = 80)
+        val first = generateNutritionPlan(seed = 200, startDay = 1, daysCount = 3, energy = NutritionProfiles.energy(NutritionProfiles.man(80)))
         val second = generateNutritionPlan(
             seed = 203,
             startDay = 4,
             daysCount = 3,
-            weightKg = 80,
+            energy = NutritionProfiles.energy(NutritionProfiles.man(80)),
             previousPlan = first
         )
 
@@ -288,19 +290,19 @@ class NutritionPlanTest {
 
     @Test
     fun testHeavyExclusionsGenerateWithFewerDistinctDishes() {
-        val full = generateNutritionPlan(seed = 5, startDay = 1, daysCount = 7, weightKg = 80)
+        val full = generateNutritionPlan(seed = 5, startDay = 1, daysCount = 7, energy = NutritionProfiles.energy(NutritionProfiles.man(80)))
         val reduced = generateNutritionPlan(
             seed = 5,
             startDay = 1,
             daysCount = 7,
-            weightKg = 80,
+            energy = NutritionProfiles.energy(NutritionProfiles.man(80)),
             excludedIngredientKeys = setOf("chicken")
         )
         val empty = generateNutritionPlan(
             seed = 5,
             startDay = 1,
             daysCount = 7,
-            weightKg = 80,
+            energy = NutritionProfiles.energy(NutritionProfiles.man(80)),
             excludedIngredientKeys = nutritionExclusionIngredients.map { it.key }.toSet()
         )
 
@@ -338,7 +340,7 @@ class NutritionPlanTest {
                     seed = 20260101,
                     startDay = startDay,
                     daysCount = 1,
-                    weightKg = weight
+                    energy = NutritionProfiles.energy(NutritionProfiles.man(weight))
                 ).days.single()
 
                 assertEquals(day.meals.sumOf { it.calories }, day.totalCalories)
@@ -360,7 +362,7 @@ class NutritionPlanTest {
 
     @Test
     fun testReloadedCycleKeepsCaloriesAsPlannedTotal() {
-        val plan = generateNutritionPlan(seed = 7, startDay = 1, daysCount = 3, weightKg = 90)
+        val plan = generateNutritionPlan(seed = 7, startDay = 1, daysCount = 3, energy = NutritionProfiles.energy(NutritionProfiles.man(90)))
         val reloaded = mealEntitiesToNutritionPlan(11L, plan.toMealEntities(11L))
 
         reloaded.days.forEach { day ->
@@ -378,7 +380,7 @@ class NutritionPlanTest {
             assertEquals(expected, nutritionCycleDayNumber(start, start.plusDays(k.toLong()), 3))
         }
 
-        val plan = generateNutritionPlan(seed = 1, startDay = 1, daysCount = 3, weightKg = 80)
+        val plan = generateNutritionPlan(seed = 1, startDay = 1, daysCount = 3, energy = NutritionProfiles.energy(NutritionProfiles.man(80)))
         val todayDayNumber = nutritionCycleDayNumber(start, start.plusDays(2), 3)
 
         assertEquals(
@@ -390,7 +392,7 @@ class NutritionPlanTest {
 
     @Test
     fun testCappedProgramDayStillNumbersTheCyclesOwnDays() {
-        val plan = generateNutritionPlan(seed = 3, startDay = 56, daysCount = 5, weightKg = 80)
+        val plan = generateNutritionPlan(seed = 3, startDay = 56, daysCount = 5, energy = NutritionProfiles.energy(NutritionProfiles.man(80)))
 
         assertTrue(plan.days.all { it.programDay == NUTRITION_PROGRAM_DAY_CAP })
         assertTrue(plan.days.all { it.isProgramDayCapped() })
@@ -399,7 +401,7 @@ class NutritionPlanTest {
 
     @Test
     fun testTodayCookingInstructionsStayShortAndActionable() {
-        val plan = generateNutritionPlan(seed = 0, startDay = 1, daysCount = 3, weightKg = 80)
+        val plan = generateNutritionPlan(seed = 0, startDay = 1, daysCount = 3, energy = NutritionProfiles.energy(NutritionProfiles.man(80)))
 
         plan.days.first().meals.forEach { meal ->
             val instructions = getTodayCookingInstructionResIds(meal)
