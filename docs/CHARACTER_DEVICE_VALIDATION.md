@@ -126,7 +126,14 @@ Executed in the build environment (see PR body for the exact commands and output
 - `:app:testDebugUnitTest` — full unit suite, including the new character tests.
 - `:app:assembleDebug` with the flag off (CI-equivalent) and on (device APK).
 - JVM: pose retargeting on the real GLB, rest invariant, joint mapping, backend attempt/fallback
-  policy, single-owner slot, thumbnail cache key, flag default.
+  policy, single-owner slot, thumbnail cache key, engine/renderer boundary.
+- Build: a default build generates `FILAMENT_CHARACTER_ENABLED = false`; no test asserts it, because a
+  unit test that fails on an intentional flag build is a trap.
+
+Not covered by an automated test: the Compose/Android glue itself (`CharacterStage`, `AndroidView`,
+`UiHelper` surface callbacks). This repository has no instrumentation source set, so that layer is
+exercised only by the device procedure below. The fallback *policy* it depends on is unit-tested;
+the view wiring is not.
 
 Requires a physical device (not executed, not claimed):
 
