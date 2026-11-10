@@ -237,9 +237,9 @@ class ProgressArchitectureTest {
         )
 
         assertEquals(
-            "a volume carries one context, one set count and one unit — no third quantity in which two " +
-                "contexts could be added, and no `total`",
-            listOf("context", "performedSets", "repetitions", "seconds"),
+            "a volume carries one context, one set count, one unit and that same context's own kilogram " +
+                "volume — no quantity in which two contexts could be added, and no `total`",
+            listOf("context", "performedSets", "repetitions", "seconds", "volumeKg"),
             declaredFields(ContextVolume::class.java)
         )
     }
@@ -251,10 +251,19 @@ class ProgressArchitectureTest {
             .filter { name -> text(name).contains("Double") }
 
         assertEquals(
-            "two quantities in this layer are mathematically fractional — the mean duration of the " +
-                "measured attempts and the workouts-per-week rate — and both are ratios of counted facts, " +
-                "not a score or a load. A third one appearing is a review event, so the set is pinned",
-            listOf("domain/progress/Frequency.kt", "domain/progress/SessionDuration.kt"),
+            "three quantities in this layer are mathematically fractional — the mean duration of the " +
+                "measured attempts, the workouts-per-week rate, and a set's load in kilograms with the " +
+                "volume accumulated from it. The first two are ratios of counted facts; the third is a " +
+                "measured weight, never a score, and no context's kilogram volume is ever added to " +
+                "another's. A fourth appearing is a review event, so the set is pinned",
+            listOf(
+                "domain/progress/ContextVolume.kt",
+                "domain/progress/ExercisePerformanceSeries.kt",
+                "domain/progress/Frequency.kt",
+                "domain/progress/ProgressCalculator.kt",
+                "domain/progress/SessionDuration.kt",
+                "domain/progress/VolumeProgress.kt"
+            ),
             withDouble
         )
         assertTrue(

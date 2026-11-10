@@ -38,6 +38,21 @@ enum class Equipment(@StringRes val labelRes: Int) {
     BACKPACK(R.string.equipment_backpack)
 }
 
+/**
+ * Whether a movement is performed with a weight the user can put on, so a confirmed set of it can carry
+ * a load.
+ *
+ * [NONE] is the default and is not a statement about difficulty: it says the app records no weight for
+ * this exercise, which is every bodyweight, mobility and stretching movement. [EXTERNAL_LOAD] says the
+ * movement's work is measured in kilograms as well as in repetitions.
+ */
+enum class LoadKind {
+
+    NONE,
+
+    EXTERNAL_LOAD
+}
+
 val postureFocusAreas = listOf(
     ExerciseSubCategory.SHOULDERS,
     ExerciseSubCategory.SPINE,
@@ -100,6 +115,7 @@ data class Exercise(
     val category: ExerciseCategory = ExerciseCategory.MOBILITY,
     val subCategory: ExerciseSubCategory = ExerciseSubCategory.FULL_BODY,
     val requiredEquipment: Set<Equipment> = emptySet(),
+    val loadKind: LoadKind = LoadKind.NONE,
     val nameRu: String = "",
     val nameEn: String = "",
     val nameUk: String = "",

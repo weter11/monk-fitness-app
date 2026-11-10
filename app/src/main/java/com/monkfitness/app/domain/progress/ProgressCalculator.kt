@@ -104,7 +104,8 @@ class ProgressCalculator(private val zone: ZoneId = ZoneId.systemDefault()) {
                                 setIndex = set.setIndex,
                                 performedAt = set.performedAt,
                                 repetitions = set.completedReps,
-                                seconds = set.durationSeconds
+                                seconds = set.durationSeconds,
+                                loadKg = set.loadKg
                             )
                         }
                 }
@@ -135,7 +136,8 @@ class ProgressCalculator(private val zone: ZoneId = ZoneId.systemDefault()) {
                     startedOn = requireNotNull(startedOn[sessionId]).atZone(zone).toLocalDate(),
                     repetitions = own.sumOf { (_, observation, _) -> observation.repetitions },
                     seconds = own.sumOf { (_, observation, _) -> observation.seconds },
-                    performedSets = own.size
+                    performedSets = own.size,
+                    volumeKg = kilogramVolumeOf(own.map { (_, observation, _) -> observation })
                 )
             }
             .sortedWith(compareByDescending<SessionVolume> { it.startedOn }.thenBy { it.sessionId.value })
@@ -147,7 +149,8 @@ class ProgressCalculator(private val zone: ZoneId = ZoneId.systemDefault()) {
                     weekStart = week,
                     repetitions = own.sumOf { (_, observation, _) -> observation.repetitions },
                     seconds = own.sumOf { (_, observation, _) -> observation.seconds },
-                    performedSets = own.size
+                    performedSets = own.size,
+                    volumeKg = kilogramVolumeOf(own.map { (_, observation, _) -> observation })
                 )
             }
             .sortedBy { it.weekStart }
@@ -168,7 +171,8 @@ class ProgressCalculator(private val zone: ZoneId = ZoneId.systemDefault()) {
                     } else {
                         null
                     },
-                    performedSets = own.size
+                    performedSets = own.size,
+                    volumeKg = kilogramVolumeOf(own.map { (_, observation, _) -> observation })
                 )
             }
             .sortedWith(compareBy({ it.exerciseId }, { it.dimension.ordinal }))
@@ -210,8 +214,27 @@ class ProgressCalculator(private val zone: ZoneId = ZoneId.systemDefault()) {
         seconds = when (series.context.dimension) {
             PrescriptionDimension.TIME_BASED -> series.observations.sumOf { it.seconds }
             else -> null
-        }
+        },
+        volumeKg = kilogramVolumeOf(series.observations)
     )
+
+    /**
+     * The kilogram volume of [observations]: `load x repetitions` summed over the sets that were both
+     * weighed and measured in repetitions, or `null` when none was.
+     *
+     * Two exclusions, for the same reason: a set with no load was never weighed and contributes nothing
+     * (its repetitions still count in the repetition total), and a timed set has no repetitions to
+     * multiply, so a weight on it is a weight but not a volume. `null` rather than `0.0` so an exercise
+     * nobody weighed reports no kilogram volume instead of claiming zero kilograms of work.
+     */
+    private fun kilogramVolumeOf(observations: List<PerformanceObservation>): Double? {
+        val weighed = observations.filter { observation ->
+            observation.isRepetitionObservation && observation.loadKg != null
+        }
+        if (weighed.isEmpty()) return null
+        val total = weighed.sumOf { observation -> requireNotNull(observation.loadKg) * observation.repetitions }
+        return total.takeIf { it > 0.0 }
+    }
 
     /**
      * One run per Program in the scope. A `PLANNED` opportunity has not happened and a `SUPERSEDED` one

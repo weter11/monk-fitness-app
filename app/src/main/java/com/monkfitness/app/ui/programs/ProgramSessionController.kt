@@ -45,7 +45,11 @@ data class SessionExerciseUi(
     /** Whether the user explicitly skipped this occurrence; a skipped one never asks for a set. */
     val skipped: Boolean = false,
     /** What each confirmed set recorded, in set order, in the occurrence's own unit. */
-    val performed: List<Int> = emptyList()
+    val performed: List<Int> = emptyList(),
+    /** Whether the catalogue says this exercise can carry external load, so a load field is shown. */
+    val acceptsLoad: Boolean = false,
+    /** The load this exercise was last performed with, or `null` when it never was weighed. */
+    val nextLoadKg: Double? = null
 ) {
 
     val isFinished: Boolean
@@ -211,6 +215,61 @@ interface SessionRestPreference {
 }
 
 /**
+ * The load a movement was last performed with, read when a workout presents it.
+ *
+ * A port for the same reason as [SessionRestPreference]: the prefill is a read of stored sets, and a
+ * test states it without a database. `null` means no weighed set of that exercise was ever recorded —
+ * which is every bodyweight movement — and the field then starts empty rather than at zero kilograms.
+ */
+fun interface LastSetLoadSource {
+
+    suspend fun loadKgOf(exerciseId: String): Double?
+}
+
+/**
+ * What the user typed into the set-confirmation fields, as a value the controller stores or refuses.
+ *
+ * One place decides what a typed repetition count and a typed load are, so the field's inline error and
+ * the write cannot disagree about which entries are acceptable.
+ */
+object SetEntry {
+
+    /** The most repetitions a typed entry may state, matching [com.monkfitness.app.domain.workout.MAX_PERFORMED_REPS]. */
+    const val MAX_REPS: Int = com.monkfitness.app.domain.workout.MAX_PERFORMED_REPS
+
+    /** The heaviest load a typed entry may state, in kilograms. */
+    const val MAX_LOAD_KG: Double = com.monkfitness.app.domain.workout.MAX_PERFORMED_LOAD_KG
+
+    /**
+     * The repetitions [raw] states, or `null` when it states none the app accepts: a whole number from
+     * `1` to [MAX_REPS]. Zero and negative values are refused because a set that was not performed is
+     * absent rather than stored as zero.
+     */
+    fun repsOf(raw: String): Int? {
+        val value = raw.trim().toIntOrNull() ?: return null
+        return value.takeIf { it in 1..MAX_REPS }
+    }
+
+    /**
+     * The load [raw] states, or `null` when it states none the app accepts: a positive, finite number of
+     * kilograms no heavier than [MAX_LOAD_KG], written with at most two decimals and either `.` or the
+     * locale's `,` as the separator.
+     *
+     * Blank is not a load and is not an error: it is the absence of one, which the caller reads as `null`.
+     */
+    fun loadOf(raw: String): Double? {
+        val text = raw.trim()
+        if (text.isEmpty()) return null
+        if (!LOAD_TEXT.matches(text)) return null
+        val value = text.replace(',', '.').toDoubleOrNull() ?: return null
+        return value.takeIf { it > 0.0 && it <= MAX_LOAD_KG }
+    }
+
+    /** At most three integer digits and two decimals: the largest load is 500, so four digits is a typo. */
+    private val LOAD_TEXT = Regex("""^\d{1,3}([.,]\d{1,2})?$""")
+}
+
+/**
  * The workout session screen's state holder — the target runtime's UI half.
  *
  * It owns **nothing** about starting, confirming, cancelling or finishing a workout: every one of those is
@@ -242,6 +301,7 @@ class ProgramSessionController(
     private val catalogue: ExerciseCatalogue,
     private val familyCatalogue: FamilyCatalogue,
     private val restPreference: SessionRestPreference,
+    private val lastLoad: LastSetLoadSource = LastSetLoadSource { null },
     private val defaultRestSeconds: Int = DEFAULT_REST_SECONDS
 ) {
 
@@ -260,6 +320,12 @@ class ProgramSessionController(
 
     /** The catalogue's family per exercise id, resolved once: the family a line's change belongs to. */
     private var familyByExerciseId: Map<String, String>? = null
+
+    /** Which exercises the catalogue says can carry external load, resolved once for the same reason. */
+    private var loadableByExerciseId: Map<String, Boolean>? = null
+
+    /** The load each movement was last weighed at; one read per exercise per attempt, `null` included. */
+    private val rememberedLoads = mutableMapOf<String, Double?>()
 
     /** The rest the user last chose, read once when the attempt opens. */
     private var rememberedRestSeconds: Int? = null
@@ -311,8 +377,8 @@ class ProgramSessionController(
         }
     }
 
-    suspend fun confirmSet(completedReps: Int = 0, durationSeconds: Int = 0) {
-        val stored = confirmSetInternal(completedReps, durationSeconds)
+    suspend fun confirmSet(completedReps: Int = 0, durationSeconds: Int = 0, loadKg: Double? = null) {
+        val stored = confirmSetInternal(completedReps, durationSeconds, loadKg)
         if (!stored) return
     }
 
@@ -436,24 +502,31 @@ class ProgramSessionController(
     }
 
     /**
-     * Parses and confirms the value the user actually performed.
+     * Parses and confirms the value the user actually performed, with the load typed beside it.
      *
-     * Blank, non-integral, zero and negative values return `false` without calling [SessionRuntime].
-     * The prescribed target is never used as a fallback: it remains presentation only until the user
-     * explicitly confirms a valid actual result.
+     * Blank, non-integral, zero, negative and over-bound values return `false` without calling
+     * [SessionRuntime], and so does a load outside `(0, 500]` kg or written with more than two decimals.
+     * A blank load is not an error: it confirms the set with no load recorded, exactly as a bodyweight
+     * set does. The prescribed target is never used as a fallback: it remains presentation only until the
+     * user explicitly confirms a valid actual result.
      */
-    suspend fun confirmActualSet(rawValue: String): Boolean {
-        val value = rawValue.trim().toIntOrNull() ?: return false
-        if (value <= 0) return false
+    suspend fun confirmActualSet(rawValue: String, rawLoad: String = ""): Boolean {
+        val value = SetEntry.repsOf(rawValue) ?: return false
+        val loadKg = if (rawLoad.isBlank()) null else SetEntry.loadOf(rawLoad) ?: return false
         val current = currentAttempt() ?: return false
         val occurrence = occurrenceToPerform(current) ?: return false
         return confirmSetInternal(
             completedReps = if (occurrence.dimension == PrescriptionDimension.TIME_BASED) 0 else value,
-            durationSeconds = if (occurrence.dimension == PrescriptionDimension.TIME_BASED) value else 0
+            durationSeconds = if (occurrence.dimension == PrescriptionDimension.TIME_BASED) value else 0,
+            loadKg = loadKg
         )
     }
 
-    private suspend fun confirmSetInternal(completedReps: Int, durationSeconds: Int): Boolean {
+    private suspend fun confirmSetInternal(
+        completedReps: Int,
+        durationSeconds: Int,
+        loadKg: Double? = null
+    ): Boolean {
         val current = currentAttempt() ?: return false
         val occurrence = occurrenceToPerform(current) ?: return false
         val rested = restTakenSeconds()
@@ -463,10 +536,13 @@ class ProgramSessionController(
                 sessionExerciseId = SessionExerciseId(occurrence.sessionExerciseId),
                 completedReps = completedReps,
                 durationSeconds = durationSeconds,
-                restSeconds = rested
+                restSeconds = rested,
+                loadKg = loadKg
             )
         ) {
             is SessionRuntimeResult.Success -> {
+                // The weight just recorded becomes the prefill of the next set of the same movement.
+                if (loadKg != null) rememberedLoads[occurrence.exerciseId] = loadKg
                 clearFocusIfResolved(confirmed.value)
                 present(confirmed.value)
                 startRestAfter(confirmed.value)
@@ -683,6 +759,7 @@ class ProgramSessionController(
 
         val exercises = session.exercises.map { exercise ->
             val nextSetNumber = exercise.results.size + 1
+            val acceptsLoad = loadableExercises()[exercise.exerciseId] == true
             SessionExerciseUi(
                 sessionExerciseId = exercise.sessionExerciseId.value,
                 exerciseId = exercise.exerciseId,
@@ -699,7 +776,9 @@ class ProgramSessionController(
                 skipped = exercise.skipped,
                 performed = exercise.results.map { set ->
                     if (set.durationSeconds > 0) set.durationSeconds else set.completedReps
-                }
+                },
+                acceptsLoad = acceptsLoad,
+                nextLoadKg = if (acceptsLoad) rememberedLoadOf(exercise.exerciseId) else null
             )
         }
 
@@ -797,5 +876,40 @@ class ProgramSessionController(
         }
         nameByFamilyId = loaded
         return loaded
+    }
+
+    /**
+     * Which exercises the catalogue records as performed with an external load, read once.
+     *
+     * An unreadable catalogue reports **no** exercise as load-capable, so the screen asks for no load
+     * rather than showing a field whose value would be stored against a movement the app cannot classify.
+     */
+    private suspend fun loadableExercises(): Map<String, Boolean> {
+        loadableByExerciseId?.let { cached -> return cached }
+        val loaded = try {
+            catalogue.options().associate { option -> option.exerciseId to option.acceptsLoad }
+        } catch (failure: Throwable) {
+            emptyMap()
+        }
+        loadableByExerciseId = loaded
+        return loaded
+    }
+
+    /**
+     * The load [exerciseId] was last performed with, or `null` when it never was.
+     *
+     * Read once per exercise per attempt and then remembered: every confirmed set re-presents the
+     * screen, and a workout must not re-query the history for each of its six movements on every set.
+     * A failed read is an absence, not an error — the field starts empty and the set is still recordable.
+     */
+    private suspend fun rememberedLoadOf(exerciseId: String): Double? {
+        if (rememberedLoads.containsKey(exerciseId)) return rememberedLoads[exerciseId]
+        val read = try {
+            lastLoad.loadKgOf(exerciseId)
+        } catch (failure: Throwable) {
+            null
+        }
+        rememberedLoads[exerciseId] = read
+        return read
     }
 }

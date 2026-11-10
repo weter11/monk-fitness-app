@@ -1084,6 +1084,10 @@
     <string name="programs_session_actual_reps">Действителни повторения</string>
     <string name="programs_session_actual_seconds">Действителни секунди</string>
     <string name="programs_session_actual_invalid">Въведете цяло число, по-голямо от нула</string>
+    <string name="programs_session_actual_load">Тежест (kg)</string>
+    <string name="programs_session_load_invalid">Въведете тежест между 0,1 и 500 kg</string>
+    <string name="programs_session_reps_invalid">Въведете между 1 и 500 повторения</string>
+    <string name="programs_session_seconds_invalid">Въведете между 1 и 500 секунди</string>
     <string name="programs_session_confirm_set">Потвърди серията</string>
     <string name="programs_session_rest">Почивка %1$d с</string>
     <string name="programs_session_rest_value">Почивка между сериите (секунди)</string>
@@ -1161,6 +1165,9 @@
     <string name="progress_performance_rep_row">%1$s \u2014 %2$d наблюдения, най-добро %3$d повторения</string>
     <string name="progress_performance_time_row">%1$s \u2014 %2$d наблюдения, най-добро %3$d с</string>
     <string name="progress_performance_empty">Още няма записана сравнима серия.</string>
+    <string name="progress_performance_load_row">%1$s \u2014 %2$d наблюдения, най-добро %3$s kg × %4$d</string>
+    <string name="progress_performance_load_row_with_volume">%1$s \u2014 %2$d наблюдения, най-добро %3$s kg × %4$d, най-добър подход %5$s kg</string>
+    <string name="progress_performance_load_hold_row">%1$s \u2014 %2$d наблюдения, най-добро %3$s kg</string>
     <string name="progress_deferred_title">Още не е изчислено</string>
     <string name="progress_notice_title">Известие</string>
     <!--
@@ -1250,6 +1257,10 @@
     <string name="progress_volume_reps">%1$d повторения</string>
     <string name="progress_volume_seconds">%1$d с</string>
     <string name="progress_volume_reps_and_seconds">%1$d повторения · %2$d с</string>
+    <string name="progress_volume_kg">%1$s kg</string>
+    <string name="progress_volume_reps_and_kg">%1$d повторения · %2$s kg</string>
+    <string name="progress_volume_seconds_and_kg">%1$d с · %2$s kg</string>
+    <string name="progress_volume_reps_seconds_and_kg">%1$d повторения · %2$s с · %3$s kg</string>
     <string name="progress_unknown_exercise">Неизвестно упражнение</string>
     <string name="library_counts_title">В приложението</string>
     <string name="library_counts_exercises">Анимирани упражнения</string>

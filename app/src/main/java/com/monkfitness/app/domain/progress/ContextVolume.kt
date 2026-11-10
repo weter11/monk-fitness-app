@@ -18,12 +18,17 @@ data class ContextVolume(
     val context: ComparableContext,
     val performedSets: Int,
     val repetitions: Int?,
-    val seconds: Int?
+    val seconds: Int?,
+    /** Sum of `load x repetitions` over the weighed repetition sets, or `null` when none was weighed. */
+    val volumeKg: Double? = null
 ) {
 
     init {
         require(performedSets >= 1) {
             "a volume exists because sets were performed; a context with none has no volume"
+        }
+        require(volumeKg == null || volumeKg > 0.0) {
+            "a kilogram volume is absent or positive, was $volumeKg"
         }
         when (context.dimension) {
             PrescriptionDimension.REP_BASED -> {

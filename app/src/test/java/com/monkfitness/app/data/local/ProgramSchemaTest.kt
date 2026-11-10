@@ -178,6 +178,13 @@ class ProgramSchemaTest {
     private fun everyNDaysStatements(): List<String> =
         recordStatements(AppDatabase.MIGRATION_20_21)
 
+    /**
+     * The one exact statement the **per-set load** step (21 -> 22) executes: the nullable column, with no
+     * default and no backfill of the sets a device already holds.
+     */
+    private fun loadStatements(): List<String> =
+        recordStatements(AppDatabase.MIGRATION_21_22)
+
     private fun allAdditiveStatements(): List<String> =
         additiveStatements() + focusStatements() + windowStatements()
 
@@ -462,8 +469,14 @@ class ProgramSchemaTest {
         )
         assertEquals(21, AppDatabase.MIGRATION_20_21.endVersion)
         assertEquals(
+            "the per-set load is the additive step after the interval",
+            21,
+            AppDatabase.MIGRATION_21_22.startVersion
+        )
+        assertEquals(22, AppDatabase.MIGRATION_21_22.endVersion)
+        assertEquals(
             "and the declared version is where the chain ends",
-            AppDatabase.MIGRATION_20_21.endVersion,
+            AppDatabase.MIGRATION_21_22.endVersion,
             currentVersion()
         )
     }
@@ -651,6 +664,53 @@ class ProgramSchemaTest {
         )
         assertTrue(
             "and no default is stated, because `0` would claim a measurement for a rest nobody recorded",
+            statements.none { statement -> statement.contains("DEFAULT", ignoreCase = true) }
+        )
+    }
+
+    /**
+     * The load step adds exactly one nullable `REAL` column on the confirmed set, with **no `DEFAULT`**.
+     *
+     * `null` is the whole claim: it is what every set stored before this step holds, and it means *no load
+     * was recorded* rather than *a load of zero kilograms*. A default would turn every historical
+     * bodyweight set into a weighed one at zero, and every kilogram volume derived from it would add that
+     * zero as if it were a measurement.
+     */
+    @Test
+    fun theLoadMigrationAddsOneNullableRealColumnAndNoDefault() {
+        val statements = loadStatements()
+
+        assertEquals(
+            "21 -> 22 executes exactly one statement: the column on the row a confirmed set owns",
+            1,
+            statements.size
+        )
+        assertEquals(
+            "ALTER TABLE `program_set_log` ADD COLUMN `loadKg` REAL",
+            ProgramSchemaFixture.normalized(statements.single())
+        )
+        assertEquals(
+            "and it is nullable, so a bodyweight set stores an absence rather than a weight of zero",
+            listOf(true),
+            ProgramSchemaFixture.columnsAddedBy("MIGRATION_21_22", "program_set_log").map { it.nullable }
+        )
+        assertEquals(
+            "and it is REAL: a load is measured in kilograms to two decimals, not counted in whole units",
+            "REAL",
+            ProgramSchemaFixture.columnsAddedBy("MIGRATION_21_22", "program_set_log")
+                .single { column -> column.name == "loadKg" }
+                .type
+        )
+        assertTrue(
+            "no statement writes a row: a backfill would invent a load for every set a device already " +
+                "recorded",
+            statements.none { statement ->
+                Regex("\\b(INSERT|UPDATE|DELETE|DROP|RENAME)\\b", RegexOption.IGNORE_CASE)
+                    .containsMatchIn(statement)
+            }
+        )
+        assertTrue(
+            "and no default is stated, because `0` would claim a weight nobody put on the bar",
             statements.none { statement -> statement.contains("DEFAULT", ignoreCase = true) }
         )
     }
@@ -2150,7 +2210,7 @@ class ProgramSchemaTest {
         val added = ProgramSchemaFixture.normalized(
             (allAdditiveStatements() + targetOccurrenceStatements() + preferenceStatements() +
                 historicalFocusStatements() + restStatements() + sessionTypesStatements() +
-                everyNDaysStatements())
+                everyNDaysStatements() + loadStatements())
                 .joinToString(" ")
         )
         // The two target-occurrence tables are created outright rather than appended to, so their columns

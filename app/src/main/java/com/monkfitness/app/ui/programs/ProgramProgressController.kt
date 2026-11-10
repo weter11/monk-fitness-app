@@ -42,7 +42,13 @@ data class ProgressPerformanceRowUi(
     val dimension: PrescriptionDimension,
     val observations: Int,
     /** The best single set in the row's own unit, or `null` when nothing measured was recorded. */
-    val best: Int?
+    val best: Int?,
+    /** The heaviest weighed set, in kilograms, or `null` when no set of this exercise was weighed. */
+    val heaviestLoadKg: Double? = null,
+    /** The repetitions of that heaviest set; meaningful only beside [heaviestLoadKg]. */
+    val heaviestLoadReps: Int? = null,
+    /** The largest single-set kilogram volume — load x reps — or `null` when nothing was weighed. */
+    val bestSetVolumeKg: Double? = null
 )
 
 /** One exercise's volume in the window, in the unit it was performed in. */
@@ -50,21 +56,25 @@ data class ProgressExerciseVolumeRowUi(
     val exerciseId: String,
     val nameRes: Int,
     val repetitions: Int?,
-    val seconds: Int?
+    val seconds: Int?,
+    /** The kilogram volume of the weighed sets, or `null` when none was weighed. */
+    val volumeKg: Double? = null
 )
 
 /** One calendar week's volume: two units, never one number. */
 data class ProgressWeekVolumeRowUi(
     val weekStart: LocalDate,
     val repetitions: Int,
-    val seconds: Int
+    val seconds: Int,
+    val volumeKg: Double? = null
 )
 
 /** One attempt's volume: two units, never one number. */
 data class ProgressSessionVolumeRowUi(
     val startedOn: LocalDate,
     val repetitions: Int,
-    val seconds: Int
+    val seconds: Int,
+    val volumeKg: Double? = null
 )
 
 data class ProgressStreakRowUi(
@@ -209,7 +219,10 @@ class ProgramProgressController(
                             nameRes = exerciseNameRes(series.context.exerciseId),
                             dimension = series.context.dimension,
                             observations = series.observations.size,
-                            best = bestOf(series.observations)
+                            best = bestOf(series.observations),
+                            heaviestLoadKg = series.heaviestSet?.loadKg,
+                            heaviestLoadReps = series.heaviestSet?.repetitions?.takeIf { reps -> reps > 0 },
+                            bestSetVolumeKg = series.bestSetVolumeKg
                         )
                     }
                     .sortedByDescending { row -> row.observations },
@@ -217,14 +230,16 @@ class ProgramProgressController(
                     ProgressSessionVolumeRowUi(
                         startedOn = volume.startedOn,
                         repetitions = volume.repetitions,
-                        seconds = volume.seconds
+                        seconds = volume.seconds,
+                        volumeKg = volume.volumeKg
                     )
                 },
                 volumeWeeks = training.weekVolumes.map { volume ->
                     ProgressWeekVolumeRowUi(
                         weekStart = volume.weekStart,
                         repetitions = volume.repetitions,
-                        seconds = volume.seconds
+                        seconds = volume.seconds,
+                        volumeKg = volume.volumeKg
                     )
                 },
                 volumeExercises = training.exerciseVolumes.map { volume ->
@@ -232,7 +247,8 @@ class ProgramProgressController(
                         exerciseId = volume.exerciseId,
                         nameRes = exerciseNameRes(volume.exerciseId),
                         repetitions = volume.repetitions,
-                        seconds = volume.seconds
+                        seconds = volume.seconds,
+                        volumeKg = volume.volumeKg
                     )
                 },
                 hasVolume = training.hasVolume,

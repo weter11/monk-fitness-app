@@ -102,6 +102,8 @@ internal object ProgramDaoSql {
 
     const val PROGRAM_SET_LOG_DAO_SETS_OF_SESSION_EXERCISE = "SELECT * FROM `program_set_log` WHERE `sessionExerciseId` = :sessionExerciseId ORDER BY `setIndex` ASC"
 
+    const val PROGRAM_SET_LOG_DAO_LAST_LOAD_KG_OF_EXERCISE = "SELECT `program_set_log`.`loadKg` FROM `program_set_log` INNER JOIN `session_exercise` ON `session_exercise`.`sessionExerciseId` = `program_set_log`.`sessionExerciseId` WHERE `session_exercise`.`exerciseId` = :exerciseId AND `program_set_log`.`loadKg` IS NOT NULL ORDER BY `program_set_log`.`performedAt` DESC, `program_set_log`.`setIndex` DESC LIMIT 1"
+
     const val PROGRAM_SET_LOG_DAO_SETS_OF_SESSIONS = "SELECT `program_set_log`.* FROM `program_set_log` INNER JOIN `session_exercise` ON `session_exercise`.`sessionExerciseId` = `program_set_log`.`sessionExerciseId` WHERE `session_exercise`.`sessionId` IN (:sessionIds) ORDER BY `session_exercise`.`sessionId` ASC, `session_exercise`.`position` ASC, `program_set_log`.`setIndex` ASC"
 
     const val PROGRAM_SET_LOG_DAO_COUNT_SETS_OF_PROGRAM = "SELECT COUNT(*) FROM `program_set_log` INNER JOIN `session_exercise` ON `session_exercise`.`sessionExerciseId` = `program_set_log`.`sessionExerciseId` INNER JOIN `workout_session` ON `workout_session`.`sessionId` = `session_exercise`.`sessionId` WHERE `workout_session`.`programId` = :programId"
@@ -207,6 +209,7 @@ internal object ProgramDaoSql {
         "ProgramSetLogDao.removeSet" to PROGRAM_SET_LOG_DAO_REMOVE_SET,
         "ProgramSetLogDao.setsOfSessionExercise" to PROGRAM_SET_LOG_DAO_SETS_OF_SESSION_EXERCISE,
         "ProgramSetLogDao.setsOfSessions" to PROGRAM_SET_LOG_DAO_SETS_OF_SESSIONS,
+        "ProgramSetLogDao.lastLoadKgOfExercise" to PROGRAM_SET_LOG_DAO_LAST_LOAD_KG_OF_EXERCISE,
         "ProgramSetLogDao.countSetsOfProgram" to PROGRAM_SET_LOG_DAO_COUNT_SETS_OF_PROGRAM,
         "ProgramPauseDao.pauseById" to PROGRAM_PAUSE_DAO_PAUSE_BY_ID,
         "ProgramPauseDao.pausesOfProgram" to PROGRAM_PAUSE_DAO_PAUSES_OF_PROGRAM,

@@ -3,8 +3,10 @@ package com.monkfitness.app.domain.progress
 import com.monkfitness.app.domain.common.ProgramId
 import com.monkfitness.app.domain.common.SessionId
 import com.monkfitness.app.domain.prescription.PrescriptionDimension
+import com.monkfitness.app.domain.workout.MAX_PERFORMED_LOAD_KG
 import com.monkfitness.app.domain.workout.SessionStatus
 import com.monkfitness.app.domain.workout.isPerformedAmount
+import com.monkfitness.app.domain.workout.isPerformedLoad
 import java.time.Instant
 
 /**
@@ -46,6 +48,10 @@ data class ComparableContext(val exerciseId: String, val dimension: Prescription
  * which Program each point came from.
  *
  * `repetitions` is `0` for a timed set and `seconds` is `0` for a repetition set.
+ *
+ * `loadKg` is the external load the set was performed with, or `null` when no load was recorded — every
+ * bodyweight set and every set stored before load existed. It is not `0`: nothing was weighed in at zero
+ * kilograms, and a volume that added the absence as zero would claim a weight for work never weighed.
  */
 data class PerformanceObservation(
     val programId: ProgramId,
@@ -54,13 +60,18 @@ data class PerformanceObservation(
     val setIndex: Int,
     val performedAt: Instant,
     val repetitions: Int,
-    val seconds: Int
+    val seconds: Int,
+    val loadKg: Double? = null
 ) {
 
     init {
         require(setIndex >= 1) { "sets are numbered from 1, was $setIndex" }
         require(repetitions >= 0) { "repetitions performed are not negative, was $repetitions" }
         require(seconds >= 0) { "seconds performed are not negative, was $seconds" }
+        require(isPerformedLoad(loadKg)) {
+            "a load is absent or a positive finite weight no heavier than $MAX_PERFORMED_LOAD_KG, " +
+                "was $loadKg"
+        }
         require((repetitions > 0) != (seconds > 0)) {
             "an observation is measured in repetitions or in time, and a set that was not performed is " +
                 "absent rather than observed as zero: reps=$repetitions seconds=$seconds"
@@ -126,6 +137,32 @@ data class ExercisePerformanceSeries(
     /** The longest single set observed in this context, or `null` in a repetition context. */
     val bestSeconds: Int?
         get() = observations.maxOfOrNull { it.seconds }?.takeIf { it > 0 }
+
+    /**
+     * The heaviest set observed here, or `null` when no set of this context was weighed. Repetitions are
+     * the tiebreak, so two sets at the same weight report the one that did more work.
+     */
+    val heaviestSet: PerformanceObservation?
+        get() = observations
+            .filter { observation -> observation.loadKg != null }
+            .maxWithOrNull(
+                compareBy<PerformanceObservation> { observation -> observation.loadKg ?: 0.0 }
+                    .thenBy { observation -> observation.repetitions }
+            )
+
+    /**
+     * The largest single-set volume observed here — load x repetitions — or `null` when no repetition
+     * set was weighed. A timed set has no volume in kilograms: its work is seconds, not repetitions, and
+     * multiplying a weight by a duration would be the invented conversion this model forbids.
+     */
+    val bestSetVolumeKg: Double?
+        get() = observations
+            .filter { observation -> observation.isRepetitionObservation && observation.loadKg != null }
+            .maxOfOrNull { observation -> requireNotNull(observation.loadKg) * observation.repetitions }
+
+    /** How many sets of this context were weighed. */
+    val weighedSets: Int
+        get() = observations.count { observation -> observation.loadKg != null }
 
     val latest: PerformanceObservation
         get() = observations.last()

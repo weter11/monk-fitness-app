@@ -99,3 +99,9 @@ dependencies {
     testImplementation("org.xerial:sqlite-jdbc:3.53.4.0")
     debugImplementation(libs.androidx.ui.tooling)
 }
+
+// The exported schema is committed: it is the physical schema of each version as a diffable file, so a
+// later step can prove what a migration changed without a device.
+ksp {
+    arg("room.schemaLocation", "$projectDir/schemas")
+}

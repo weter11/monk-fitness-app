@@ -18,6 +18,7 @@ import com.monkfitness.app.data.local.SettingsManager
 import com.monkfitness.app.data.model.BiologicalSex
 import com.monkfitness.app.data.model.BodyWeightEntry
 import com.monkfitness.app.data.model.Equipment
+import com.monkfitness.app.data.model.LoadKind
 import com.monkfitness.app.data.model.Exercise
 import com.monkfitness.app.data.model.LibraryCounts
 import com.monkfitness.app.data.model.LibraryStats
@@ -70,6 +71,7 @@ import com.monkfitness.app.ui.programs.ProgramProgressController
 import com.monkfitness.app.ui.programs.ProgramProgressUiState
 import com.monkfitness.app.ui.programs.ProgramSessionController
 import com.monkfitness.app.ui.programs.ProgramsController
+import com.monkfitness.app.ui.programs.LastSetLoadSource
 import com.monkfitness.app.ui.programs.SessionRestPreference
 import com.monkfitness.app.validation.EngineeringValidationFilter
 import com.monkfitness.app.validation.ValidationCategory
@@ -187,7 +189,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                         exerciseId = exercise.id,
                         nameRes = exercise.nameRes,
                         familyId = exercise.familyId,
-                        isTimerBased = exercise.isTimerBased
+                        isTimerBased = exercise.isTimerBased,
+                        acceptsLoad = exercise.loadKind != LoadKind.NONE
                     )
                 }
             },
@@ -196,6 +199,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 override suspend fun read(): Int? = settings.sessionRestSecondsFlow.first()
 
                 override suspend fun remember(seconds: Int) = settings.setSessionRestSeconds(seconds)
+            },
+            lastLoad = LastSetLoadSource { exerciseId ->
+                container.workoutSessionRepository.lastLoadKgOf(exerciseId)
             }
         )
         viewModelScope.launch { settings.ensureTrackStartDate() }

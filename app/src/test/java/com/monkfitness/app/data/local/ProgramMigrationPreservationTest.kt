@@ -87,6 +87,8 @@ class ProgramMigrationPreservationTest {
         database.migrate(AppDatabase.MIGRATION_18_19)
         database.migrate(AppDatabase.MIGRATION_19_20)
         database.migrate(AppDatabase.MIGRATION_20_21)
+        // The per-set load column — nullable, additive, and no backfill of the sets already stored.
+        database.migrate(AppDatabase.MIGRATION_21_22)
     }
 
     /** A populated **version-18** database: every step before the per-set rest column. */
@@ -480,7 +482,8 @@ class ProgramMigrationPreservationTest {
                 "completedReps",
                 "durationSeconds",
                 "performedAt",
-                "restSeconds"
+                "restSeconds",
+                "loadKg"
             ),
             database.columnNames("program_set_log")
         )
@@ -634,6 +637,8 @@ class ProgramMigrationPreservationTest {
         assertEquals(20, AppDatabase.MIGRATION_19_20.endVersion)
         assertEquals(20, AppDatabase.MIGRATION_20_21.startVersion)
         assertEquals(21, AppDatabase.MIGRATION_20_21.endVersion)
+        assertEquals(21, AppDatabase.MIGRATION_21_22.startVersion)
+        assertEquals(22, AppDatabase.MIGRATION_21_22.endVersion)
 
         val database = SqliteTestDatabase.inMemory()
         database.execAll(LegacyV7Schema.TABLE_STATEMENTS)
@@ -652,6 +657,7 @@ class ProgramMigrationPreservationTest {
             database.migrate(AppDatabase.MIGRATION_18_19)
             database.migrate(AppDatabase.MIGRATION_19_20)
             database.migrate(AppDatabase.MIGRATION_20_21)
+            database.migrate(AppDatabase.MIGRATION_21_22)
         } catch (failure: SQLException) {
             throw AssertionError("the migration failed on a real engine: ${failure.message}")
         }
@@ -891,7 +897,10 @@ class ProgramMigrationPreservationTest {
         )
         assertEquals(
             "the column is appended to the row's existing columns, in the order the entity declares them",
-            ProgramSchemaFixture.columnsNow("program_set_log").map { it.name },
+            (
+                ProgramSchemaFixture.COLUMNS.getValue("program_set_log") +
+                    ProgramSchemaFixture.columnsAddedBy("MIGRATION_18_19", "program_set_log")
+                ).map { column -> column.name },
             database.columnNames("program_set_log")
         )
         assertEquals(

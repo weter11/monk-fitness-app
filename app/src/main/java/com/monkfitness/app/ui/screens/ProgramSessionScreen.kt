@@ -79,6 +79,8 @@ import com.monkfitness.app.ui.programs.SessionExerciseUi
 import com.monkfitness.app.ui.programs.SessionOutcomeShape
 import com.monkfitness.app.ui.programs.SessionOutcomeText
 import com.monkfitness.app.ui.programs.SessionStage
+import com.monkfitness.app.ui.programs.SetEntry
+import com.monkfitness.app.ui.programs.formatKg
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
@@ -460,6 +462,13 @@ private fun PresentingSession(
     }
     var actualInputInvalid by remember { mutableStateOf(false) }
 
+    // Prefilled with the weight this movement was last performed with, and cleared to an empty field when
+    // it never was: an empty load is "not recorded", never a zero kilogram set.
+    var loadValue by remember(current?.sessionExerciseId, current?.completedSets) {
+        mutableStateOf(current?.nextLoadKg?.let { kg -> formatKg(kg) }.orEmpty())
+    }
+    var loadInputInvalid by remember { mutableStateOf(false) }
+
     var timerLeft by remember(timed?.sessionExerciseId, timed?.completedSets) {
         mutableIntStateOf(timed?.nextTarget ?: 0)
     }
@@ -486,7 +495,12 @@ private fun PresentingSession(
             onBeep()
             if (vibrationEnabled) VibrationFeedback.buzz(context)
             actualValue = (timed?.nextTarget ?: 0).toString()
-            scope.launch { controller.confirmSet(durationSeconds = timed?.nextTarget ?: 0) }
+            scope.launch {
+                controller.confirmSet(
+                    durationSeconds = timed?.nextTarget ?: 0,
+                    loadKg = SetEntry.loadOf(loadValue)
+                )
+            }
         }
     }
 
@@ -563,11 +577,17 @@ private fun PresentingSession(
                         onExpandDemo = { demo -> expandedDemo = demo },
                         actualValue = actualValue,
                         actualInputInvalid = actualInputInvalid,
+                        loadValue = loadValue,
+                        loadInputInvalid = loadInputInvalid,
                         timeLeft = timerLeft,
                         timerRunning = timerRunning,
                         onActualChange = { value ->
                             actualValue = value.filter(Char::isDigit)
                             actualInputInvalid = false
+                        },
+                        onLoadChange = { value ->
+                            loadValue = value.filter { character -> character.isDigit() || character == '.' || character == ',' }
+                            loadInputInvalid = false
                         },
                         onStep = { delta ->
                             val step = if (exercise.dimension == PrescriptionDimension.TIME_BASED) {
@@ -606,8 +626,15 @@ private fun PresentingSession(
                 text = stringResource(R.string.programs_session_confirm_set),
                 onClick = {
                     scope.launch {
-                        val stored = controller.confirmActualSet(actualValue)
-                        actualInputInvalid = !stored
+                        val stored = controller.confirmActualSet(
+                            actualValue,
+                            if (current.acceptsLoad) loadValue else ""
+                        )
+                        actualInputInvalid = !stored && SetEntry.repsOf(actualValue) == null
+                        loadInputInvalid = !stored &&
+                            current.acceptsLoad &&
+                            loadValue.isNotBlank() &&
+                            SetEntry.loadOf(loadValue) == null
                         if (stored && vibrationEnabled) VibrationFeedback.buzz(context)
                     }
                 },
@@ -792,9 +819,12 @@ private fun FocusCard(
     onExpandDemo: (Exercise) -> Unit,
     actualValue: String,
     actualInputInvalid: Boolean,
+    loadValue: String,
+    loadInputInvalid: Boolean,
     timeLeft: Int,
     timerRunning: Boolean,
     onActualChange: (String) -> Unit,
+    onLoadChange: (String) -> Unit,
     onStep: (Int) -> Unit,
     onToggleTimer: () -> Unit,
     onResetTimer: () -> Unit,
@@ -908,10 +938,41 @@ private fun FocusCard(
                     }
                     if (actualInputInvalid) {
                         Text(
-                            text = stringResource(R.string.programs_session_actual_invalid),
+                            text = stringResource(
+                                when (exercise.dimension) {
+                                    PrescriptionDimension.TIME_BASED ->
+                                        R.string.programs_session_seconds_invalid
+
+                                    else -> R.string.programs_session_reps_invalid
+                                }
+                            ),
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.error
                         )
+                    }
+
+                    if (exercise.acceptsLoad) {
+                        Spacer(modifier = Modifier.height(12.dp))
+                        Text(
+                            text = stringResource(R.string.programs_session_actual_load),
+                            style = MaterialTheme.typography.labelLarge
+                        )
+                        Spacer(modifier = Modifier.height(4.dp))
+                        OutlinedTextField(
+                            value = loadValue,
+                            onValueChange = onLoadChange,
+                            singleLine = true,
+                            isError = loadInputInvalid,
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                        if (loadInputInvalid) {
+                            Text(
+                                text = stringResource(R.string.programs_session_load_invalid),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.error
+                            )
+                        }
                     }
                 }
             }
