@@ -430,7 +430,7 @@ class AnatomyFrame(val muscleStates: Array<MuscleState>, val landmarks: FloatArr
 class MuscleState(
     val id: String,
     val side: Side,
-    /** Path in engine world units, sampled at `pointCount` points. */
+    /** Path in engine world units, sampled at `pointCount` points; capacity includes the insertion allowance (§7.4.1). */
     val path: FloatArray,
     val pointCount: Int,
     val length: Float,          // along the path, including wrap detours
@@ -751,43 +751,110 @@ for each head:
   1  resolve attachments:  world = jointWorldPosition + R(jointWorldRotation) * (offsetMetres * unitsPerMetre)
   2  build the control polyline: origin, waypoints..., insertion
   3  resample the polyline at N points (N ∝ path length / 0.01 m, clamped 8..48)
-  4  project samples outside every declared obstacle, in declaration order, to a fixed point:
+  4  obstacle-aware projection (construction, not proof):
         repeat up to K passes (K declared per definition, default 8):
             for each obstacle in declaration order:
-                for each sample inside the obstacle by more than ε_pen:
-                    push the sample to the obstacle surface along its gradient
+                for each segment of the current polyline:
+                    if the segment intersects the obstacle (§7.4.1b):
+                        insert its entry and exit points as samples
+                for each sample inside an obstacle by more than ε_pen:
+                    push the sample to the inflated surface along the outward normal
             stop when no sample violates any obstacle by more than ε_pen
   5  smooth the path (Catmull-Rom, 0.25 blend) to remove the faceting projection leaves
-  6  RE-VALIDATE the smoothed path against every declared obstacle (§7.4.1).
-     Smoothing is a geometric operation like every other one and can push the path back inside
-  7  if the check fails: PathStatus.INVALID with the offending samples; stop. The muscle is not
-     rendered along a path that failed step 6 (§7.4.2)
-  8  length = Σ |p[i] − p[i−1]|          // along the solved path, NOT the straight chord
-  9  tendonLength = originFraction * length + insertionFraction * length
- 10  strain = length / restLength − 1     // reported; never a geometry input (§7.6)
+  6  VALIDATE the final polyline, segment by segment, against every declared obstacle (§7.4.1):
+        smoothing is a geometric operation like every other one and can push the path back inside,
+        so the check runs on the final points, not on the pre-smoothing ones;
+        every segment disjoint from every obstacle, every sample clear by ε_pen;
+        any failure, or any result the check cannot establish, → PathStatus.INVALID, stop.
+  7  length = Σ |p[i] − p[i−1]|          // along the solved path, NOT the straight chord
+  8  tendonLength = originFraction * length + insertionFraction * length
+  9  strain = length / restLength − 1     // reported; never a geometry input (§7.6)
 ```
 
-`MuscleState` therefore carries a `PathStatus` — `VALID`, or `INVALID` with a reason and the failing sample indices. A
-consumer may not read a missing status as `VALID`, and no layer draws an `INVALID` path as if it were anatomy.
+Step 4 inserts points, so the path buffer is sized for `N_max` plus a declared insertion allowance; exceeding it is
+`INVALID` (`BUFFER_CAPACITY`), never a silent truncation.
+
+`MuscleState` therefore carries a `PathStatus` — `VALID`, or `INVALID` with a reason and the failing segment and
+obstacle indices. A consumer may not read a missing status as `VALID`, and no layer draws an `INVALID` path as if it
+were anatomy.
 
 #### 7.4.1 Obstacle validation contract
 
-The check is stated once and used everywhere: **every sample of the final path lies outside every declared obstacle
-within the declared tolerance, or the path is invalid.**
+Three different checks are routinely conflated. This section keeps them apart, because only the second one is a test
+for intersection.
 
-- **Tolerance.** A sample violates when it is inside an obstacle by more than `ε_pen`. `ε_pen` is a property of the
-  definition version, not a per-call argument (proposed `1e-4 m`, fixed at stage 2 against the debug overlay); changing
-  it invalidates the fixtures that were signed off against the old value.
-- **Sampling and refinement.** The path is sampled at ≤ 0.01 m arc length. Any segment whose endpoints straddle an
-  obstacle boundary is bisected recursively up to a declared depth (proposed 6, ≈ 0.16 mm at the base spacing) or until
-  the inside/outside classification of both children is stable. The sampling density and refinement depth are recorded
-  with the result, so a pass is reproducible.
-- **Scope of the check.** All obstacles declared on the muscle plus any obstacle the definition marks as global
-  (thorax, pelvis), evaluated over the entire path including tendon portions — a tendon can cut a rib as easily as a
-  belly can.
-- **What a pass means.** A pass means: this polyline, at this density, with this tolerance, satisfies these declared
-  obstacles. It does **not** mean the path is continuously collision-free, and neither code, test names nor copy may
-  claim that (§7.4.4, §11).
+**(a) Sample check — necessary, not sufficient.** Every sample of the final polyline lies outside every declared
+obstacle. This catches gross violations cheaply and bounds how far the projection step still has to move. It proves
+nothing about the segments between samples: two consecutive samples can both be outside an obstacle while the straight
+segment joining them passes through it, and a 1 cm sample spacing cannot see an obstacle thinner than 1 cm at all.
+
+**(b) Segment check — required, and the one that decides.** Every segment `[p_i, p_{i+1}]` of the final polyline is
+tested against every declared obstacle, analytically. Scaling space by the inverse semi-axes turns the ellipsoid into the
+unit sphere, and the segment into a line, so the question becomes a quadratic:
+
+```
+q0 = (p_i   − c) / (r + ε_pen)        // componentwise; r = (rx, ry, rz)
+qd = (p_{i+1} − p_i) / (r + ε_pen)
+
+a  = qd · qd
+b  = 2 (q0 · qd)
+c0 = q0 · q0 − 1
+
+Δ  = b² − 4 a c0
+roots t0,1 = (−b ∓ √Δ) / (2a)
+
+intersection  ⇔  Δ ≥ 0  and  [t0, t1] ∩ [0, 1] ≠ ∅
+```
+
+The test is closed-form, deterministic, allocation-free and **independent of sampling density**: it answers "does this
+straight segment enter this ellipsoid" exactly, to floating point, for any obstacle size — including one thinner than
+the sample spacing. `t0` and `t1` are reported, so a failure names the segment, the obstacle and where along the segment
+the path enters.
+
+**(c) Unverifiable — `INVALID`, never assumed.** A path is accepted only when every segment test returns "no
+intersection" **and** every sample test returns "outside". Anything else is `PathStatus.INVALID` with a reason:
+
+| Condition | Status reason |
+| --- | --- |
+| a segment enters an obstacle (after inflation by `ε_pen`) | `SEGMENT_INTERSECTS_OBSTACLE` |
+| non-finite coordinate, radius or tolerance | `NON_FINITE_GEOMETRY` |
+| obstacle with a non-positive semi-axis | `DEGENERATE_OBSTACLE` |
+| zero-length segment whose sample is inside an obstacle | `DEGENERATE_SEGMENT` |
+| inserted points exceed the path buffer's declared capacity | `BUFFER_CAPACITY` |
+
+There is no "probably fine" outcome and no fall-through default. If the check cannot be completed, the path is invalid.
+
+**Tolerance and conservatism.** `ε_pen` (proposed `1e-4 m`, fixed at stage 2 against the debug overlay) is applied by
+inflating each obstacle semi-axis before the test, so "no intersection" means a clearance of at least about `ε_pen`,
+not exactly zero. Inflating the semi-axes is conservative: it can reject a path whose true clearance is under `ε_pen`,
+and it cannot accept a path that enters the obstacle. `ε_pen` is a property of the definition version, not a per-call
+argument; changing it invalidates the fixtures signed off against the old value.
+
+**Where sampling still matters.** Samples remain a construction device: they set the polyline's resolution for length
+and rendering, they give the projection step points to push out, and they define where a tangent kink can be measured.
+Their density no longer determines whether an intersection is detected — the segment test does that — and this document
+makes no claim that any sample spacing "proves" clearance.
+
+**Scope.** All obstacles declared on the muscle plus any the definition marks as global (thorax, pelvis), over the whole
+polyline including tendon portions — a tendon can cut a rib as easily as a belly can.
+
+**What a pass means.** A pass means: every segment of this polyline is disjoint from every declared ellipsoid, and every
+sample clears it by `ε_pen`. That is a statement about the polyline and the ellipsoid model, and nothing more. It is not
+a statement about the anatomical surface, which the ellipsoids only approximate (§7.4.4), and it is not a contact
+simulation (§11).
+
+**What it does not cover, stated so it is not mistaken for a guarantee.**
+
+- **The validated object is the polyline.** Nothing downstream may re-evaluate the Catmull-Rom spline or smooth the
+  polyline again before rendering: a renderer that re-smooths to build a tube reintroduces a curve that was never
+  tested, and the `ε_pen` margin does not bound that deviation. Strategy A consumes the validated points as they are.
+- **A single frame is not a trajectory.** The check is per frame. Motion between frames is bounded by the temporal
+  continuity check (§7.4.3), not by this test, so a fast transition can still sweep a muscle through an obstacle
+  between two individually valid frames.
+- **The obstacle set is the model.** Clearance from an ellipsoid is not clearance from bone, fascia or skin. A path can
+  pass this test and still look wrong; that is what the L7 review (§12.4) is for.
+- **Floating point.** The quadratic is evaluated in double precision; a discriminant within rounding of zero is treated
+  as an intersection, not as a miss. The conservative direction is always chosen.
 
 #### 7.4.2 Overlapping, nested and impossible routes
 
@@ -796,17 +863,19 @@ an error). The rules make the outcome deterministic and reviewable:
 
 - **Declaration order is part of the data.** Projection runs in declaration order, and that order is diffable. Two
   definitions with the same obstacles in a different order are different definitions with different expected fixtures.
-- **Acceptance is by the union.** A path is valid when it is outside the union of the obstacles. Intermediate
-  projections are an implementation detail; only the post-smoothing check decides.
+- **Acceptance is by the union.** A path is valid when it is outside the union of the obstacles. Validation tests every
+  segment against every obstacle individually, so overlap and nesting need no special case there — the union falls out
+  of the per-obstacle tests. Only projection order is affected.
 - **Nested obstacles.** A sample inside a nested pair is pushed out of each in declaration order until it leaves both or
   the pass cap is reached. An "outer" surface that does not contain its declared inner obstacle is a **definition
   error** (L3), not a runtime condition to paper over.
 - **An attachment inside an obstacle** is a definition error, caught statically at L3. If unvalidated data reaches the
   solver anyway it returns `INVALID` with `ENDPOINT_INSIDE_OBSTACLE`; the solver never routes around its own endpoint.
 - **No valid route.** If the pass cap is reached with a violation, or the only obstacle-free route would leave the
-  segment envelope, the result is `INVALID` with a reason — `NO_ROUTE`, `PASS_CAP`, `ENDPOINT_INSIDE_OBSTACLE`. It is
-  reported, counted by the fixture, and blocks L4. A path through geometry is never accepted because it is the closest
-  thing the solver found.
+  segment envelope, the result is `INVALID` with a reason — `NO_ROUTE`, `PASS_CAP`, `ENDPOINT_INSIDE_OBSTACLE`. If the
+  final polyline fails validation instead, the reason comes from §7.4.1 (`SEGMENT_INTERSECTS_OBSTACLE` and its
+  neighbours). Either way it is reported, counted by the fixture, and blocks L4. A path through geometry is never
+  accepted because it is the closest thing the solver found.
 - **Ambiguity.** Where two local routes are both valid, declaration order and the fixed sample grid decide. The solver
   must return the same route on every run, every device and every buffer reuse. "Either route is acceptable" is not a
   contract, and a solver that alternates between two valid routes has a bug, not a tie.
@@ -833,6 +902,15 @@ This is a **geometric approximation**: ellipsoids stand in for bones, tendon she
 samples, it does not resolve contact; there is no friction, no sliding, no obstacle deformation and no force. It is
 classified as an approximation in §11 and must be described that way wherever it surfaces, including review notes and UI
 copy.
+
+Two levels of approximation are worth separating, because they are constantly confused:
+
+- **The test is exact.** Segment-versus-ellipsoid intersection is solved in closed form (§7.4.1b). There is no sampling
+  error in the verdict: if the polyline enters the ellipsoid, the test says so, whatever the sample spacing.
+- **The model is approximate.** An ellipsoid is not a bone, a tendon sheet or a fascia plane. Passing the test means
+  the path misses the *ellipsoid*; it does not mean the path misses the anatomy.
+
+"Exact test" is not "correct anatomy", and "approximate model" is not "sloppy test".
 
 Design notes:
 
@@ -1171,7 +1249,7 @@ change that quietly promotes an approximation to a claim.
 | Rest-delta retarget | established technique | rotations only; translation only at the pelvis | L2 rest invariant |
 | Bone-name resolution with aliases | established technique | alias tables can map the wrong bone | L2 coverage + manual rig review |
 | Anatomical attachment points | **requires expert validation** | a plausible-looking point can still be wrong | L3 mechanical + L7 review (§12.4) |
-| Path + ellipsoid obstacle wrapping | approximation — geometric, not contact | ellipsoids stand in for bone and fascia; sampled validation at a declared tolerance, **not** a continuous collision guarantee | L4 fixtures + visual review |
+| Path + ellipsoid obstacle wrapping | approximation — geometric, not contact | ellipsoids stand in for bone and fascia; the segment test is exact for the polyline, the approximation is the obstacle model | L4 fixtures + visual review |
 | Arc-length measurement along the path | established technique | depends on path sampling density | L4 |
 | Muscle cross-section response | **not implemented — research hypothesis only** (§7.6) | no validated per-muscle deformation model; the cylinder law is a plausibility argument. Linear-blend skinning still stretches the mesh between separating helpers — a skinning artifact, not a modelled response | none — not a validation target |
 | Morph-target morphology | visual approximation | surface only; joints can degrade without a joint rule | L6 |
@@ -1204,7 +1282,7 @@ Seven levels, each with one owner, one report and an explicit automation status.
 | **L1 Motion** | 18 existing rules over joint-space geometry (`ExerciseValidator.kt:47-90`) | yes, unchanged | JVM tests + debug tooling | the pose/engine is wrong; block |
 | **L2 Rig** | bone coverage, rest invariant, inverse binds, side/handedness, unit scale, bone budget | yes | JVM (asset parse) + offline | the asset or map is wrong; block |
 | **L3 Attachments** | every attachment's joint exists; offset inside a segment envelope; L/R mirror; head count; origin ≠ insertion; span ≥ 2 segments | yes | JVM + offline tool | the anatomy data is wrong; block |
-| **L4 Path** | arc length continuity; the final path re-validated after smoothing and every other geometric operation against every obstacle at a declared tolerance and sampling density; deterministic outcome for overlapping, nested and impossible routes; tangent and curvature continuity at entry/exit; temporal continuity; rest-length tolerance vs measured reference | yes, with adversarial fixtures | JVM + visual overlay | the solver or the data is wrong; block |
+| **L4 Path** | every segment of the final polyline tested analytically against every obstacle (closed-form segment–ellipsoid), plus sample clearance by `ε_pen`; unverifiable geometry reported `INVALID`; deterministic outcome for overlapping, nested and impossible routes; tangent and curvature continuity at entry/exit; temporal continuity; rest-length tolerance vs measured reference | yes, with adversarial fixtures | JVM + visual overlay | the solver or the data is wrong; block |
 | **L5 Mesh** | self-intersection, degenerate triangles, weight sums, volume sanity per muscle, helper-bone bind match | partly (tool) | offline, artist review | the mesh is wrong; block release, not build |
 | **L6 Morphology** | per-preset rest invariant, joint-ring preservation under morphs, delta bounds, anatomy still inside the body | yes | JVM + offline | a preset breaks the rig; block the preset |
 | **L7 Anatomical review** | A1–A6 in §12.4: attachment locations, position vs bone and body surface, visible intersections, shape/path plausibility across poses, preset consistency, provenance | no — human, **required for M1** | recorded review against identifiable references | the model is not accepted; M1 does not ship |
@@ -1213,8 +1291,9 @@ Seven levels, each with one owner, one report and an explicit automation status.
 
 - L1 (already), L2 (fully), L3's mechanical half (existence, envelope, mirror), L4's numeric half, L6 (fully), and L5's
   geometric half. These are the parts a CI job can gate.
-- L4's numeric half is a **sampled** check at a declared density and tolerance (§7.4.1). It gates the fixtures it was
-  run on; it is not a proof of continuous collision freedom, and the test names and reports must not imply one.
+- L4's numeric half is exact for the polyline it is handed — closed-form segment–ellipsoid tests, not a sample census
+  (§7.4.1). What it still cannot certify is the anatomical surface the ellipsoids stand for, the frames it was not run
+  on, or a rendered curve that is not the validated polyline.
 - **Not automatable:** whether an attachment is the *right* anatomical point; whether a wrap produces a believable
   contour; whether a muscle mesh reads as that muscle; whether a path looks plausible in a pose nobody posed a fixture
   for. Any claim otherwise is false confidence, and this document refuses to design a "score" that hides it. §12.4 is
@@ -1229,7 +1308,7 @@ Seven levels, each with one owner, one report and an explicit automation status.
 | `BoneMapCoverageTest` | L2 | 23 mapped joints resolve; unmapped joints are declared, not accidental |
 | `RigSideTest` | L2 | `Left*` bones on the same side as anatomy side A in the rest pose |
 | `AnatomyDefinitionTest` | L3 | ids unique; attachments resolve; envelope bounds; L/R mirror; heads consistent |
-| `MusclePathGeometryTest` | L4 | arc length ≥ chord; the smoothed path is outside every obstacle at the declared tolerance; deterministic across runs and buffer reuse |
+| `MusclePathGeometryTest` | L4 | arc length ≥ chord; every segment of the smoothed polyline is disjoint from every obstacle at the declared clearance; deterministic across runs and buffer reuse |
 | `MusclePathObstacleFixtureTest` | L4 | the adversarial set (§12.2.1) either passes or reports `INVALID` with the expected reason — never silently |
 | `MusclePathContinuityTest` | L4 | C0, tangent bound at entry/exit, curvature bound, and frame-to-frame sample displacement within `δ_frame` |
 | `MuscleLengthDeterminismTest` | L4 | the same pose produces the same length across runs, buffer reuse and definition reload; no discontinuity beyond tolerance across a sampled motion |
@@ -1263,7 +1342,8 @@ outcome.
 
 | Fixture | Configuration | Expected result |
 | --- | --- | --- |
-| `single_obstacle` | one ellipsoid between two attachments | `VALID`; every sample clears the surface by ≥ `ε_pen` |
+| `single_obstacle` | one ellipsoid between two attachments | `VALID`; every segment disjoint, every sample clear by ≥ `ε_pen` |
+| `outside_endpoints_crossing_obstacle` | thin ellipsoid on the chord, both segment endpoints outside | `INVALID` with `SEGMENT_INTERSECTS_OBSTACLE`; a sample-only check wrongly accepts it |
 | `multiple_obstacles` | two obstacles in series along the route | `VALID`; clears both after smoothing |
 | `overlapping_obstacles` | two ellipsoids that intersect each other | `VALID` outside the union; identical result for the same declaration order |
 | `nested_obstacles` | a small ellipsoid fully inside a large one | `VALID` outside the outer surface |
@@ -1272,8 +1352,22 @@ outcome.
 | `endpoint_inside` | an attachment inside a declared obstacle | definition error at L3, not a solver result |
 | `pass_cap` | a configuration that oscillates between two surfaces | `INVALID` with `PASS_CAP`; deterministic and terminating, not a hang |
 
-A fixture that produces an `INVALID` result where the table expects `VALID` fails L4. A fixture that produces a path
-through geometry fails L4 twice: once for the geometry and once for accepting it.
+**`outside_endpoints_crossing_obstacle`, constructed so it cannot pass by accident.** One ellipsoid with semi-axes
+4 mm × 2 mm × 2 mm centred on the straight chord between two attachments 0.29 m apart, with the polyline running along
+the ellipsoid's long axis through its centre. At the 0.01 m base spacing the samples land at ±5 mm from the centre,
+where `|q| = 5/4 = 1.25 > 1`: **no sample is inside the obstacle, and no segment has one endpoint inside**, so the
+sample check and a boundary-straddle refinement rule both report "clear" while the path passes through the obstacle's
+centre. The segment test returns `Δ > 0` with both roots inside `[0, 1]` and reports `SEGMENT_INTERSECTS_OBSTACLE`.
+
+The obstacle is deliberately thinner than the sample spacing, because the check must not depend on an obstacle being
+fatter than the polyline's resolution. Its paired control is the same geometry with the chord offset 5 mm laterally,
+which must stay `VALID` — so the fixture cannot pass by rejecting everything, and a solver that always returns
+`INVALID` fails the control just as a sample-only solver fails the fixture.
+
+A fixture whose expected outcome a broken implementation also produces is not a fixture. This one is defined by the
+property that the two checks disagree, and the L4 report records which check produced each verdict. A fixture that
+produces an `INVALID` result where the table expects `VALID` fails L4; a fixture that produces a path through geometry
+fails L4 twice — once for the geometry and once for accepting it.
 
 ### 12.3 Device-only evidence (not claimed here)
 
@@ -1332,7 +1426,7 @@ or a new morphology preset.
 | R8 | PR #385 changes before merge, or is rejected | medium | medium | this RFC depends on its contracts, not its files; rebase plan in stage 1 | engineering |
 | R9 | Deep muscles / organs expand scope beyond appetite | high | low | §16 non-goals and the layer table's v1 column | product |
 | R10 | Left/right handedness mismatch between anatomy and rig | medium | medium | `RigSideTest`; asset fix, never a render-time flip | engineering |
-| R11 | L4's obstacle check is sampled, so a thin intersection between samples can pass | medium | low | declared tolerance plus recursive refinement at boundary crossings (§7.4.1); classified as a geometric approximation, not a collision proof (§11); the L7 review catches what sampling misses | engineering |
+| R11 | L4 proves the polyline misses the ellipsoids, not that the rendered muscle or the anatomical surface does | medium | low | strategy A consumes the validated points unchanged and re-smoothing is forbidden (§7.4.1); the ellipsoid model is classified as an approximation (§11); L7 review covers what geometry cannot (§12.4) | engineering |
 
 **Unresolved, with the smallest resolving experiment:**
 
@@ -1496,9 +1590,10 @@ schedule risk, not the engineering one.
   `app/src/main/assets/anatomy/anatomy_v1.json`, `app/src/test/.../anatomy/*`.
 - **User-visible deliverable:** a dev-only muscle layer showing red tubes following the squat and push-up, with a length
   readout per muscle.
-- **Automated acceptance:** arc length ≥ chord on every frame; the smoothed path passes the obstacle check at the
-  declared tolerance on the adversarial fixture set (§12.2.1); lengths are deterministic and continuous across a sampled
-  motion; rest lengths within tolerance; no fixture reports `INVALID` without the failure being visible in the report.
+- **Automated acceptance:** arc length ≥ chord on every frame; every segment of the smoothed polyline passes the
+  analytic obstacle check at the declared clearance on the adversarial fixture set (§12.2.1), including
+  `outside_endpoints_crossing_obstacle`; lengths are deterministic and continuous across a sampled motion; rest lengths
+  within tolerance; no fixture reports `INVALID` without the failure being visible in the report.
 - **Manual acceptance:** anatomist review of the eight attachment sets and of the wrap behaviour on three poses.
 - **Risks:** calibration drift (R7); wrap parameters; the tube look invites quality complaints — state clearly that
   stage 2 is a mechanism demo, not final visuals.
