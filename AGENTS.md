@@ -22,6 +22,7 @@ export GRADLE_USER_HOME="$(pwd)/.gradle-home"
 | `docs/ARCHITECTURE_V2.md` | Carrier contract: `SkeletonPose` intent vs. state, ownership per subsystem. |
 | `docs/MIGRATION_RULES.md` | Enforced pose coding standard; prohibited legacy patterns. |
 | `docs/VALIDATION.md` | Validation poses and the validation subsystem. |
+| `docs/CHARACTER_RENDERING.md` | Filament character: seam, flag, backend selection, thumbnails, risks. |
 
 Reference only, not required reading: `docs/CODING_RULES.md`, `docs/ENGINE_ARCHITECTURE.md` (file/joint map),
 `docs/BIOMECHANICS.md`, `docs/API_CONTRACTS.md`, `docs/STABILIZATION_AUDIT.md` (forward work), the matrices under

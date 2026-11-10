@@ -97,7 +97,8 @@ fun ExerciseScreen(
             ExerciseHeroMedia(
                 exercise = exercise,
                 modifier = Modifier.fillMaxWidth(),
-                height = 225.dp
+                height = 225.dp,
+                liveCharacter = true
             )
 
             Spacer(modifier = Modifier.height(24.dp))
