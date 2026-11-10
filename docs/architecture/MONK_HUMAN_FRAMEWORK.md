@@ -58,7 +58,8 @@ The design rules that follow from that direction:
    mesh and morphology validation are new observers with their own reports; none of them can weaken motion validation.
 
 The first useful deliverable (milestone **M1**, §15) is one character, driven by the real motion engine, playing at least
-three existing exercises, with a shared rig, eight anatomically grounded muscles that follow the movement, and
+three existing exercises, on one shared rig (a v1 scope constraint, §6.1), with eight muscles that follow the movement
+and whose attachments have passed a recorded anatomical review (§12.4), one morphology preset, and
 skin/superficial-muscle/skeleton layers. The full muscle library, the deep layer, organs, labels and education content
 are explicitly later.
 
@@ -238,7 +239,7 @@ Its transferable ideas, stripped of its implementation:
 
 1. **Muscles are data, not animation.** Origin/insertion rows, intermediate waypoints, width/thickness, tendon fractions,
    layer, and obstacle wrapping are authored as a table; the mesh is derived.
-2. **Length is measured along the solved path**, then used for a *defined* shape response, not an arbitrary pulse.
+2. **Length is measured along the solved path**, not along the straight chord between attachments.
 3. **Roles and phases drive colour**, from a per-exercise table of prime movers, synergists and stabilisers.
 4. **One layer system** (skin, superficial, deep, skeleton, organs) with dissolve transitions, where hiding a layer never
    touches the motion.
@@ -250,7 +251,8 @@ What it does not contribute, and this framework deliberately rejects:
 - no joint limits, no contact model, no self-collision, no published-frame validation;
 - balance as a centre-of-mass box test, presented as physical plausibility;
 - a fixed 33-joint anatomical rig with per-rib and per-organ segments, which this engine's namespace does not have;
-- geometry rebuilt on the CPU every frame for the full library, which is not affordable on a mid-range phone.
+- geometry rebuilt on the CPU every frame for the full library, which is not affordable on a mid-range phone;
+- its length-to-thickness shape response, which this framework does not adopt (§7.6).
 
 ### 3.6 Gaps the framework must close
 
@@ -261,6 +263,7 @@ What it does not contribute, and this framework deliberately rejects:
 | No activation semantics | exercise pages cannot explain participation | Activation model (§8) |
 | No layer system | the Filament path renders one body; no anatomy view | Presentation (§9) |
 | No rig/asset validation | a wrong bone map, bind pose or weight set fails visually, late | Validation L2–L6 (§12) |
+| No anatomical acceptance gate | nothing distinguishes "the joints are right" from "the anatomy is right"; a plausible model can pass every numeric rule | L7 review (§12.4) |
 | No morph validation | morphology can silently break joints or anatomy | Validation L6 (§12) |
 | No device evidence | Filament FPS, thermal drift and context loss are unmeasured | Roadmap stage 1 gate (§15) |
 
@@ -342,6 +345,8 @@ Rules:
   (named, sparse, reviewed) where a shared attachment is measurably wrong for that family (§6.3, §7.3).
 - Bone lengths are part of the **motion** identity, not the appearance identity. v1 characters share
   `SkeletonDefinition.DEFAULT_ADULT`; height is uniform scale in the asset, not per-bone proportions (§14, decision 4).
+  That is a v1 boundary, not a claim that morphs and scale cover every morphology — a different body plan needs a
+  versioned rig profile and a revalidation of poses, attachments and retargeting (§6.1).
 
 ### 4.4 Presentation
 
@@ -431,7 +436,9 @@ class MuscleState(
     val length: Float,          // along the path, including wrap detours
     val restLength: Float,      // bind-pose length for this body profile
     val tendonLength: Float,    // origin + insertion tendon portions
-    val strain: Float           // length / restLength - 1
+    val strain: Float,          // length / restLength - 1; reported, not a geometry input
+    /** VALID, or INVALID with a reason and the failing sample indices (§7.4.2). */
+    val pathStatus: PathStatus
 )
 
 /** Pure: reads the published pose, writes only its own output buffer. */
@@ -506,6 +513,18 @@ library, one anatomy library and one animation library serve every body.
 helper bones** (§7.5). The current PR #385 asset has 32 joints, 5 single-segment fingers per hand, no scapula, no twist
 bones. The scapula addition is the only rig change that materially affects anatomy quality.
 
+**This is a v1 scope constraint, not an architectural law.** One rig is what makes M1 affordable: one `BoneMap`, one
+rest invariant, one pose library, one anatomy library. It is not a claim that a single rig, surface morphs and uniform
+scale can represent every human body. Segment-length proportions — a long femur, a short humerus, a different
+torso-to-limb ratio — are a motion input, not a surface, and no morph target can produce them (§6.3).
+
+A materially different body plan therefore needs a **separately versioned rig profile**: a new `SkeletonDefinition` id,
+a `humanoid_vN` rig whose joint names, hierarchy, rest pose and bind pose still satisfy this section's contract, and a
+revalidation of every pose, every attachment and every retarget path against it. That is a deliberate extension point
+with a real cost — a motion project, not an appearance setting — and it is deliberately not taken in M1: M1 ships one
+rig and one `SkeletonDefinition` (§15). Nothing in this document forbids the extension; it only refuses to pretend it is
+free.
+
 ### 6.2 Mapping contract, 33 → rig
 
 `BoneMap` is data, resolved once per asset and validated (§12 L2):
@@ -546,12 +565,13 @@ Morphology is split into two mechanisms with different owners, because they have
 | --- | --- | --- | --- |
 | **Surface morph targets** | vertices under an unchanged skeleton: shoulder width, chest volume, waist, limb thickness, head scale, muscle definition | Character asset | yes |
 | **Uniform scale** | the whole character's size | Character profile + calibration | yes |
-| **Per-bone proportions** | segment lengths, therefore IK reach and joint placement | `SkeletonDefinition` (motion) | no — a different body plan is a different motion definition, not an appearance |
+| **Per-bone proportions** | segment lengths, therefore IK reach and joint placement | `SkeletonDefinition` (motion) | no in v1 — deferred to a versioned rig profile with full revalidation (§6.1); not a permanent prohibition |
 
 The PR #385 asset already carries the five regional morphs (`ShoulderWidth`, `ChestVolume`, `WaistWidth`,
-`LimbThickness`, `HeadScale`) and four presets (`MorphologyPreset.kt:7-11`). What is missing is the validation that
-makes them safe: region masks around joint pivots and a rest-invariant check per preset. Without a mask, a shoulder-width
-morph drags the deltoid ring through the acromion and no joint-space rule can see it.
+`LimbThickness`, `HeadScale`) and four presets (`MorphologyPreset.kt:7-11`). Those are preset definitions carried by a
+test asset, not four M1 deliverables: M1 ships one preset, and four body families are stage 5 (§15). What is missing for
+either is the validation that makes presets safe: region masks around joint pivots and a rest-invariant check per preset.
+Without a mask, a shoulder-width morph drags the deltoid ring through the acromion and no joint-space rule can see it.
 
 **A consequence that must be budgeted, not discovered:** a body morph target moves surface vertices, and muscle meshes
 are separate renderables. A muscle layer therefore does **not** inherit the body's morphs; either the muscle asset
@@ -694,6 +714,9 @@ data class WrapSurface(
 )
 ```
 
+A `WrapSurface` is what §7.4 calls an **obstacle**: the same object, named after its effect on the path. The two words
+are used interchangeably, and neither implies a physical contact model.
+
 A concrete entry, with the schema's intent made explicit:
 
 ```json
@@ -720,28 +743,101 @@ the distance a tape measure gives on the reference body within a stated toleranc
 
 ### 7.4 Path solving
 
-Per muscle, per frame (`AnatomySolver.solve`), pure and allocation-light:
+Per muscle, per frame (`AnatomySolver.solve`), pure and allocation-light. The steps below are the whole algorithm: what a
+renderer or a validator needs is an output of it, and nothing downstream re-routes a path.
 
 ```
 for each head:
   1  resolve attachments:  world = jointWorldPosition + R(jointWorldRotation) * (offsetMetres * unitsPerMetre)
   2  build the control polyline: origin, waypoints..., insertion
   3  resample the polyline at N points (N ∝ path length / 0.01 m, clamped 8..48)
-  4  for each sample, for each wrap surface in declaration order:
-        if the sample is inside the ellipsoid: push it to the surface along the ellipsoid normal
-        (one pass per surface, two passes total, so nested wraps settle)
-  5  smooth the path (Catmull-Rom, 0.25 blend) to remove the faceting a projection leaves
-  6  length = Σ |p[i] − p[i−1]|          // along the solved path, NOT the straight chord
-  7  tendonLength = originFraction * length + insertionFraction * length
-  8  strain = length / restLength − 1
+  4  project samples outside every declared obstacle, in declaration order, to a fixed point:
+        repeat up to K passes (K declared per definition, default 8):
+            for each obstacle in declaration order:
+                for each sample inside the obstacle by more than ε_pen:
+                    push the sample to the obstacle surface along its gradient
+            stop when no sample violates any obstacle by more than ε_pen
+  5  smooth the path (Catmull-Rom, 0.25 blend) to remove the faceting projection leaves
+  6  RE-VALIDATE the smoothed path against every declared obstacle (§7.4.1).
+     Smoothing is a geometric operation like every other one and can push the path back inside
+  7  if the check fails: PathStatus.INVALID with the offending samples; stop. The muscle is not
+     rendered along a path that failed step 6 (§7.4.2)
+  8  length = Σ |p[i] − p[i−1]|          // along the solved path, NOT the straight chord
+  9  tendonLength = originFraction * length + insertionFraction * length
+ 10  strain = length / restLength − 1     // reported; never a geometry input (§7.6)
 ```
+
+`MuscleState` therefore carries a `PathStatus` — `VALID`, or `INVALID` with a reason and the failing sample indices. A
+consumer may not read a missing status as `VALID`, and no layer draws an `INVALID` path as if it were anatomy.
+
+#### 7.4.1 Obstacle validation contract
+
+The check is stated once and used everywhere: **every sample of the final path lies outside every declared obstacle
+within the declared tolerance, or the path is invalid.**
+
+- **Tolerance.** A sample violates when it is inside an obstacle by more than `ε_pen`. `ε_pen` is a property of the
+  definition version, not a per-call argument (proposed `1e-4 m`, fixed at stage 2 against the debug overlay); changing
+  it invalidates the fixtures that were signed off against the old value.
+- **Sampling and refinement.** The path is sampled at ≤ 0.01 m arc length. Any segment whose endpoints straddle an
+  obstacle boundary is bisected recursively up to a declared depth (proposed 6, ≈ 0.16 mm at the base spacing) or until
+  the inside/outside classification of both children is stable. The sampling density and refinement depth are recorded
+  with the result, so a pass is reproducible.
+- **Scope of the check.** All obstacles declared on the muscle plus any obstacle the definition marks as global
+  (thorax, pelvis), evaluated over the entire path including tendon portions — a tendon can cut a rib as easily as a
+  belly can.
+- **What a pass means.** A pass means: this polyline, at this density, with this tolerance, satisfies these declared
+  obstacles. It does **not** mean the path is continuously collision-free, and neither code, test names nor copy may
+  claim that (§7.4.4, §11).
+
+#### 7.4.2 Overlapping, nested and impossible routes
+
+Obstacles overlap and nest in normal anatomy (a bone ellipsoid inside a muscle-group ellipsoid is the common case, not
+an error). The rules make the outcome deterministic and reviewable:
+
+- **Declaration order is part of the data.** Projection runs in declaration order, and that order is diffable. Two
+  definitions with the same obstacles in a different order are different definitions with different expected fixtures.
+- **Acceptance is by the union.** A path is valid when it is outside the union of the obstacles. Intermediate
+  projections are an implementation detail; only the post-smoothing check decides.
+- **Nested obstacles.** A sample inside a nested pair is pushed out of each in declaration order until it leaves both or
+  the pass cap is reached. An "outer" surface that does not contain its declared inner obstacle is a **definition
+  error** (L3), not a runtime condition to paper over.
+- **An attachment inside an obstacle** is a definition error, caught statically at L3. If unvalidated data reaches the
+  solver anyway it returns `INVALID` with `ENDPOINT_INSIDE_OBSTACLE`; the solver never routes around its own endpoint.
+- **No valid route.** If the pass cap is reached with a violation, or the only obstacle-free route would leave the
+  segment envelope, the result is `INVALID` with a reason — `NO_ROUTE`, `PASS_CAP`, `ENDPOINT_INSIDE_OBSTACLE`. It is
+  reported, counted by the fixture, and blocks L4. A path through geometry is never accepted because it is the closest
+  thing the solver found.
+- **Ambiguity.** Where two local routes are both valid, declaration order and the fixed sample grid decide. The solver
+  must return the same route on every run, every device and every buffer reuse. "Either route is acceptable" is not a
+  contract, and a solver that alternates between two valid routes has a bug, not a tie.
+
+#### 7.4.3 Continuity and tangent transitions
+
+Projection and smoothing both create transitions where the path leaves an obstacle. Four numeric checks, each with a
+declared bound:
+
+1. **C0.** One polyline, no duplicated, reordered or dropped points. Structural, cheap, always on.
+2. **Tangent continuity at entry and exit.** The angle between the segment entering an obstacle's influence region and
+   the segment leaving it must not exceed `θ_max` (proposed 45°, fixed at stage 2). A larger kink reports
+   `TANGENT_DISCONTINUITY`; in practice it means the obstacle radius is wrong for that attachment pair, not that the
+   path needs more smoothing.
+3. **Curvature bound.** No interior sample may turn more than `θ_max` relative to its neighbours at the declared
+   sampling spacing. This is the discrete stand-in for "the muscle does not fold".
+4. **Temporal continuity.** Between consecutive frames, no path sample of the same muscle may move more than
+   `δ_frame` (proposed 2 cm at 60 Hz) unless the published pose itself moved discontinuously, which L1 already fails.
+   This is what catches a solver flipping between two valid routes.
+
+#### 7.4.4 What this is, and is not
+
+This is a **geometric approximation**: ellipsoids stand in for bones, tendon sheets and fascia; projection constrains
+samples, it does not resolve contact; there is no friction, no sliding, no obstacle deformation and no force. It is
+classified as an approximation in §11 and must be described that way wherever it surfaces, including review notes and UI
+copy.
 
 Design notes:
 
 - **Length is arc length along the solved path.** A straight-line measure would report shortening whenever a muscle
   wraps a joint, which is the opposite of the truth. This is the single most important correctness rule in the model.
-- **Two wrap passes, fixed order.** Order is declared per muscle so it is deterministic and reviewable; it is not a
-  physical contact solve, and the doc says so (§11).
 - **`restLength` comes from the same solver at the bind stance**, not from the definition's numbers, so the rest state
   and the runtime can never disagree (this is also what the exporter bakes; §10.4).
 - **No joint motion is written.** The solver reads `pose` and writes only `AnatomyFrame`.
@@ -750,7 +846,7 @@ Design notes:
 
 | Strategy | Anatomy quality | CPU per frame | Filament fit | Art cost | Verdict |
 | --- | --- | --- | --- | --- | --- |
-| **A. Procedural tube/sheet from the path** (AA-3D's approach) | low–medium: correct length, generic cross-section, no surface detail | high: full rebuild of every muscle every frame (AA-3D: 30.9 k tris, 4.6 ms desktop) | easy: one buffer, one dynamic mesh per layer | none | **phase A / debug / tier `reduced`** |
+| **A. Procedural tube/sheet from the path** (AA-3D's approach) | low–medium: correct length, generic constant cross-section (§7.6), no surface detail | high: full rebuild of every muscle every frame (AA-3D: 30.9 k tris, 4.6 ms desktop) | easy: one buffer, one dynamic mesh per layer | none | **phase A / debug / tier `reduced`** |
 | **B. Pre-authored muscle mesh skinned to the body rig** | high surface, but the mesh follows bones, not the path; length is implicit and cannot be measured or trusted | ~0 | easy | high | rejected as the primary strategy |
 | **C. Hybrid: authored mesh skinned to path-driven helper bones** | high surface *and* path-correct length | low: ~4 helper transforms per muscle | good: one skin, standard skinning | medium–high (mesh + helper bind) | **target** |
 | **D. GPU deformation (compute/vertex shader from path uniforms)** | same as C, potentially finer | lowest CPU | needs a custom material; Filament material authoring, no simple glTF path | high | research; not v1 |
@@ -772,40 +868,61 @@ Helper-bone specification (strategy C):
   tangent, +Z from the surface normal reference). The muscle mesh is weighted to these four bones by proximity along
   the path, with ≤ 4 influences per vertex (glTF standard).
 - Per frame, `MuscleLayerSkinner` writes each helper as: translation = path point at the same fractional arc length;
-  rotation = frame built from the local tangent and a stable up reference; scale = thickness response (§7.6).
+  rotation = frame built from the local tangent and a stable up reference; scale = 1. M1 applies no cross-section
+  response (§7.6), so the helper transform carries position and orientation only.
 - Because the helper's fractional position is preserved, the mesh's *shape* is authored, while its *length* is whatever
   the path solver measured. That is the whole trick, and it is why the mesh cannot drift from the skeleton.
 
 ### 7.6 Deformation model
 
-Only two things move a muscle's geometry, and both are defined:
+M1 has exactly one deformation driver:
 
-1. **Path following.** The helper bones move to the solved path. This is the primary deformation and it is exact within
-   the path solver's approximation.
-2. **Thickness response to length.** Modelled as an isovolumetric approximation of a uniform cylinder:
+**Path following.** The helper bones (strategy C) or the generated vertices (strategy A) move to the solved path. A
+muscle's visible length and position change because its attachments moved; its cross-section does not change. Scale is
+1 on every helper bone and constant on every generated ring.
 
-   ```
-   r(L) = clamp( r0 * sqrt(L0 / L), 0.75 * r0, 1.25 * r0 )
-   ```
+That is the whole model. A muscle that shortens looks shorter. It does not automatically get thicker, and it does not
+bulge because the exercise says it is working.
 
-   applied to the two belly helpers only (cross-section scale in X/Z), with tendons rigid and no scale on origin and
-   insertion. Clamps bound the visible effect; outside them the approximation is simply wrong.
+One honest caveat about strategy C: as helpers separate along the path, linear-blend skinning stretches the mesh between
+them, so the rendered silhouette is not perfectly constant. That is a skinning artifact of moving the geometry to the
+solved path — it is not a modelled response, it is not calibrated to length, and it must not be described as one.
 
-**What this model does not do, stated plainly:** real muscle is pinnate, anisotropic, wrapped in fascia, changes shape
-with joint angle in ways a cylinder cannot express, and its cross-section is not constant along its length. There is no
-muscle "firing" animation, no fibre-level deformation, and no claim that a thicker belly means a stronger contraction.
-The thickness response exists so that a visibly shortening muscle does not stay visually identical; it is an
-approximation with a stated formula, not a simulation.
+**Why the isovolumetric formula is not in M1.** The obvious candidate is the isovolumetric approximation of a uniform
+cylinder:
 
-**Forbidden, per §11:** any bulge keyed to activation, any geometry change without a length measurement behind it, any
-per-muscle timeline, any scale not derived from `MuscleState`.
+```
+r(L) = clamp( r0 * sqrt(L0 / L), 0.75 * r0, 1.25 * r0 )
+```
+
+It is a uniform-cylinder volume argument, not a validated model of individual muscle deformation. Real muscle is
+pinnate, anisotropic, wrapped in fascia, varies in cross-section along its length, and changes shape with joint angle in
+ways a cylinder cannot express. Applied automatically it produces a bulge that a reader will read as a contraction claim
+the model cannot support (§11). An approximation that looks plausible is not thereby validated, and a formula that is
+cheap to evaluate is not thereby evidence.
+
+**Optional future research hypothesis — explicitly not a commitment.** If a cross-section response is ever wanted, the
+formula above is the cheapest candidate to test, but it is a hypothesis to be validated before it is a mechanism to be
+shipped:
+
+- it must be checked against measured cross-section behaviour of specific muscles through specific ranges (imaging or
+  ultrasound), not against visual plausibility;
+- it must be per-muscle or per-muscle-group, because the cylinder law fails worst exactly where it is most visible —
+  the pennate quadriceps and the multi-head biceps;
+- it must be opt-in per muscle in the definition, off by default, and classified in §11 as a visual approximation;
+- no roadmap stage commits to it. Appendix C item 4 asks whether it should exist at all.
+
+**Forbidden, per §11:** any bulge keyed to activation; any per-muscle animation curve; any cross-section change not
+derived from a measured length (M1 has none); any substitute heuristic ("thicker when the exercise is harder", "pulse on
+the concentric phase"). `strain` is reported for the length readout and the education panel; it is never a geometry
+input.
 
 ### 7.7 Layers, and what is deferred
 
 | Layer | Contents | v1 | Notes |
 | --- | --- | --- | --- |
-| superficial muscles | 8 muscles for M1, ~35 for v2 | yes | quads, hamstrings, glutes, delts, pecs, lats, biceps, triceps, calves, erectors, abs |
-| deep muscles | 8–12 for v2 | yes, after M1 | psoas, iliacus, rotator cuff, transverse abdominis, multifidus |
+| superficial muscles | 8 muscles for M1, ~35 for v2 | yes — the 8 | quads, hamstrings, glutes, delts, pecs, lats, biceps, triceps, calves, erectors, abs |
+| deep muscles | 8–12 for v2 | no — deferred beyond M1 | psoas, iliacus, rotator cuff, transverse abdominis, multifidus |
 | tendons / ligaments | authored bands from the same attachment data | later | needs its own geometry contract; not a muscle with different colour |
 | organs | meshes rigged to the thorax/abdomen | later | explicitly deprioritised by the task; the reference implementation's organs are a separate asset with its own animation, which this framework would have to justify mechanically |
 | attachment markers | spheres/labels at attachment points | later | useful for authoring and education, cheap once data exists |
@@ -820,6 +937,7 @@ per-muscle timeline, any scale not derived from `MuscleState`.
 | Left/right and origin/insertion conventions per muscle | mirroring errors are silent | the side check (§12 L2) plus a per-muscle review checklist |
 | Pennation / multi-head handling | biceps and triceps need two/three heads sharing one visual belly | model heads as separate paths with a shared mesh region; validate that head lengths differ plausibly |
 | Whether a single skin can hold all helper bones | Filament's per-renderable bone budget is engine- and driver-dependent and **unmeasured here** | measure on one device; if the budget is too small, split the muscle layer into regional renderables (§10.3) |
+| Per-muscle cross-section behaviour, if it is ever wanted | no validated model exists; the cylinder law is a plausibility argument, not evidence (§7.6) | an imaging-based study of the specific muscles through their working ranges, with a stated tolerance — a research task, not an engineering one |
 
 ---
 
@@ -907,6 +1025,9 @@ enum class CharacterLayer { SKIN, MUSCLES_SUPERFICIAL, MUSCLES_DEEP, SKELETON, S
 | `SKELETON` | `shared/skeleton_v1.glb` | first shown | rigid bone meshes, one draw call per material |
 | `SELECTED` | derived | always | tint + panel; no geometry |
 
+`MUSCLES_DEEP` exists in the enum from the start as a reserved value; in M1 it has no asset and no renderable, and it is
+not counted in M1's layers (§7.7, §9.2).
+
 Rules:
 
 - **Visibility is a renderable/material flag, never a rebuild.** Toggling a layer must not re-create the engine, reload
@@ -974,7 +1095,7 @@ correct. If a caller needs to pass a `SkeletonPose` into the renderer, the layer
 | Layer | Contents | Budget (standard / reduced) | Required bindings |
 | --- | --- | --- | --- |
 | skin | body mesh, morph targets, materials/textures | 30–40 k tris / 12–18 k; 2K / 1K textures | full rig, ≤ 4 influences |
-| muscles superficial | muscle meshes, helper bones, tendons as material regions | ~1.2–1.8 k tris per muscle at v2 (~35 muscles); M1's eight fit in 10–14 k | 4 helpers per muscle, ≤ 4 influences |
+| muscles superficial | muscle meshes, helper bones, tendons as material regions | ~1.2–1.8 k tris per muscle at v2 (~35 muscles); the eight authored meshes at stage 3 fit in 10–14 k. M1's procedural layer is generated from the path and budgeted by sample count, not by triangle count | 4 helpers per muscle, ≤ 4 influences |
 | muscles deep | muscle meshes, helper bones | ~0.8–1.2 k tris per muscle at v2 | same |
 | skeleton overlay | rigid bone meshes | 8–12 k / 4–6 k | parented to mapped bones; no skinning |
 
@@ -1049,24 +1170,28 @@ change that quietly promotes an approximation to a claim.
 | Contact settlement / posture CCD | established, bounded | iterative, not a physics solve | L1 + RFC R12 |
 | Rest-delta retarget | established technique | rotations only; translation only at the pelvis | L2 rest invariant |
 | Bone-name resolution with aliases | established technique | alias tables can map the wrong bone | L2 coverage + manual rig review |
-| Anatomical attachment points | **requires expert validation** | a plausible-looking point can still be wrong | L3 + anatomist sign-off |
-| Path + ellipsoid wrapping | approximation | no fascia, no fat, no bone sliding, 2 fixed passes | L4 + visual review |
+| Anatomical attachment points | **requires expert validation** | a plausible-looking point can still be wrong | L3 mechanical + L7 review (§12.4) |
+| Path + ellipsoid obstacle wrapping | approximation — geometric, not contact | ellipsoids stand in for bone and fascia; sampled validation at a declared tolerance, **not** a continuous collision guarantee | L4 fixtures + visual review |
 | Arc-length measurement along the path | established technique | depends on path sampling density | L4 |
-| Isovolumetric thickness (`r ∝ L^-½`, clamped) | approximation | uniform cylinder; real muscle is pinnate, anisotropic | L4 (bounds) + visual |
+| Muscle cross-section response | **not implemented — research hypothesis only** (§7.6) | no validated per-muscle deformation model; the cylinder law is a plausibility argument. Linear-blend skinning still stretches the mesh between separating helpers — a skinning artifact, not a modelled response | none — not a validation target |
 | Morph-target morphology | visual approximation | surface only; joints can degrade without a joint rule | L6 |
 | Corrective shapes | visual approximation | authored per rig; not anatomy | L6 + visual |
 | Activation colouring | **educational model, not physiology** | no EMG, no measured intensity, no per-frame claim | §8 schema + expert review |
 | Organ motion (future) | research required | no defensible mechanical driver at this stage | not planned |
 | Skin/muscle self-intersection | unverified | no runtime collision; mesh checks are offline only | L5 |
+| Anatomical review of attachments and placement | **required human gate** (§12.4) | professional judgement against named references; recorded, never scored | L7 record |
 
 **Hard rules.**
 
-1. No muscle geometry moves for any reason other than the solved path and the defined thickness response.
+1. No muscle geometry moves for any reason other than the solved path. M1 applies no cross-section response at all
+   (§7.6); an `INVALID` path is reported, never drawn as if it were valid.
 2. No numeric activation value is displayed without a cited source; tiers are ordinal.
 3. No balance, contact or ground model is introduced in the presentation path. The character consumes the published
    pose; it does not re-solve it.
 4. No claim of anatomical correctness is derived from joint-space validation. L1 passing says nothing about a surface.
 5. No mechanism may be described in UI copy as "simulated", "measured" or "real-time physiology".
+6. No milestone passes its anatomical gate on automated results alone. L1–L6 green is a precondition for the review in
+   §12.4, not a substitute for it.
 
 ---
 
@@ -1078,19 +1203,22 @@ Seven levels, each with one owner, one report and an explicit automation status.
 | --- | --- | --- | --- | --- |
 | **L1 Motion** | 18 existing rules over joint-space geometry (`ExerciseValidator.kt:47-90`) | yes, unchanged | JVM tests + debug tooling | the pose/engine is wrong; block |
 | **L2 Rig** | bone coverage, rest invariant, inverse binds, side/handedness, unit scale, bone budget | yes | JVM (asset parse) + offline | the asset or map is wrong; block |
-| **L3 Attachments** | every attachment's joint exists; offset inside a segment envelope; L/R mirror; head count; origin ≠ insertion; span ≥ 2 segments | yes + expert sign-off | JVM + offline tool | the anatomy data is wrong; block |
-| **L4 Path** | arc length continuity, monotone strain within a phase, wrap satisfaction (no sample inside its obstacle), no path self-crossing, rest-length tolerance vs measured reference | yes, with fixtures | JVM + visual overlay | the solver or the data is wrong; block |
+| **L3 Attachments** | every attachment's joint exists; offset inside a segment envelope; L/R mirror; head count; origin ≠ insertion; span ≥ 2 segments | yes | JVM + offline tool | the anatomy data is wrong; block |
+| **L4 Path** | arc length continuity; the final path re-validated after smoothing and every other geometric operation against every obstacle at a declared tolerance and sampling density; deterministic outcome for overlapping, nested and impossible routes; tangent and curvature continuity at entry/exit; temporal continuity; rest-length tolerance vs measured reference | yes, with adversarial fixtures | JVM + visual overlay | the solver or the data is wrong; block |
 | **L5 Mesh** | self-intersection, degenerate triangles, weight sums, volume sanity per muscle, helper-bone bind match | partly (tool) | offline, artist review | the mesh is wrong; block release, not build |
 | **L6 Morphology** | per-preset rest invariant, joint-ring preservation under morphs, delta bounds, anatomy still inside the body | yes | JVM + offline | a preset breaks the rig; block the preset |
-| **L7 Visual** | anatomical plausibility: silhouette, attachment placement, wrap behaviour, tendon regions | no — human | review checklist against references | the model looks wrong; open an anatomy/art issue |
+| **L7 Anatomical review** | A1–A6 in §12.4: attachment locations, position vs bone and body surface, visible intersections, shape/path plausibility across poses, preset consistency, provenance | no — human, **required for M1** | recorded review against identifiable references | the model is not accepted; M1 does not ship |
 
 ### 12.1 What is genuinely automatable
 
 - L1 (already), L2 (fully), L3's mechanical half (existence, envelope, mirror), L4's numeric half, L6 (fully), and L5's
   geometric half. These are the parts a CI job can gate.
+- L4's numeric half is a **sampled** check at a declared density and tolerance (§7.4.1). It gates the fixtures it was
+  run on; it is not a proof of continuous collision freedom, and the test names and reports must not imply one.
 - **Not automatable:** whether an attachment is the *right* anatomical point; whether a wrap produces a believable
-  contour; whether a muscle mesh reads as that muscle. Any claim otherwise is false confidence, and this document
-  refuses to design a "score" that hides it.
+  contour; whether a muscle mesh reads as that muscle; whether a path looks plausible in a pose nobody posed a fixture
+  for. Any claim otherwise is false confidence, and this document refuses to design a "score" that hides it. §12.4 is
+  where those judgements are recorded.
 
 ### 12.2 New test inventory (names, not implementations)
 
@@ -1101,8 +1229,12 @@ Seven levels, each with one owner, one report and an explicit automation status.
 | `BoneMapCoverageTest` | L2 | 23 mapped joints resolve; unmapped joints are declared, not accidental |
 | `RigSideTest` | L2 | `Left*` bones on the same side as anatomy side A in the rest pose |
 | `AnatomyDefinitionTest` | L3 | ids unique; attachments resolve; envelope bounds; L/R mirror; heads consistent |
-| `MusclePathGeometryTest` | L4 | arc length ≥ chord; wrap keeps samples outside the ellipsoid; deterministic across runs |
-| `MuscleLengthTrackingTest` | L4 | quadriceps shorten monotonically through a squat's concentric phase; a stabiliser's length varies less than a prime mover's across the same phase |
+| `MusclePathGeometryTest` | L4 | arc length ≥ chord; the smoothed path is outside every obstacle at the declared tolerance; deterministic across runs and buffer reuse |
+| `MusclePathObstacleFixtureTest` | L4 | the adversarial set (§12.2.1) either passes or reports `INVALID` with the expected reason — never silently |
+| `MusclePathContinuityTest` | L4 | C0, tangent bound at entry/exit, curvature bound, and frame-to-frame sample displacement within `δ_frame` |
+| `MuscleLengthDeterminismTest` | L4 | the same pose produces the same length across runs, buffer reuse and definition reload; no discontinuity beyond tolerance across a sampled motion |
+| `MuscleLengthReferenceTest` | L4 | length matches expert-reviewed reference data where it exists, within the stated tolerance; absent reference data is reported as a gap, not a pass |
+| `MuscleDirectionalExpectationTest` | L4 | only exercise- and muscle-specific expectations, each carrying a documented justification and source |
 | `MuscleRestLengthTest` | L4 | solved rest length matches the calibrated reference within tolerance |
 | `MorphPresetTest` | L6 | rest invariant per preset; joint rings unmoved beyond tolerance |
 | `LayerToggleTest` | presentation | toggling a layer changes visibility only; no engine or pose rebuild |
@@ -1112,11 +1244,77 @@ Seven levels, each with one owner, one report and an explicit automation status.
 All except `LayerToggleTest` are JVM tests (the character session itself requires a device). `LayerToggleTest` splits:
 a pure state test on the controller in JVM, and a device smoke test in the existing diagnostics screen.
 
+None of these tests establishes anatomical correctness, and none of them replaces §12.4.
+
+**No universal monotonicity test.** A tempting requirement is that the quadriceps shorten monotonically through a
+squat's concentric phase. It is not safe as a universal rule. Rectus femoris crosses both the hip and the knee, so its
+length is a function of two joint angles and can lengthen while the vasti shorten; a bi-articular muscle can also hold
+length through a phase in which the joint moves. A test that forced the solver to produce a predetermined curve would
+make the anatomy satisfy the test instead of the test describing the anatomy — precisely the inversion §11 exists to
+prevent. The inventory therefore checks what is mechanically defensible: attachment and path correctness, determinism,
+continuity, and agreement with reviewed reference data where such data exists. Directional expectations are allowed only
+per muscle and per exercise, with the justification and its source recorded next to the test.
+
+#### 12.2.1 Adversarial path fixtures
+
+The obstacle check is only as good as the configurations it is run against. This fixture set is part of the L4
+deliverable, not an optional extra; each case is a named fixture with a declared obstacle configuration and an expected
+outcome.
+
+| Fixture | Configuration | Expected result |
+| --- | --- | --- |
+| `single_obstacle` | one ellipsoid between two attachments | `VALID`; every sample clears the surface by ≥ `ε_pen` |
+| `multiple_obstacles` | two obstacles in series along the route | `VALID`; clears both after smoothing |
+| `overlapping_obstacles` | two ellipsoids that intersect each other | `VALID` outside the union; identical result for the same declaration order |
+| `nested_obstacles` | a small ellipsoid fully inside a large one | `VALID` outside the outer surface |
+| `near_tangent` | an obstacle whose surface is tangent to the straight chord | `VALID`; no oscillation; tangent check within `θ_max` |
+| `no_valid_route` | obstacles that close the corridor between the attachments | `INVALID` with `NO_ROUTE`; the frame reports it and nothing is drawn along it |
+| `endpoint_inside` | an attachment inside a declared obstacle | definition error at L3, not a solver result |
+| `pass_cap` | a configuration that oscillates between two surfaces | `INVALID` with `PASS_CAP`; deterministic and terminating, not a hang |
+
+A fixture that produces an `INVALID` result where the table expects `VALID` fails L4. A fixture that produces a path
+through geometry fails L4 twice: once for the geometry and once for accepting it.
+
 ### 12.3 Device-only evidence (not claimed here)
 
 Frame time, jank, thermal drift, surface recreation and context loss cannot be validated in this environment. They are
 gates on stage 1 and are recorded in `docs/CHARACTER_DEVICE_VALIDATION.md` (PR #385) with backend, FPS, p95 frame time
 and defects per device.
+
+### 12.4 Anatomical review gate (M1 acceptance)
+
+M1 does not pass because L1–L6 are green. Those levels prove the data is well-formed and that the geometry obeys its own
+rules. They cannot prove that an attachment is the right point on the right bone, that a belly sits in the right
+compartment, or that a silhouette reads as the named muscle. The gate is a recorded human review with named criteria, a
+named reviewer and named references.
+
+**Criteria.** Reviewed per muscle, per side, in the poses the milestone actually ships:
+
+| # | Criterion | What "pass" means |
+| --- | --- | --- |
+| A1 | Attachment locations | each origin and insertion lands on the landmark named in the definition, within the tolerance stated in the review record |
+| A2 | Position relative to bones and body surface | the belly sits in the correct compartment: not inside bone, not outside skin, not on the wrong side of a joint |
+| A3 | Visible intersections | no intersection with skin or with an adjacent muscle in any reviewed pose, at the layer visibility the milestone ships |
+| A4 | Plausible shape and path across poses | path and silhouette read as that muscle in at least three distinct poses — for M1, squat bottom, squat top and push-up bottom — plus any pose the reviewer asks for |
+| A5 | Consistency across presets | every morphology preset shipped in the milestone is reviewed; a preset added later re-opens the review for the muscles it moves. M1 ships one preset, so this criterion is satisfied by reviewing that one and is not evidence about any other |
+| A6 | Provenance | every judgement in the record points at an identifiable reference, not at "looks right" |
+
+**Reviewer.** A qualified anatomist or physiotherapist, named in the record, independent of the person who authored the
+attachment table. Test authorship is not review.
+
+**References.** Identifiable and citable: a named atlas with its edition, a peer-reviewed source, or an imaging dataset
+with its access note. This document deliberately names none it has not verified; the review record carries the citation
+keys and the provenance note, and inventing a reference is a review defect of the same severity as a wrong attachment.
+
+**Record.** One versioned file per anatomy version (proposed `docs/anatomy/anatomy_review_v1.md`; not created by this
+change) containing: reviewer, date and qualifications; the reference list; per-muscle findings against A1–A6; and an
+explicit **unresolved limitations** list. A limitation is not a failure — hiding one is.
+
+**What the record does not do.** It does not convert to a score, it does not make L7 automatable, and it does not
+retroactively validate poses, presets or meshes it did not cover. A review of `anatomy_v1` does not cover `anatomy_v1.1`
+or a new morphology preset.
+
+**Enforcement.** The M1 checklist (§15) cites the record. A missing record is a failed gate, exactly as a red L4 is.
 
 ---
 
@@ -1134,17 +1332,26 @@ and defects per device.
 | R8 | PR #385 changes before merge, or is rejected | medium | medium | this RFC depends on its contracts, not its files; rebase plan in stage 1 | engineering |
 | R9 | Deep muscles / organs expand scope beyond appetite | high | low | §16 non-goals and the layer table's v1 column | product |
 | R10 | Left/right handedness mismatch between anatomy and rig | medium | medium | `RigSideTest`; asset fix, never a render-time flip | engineering |
+| R11 | L4's obstacle check is sampled, so a thin intersection between samples can pass | medium | low | declared tolerance plus recursive refinement at boundary crossings (§7.4.1); classified as a geometric approximation, not a collision proof (§11); the L7 review catches what sampling misses | engineering |
 
 **Unresolved, with the smallest resolving experiment:**
 
 1. **Bone budget per renderable** — load the 8-muscle layer with 32 helpers on one device; if it renders, double until
    failure. Resolves the split threshold.
 2. **Strategy C authoring effort** — one muscle (rectus femoris) taken from attachment data to a path-rigged mesh end to
-   end; measure artist hours. Decides whether the M1 subset is 8 or 4 muscles.
+   end; measure artist hours. This decides the stage-3 art budget. M1 is defined as eight muscles (§15); if this
+   experiment shows eight are unaffordable, the M1 definition changes in this document first — the experiment is a gate
+   on the definition, not a licence to ship a different deliverable.
 3. **Whether `anatomicalForward`'s semantics should be renamed** — not a blocker for anatomy (which uses segment rest
    frames), but it is a trap for every new author. A docs-only rename proposal belongs in a separate change.
 4. **Deep-muscle value** — user research question, not an engineering one: does the education panel need deep muscles
    before organs?
+5. **Which reference set the anatomical review cites** — §12.4 requires identifiable references but deliberately names
+   none. Which atlas or dataset a reviewing clinician will accept is their professional call. Smallest resolution: ask
+   the reviewer for two candidate sources and record the choice, with its edition, in the review file.
+6. **Whether any cross-section response is ever justified** — M1 ships none (§7.6). The smallest resolving experiment is
+   not an implementation spike but a literature question: does measured cross-section behaviour of the eight M1 muscles
+   support a per-muscle model at all?
 
 ---
 
@@ -1154,10 +1361,14 @@ Each decision gives a recommendation, the reasoning, and — where the repositor
 experiment.
 
 **D1. One shared visual rig or multiple compatible rigs?**
-*One rig (`humanoid_v2`), versioned.* Multiple rigs are allowed only if they preserve joint names, hierarchy, rest pose
-and bind pose, which in practice means they are the same rig with different meshes. The whole value proposition — one
-pose library, one anatomy library — collapses the moment two rigs diverge, because `BoneMap` would have to fork and the
-rest invariant would have to be re-proved per rig. A second rig is a second product, not a second character.
+*One rig for v1 (`humanoid_v2`); further rigs only as versioned profiles with their own revalidation.* The v1 constraint
+is a scope decision: one `BoneMap`, one rest invariant, one pose library, one anatomy library, one thing to prove before
+M1 ships. It is not a permanent prohibition. Multiple rigs are allowed when they preserve joint names, hierarchy, rest
+pose and bind pose — which in practice means the same rig contract with different meshes and, if needed, different
+segment proportions. The value proposition holds only while the rigs share those contracts; the moment two rigs diverge,
+`BoneMap` forks and the rest invariant is re-proved per rig. That is why a second rig is a versioned decision with a
+revalidation cost — a motion project, not a second character — and why §6.1 defines the extension path instead of
+forbidding it.
 
 **D2. Shared anatomical skeleton versus visual deformation skeleton?**
 *Both, with strict roles and no shared identity.* The 33-joint canonical skeleton is the only anatomical authority; the
@@ -1172,15 +1383,19 @@ fail the quality test and cost CPU every frame. The hybrid keeps authored surfac
 the contract that lets the first implementation (tubes) be replaced without touching anatomy or motion.
 
 **D4. Morph targets versus parameterized mesh generation?**
-*Morph targets for surface; uniform scale for size; per-bone proportions excluded from appearance.* Bone lengths are
-baked into inverse binds and drive IK reach; changing them per character changes the motion solution, not just the
-picture. If a future product wants per-character proportions, it needs a per-character `SkeletonDefinition` and a
-re-validation of every pose — a motion project, not an appearance setting.
+*Morph targets for surface, uniform scale for size, in v1; per-bone proportions deferred behind a versioned
+`SkeletonDefinition`.* Bone lengths are baked into inverse binds and drive IK reach; changing them per character changes
+the motion solution, not just the picture. Morphs and uniform scale cover surface shape and overall size — they do not
+cover segment proportions, because a long-femur body is a different motion definition, not a different morph weight.
+Supporting one means a new `SkeletonDefinition` id, a rig profile that still satisfies §6.1, and revalidation of every
+pose, attachment and retarget path. Deferred, not forbidden.
 
 **D5. How should muscle geometry react to length changes?**
-*Only through the path, plus the clamped isovolumetric thickness response on the belly.* This is a defined model with a
-stated limitation, measurable (`r/r0` vs `L/L0`) and bounded. Activation never moves geometry; a muscle that is
-"working" but not changing length looks exactly like a muscle that is not working, and the HUD explains why.
+*Through the path only. M1 applies no cross-section response.* A muscle's length and position follow from its solved
+path; its cross-section is constant. This is the honest option: a muscle that shortens looks shorter, and nothing in the
+picture implies a contraction magnitude the data cannot support. The isovolumetric cylinder law survives in §7.6 only as
+an optional research hypothesis with validation preconditions attached — not as a v1 mechanism — and activation never
+moves geometry in either case.
 
 **D6. How should scapula and shoulder-girdle motion influence muscle paths?**
 *Through attachments pinned to `SCAPULA_A/P` and `CLAVICLE_A/P`, plus one or two thorax wrap surfaces.* The engine
@@ -1228,10 +1443,10 @@ schedule risk, not the engineering one.
 | 0 | This RFC reviewed and accepted | 0 | — | reviewer sign-off |
 | 1 | Rig v2 + asset validation + device evidence | 3–4 | 2–3 rig-art | L2 green, device numbers recorded |
 | 2 | Anatomy kernel + 8 muscles as procedural tubes | 4–5 | 1 anatomist week | L3/L4 green on fixtures |
-| **M1** | **one character, 3+ exercises, 8 muscles, 3 layers** | — | — | **demo + all gates** |
+| **M1** | **one character, 1 preset, 3+ exercises, 8 muscles, 3 layers** | — | — | **demo + L1–L4 + §12.4 review record** |
 | 3 | Path-rigged authored muscle meshes | 4 | 6–8 muscle art | L5 + visual review |
 | 4 | Activation + education panel (3 exercises) | 2 | 1 review week | §8 validator + sign-off |
-| 5 | Morphology v2: four body families | 3 | 6 art | L6 green per preset |
+| 5 | Morphology v2: four body families (the first stage with more than one preset) | 3 | 6 art | L6 green per preset |
 | 6 | Library expansion: ~35 superficial, ~12 deep | 6–8 | 12–16 art | L3/L4/L5 at scale |
 | 7 | Labels, picking, explanations | 3 | 2 | visual review |
 
@@ -1272,8 +1487,8 @@ schedule risk, not the engineering one.
 - **Objective:** make anatomy real, in engine space, with no art dependency: definitions, solver, frame, validation, and
   a debug muscle layer.
 - **Components:** `anatomy/` package (pure Kotlin, no Android), `AnatomyDefinition` + loader, `AnatomySolver`,
-  `AnatomyFrame`, `AnatomyDefinitionTest`, `MusclePathGeometryTest`, `MuscleLengthTrackingTest`, procedural tube
-  generator.
+  `AnatomyFrame`, `AnatomyDefinitionTest`, `MusclePathGeometryTest`, `MusclePathObstacleFixtureTest`,
+  `MusclePathContinuityTest`, `MuscleLengthDeterminismTest`, `MuscleLengthReferenceTest`, procedural tube generator.
 - **Muscles (8):** rectus femoris, vastus lateralis, biceps femoris, gluteus maximus, erector spinae, deltoid anterior,
   pectoralis major, gastrocnemius medial.
 - **Dependencies:** stage 1 (rest stance + definition), anatomy calibration session.
@@ -1281,8 +1496,9 @@ schedule risk, not the engineering one.
   `app/src/main/assets/anatomy/anatomy_v1.json`, `app/src/test/.../anatomy/*`.
 - **User-visible deliverable:** a dev-only muscle layer showing red tubes following the squat and push-up, with a length
   readout per muscle.
-- **Automated acceptance:** arc length ≥ chord on every frame; no samples inside wrap ellipsoids; the quadriceps
-  shorten monotonically through a squat's concentric phase; rest lengths within tolerance.
+- **Automated acceptance:** arc length ≥ chord on every frame; the smoothed path passes the obstacle check at the
+  declared tolerance on the adversarial fixture set (§12.2.1); lengths are deterministic and continuous across a sampled
+  motion; rest lengths within tolerance; no fixture reports `INVALID` without the failure being visible in the report.
 - **Manual acceptance:** anatomist review of the eight attachment sets and of the wrap behaviour on three poses.
 - **Risks:** calibration drift (R7); wrap parameters; the tube look invites quality complaints — state clearly that
   stage 2 is a mechanism demo, not final visuals.
@@ -1296,13 +1512,21 @@ schedule risk, not the engineering one.
 1. One character (`male_neutral_v1`) on `humanoid_v2`, driven by the real pipeline through `CharacterStage`.
 2. At least three existing procedural exercises (air squat, push-up, bird dog or plank) animate correctly with the
    character; no exercise builder changed.
-3. Layers: skin, superficial muscles (the 8), skeleton overlay; toggling does not rebuild the engine.
-4. Muscles follow the movement within the path model and report lengths; no independent muscle animation exists.
-5. A second morphology preset changes the body without changing any pose, muscle definition or animation id.
-6. L1 and L2 green in CI; L3/L4 green on the eight-muscle fixture set; device numbers recorded for the character alone.
+3. Layers: skin, superficial muscles (the 8), skeleton overlay; toggling does not rebuild the engine. `MUSCLES_DEEP`
+   exists in the enum as a reserved value but has no asset and no renderable (§7.7, §9.1).
+4. Muscles follow the movement within the path model and report lengths; no independent muscle animation exists and no
+   cross-section response is applied (§7.6).
+5. One morphology preset (`neutral`). M1 demonstrates that the preset changes nothing in the pose, muscle or animation
+   data; it does not demonstrate body-family coverage — four families are stage 5 (§6.3, §15).
+6. L1 and L2 green in CI; L3/L4 green on the eight-muscle fixture set including the adversarial path fixtures (§12.2.1);
+   device numbers recorded for the character alone.
+7. The anatomical review gate (§12.4) is passed and recorded: named reviewer, reference list, per-muscle findings
+   against A1–A6, and unresolved limitations. A missing record fails M1 exactly as a red L4 does.
+8. Every claim in the demo's copy survives §11: no "simulated", no measured activation, no implied contraction
+   magnitude.
 
-**Explicitly not in M1:** authored muscle meshes (stage 3), activation colouring (stage 4), deep muscles, organs,
-labels, picking, a muscle library beyond eight, and any claim of surface accuracy.
+**Explicitly not in M1:** authored muscle meshes (stage 3), activation colouring (stage 4), deep muscles, a second
+morphology preset (stage 5), organs, labels, picking, a muscle library beyond eight, and any claim of surface accuracy.
 
 ### Stage 3 — Path-rigged authored muscle meshes
 
@@ -1313,8 +1537,8 @@ labels, picking, a muscle library beyond eight, and any claim of surface accurac
 - **Expected files:** `tools/anatomy-export/`, `character/MuscleLayerSkinner.kt`,
   `app/src/main/assets/characters/*/muscles_sup.glb`, `app/src/test/.../HelperBindTest.kt`.
 - **User-visible deliverable:** the same eight muscles, now with surface anatomy, still following the path exactly.
-- **Automated acceptance:** helper bind positions equal the solver's rest path within 1e-3; thickness response within
-  the clamp bounds; frame cost of the muscle layer below the measured budget.
+- **Automated acceptance:** helper bind positions equal the solver's rest path within 1e-3; helper scale is uniform, with
+  no cross-section response (§7.6); frame cost of the muscle layer below the measured budget.
 - **Manual acceptance:** visual review of the eight muscles in three poses against anatomical references.
 - **Risks:** helper bone budget (R3); art time (R2).
 - **Effort:** 4 engineering weeks + 6–8 muscle-art weeks.
@@ -1337,7 +1561,8 @@ labels, picking, a muscle library beyond eight, and any claim of surface accurac
 
 ### Stage 5 — Morphology v2 (four body families)
 
-- **Objective:** prove one anatomy library serves slim, heavy, muscular and female bodies.
+- **Objective:** prove one anatomy library serves slim, heavy, muscular and female bodies. This is the first stage that
+  ships more than one morphology preset; M1 ships one (§15, M1 item 5).
 - **Components:** morph targets with region masks, four presets, `MorphPresetTest`, per-preset device screenshots.
 - **Dependencies:** stage 3 meshes (morphs are authored per body).
 - **Expected files:** `app/src/main/assets/characters/*/skin.glb` (morph targets), `character/CharacterProfile.kt`,
@@ -1446,6 +1671,7 @@ tools/anatomy-export/             offline helper-bind + asset validation (JVM)
 2. Is eight muscles the right M1 subset for the first three exercises, or should M1 be four muscles done well?
 3. Should the skeleton overlay be a shared asset across characters (this RFC's assumption) or per character, given
    uniform scale differences?
-4. Is the isovolumetric thickness response worth shipping at all, or should v1 show length-driven path motion with no
-   thickness change and no risk of being read as a contraction claim?
+4. Is any cross-section response ever justified? This RFC ships none in M1 (§7.6). If a reviewer believes a visibly
+   shortening muscle must change shape, the burden is a validated per-muscle model with measured references; the
+   cylinder law on its own is a plausibility argument, not evidence.
 5. Who signs the anatomy table, and how many muscles per review session is realistic?
