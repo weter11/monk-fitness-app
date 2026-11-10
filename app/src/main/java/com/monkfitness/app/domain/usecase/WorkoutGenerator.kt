@@ -8,6 +8,7 @@ import com.monkfitness.app.data.model.ExerciseCategory
 import com.monkfitness.app.data.model.ExerciseSubCategory
 import com.monkfitness.app.data.model.FlexibilityTrainingType
 import com.monkfitness.app.data.model.LibraryStats
+import com.monkfitness.app.data.model.LoadKind
 import com.monkfitness.app.data.model.Workout
 import com.monkfitness.app.data.model.WorkoutType
 import com.monkfitness.app.data.model.flexibilitySpecificFocusAreas
@@ -55,6 +56,35 @@ class WorkoutGenerator {
         ExerciseFamily("horse_stance", R.string.family_horse_stance, R.string.family_horse_stance_desc),
         ExerciseFamily("superman", R.string.family_superman, R.string.family_superman_desc),
         ExerciseFamily("child_pose", R.string.family_child_pose, R.string.family_child_pose_desc)
+    )
+
+    /**
+     * The catalogue's own statement of which movements are performed with a weight the user can put on.
+     *
+     * Written as a list rather than inferred from [Exercise.requiredEquipment] because the equipment
+     * vocabulary answers a different question: a `BAR` is a pull-up bar and `BANDS` is a stretch band,
+     * and neither says whether the movement's work is measured in kilograms. An id not listed here keeps
+     * [LoadKind.NONE], so no exercise is classified by accident — the load field appears only where this
+     * list says it does.
+     */
+    private val loadableExerciseIds = setOf(
+        "pushups",
+        "pushups_wide",
+        "pushups_military",
+        "pushups_knee",
+        "decline_pushups",
+        "diamond_pushups",
+        "pullups",
+        "pullups_chin",
+        "pullups_neutral",
+        "pullups_wide",
+        "dips",
+        "squats",
+        "squats_sumo",
+        "lunges",
+        "lunges_reverse",
+        "rows",
+        "kettlebell_swing"
     )
 
     private val allExercises = listOf(
@@ -151,7 +181,9 @@ class WorkoutGenerator {
         baseTimerExercise("arm_circles", "shoulder_mobility", "arm_circles_hold", R.string.ex_arm_circles, R.string.ex_arm_circles, R.string.ex_arm_circles, imageRes = R.drawable.ic_exercise_placeholder, sets = 1, baseDurationSeconds = 20, phase4DurationSeconds = 45, category = ExerciseCategory.MOBILITY, subCategory = ExerciseSubCategory.SHOULDERS),
         baseTimerExercise("hip_circles", "hip_mobility", "hip_circles_hold", R.string.ex_hip_circles, R.string.ex_hip_circles, R.string.ex_hip_circles, imageRes = R.drawable.ic_exercise_placeholder, sets = 1, baseDurationSeconds = 20, phase4DurationSeconds = 45, category = ExerciseCategory.MOBILITY, subCategory = ExerciseSubCategory.HIPS),
         baseTimerExercise("leg_swings", "hip_mobility", "leg_swings_hold", R.string.ex_leg_swings, R.string.ex_leg_swings, R.string.ex_leg_swings, imageRes = R.drawable.ic_exercise_placeholder, sets = 1, baseDurationSeconds = 20, phase4DurationSeconds = 45, category = ExerciseCategory.MOBILITY, subCategory = ExerciseSubCategory.LEGS)
-    )
+    ).map { exercise ->
+        if (exercise.id in loadableExerciseIds) exercise.copy(loadKind = LoadKind.EXTERNAL_LOAD) else exercise
+    }
 
     private val oldToNewIdMap = mapOf(
         "pushups" to "pushups",

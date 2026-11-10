@@ -62,7 +62,9 @@ data class ExerciseOptionUi(
     /** Whether the catalogue records this exercise as timed, which decides its prescription dimension. */
     val isTimerBased: Boolean,
     /** The span the catalogue states for this exercise, or `null` when it states none. */
-    val range: ExerciseRange? = null
+    val range: ExerciseRange? = null,
+    /** Whether the catalogue records this movement as performed with an external load. */
+    val acceptsLoad: Boolean = false
 )
 
 /** One row of My Programs: a saved Program with the state the list shows. */

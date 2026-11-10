@@ -253,6 +253,9 @@ internal class ProgramDataAccessRig(key: String = "a", supplied: SqliteTestDatab
             // The every-N-days interval column, for the same reason: a rig one version behind fails
             // the entity/column comparison rather than the test it was built for.
             database.migrate(AppDatabase.MIGRATION_20_21)
+            // The per-set load column: the rig's database is the schema the app opens, so a rig one
+            // version behind would make every confirmed set fail on its own column check.
+            database.migrate(AppDatabase.MIGRATION_21_22)
         }
     }
 }
@@ -565,6 +568,9 @@ private class FailingProgramSetLogDao(
 
     override suspend fun countSetsOfProgram(programId: String): Int =
         delegate.countSetsOfProgram(programId)
+
+    override suspend fun lastLoadKgOfExercise(exerciseId: String): Double? =
+        delegate.lastLoadKgOfExercise(exerciseId)
 }
 
 /** One Program, its first revision and the slots a creation would produce. */

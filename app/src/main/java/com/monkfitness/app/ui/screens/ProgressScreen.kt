@@ -67,6 +67,7 @@ import com.monkfitness.app.data.model.Exercise
 import com.monkfitness.app.ui.programs.ProgressExerciseVolumeRowUi
 import com.monkfitness.app.ui.programs.ProgressSessionVolumeRowUi
 import com.monkfitness.app.ui.programs.ProgressWeekVolumeRowUi
+import com.monkfitness.app.ui.programs.formatKg
 import com.monkfitness.app.viewmodel.MainViewModel
 import java.time.LocalDate
 import java.util.Locale
@@ -266,20 +267,51 @@ fun ProgressScreen(viewModel: MainViewModel) {
                         stringResource(R.string.progress_unknown_exercise)
                     }
                     row.best?.let { best ->
-                        if (row.dimension == PrescriptionDimension.TIME_BASED) {
-                            stringResource(
-                                R.string.progress_performance_time_row,
-                                name,
-                                row.observations,
-                                best
-                            )
-                        } else {
-                            stringResource(
-                                R.string.progress_performance_rep_row,
-                                name,
-                                row.observations,
-                                best
-                            )
+                        val loadKg = row.heaviestLoadKg
+                        val loadReps = row.heaviestLoadReps
+                        when {
+                            loadKg != null && loadReps != null && row.bestSetVolumeKg != null ->
+                                stringResource(
+                                    R.string.progress_performance_load_row_with_volume,
+                                    name,
+                                    row.observations,
+                                    formatKg(loadKg),
+                                    loadReps,
+                                    formatKg(row.bestSetVolumeKg)
+                                )
+
+                            loadKg != null && loadReps != null ->
+                                stringResource(
+                                    R.string.progress_performance_load_row,
+                                    name,
+                                    row.observations,
+                                    formatKg(loadKg),
+                                    loadReps
+                                )
+
+                            loadKg != null ->
+                                stringResource(
+                                    R.string.progress_performance_load_hold_row,
+                                    name,
+                                    row.observations,
+                                    formatKg(loadKg)
+                                )
+
+                            row.dimension == PrescriptionDimension.TIME_BASED ->
+                                stringResource(
+                                    R.string.progress_performance_time_row,
+                                    name,
+                                    row.observations,
+                                    best
+                                )
+
+                            else ->
+                                stringResource(
+                                    R.string.progress_performance_rep_row,
+                                    name,
+                                    row.observations,
+                                    best
+                                )
                         }
                     }
                 },
@@ -532,7 +564,7 @@ private fun VolumeCard(
                         stringResource(
                             R.string.progress_volume_week_row,
                             week.weekStart.toString(),
-                            volumeAmount(week.repetitions, week.seconds)
+                            volumeAmount(week.repetitions, week.seconds, week.volumeKg)
                         )
                     }
                 )
@@ -547,7 +579,11 @@ private fun VolumeCard(
                         stringResource(
                             R.string.progress_volume_exercise_row,
                             name,
-                            volumeAmount(exercise.repetitions ?: 0, exercise.seconds ?: 0)
+                            volumeAmount(
+                                exercise.repetitions ?: 0,
+                                exercise.seconds ?: 0,
+                                exercise.volumeKg
+                            )
                         )
                     }
                 )
@@ -557,7 +593,7 @@ private fun VolumeCard(
                         stringResource(
                             R.string.progress_volume_session_row,
                             session.startedOn.toString(),
-                            volumeAmount(session.repetitions, session.seconds)
+                            volumeAmount(session.repetitions, session.seconds, session.volumeKg)
                         )
                     }
                 )
@@ -580,14 +616,35 @@ private fun VolumeSection(title: String, rows: List<String>) {
     }
 }
 
-/** One volume in its own units: repetitions, seconds, or both — never one added number. */
+/**
+ * One volume in its own units: repetitions, seconds and kilogram-volume — never one added number.
+ *
+ * The kilogram volume is printed beside the unit it was accumulated from, never folded into it: a
+ * repetition total and a `load x reps` total answer different questions, and the third number is absent
+ * (not `0 kg`) when nothing was weighed.
+ */
 @Composable
-private fun volumeAmount(repetitions: Int, seconds: Int): String = when {
+private fun volumeAmount(repetitions: Int, seconds: Int, volumeKg: Double?): String = when {
+    repetitions > 0 && seconds > 0 && volumeKg != null ->
+        stringResource(
+            R.string.progress_volume_reps_seconds_and_kg,
+            repetitions,
+            seconds,
+            formatKg(volumeKg)
+        )
+
     repetitions > 0 && seconds > 0 ->
         stringResource(R.string.progress_volume_reps_and_seconds, repetitions, seconds)
 
+    repetitions > 0 && volumeKg != null ->
+        stringResource(R.string.progress_volume_reps_and_kg, repetitions, formatKg(volumeKg))
+
+    seconds > 0 && volumeKg != null ->
+        stringResource(R.string.progress_volume_seconds_and_kg, seconds, formatKg(volumeKg))
+
     repetitions > 0 -> stringResource(R.string.progress_volume_reps, repetitions)
     seconds > 0 -> stringResource(R.string.progress_volume_seconds, seconds)
+    volumeKg != null -> stringResource(R.string.progress_volume_kg, formatKg(volumeKg))
     else -> stringResource(R.string.progress_volume_empty)
 }
 

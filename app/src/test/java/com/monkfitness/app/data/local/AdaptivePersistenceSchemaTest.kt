@@ -167,14 +167,14 @@ class AdaptivePersistenceSchemaTest {
                 "Stage 18's explicit target schedule source, 16 is §30 step 28's exercise " +
                 "preference column, 17 is P29's historical focus, 18 is P31's persisted " +
                 "progression relation catalogue, 19 is the per-set rest column, 20 is the " +
-                "session-type selection and 21 is the every-N-days interval",
-            source.contains("version = 21")
+                "session-type selection, 21 is the every-N-days interval and 22 is the per-set load",
+            source.contains("version = 22")
         )
         assertTrue(
             "and the step that reaches it is declared, and registered in the builder's chain right " +
                 "after the step it follows",
-            source.contains("MIGRATION_20_21 = object : Migration(20, 21)") &&
-                Regex("MIGRATION_19_20,\\s*MIGRATION_20_21").containsMatchIn(source)
+            source.contains("MIGRATION_21_22 = object : Migration(21, 22)") &&
+                Regex("MIGRATION_20_21,\\s*MIGRATION_21_22").containsMatchIn(source)
         )
 
         val registered = Regex("entities = \\[(.*?)]", RegexOption.DOT_MATCHES_ALL)

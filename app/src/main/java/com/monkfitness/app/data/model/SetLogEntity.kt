@@ -6,6 +6,15 @@ import androidx.room.Index
 import androidx.room.PrimaryKey
 
 /**
+ * The heaviest load a stored set may carry, in kilograms.
+ *
+ * Restated here rather than imported from the domain because an entity stores and does not translate —
+ * the mapper layer is the one place the two vocabularies meet. The two bounds must agree, and a test
+ * asserts that they do.
+ */
+private const val MAX_STORED_LOAD_KG: Double = 500.0
+
+/**
  * One confirmed set.
  *
  * A row exists because a set was confirmed. That is the whole contract of this table: an exercise that
@@ -31,6 +40,9 @@ import androidx.room.PrimaryKey
  *   every row written before the column existed, and the first set of an occurrence. `null` is not
  *   zero: no rest observed and a rest of no seconds are different facts, and only the second one is a
  *   measurement.
+ * @property loadKg external load in kilograms; `null` when no load was recorded, which is every
+ *   bodyweight set and every row written before the column existed. `null` is not `0` — nothing
+ *   weighed in at zero kilograms, and a reader that added the absence as zero would invent volume.
  */
 @Entity(
     tableName = "program_set_log",
@@ -51,7 +63,8 @@ data class SetLogEntity(
     val completedReps: Int,
     val durationSeconds: Int,
     val performedAt: Long,
-    val restSeconds: Int? = null
+    val restSeconds: Int? = null,
+    val loadKg: Double? = null
 ) {
 
     init {
@@ -60,6 +73,10 @@ data class SetLogEntity(
         require(durationSeconds >= 0) { "durationSeconds must be >= 0, was $durationSeconds" }
         require(restSeconds == null || restSeconds >= 0) {
             "restSeconds must be absent or >= 0, was $restSeconds"
+        }
+        require(loadKg == null || (loadKg.isFinite() && loadKg > 0.0 && loadKg <= MAX_STORED_LOAD_KG)) {
+            "loadKg must be absent or a positive finite load no heavier than $MAX_STORED_LOAD_KG, " +
+                "was $loadKg"
         }
         require((completedReps > 0) != (durationSeconds > 0)) {
             "a set is measured in repetitions or in time, and a set that was not performed is " +

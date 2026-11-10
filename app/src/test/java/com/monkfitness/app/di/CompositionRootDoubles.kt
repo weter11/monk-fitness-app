@@ -270,6 +270,8 @@ internal class CompositionRootRig(
         database.migrate(AppDatabase.MIGRATION_19_20)
         // The every-N-days interval column: the rig has to be the schema the app opens.
         database.migrate(AppDatabase.MIGRATION_20_21)
+        // The per-set load column, for the same reason: the container's suites write confirmed sets.
+        database.migrate(AppDatabase.MIGRATION_21_22)
     }
 
     val database = SqliteAppDatabase(engine)

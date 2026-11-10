@@ -153,6 +153,9 @@ class WorkoutSessionRepository(
     suspend fun setsOf(sessionExerciseId: SessionExerciseId): List<SetResult> =
         setLogDao.setsOfSessionExercise(sessionExerciseId.value).map { it.toDomain() }
 
+    /** The load the last weighed set of [exerciseId] recorded, or `null` when none was weighed. */
+    suspend fun lastLoadKgOf(exerciseId: String): Double? = setLogDao.lastLoadKgOfExercise(exerciseId)
+
     /**
      * Removes one confirmed set.
      *

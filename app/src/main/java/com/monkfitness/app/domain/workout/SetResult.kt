@@ -19,6 +19,11 @@ import java.time.Instant
  * which is what every set stored before the field existed holds, and what the first set of an occurrence
  * holds. `null` is deliberately not `0`: "no rest was observed" is an absence, while `0` is a
  * measurement that says the user went straight on.
+ *
+ * [loadKg] is the external load the set was performed with, in kilograms, and is `null` when no load was
+ * recorded — which is every bodyweight set, every set stored before the field existed, and a loaded set
+ * the user did not weigh. `null` is not `0`: zero kilograms is not a load a set can be performed with,
+ * and reading the absence as zero would invent a weight for work that was never weighed.
  */
 data class SetResult(
     val setLogId: SetLogId,
@@ -26,7 +31,8 @@ data class SetResult(
     val completedReps: Int,
     val durationSeconds: Int,
     val performedAt: Instant,
-    val restSeconds: Int? = null
+    val restSeconds: Int? = null,
+    val loadKg: Double? = null
 ) {
 
     init {
@@ -35,6 +41,10 @@ data class SetResult(
         require(durationSeconds >= 0) { "durationSeconds must be >= 0, was $durationSeconds" }
         require(restSeconds == null || restSeconds >= 0) {
             "restSeconds must be absent or >= 0, was $restSeconds"
+        }
+        require(isPerformedLoad(loadKg)) {
+            "loadKg must be absent or a positive finite load no heavier than $MAX_PERFORMED_LOAD_KG, " +
+                "was $loadKg"
         }
         require((completedReps > 0) != (durationSeconds > 0)) {
             "a set is measured in repetitions or in time, and a set that was not performed is " +

@@ -321,7 +321,8 @@ private fun Map<String, String?>.setLogEntity() = SetLogEntity(
     setIndex = number("setIndex"),
     completedReps = number("completedReps"),
     durationSeconds = number("durationSeconds"),
-    performedAt = millis("performedAt")
+    performedAt = millis("performedAt"),
+    loadKg = this["loadKg"]?.toDouble()
 )
 
 private fun Map<String, String?>.pauseEntity() = ProgramPauseEntity(
@@ -711,6 +712,12 @@ internal class SqliteProgramSetLogDao(private val database: SqliteTestDatabase) 
 
     override suspend fun countSetsOfProgram(programId: String): Int =
         database.first(ProgramDaoSql.PROGRAM_SET_LOG_DAO_COUNT_SETS_OF_PROGRAM, programId)
+
+    override suspend fun lastLoadKgOfExercise(exerciseId: String): Double? =
+        database.rows(ProgramDaoSql.PROGRAM_SET_LOG_DAO_LAST_LOAD_KG_OF_EXERCISE, exerciseId)
+            .firstOrNull()
+            ?.get("loadKg")
+            ?.toDouble()
 }
 
 internal class SqliteProgramPauseDao(private val database: SqliteTestDatabase) : ProgramPauseDao {

@@ -1,5 +1,6 @@
 package com.monkfitness.app.domain
 
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.io.File
@@ -145,6 +146,16 @@ class ProgramDomainPurityTest {
         )
     }
 
+    /**
+     * The foundation's one fractional quantity: a set's external load, in kilograms.
+     *
+     * The rule below forbids floating point because what it exists to prevent is a *derived* number — a
+     * universal load score, a progression coefficient — and a weight the user put on a bar is neither: it
+     * is a measured fact of one set, stored and read in its own unit. It is pinned to these two files so a
+     * third Double still fails this test rather than riding in behind an allowlist.
+     */
+    private val measuredLoadFiles = listOf("SetResult.kt", "PerformedLoad.kt")
+
     @Test
     fun theFoundationDeclaresNoFloatingPointAndNoProgressionCoefficient() {
         val offenders = scan(foundationSources()) { line ->
@@ -157,12 +168,29 @@ class ProgramDomainPurityTest {
                 Regex("""\bRandom\b""").containsMatchIn(line) -> line.trim()
                 else -> null
             }
-        }
+        }.filterNot { offender -> measuredLoadFiles.any { file -> offender.startsWith("$file: ") } }
 
         assertTrue(
             "no universal load score and no numeric progression coefficient may appear in the " +
                 "foundation, found: $offenders",
             offenders.isEmpty()
+        )
+    }
+
+    @Test
+    fun theMeasuredLoadIsTheOnlyFractionalQuantityTheFoundationCarries() {
+        val withDouble = foundationSources()
+            .filter { source ->
+                codeLines(source).any { line -> Regex("""\b(Double|Float)\b""").containsMatchIn(line) }
+            }
+            .map { source -> source.name }
+            .sorted()
+
+        assertEquals(
+            "a load in kilograms is measured and fractional; nothing else in the foundation is. A new " +
+                "one appearing is a review event, so the set is pinned",
+            measuredLoadFiles.sorted(),
+            withDouble
         )
     }
 

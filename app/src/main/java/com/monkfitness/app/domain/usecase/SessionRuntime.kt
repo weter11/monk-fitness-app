@@ -186,7 +186,8 @@ class SessionRuntime(
         sessionExerciseId: SessionExerciseId,
         completedReps: Int = 0,
         durationSeconds: Int = 0,
-        restSeconds: Int? = null
+        restSeconds: Int? = null,
+        loadKg: Double? = null
     ): SessionRuntimeResult<WorkoutSession> = sessionOutcome {
         val session = sessionRepository.sessionById(sessionId)
             ?: return@sessionOutcome refused(SessionRefusal.SessionNotFound(sessionId))
@@ -225,7 +226,8 @@ class SessionRuntime(
                 completedReps = completedReps,
                 durationSeconds = durationSeconds,
                 performedAt = clock.now(),
-                restSeconds = restSeconds
+                restSeconds = restSeconds,
+                loadKg = loadKg
             )
         )
         success(requireStored(sessionId))

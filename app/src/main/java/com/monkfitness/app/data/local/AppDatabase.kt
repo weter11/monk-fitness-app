@@ -84,8 +84,8 @@ import com.monkfitness.app.data.model.WorkoutSessionEntity
         AdaptiveDecisionRecordEntity::class,
         AdaptiveAdjustmentEntity::class
     ],
-    version = 21,
-    exportSchema = false
+    version = 22,
+    exportSchema = true
 )
 @TypeConverters(AdaptiveTypeConverters::class, ProgramTypeConverters::class)
 abstract class AppDatabase : RoomDatabase() {
@@ -1244,6 +1244,28 @@ abstract class AppDatabase : RoomDatabase() {
             }
         }
 
+        /**
+         * Version 21 -> version 22: the **external load a set was performed with** becomes a stored
+         * fact.
+         *
+         * One nullable column and nothing else. Until this step a confirmed set recorded repetitions or
+         * seconds and no weight, so a strength program had no load history at all: no kg x reps volume,
+         * no weight progression and no weight record could be computed from rows a device holds.
+         *
+         * There is deliberately **no `DEFAULT` and no backfill**. `NULL` means *no load was recorded*,
+         * which is exactly what every row written before this column existed holds and what every
+         * bodyweight set holds; writing `0` would claim every historical set was performed with no
+         * external load at all, and would let a reader add the absence as zero kilograms of volume.
+         * `REAL` because a load is measured in kilograms to two decimals, not counted in whole units.
+         */
+        internal val MIGRATION_21_22 = object : Migration(21, 22) {
+            override fun migrate(database: SupportSQLiteDatabase) {
+                database.execSQL(
+                    "ALTER TABLE `program_set_log` ADD COLUMN `loadKg` REAL"
+                )
+            }
+        }
+
         fun getDatabase(context: Context): AppDatabase {
             return INSTANCE ?: synchronized(this) {
                 val instance = Room.databaseBuilder(
@@ -1271,7 +1293,8 @@ abstract class AppDatabase : RoomDatabase() {
                         MIGRATION_17_18,
                         MIGRATION_18_19,
                         MIGRATION_19_20,
-                        MIGRATION_20_21
+                        MIGRATION_20_21,
+                        MIGRATION_21_22
                     )
                     .build()
                 INSTANCE = instance

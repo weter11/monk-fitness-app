@@ -1084,6 +1084,10 @@
     <string name="programs_session_actual_reps">Repetições reais</string>
     <string name="programs_session_actual_seconds">Segundos reais</string>
     <string name="programs_session_actual_invalid">Digite um número inteiro maior que zero</string>
+    <string name="programs_session_actual_load">Carga (kg)</string>
+    <string name="programs_session_load_invalid">Digite uma carga entre 0,1 e 500 kg</string>
+    <string name="programs_session_reps_invalid">Digite entre 1 e 500 repetições</string>
+    <string name="programs_session_seconds_invalid">Digite entre 1 e 500 segundos</string>
     <string name="programs_session_confirm_set">Confirmar série</string>
     <string name="programs_session_rest">Descanso %1$d s</string>
     <string name="programs_session_rest_value">Descanso entre séries (segundos)</string>
@@ -1161,6 +1165,9 @@
     <string name="progress_performance_rep_row">%1$s \u2014 %2$d observações, melhor %3$d repetições</string>
     <string name="progress_performance_time_row">%1$s \u2014 %2$d observações, melhor %3$d s</string>
     <string name="progress_performance_empty">Nenhuma série comparável foi registrada ainda.</string>
+    <string name="progress_performance_load_row">%1$s \u2014 %2$d observações, melhor %3$s kg × %4$d</string>
+    <string name="progress_performance_load_row_with_volume">%1$s \u2014 %2$d observações, melhor %3$s kg × %4$d, melhor série %5$s kg</string>
+    <string name="progress_performance_load_hold_row">%1$s \u2014 %2$d observações, melhor %3$s kg</string>
     <string name="progress_deferred_title">Ainda não calculado</string>
     <string name="progress_notice_title">Aviso</string>
     <!--
@@ -1250,6 +1257,10 @@
     <string name="progress_volume_reps">%1$d repetições</string>
     <string name="progress_volume_seconds">%1$d s</string>
     <string name="progress_volume_reps_and_seconds">%1$d repetições · %2$d s</string>
+    <string name="progress_volume_kg">%1$s kg</string>
+    <string name="progress_volume_reps_and_kg">%1$d repetições · %2$s kg</string>
+    <string name="progress_volume_seconds_and_kg">%1$d s · %2$s kg</string>
+    <string name="progress_volume_reps_seconds_and_kg">%1$d repetições · %2$s s · %3$s kg</string>
     <string name="progress_unknown_exercise">Exercício desconhecido</string>
     <string name="library_counts_title">Na aplicação</string>
     <string name="library_counts_exercises">Exercícios animados</string>

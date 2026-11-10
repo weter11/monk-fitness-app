@@ -127,6 +127,7 @@ internal object ProgramSchemaFixture {
 
     private val TEXT = "TEXT"
     private val INTEGER = "INTEGER"
+    private val REAL = "REAL"
 
     /**
      * Every target table's columns, in declaration order.
@@ -689,6 +690,12 @@ internal object ProgramSchemaFixture {
         // would claim a rhythm those revisions never had.
         "MIGRATION_20_21" to mapOf(
             "program_revision" to listOf(Column("scheduleIntervalDays", INTEGER, nullable = true))
+        ),
+        // The external load a set was performed with: nullable with no default, because `null` is what
+        // every row written before the column existed holds and what every bodyweight set holds. `0`
+        // would claim a weighed set of zero kilograms and would be addable as zero volume.
+        "MIGRATION_21_22" to mapOf(
+            "program_set_log" to listOf(Column("loadKg", REAL, nullable = true))
         )
     )
 
