@@ -639,6 +639,8 @@ They are classified as an approximation (§11), not as anatomy.
 
 `anatomyOverrides` is the escape hatch for a body family whose *shared* attachment is measurably wrong (for example a
 pelvis-width-dependent origin). It must be sparse, named, and reviewed; it is not a per-character copy of the library.
+An override moves an attachment, never a rig bone or a joint: it cannot repair a rig-to-engine alignment residual
+(§6.6 A1/A2), which is an asset failure fixed in the rig or its calibration.
 
 `BodyProfile` and the overrides are **anatomy inputs only**. They never reach the engine, never change a joint, a pose or
 a `SkeletonDefinition`, and cannot be used to move the body to meet a mesh (§6.6 A3). A profile field that would have to
@@ -686,10 +688,20 @@ bound is reported per joint by `RigAlignmentResidualTest` (L2) together with the
 representative poses (squat bottom, push-up bottom, overhead reach). A measured residual above `τ_residual` (proposed
 5 mm at the most distal mapped joint) fails the asset, not the anatomy.
 
-**A3 — the rig follows anatomy, never the reverse.** If the residual exceeds tolerance, the fix is a better rig, a
-correction in the calibration, or — for a systematically different body family — a reviewed `anatomyOverrides` entry
-(§6.4). Anatomy is never nudged to fit a mesh, and a character is never allowed to move a joint to meet a muscle. An
-override whose stated purpose is to hide an alignment failure is a review defect.
+**A3 — the rig follows anatomy, never the reverse.** If the residual exceeds tolerance, the fix is a better rig (bone
+heads and lengths recalibrated to the engine skeleton) or a correction in the calibration (§6.6 A1/A2, L2). Anatomy is
+never nudged to fit a mesh, and a character is never allowed to move a joint to meet a muscle.
+
+**`anatomyOverrides` cannot repair an alignment residual.** An override changes an *attachment offset* in the shared
+anatomy data (§6.4); it does not move a rig bone head, change a segment length, or alter a rest orientation — the three
+quantities A1 and A2 measure. A residual over `τ_bind` or `τ_residual` is therefore an asset failure (L2), and no
+override entry, however well reviewed, can turn `RigLandmarkAlignmentTest` or `RigAlignmentResidualTest` green: the
+override is not an input to either test. Conversely, a legitimate override (a body family whose *shared* attachment is
+measurably wrong, e.g. a pelvis-width-dependent origin) must be reviewed against A1/A2 **after** the rig already passes
+them, so that a proposed override is never mistaken for a remedy to a failing rig. An override whose stated purpose is
+to hide an alignment failure is a review defect, and the fix belongs in the asset or its calibration. A1/A2 residuals
+and attachment correctness are independent: a rig can satisfy A1/A2 while an attachment is wrong (an L3/L7 matter), and
+an attachment can be correct while the rig fails A1/A2 (an L2 matter).
 
 **What this does not claim.** A1–A3 align *joint landmarks*. They do not claim that the skin surface matches the muscle
 belly, that the authored mesh follows the polyline between helpers (§7.5), or that a body with different proportions is
@@ -848,14 +860,15 @@ for each head:
                 for each segment of the current polyline:
                     if the segment intersects the obstacle (§7.4.1b):
                         insert entry/exit points and one lateral detour waypoint (§7.4.5)
-                for each sample inside an obstacle by more than ε_pen:
+                for each sample inside the inflated obstacle (rw, §7.4.1):
                     push the sample to the inflated surface along the outward normal
-            stop when no sample violates any obstacle by more than ε_pen
+            stop when no sample lies inside any inflated obstacle
   5  smooth the path (Catmull-Rom, 0.25 blend) to remove the faceting projection leaves
   6  VALIDATE the final polyline, segment by segment, against every declared obstacle (§7.4.1):
         smoothing is a geometric operation like every other one and can push the path back inside,
         so the check runs on the final points, not on the pre-smoothing ones;
-        every segment disjoint from every obstacle, every sample clear by ε_pen;
+        every segment disjoint from every (inflated) obstacle, every sample outside the inflated surface by the
+        ε_pen numerical margin;
         any failure, or any result the check cannot establish, → PathStatus.INVALID, stop.
   7  length = Σ |p[i] − p[i−1]|          // along the solved path, NOT the straight chord
   8  tendonLength = originFraction * length + insertionFraction * length
@@ -889,6 +902,7 @@ cw = jointWorldPosition(segment) + R(jointWorldRotation(segment)) · (centreMetr
 Rw = jointWorldRotation(segment)                 // obstacle axes, world space
 rw = (radiiMetres + ε_pen) · s                   // inflated semi-axes, engine units
 
+e  = ε_pen · s                                 // same numerical margin, in engine units
 q0 = Rwᵀ (p_i     − cw) / rw                     // componentwise divide
 qd = Rwᵀ (p_{i+1} − p_i) / rw
 
@@ -899,8 +913,14 @@ c0 = q0 · q0 − 1
 Δ  = b² − 4 a c0
 ```
 
+`rw` is `(radiiMetres + ε_pen) · s` (above): the margin is added in **metres, before** the single `· s` conversion,
+and the same `e = ε_pen · s` is reused wherever the margin is needed alone. Adding `ε_pen` as if it were already in
+engine units under-inflates by a factor of `s` (≈ 247), so a path 0.05 mm inside the correctly inflated surface would
+be reported clear. `cw`, `p_i`, `p_{i+1}` and `q0`/`qd` are all in one frame — world positions, world-space axes `Rw`,
+engine-unit semi-axes — so no mixed-frame comparison remains.
+
 Intersection is `Δ ≥ 0` and the root interval meeting `[0, 1]`; a segment entirely inside the obstacle also intersects,
-because its interval contains part or all of `[0, 1]`.
+because its interval contains part or all of `[0, 1]`. The tolerance policy below applies to `Δ`, not to the roots.
 
 Ignoring `Rw` is not a rounding error, it is a wrong answer: for an obstacle with semi-axes (2, 1) rotated 90°, a short
 world-space segment from `(−0.1, 1.5)` to `(0.1, 1.5)` lies inside the rotated obstacle (normalized squared length
@@ -910,16 +930,36 @@ The test is closed-form, deterministic, allocation-free and **independent of sam
 straight segment enter this ellipsoid" for any obstacle size, including one thinner than the sample spacing. `t0` and
 `t1` are reported, so a failure names the segment, the obstacle and where along the segment the path enters.
 
-**Numeric policy.** The test is specified, not left to the implementation's mood:
+**Numeric policy.** The test is specified, not left to the implementation's mood. Precedence matters: the degeneracy,
+non-finite and tolerance checks below run **before** the discriminant is classified, so a zero-length segment or a bad
+`ε_pen` never reaches the quadratic. In the table `Δ_tol = κ·(b² + abs(4·a·c0))` with `κ = 1e-12` — a relative bound on
+the two products whose difference forms `Δ`, so it scales with the geometry instead of being a fixed absolute epsilon.
+`sign(0) = +1`, i.e. `sign(b) = +1` when `b ≥ 0`, else `−1`; without this convention a symmetric chord starting at the
+obstacle centre gives `b = 0`, `q = 0` and a division by zero in `t1 = c0/q`.
 
 | Concern | Rule |
 | --- | --- |
 | Precision | `Double` throughout; no `Float` intermediates |
-| Stable roots | `q = −(b + sign(b)·√Δ)/2`, `t0 = q/a`, `t1 = c0/q` — avoids the cancellation of the textbook form |
-| Near-tangency | `Δ ≤ Δ_tol` is treated as an intersection; `Δ_tol = κ·(b² + abs(4·a·c0))` with `κ = 1e-12`, so a discriminant lost to rounding fails closed |
-| Degenerate segment | `a = 0` (zero length): the sample test decides; inside → `DEGENERATE_SEGMENT`, outside → clear |
-| Non-finite intermediates | overflow, NaN or infinity anywhere in `cw`, `rw`, `q0`, `qd`, `Δ` → `NON_FINITE_GEOMETRY`, not a verdict |
-| Bad tolerance | `ε_pen` negative or non-finite → `NON_FINITE_GEOMETRY`; a negative margin is never clamped to zero |
+| Stable roots | `q = −(b + sign(b)·√Δ)/2`, `t0 = q/a`, `t1 = c0/q` — avoids the cancellation of the textbook form. `q` is the larger-magnitude root of the restructured quadratic (`q = a·t_large`), so it is nonzero whenever `Δ > Δ_tol` and `a > 0`; the `sign(0) = +1` convention above makes it nonzero for `b = 0` too. Only these two roots are needed: the verdict is decided by `Δ` and the interval `[t0, t1] ∩ [0, 1]`. |
+| Discriminant classification | `Δ > Δ_tol` → compute `t0`, `t1` and intersect `[0, 1]` (the **clear** and **intersecting** cases); `abs(Δ) ≤ Δ_tol` → **near-tangent**, reported as an intersection without computing roots (a discriminant lost to rounding fails closed); `Δ < −Δ_tol` → **clear**, disjoint. The three cases are exhaustive and mutually exclusive, so a negative `Δ` with a large magnitude is never swept into the near-tangent band. |
+| Degenerate segment | `a = 0` (zero length): handled first by the sample test — inside → `DEGENERATE_SEGMENT`, outside → clear. No `Δ` classification runs, so `a = 0` never divides the root formula. |
+| Non-finite intermediates | overflow, NaN or infinity anywhere in `cw`, `rw`, `q0`, `qd`, `Δ` or `Δ_tol` → `NON_FINITE_GEOMETRY`, not a verdict |
+| Bad tolerance | `ε_pen` negative or non-finite → `NON_FINITE_GEOMETRY`; a negative margin is never clamped to zero. `Δ_tol` is derived from `κ`, not from `ε_pen`; the two tolerances are unrelated. |
+
+**Worked cases** (unit sphere, `q0`/`qd` in normalized coordinates, `κ = 1e-12`; all values computed in double precision):
+
+| Case | `q0` | `qd` | `(a, b, c0)` | `Δ` | `Δ_tol` | Verdict |
+| --- | --- | --- | --- | --- | --- | --- |
+| Clear — line misses the ellipsoid | `(2, 0, 0)` | `(0, 1, 0)` | `(1, 0, 3)` | `−12` | `1.2e-11` | `Δ < −Δ_tol` → clear |
+| Clear — infinite line crosses, segment does not | `(2, 0, 0)` | `(1, 0, 0)` | `(1, 4, 3)` | `4` | `2.8e-11` | `Δ > Δ_tol`, but `[t0, t1] = [−3, −1] ∩ [0, 1] = ∅` → clear |
+| Intersecting | `(−2, 0, 0)` | `(4, 0, 0)` | `(16, −16, 3)` | `64` | `4.48e-10` | `Δ > Δ_tol`, `q = 12`, `[t0, t1] = [0.25, 0.75] ∩ [0, 1] ≠ ∅` → intersection |
+| Near-tangent — exact | `(−2, 1, 0)` | `(4, 0, 0)` | `(16, −16, 4)` | `0` | `5.12e-10` | `abs(Δ) ≤ Δ_tol` → intersection (fail closed); tangency at `t = −b/2a = 0.5` |
+| Near-tangent — Δ lost to rounding | `(−2, 1+1e-13, 0)` | `(4, 0, 0)` | `(16, −16, 4)` | `≈ −0` (rounds to 0) | `5.12e-10` | same band → intersection, not a miss |
+| Symmetric chord from the centre — the `q = 0` trap | `(0, 0, 0)` | `(1, 0, 0)` | `(1, 0, −1)` | `4` | `4e-12` | `b = 0`; with `sign(0) = +1`, `q = −1`, `[t0, t1] = [−1, 1] ∩ [0, 1] ≠ ∅` → intersection. With the textbook `sign(0) = 0`, `q = 0` and `t1 = c0/q` is non-finite — which is why the convention is part of this policy. |
+
+The second clear row is the one a discriminant-only test gets wrong: `Δ > 0` alone is not an intersection, the root
+interval must meet `[0, 1]`. The centre-start row is the reason `sign(0)` is pinned: `c0 = −1` (endpoint inside) with
+`b = 0` is otherwise a silent `NON_FINITE_GEOMETRY` from a division by zero rather than the intersection it is.
 
 A verdict produced by an implementation that does not follow this policy is not the verdict this document specifies.
 
@@ -937,14 +977,22 @@ intersection" **and** every sample test returns "outside". Anything else is `Pat
 There is no "probably fine" outcome and no fall-through default. If the check cannot be completed, the path is invalid.
 
 **What the inflation guarantees — and what it does not.** `ε_pen` (proposed `1e-4 m`, fixed at stage 2 against the debug
-overlay) inflates each semi-axis before the test. Two claims must be kept apart:
+overlay) inflates each semi-axis before the test. The inflation is in **engine units**: `rw = (radiiMetres + ε_pen) · s`,
+i.e. the metre-valued margin is added in metres and the whole sum is converted once with `s = unitsPerMetre` (§7.2). A
+margin applied as if it were already in engine units is smaller by a factor of `s`, so the check would accept a path that
+enters the correctly inflated surface; `non_unit_scale` in §12.2.1 is the fixture that catches exactly that error. Two
+claims must be kept apart:
 
 - **True:** if a segment misses the inflated ellipsoid, it misses the original ellipsoid, because the original is
   contained in the inflated one. This is what makes the check safe: it cannot call a penetrating path clear.
 - **False, and previously implied:** that a passing path is at least `ε_pen` from the original surface in Euclidean
   distance. Inflating semi-axes is not the Euclidean offset of an ellipsoid; near regions of high curvature the true
-  clearance can be slightly less than `ε_pen`. `ε_pen` is therefore a **numerical margin**, not a physical clearance
-  specification, and no copy, test name or review note may call it one.
+  Euclidean distance from the path to the original surface can be slightly less than `ε_pen`. `ε_pen` is therefore a
+  **numerical margin** — a guard against floating-point and sampling uncertainty — not a physical clearance
+  specification. No copy, test name, fixture name or review note may describe it as "clearance", "distance from the
+  obstacle", "the declared clearance" or "guaranteed separation"; say "outside the inflated ellipsoid by the numerical
+  margin" instead. The word "clearance" in this document is reserved for the genuinely distance-based test below, which
+  v1 does not implement.
 
 A genuine Euclidean clearance guarantee would need a distance-based test (segment-to-ellipsoid distance ≥ ε), which is a
 different and harder computation. It is not in v1; if a later stage needs it, it is a new contract, not a reinterpretation
@@ -954,15 +1002,16 @@ fixtures signed off against the old value.
 **Where sampling still matters.** Samples remain a construction device: they set the polyline's resolution for length
 and rendering, they give the projection step points to push out, and they define where a tangent kink can be measured.
 Their density no longer determines whether an intersection is detected — the segment test does that — and this document
-makes no claim that any sample spacing "proves" clearance.
+makes no claim that any sample spacing "proves" a Euclidean distance to the obstacle.
 
 **Scope.** All obstacles declared on the muscle plus any the definition marks as global (thorax, pelvis), over the whole
 polyline including tendon portions — a tendon can cut a rib as easily as a belly can.
 
-**What a pass means.** A pass means: every segment of this polyline is disjoint from every declared ellipsoid, and every
-sample clears it by `ε_pen`. That is a statement about the polyline and the ellipsoid model, and nothing more. It is not
-a statement about the anatomical surface, which the ellipsoids only approximate (§7.4.4), and it is not a contact
-simulation (§11).
+**What a pass means.** A pass means: every segment of this polyline is disjoint from every declared inflated ellipsoid,
+and every sample lies outside that inflated surface by the `ε_pen` numerical margin. That is a statement about the
+polyline and the ellipsoid model, and nothing more. It is not a statement about the anatomical surface, which the
+ellipsoids only approximate (§7.4.4), it is not a contact simulation (§11), and it is not a Euclidean clearance
+guarantee (§7.4.1).
 
 **What it does not cover, stated so it is not mistaken for a guarantee.**
 
@@ -972,8 +1021,8 @@ simulation (§11).
 - **A single frame is not a trajectory.** The check is per frame. Motion between frames is bounded by the temporal
   continuity check (§7.4.3), not by this test, so a fast transition can still sweep a muscle through an obstacle
   between two individually valid frames.
-- **The obstacle set is the model.** Clearance from an ellipsoid is not clearance from bone, fascia or skin. A path can
-  pass this test and still look wrong; that is what the L7 review (§12.4) is for.
+- **The obstacle set is the model.** A segment disjoint from an inflated ellipsoid is not thereby disjoint from bone,
+  fascia or skin. A path can pass this test and still look wrong; that is what the L7 review (§12.4) is for.
 - **Floating point.** The quadratic is evaluated in double precision; a discriminant within rounding of zero is treated
   as an intersection, not as a miss. The conservative direction is always chosen.
 
@@ -1056,19 +1105,47 @@ produce a valid route: for a chord through the centre of a sphere, the samples, 
 outward normals all lie on the chord's axis, so projecting and smoothing preserves the axis and the path still passes
 through the obstacle. The `single_obstacle` success case therefore needs a lateral rule.
 
+**Frame and unit ledger (all of §7.4.5).** One frame, one scale, stated once:
+
+| Symbol | Meaning | Frame | Unit |
+| --- | --- | --- | --- |
+| `p_i`, `p_{i+1}`, `m`, `cw` | polyline points and obstacle centre | world | engine units |
+| `d̂`, `u`, `lateral` | directions (unit vectors, frame-independent magnitude) | world | dimensionless |
+| `Rw` | obstacle axes (§7.4.1b) | local → world rotation | dimensionless |
+| `rw` | inflated semi-axes `(radiiMetres + ε_pen) · s` | obstacle-local axes | engine units |
+| `e = ε_pen · s` | the same numerical margin, on its own | — | engine units |
+| `d_1`, `d_k`, `h(l̂_d)` | detour distances | world length | engine units |
+
+Every distance added to a world point is in engine units; `ε_pen` is **metres** and never enters a sum until it has been
+multiplied by `s = unitsPerMetre` (§7.2). A direction fed into `h` is first mapped to the obstacle's local frame with
+`Rwᵀ`, because `rw` lives on those axes. Mixing these — a metre-valued `ε_pen` added to engine-unit `rw`, or a
+world-space direction used as if it were local — is the defect class the fixtures below catch.
+
 **Lateral detour rule.** For each obstacle a segment intersects:
 
 ```
-d̂ = normalize(p_{i+1} − p_i)                  // chord direction
-m = (p_i + p_{i+1}) / 2                        // chord midpoint
-u = (m − cw) − ((m − cw) · d̂) d̂               // lateral component of the chord offset
+d̂ = normalize(p_{i+1} − p_i)                  // chord direction, world
+m = (p_i + p_{i+1}) / 2                        // chord midpoint, world
+u = (m − cw) − ((m − cw) · d̂) d̂               // lateral component of the chord offset, world
 
-lateral = normalize(u)                         if |u| > u_min (proposed 1e-6 m)
-        = obstacle-local axis least aligned with d̂, in x → y → z order on ties   otherwise
+d̂_local = Rwᵀ · d̂                              // the chord direction in OBSTACLE-LOCAL axes
+lateral = normalize(u)                         if |u| > u_min (proposed 1e-6 m → 1e-6 · s engine units)
+        = Rw · (local axis least aligned with d̂_local, x → y → z on ties)   otherwise
+        // fallback is chosen in the local frame and rotated back to world; it is a direction, so no scale applies
 
-d_1 = h(l̂) + ε_pen                             // h = support function, √Σ (rw_i · l̂_i)²
+l̂_d = Rwᵀ · lateral                           // the chosen world direction, back in local axes
+d_1 = h(l̂_d) + e                              // h = support function, √Σ (rw_i · l̂_d_i)²
 d_k = 1.5 · d_{k−1}                            // escalate on each further pass, capped by the corridor limit
 ```
+
+`h(l̂_d) = √Σ (rw_i · l̂_d_i)²` is the support function of the **inflated** ellipsoid (`rw` already contains `e`): it is
+the distance from `cw` to the tangent plane in the `l̂_d` direction, in engine units. `d_1` adds `e` on top, so every
+distance in the rule is engine-unit and `ε_pen` is converted exactly once. The fallback picks the local axis least
+aligned with `d̂_local = Rwᵀ d̂`; choosing among world axes assumes `Rw = I` and is wrong for a rotated obstacle, and the
+chosen axis is rotated back with `Rw` before it is used as a world direction.
+
+For a sphere (`rw = (R + e, R + e, R + e)`, `R = radiiMetres · s`), `h` is `R + e` for any `l̂_d`, so `d_1 = R + 2e`,
+which in metres is `radiiMetres + 2·ε_pen`. The rule therefore never inflates twice by accident and never mixes frames.
 
 Insert **one** waypoint at `cw + lateral · d_k` — one side only. Two waypoints on opposite sides would make the path
 cross the obstacle between them, which is the failure this rule exists to avoid. The side is chosen by the rule above
@@ -1077,10 +1154,22 @@ the declared corridor limit) rather than flipping sides, so the outcome stays de
 limit is `NO_ROUTE`.
 
 Escalation is not decoration: a waypoint placed exactly at the support distance leaves the two connecting segments
-grazing the surface, because they approach obliquely. For a 20 mm obstacle on a 0.29 m chord, the first placement at
-`h + ε_pen` = 20.1 mm gives a closest approach of 19.91 mm — still inside — while the first escalated placement at
-30 mm clears it at 29.38 mm. The rule therefore treats `h + ε_pen` as a starting guess and lets the validator, not the
-guess, decide.
+grazing the surface, because they approach obliquely. For a 20 mm sphere on a 0.29 m chord, `d_1 = R + 2e` = 20.2 mm
+gives a closest segment approach of 20.0068 mm — still inside the 20.1 mm inflated radius — while the first escalated
+placement at `1.5·d_1` = 30.3 mm leaves both connecting segments disjoint from the inflated sphere (closest approach
+29.6594 mm > 20.1 mm). The rule therefore treats `d_1` as a starting guess and lets the validator, not the guess,
+decide. (The anisotropic case below needs no escalation; this sphere example is the one that does.)
+
+**Worked frame check — `rotated_anisotropic`.** One obstacle with local semi-axes 40 × 10 × 20 mm, `Rw` = +90° about Z
+(local X → world +Y), `ε_pen` = 0.1 mm, chord `(−145, 0, 0) → (145, 0, 0)` mm in world X through `cw`. Here
+`d̂ = (1, 0, 0)`, `u = 0` (midpoint at the centre), and `Rwᵀ d̂ = (0, −1, 0)`: the local axes least aligned with it are
+X and Z (both dot 0), so the tie order picks local X, rotated back to world `(0, 1, 0)`. Correctly, `l̂_d = (1, 0, 0)`
+and `h = rw_x` = 40.1 mm → `d_1` = 40.2 mm, at which both connecting segments are already disjoint (`Δ ≈ −0.10`,
+`Δ_tol ≈ 3.4e-7`); `d_2` = 60.3 mm is a wider margin (`Δ ≈ −1030.8`). Choosing the fallback in world axes instead
+(world +Y fed straight into `h` as if local) gives `h = rw_y` = 10.1 mm, a waypoint 10.2 mm from the centre — still
+inside the 40.1 mm inflated boundary — so the validator rejects it (`Δ ≈ 771` > `Δ_tol`). The `rotated_anisotropic`
+fixtures in §12.2.1 pin both halves: the validator must honour `Rw`, and the constructor must transform the fallback and
+the support direction.
 
 **What it guarantees, and what it does not.** The rule is deterministic, bounded (≤ 1 detour waypoint per hit per pass,
 plus its entry/exit samples, with the pass cap `K`), and sufficient for a single convex obstacle and for short sequences
@@ -1506,7 +1595,7 @@ Seven levels, each with one owner, one report and an explicit automation status.
 | **L1 Motion** | 18 existing rules over joint-space geometry (`ExerciseValidator.kt:47-90`) | yes, unchanged | all | the pose/engine is wrong; block |
 | **L2 Rig** | bone coverage, rest invariant, inverse binds, side/handedness, unit scale, bone budget, landmark alignment (§6.6) | yes | all | the asset or map is wrong; block |
 | **L3 Attachments** | every attachment's joint exists; offset inside a segment envelope; L/R mirror; head count; origin ≠ insertion; span ≥ 2 segments | yes | all | the anatomy data is wrong; block |
-| **L4 Path** | every segment of the final polyline tested analytically against every obstacle (closed-form segment–ellipsoid), plus sample clearance by `ε_pen`; unverifiable geometry reported `INVALID`; deterministic outcome for overlapping, nested and impossible routes; tangent and curvature continuity at entry/exit; temporal continuity; rest-length tolerance vs measured reference | yes, with adversarial fixtures | all | the solver or the data is wrong; block |
+| **L4 Path** | every segment of the final polyline tested analytically against every obstacle (closed-form segment–ellipsoid), plus a sample-outside-inflated-surface check using the `ε_pen` numerical margin; unverifiable geometry reported `INVALID`; deterministic outcome for overlapping, nested and impossible routes; tangent and curvature continuity at entry/exit; temporal continuity; rest-length tolerance vs measured reference | yes, with adversarial fixtures | all | the solver or the data is wrong; block |
 | **L5 Mesh** | self-intersection, degenerate triangles, weight sums, volume sanity per muscle, helper-bone bind match | partly (tool) | **subset** (§12.5) | the mesh is wrong; block release, not build |
 | **L6 Morphology** | per-preset rest invariant, joint-ring preservation under morphs, delta bounds, anatomy still inside the body | yes | **subset** (§12.5) | a preset breaks the rig; block the preset |
 | **L7 Anatomical review** | A1–A6 in §12.4: attachment locations, position vs bone and body surface, visible intersections, shape/path plausibility across poses, preset consistency, provenance | no — human, **required for M1** | all | the model is not accepted; M1 does not ship |
@@ -1534,7 +1623,7 @@ Seven levels, each with one owner, one report and an explicit automation status.
 | `BoneMapCoverageTest` | L2 | 23 mapped joints resolve; unmapped joints are declared, not accidental |
 | `RigSideTest` | L2 | `Left*` bones on the same side as anatomy side A in the rest pose |
 | `AnatomyDefinitionTest` | L3 | ids unique; attachments resolve; envelope bounds; L/R mirror; heads consistent |
-| `MusclePathGeometryTest` | L4 | arc length ≥ chord; every segment of the smoothed polyline is disjoint from every obstacle at the declared clearance; deterministic across runs and buffer reuse |
+| `MusclePathGeometryTest` | L4 | arc length ≥ chord; every segment of the smoothed polyline is disjoint from every inflated obstacle, and every sample lies outside the inflated surface by the `ε_pen` numerical margin; deterministic across runs and buffer reuse |
 | `MusclePathObstacleFixtureTest` | L4 | the validator fixtures (§12.2.1) return the expected verdict, and the solver fixtures return the expected final path or the expected failure reason — never silently |
 | `MusclePathContinuityTest` | L4 | C0, tangent bound at entry/exit, curvature bound, and frame-to-frame displacement at matched arc-length stations within `δ_frame` |
 | `MuscleLengthDeterminismTest` | L4 | the same pose produces the same length across runs, buffer reuse and definition reload; no discontinuity beyond tolerance across a sampled motion |
@@ -1575,9 +1664,17 @@ at once, and only a split table can say so.
 | Fixture | Configuration | Expected verdict |
 | --- | --- | --- |
 | `raw_clear` | a polyline that clears every obstacle | `VALID` |
+| `clear_negative_discriminant` | unit-sphere case `(q0, qd) = ((2,0,0), (0,1,0))`: `Δ = −12 ≪ −Δ_tol` | `VALID` — disjoint; a test that maps a large negative `Δ` into the near-tangent band fails here |
+| `clear_roots_outside_segment` | unit-sphere case `((2,0,0), (1,0,0))`: `Δ = 4` > `Δ_tol` but roots `[−3, −1] ∩ [0, 1] = ∅` | `VALID` — the infinite line crosses the ellipsoid but the finite segment does not; a `Δ ≥ 0`-only verdict fails here |
+| `intersecting` | unit-sphere case `((−2,0,0), (4,0,0))`: `Δ = 64`, roots `[0.25, 0.75]` | `INVALID` — `SEGMENT_INTERSECTS_OBSTACLE` |
+| `near_tangent_exact` | unit-sphere case `((−2,1,0), (4,0,0))`: `Δ = 0`, `Δ_tol = 5.12e-10` | `INVALID` — `abs(Δ) ≤ Δ_tol` fails closed; tangency is rejected, not accepted (§7.4.1, §7.4.4) |
+| `near_tangent_rounding` | same with `q0 = (−2, 1+1e-13, 0)`: `Δ` rounds to `≈ −0` | `INVALID` — still inside the near-tangent band; a test that treats a slightly negative `Δ` as clear fails here |
+| `q_zero_centre_start` | unit-sphere case `((0,0,0), (1,0,0))`: `b = 0`, `c0 = −1`, `Δ = 4` | `INVALID` — `SEGMENT_INTERSECTS_OBSTACLE`. With `sign(0) = +1`, `q = −1` and roots `[−1, 1] ∩ [0, 1] ≠ ∅`; a textbook `sign(0) = 0` gives `q = 0` and a non-finite `t1`, so the fixture fails that implementation (§7.4.1) |
 | `outside_endpoints_crossing_obstacle` | thin ellipsoid on the chord, both segment endpoints outside | `INVALID` — `SEGMENT_INTERSECTS_OBSTACLE`; a sample-only check wrongly accepts it |
 | `raw_crossing_thick` | chord through a thick obstacle, samples inside | `INVALID` — `SEGMENT_INTERSECTS_OBSTACLE` |
 | `rotated_obstacle` | an obstacle rotated with its segment, segment clear only in the unrotated frame | `INVALID` — a test that ignores `Rw` misses it (§7.4.1b) |
+| `rotated_anisotropic` | local semi-axes 40 × 10 × 20 mm, `Rw` = +90° about Z (local X → world +Y); straight chord `(−100, 15, 0) → (100, 15, 0)` mm | `INVALID` — `SEGMENT_INTERSECTS_OBSTACLE` with the correct `Rw` (`Δ ≈ 1349` > `Δ_tol`); a test that drops `Rw` reports clear (`Δ ≈ −120`). Exercises the frame transform on a non-spherical obstacle, not just a rotation |
+| `non_unit_scale` | sphere `radiiMetres` = 0.020 m, chord `(−100, 20.05, 0) → (100, 20.05, 0)` mm; `s = 235/0.95 ≈ 247.4`, `ε_pen` = 0.1 mm | `INVALID` — `SEGMENT_INTERSECTS_OBSTACLE`. Correct inflation `rw = (0.020 + ε_pen) · s` = 20.1 mm gives `Δ ≈ 1.97` > `Δ_tol`; applying `ε_pen` as if it were engine units (omitting `· s`) gives 20.0004 mm and `Δ ≈ −1.99`, a false clear. Paired control: move the chord to `y = 20.15 mm` (0.05 mm beyond the inflated surface) → `VALID`, so the fixture cannot pass by rejecting everything |
 | `endpoint_inside` | an attachment resolved inside a declared obstacle | `INVALID` — `ENDPOINT_INSIDE_OBSTACLE` |
 | `non_finite` | a NaN coordinate or radius | `INVALID` — `NON_FINITE_GEOMETRY` |
 | `degenerate_obstacle` | a zero or negative semi-axis | `INVALID` — `DEGENERATE_OBSTACLE` |
@@ -1587,19 +1684,21 @@ at once, and only a split table can say so.
 | Fixture | Configuration | Expected result |
 | --- | --- | --- |
 | `single_obstacle` | one ellipsoid between two attachments, chord through its centre | `VALID`; the §7.4.5 lateral rule routes around it; every segment disjoint |
-| `multiple_obstacles` | two obstacles in series along the route | `VALID`; clears both after smoothing |
+| `rotated_anisotropic` | the `rotated_anisotropic` validator geometry as a solver run: local semi-axes 40 × 10 × 20 mm, `Rw` = +90° about Z, chord `(−145, 0, 0) → (145, 0, 0)` mm through the centre | `VALID`; the §7.4.5 fallback picks local X (tie X/Z), rotates it to world +Y, and `h(l̂_d)` = `rw_x` = 40.1 mm gives `d_1` = 40.2 mm with both segments disjoint (`Δ ≈ −0.10`). Choosing the fallback among world axes, or using the world direction directly as the support argument, yields `h` = 10.1 mm and a waypoint still inside the obstacle → `INVALID`; the fixture fails that implementation |
+| `multiple_obstacles` | two obstacles in series along the route | `VALID`; every segment disjoint from both after smoothing |
 | `overlapping_obstacles` | two ellipsoids that intersect each other | `VALID` outside the union; identical result for the same declaration order |
 | `nested_obstacles` | a small ellipsoid fully inside a large one | `VALID` outside the outer surface |
-| `near_tangent` | an obstacle whose surface is tangent to the straight chord | `VALID`; no oscillation; tangent check within `θ_max` |
+| `near_tangent` | an obstacle whose surface is tangent to the straight chord | `VALID`; the solver routes around it so the **final** polyline is strictly disjoint (`Δ < −Δ_tol`, not merely `abs(Δ) ≤ Δ_tol`); no oscillation; tangent check within `θ_max`. This is the solver half of the split: the raw tangent chord is rejected by the validator (§12.2.1 `near_tangent_exact`), but a detour that clears the near-tangent band is a legitimate `VALID` result |
 | `no_valid_route` | obstacles that close the corridor between the attachments | `INVALID` — `NO_ROUTE`; the frame reports it and nothing is drawn along it |
 | `pass_cap` | a configuration that oscillates between two surfaces | `INVALID` — `PASS_CAP`; deterministic and terminating, not a hang |
 
 **`outside_endpoints_crossing_obstacle`, constructed so it cannot pass by accident.** One ellipsoid with semi-axes
 4 mm × 2 mm × 2 mm centred on the straight chord between two attachments 0.29 m apart, with the polyline running along
-the ellipsoid's long axis through its centre. At the 0.01 m base spacing the samples land at ±5 mm from the centre,
-where `|q| = 5/4 = 1.25 > 1`: **no sample is inside the obstacle, and no segment has one endpoint inside**, so the
-sample check and a boundary-straddle refinement rule both report "clear" while the path passes through the obstacle's
-centre. The segment test returns `Δ > 0` with both roots inside `[0, 1]` and reports `SEGMENT_INTERSECTS_OBSTACLE`.
+the ellipsoid's long axis through its centre. With `ε_pen` = 0.1 mm the inflated long semi-axis is 4.1 mm (§7.4.1). At
+the 0.01 m base spacing the samples land at ±5 mm from the centre, where `|q| = 5/4.1 ≈ 1.22 > 1`: **no sample is
+inside the inflated obstacle, and no segment has one endpoint inside**, so the sample check and a boundary-straddle
+refinement rule both report "clear" while the path passes through the obstacle's centre. The segment test returns
+`Δ ≈ 23.8` > `Δ_tol` with roots `[0.09, 0.91] ∩ [0, 1] ≠ ∅` and reports `SEGMENT_INTERSECTS_OBSTACLE`.
 
 The obstacle is deliberately thinner than the sample spacing, because the check must not depend on an obstacle being
 fatter than the polyline's resolution. Its paired control is the same geometry with the chord offset 5 mm laterally,
