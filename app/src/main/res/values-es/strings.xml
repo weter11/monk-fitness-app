@@ -786,9 +786,8 @@
     <string name="validation_dead_hang_p2">Geometría del colgado y cintura escapular</string>
     <string name="validation_dead_hang_p3">Proporciones de brazos y orientación de muñecas</string>
 
-    <!-- C2 — the exercise hero's camera mode toggle: the opt-in dynamic "camera push-in" (per-frame framing). OFF by default; the default presentation draws the exercise at one static frame. -->
-    <string name="camera_dynamic">Cámara dinámica</string>
 
+    <string name="exercise_animation_hero">Animación del ejercicio</string>
     <string name="ok">Aceptar</string>
 
     <!-- C3 Manual Controls -->

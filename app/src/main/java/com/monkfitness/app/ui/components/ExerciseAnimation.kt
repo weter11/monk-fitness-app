@@ -2,19 +2,12 @@ package com.monkfitness.app.ui.components
 
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.Canvas
-import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.material3.FilterChip
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.saveable.rememberSaveable
-import androidx.compose.runtime.setValue
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
@@ -23,11 +16,9 @@ import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
-import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
-import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
-import com.monkfitness.app.R
+import com.monkfitness.app.animation.AnimationController
 import com.monkfitness.app.animation.AnimationState
 import com.monkfitness.app.animation.Camera
 import com.monkfitness.app.animation.CameraFraming
@@ -48,27 +39,36 @@ import com.monkfitness.app.ui.components.animation.poseAt
 import kotlin.math.max
 import kotlin.math.sqrt
 
+/**
+ * The animated exercise visual. The hero's single gesture layer owns [controller] (rotation); for
+ * the non-hero callers (thumbnails, the detail screen) a local controller is created so the rep still
+ * plays. The frame is always the exercise's own fixed frame, derived for the surface this box is
+ * given — the hero frames it into the safe band, so the rig never reaches the overlay.
+ */
 @Composable
 fun ExerciseAnimatedVisual(
     exerciseId: String,
     animationId: String,
     animation: SkeletonAnimation,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    controller: AnimationController? = null
 ) {
     val poseConfig = PoseRegistry.getPoseConfig(animationId)
+    // A non-hero caller has no gesture layer, so the rep advances through its own controller; its
+    // cameraYawOffset stays zero (no rotation gesture there).
+    val localController = poseConfig?.let { cfg ->
+        rememberAnimationController(metadata = cfg.builder.metadata, alternating = cfg.alternating)
+    }
+    val active = controller ?: localController
 
-    if (poseConfig != null) {
+    if (poseConfig != null && active != null) {
         val metadata = poseConfig.builder.metadata
-        val controller = rememberAnimationController(
-            metadata = metadata,
-            alternating = poseConfig.alternating
-        )
         val definition = SkeletonDefinition.DEFAULT_ADULT
         val cameraDefinition = metadata.camera
 
         val camera = remember(cameraDefinition) { Camera(cameraDefinition) }
         val animatedYaw by animateFloatAsState(
-            targetValue = cameraDefinition.defaultYaw + controller.cameraYawOffset,
+            targetValue = cameraDefinition.defaultYaw + active.cameraYawOffset,
             animationSpec = spring(stiffness = Spring.StiffnessLow),
             label = "CameraRotation"
         )
@@ -79,11 +79,6 @@ fun ExerciseAnimatedVisual(
             SkeletonEngine(definition, style)
         }
 
-        // The camera mode. The default presentation is the exercise's own static frame: one zoom and one
-        // anchor for the whole rep, derived before the first frame is drawn, so the subject cannot push in
-        // and pull out as it moves. The dynamic per-frame fit is the opt-in mode, OFF by default.
-        var dynamicCamera by rememberSaveable { mutableStateOf(false) }
-
         BoxWithConstraints(modifier = modifier) {
             // The canvas below fills this box exactly, so its surface IS this constraint — the frame
             // is derived for the surface the athlete is drawn on.
@@ -92,30 +87,24 @@ fun ExerciseAnimatedVisual(
             val heightPx = with(density) { maxHeight.toPx() }
 
             val framing = remember(engine) { CameraFraming(engine) }
-            // Derived BEFORE the frame's own pose is built below: the pre-pass plays the builder, and a
-            // builder publishes into a reused carrier.
-            val staticFrame = remember(engine, poseConfig, cameraDefinition, widthPx, heightPx, dynamicCamera) {
-                if (dynamicCamera) {
-                    null
-                } else {
-                    framing.exerciseFrame(
-                        // The authored viewpoint, never the live (gesture-rotated) one: the frame is a
-                        // function of the exercise, not of where the camera happens to be pointing.
-                        camera = Camera(cameraDefinition),
-                        builder = poseConfig.builder,
-                        // The sides the play advances through: an alternating exercise plays both.
-                        sides = if (poseConfig.alternating) listOf(Side.RIGHT, Side.LEFT) else listOf(Side.RIGHT),
-                        width = widthPx,
-                        height = heightPx
-                    )
-                }
+            // One zoom and one anchor for the whole rep: the authored viewpoint, never the live
+            // (gesture-rotated) one, so the frame is a function of the exercise, not of where the
+            // camera happens to be pointing.
+            val staticFrame = remember(engine, poseConfig, cameraDefinition, widthPx, heightPx) {
+                framing.exerciseFrame(
+                    camera = Camera(cameraDefinition),
+                    builder = poseConfig.builder,
+                    sides = if (poseConfig.alternating) listOf(Side.RIGHT, Side.LEFT) else listOf(Side.RIGHT),
+                    width = widthPx,
+                    height = heightPx
+                )
             }
 
-            val curveProgress = MotionCurves.transform(metadata.motionCurve, controller.progress)
+            val curveProgress = MotionCurves.transform(metadata.motionCurve, active.progress)
             val poseContext = PoseContext(
                 state = AnimationState(
                     progress = curveProgress,
-                    side = controller.side
+                    side = active.side
                 ),
                 definition = definition
             )
@@ -130,29 +119,7 @@ fun ExerciseAnimatedVisual(
                 // (`SupportDefinition.supportPoints`), not a hand-rolled copy of it.
                 supportedPoints = metadata.support.supportPoints,
                 staticFrame = staticFrame,
-                modifier = Modifier
-                    .fillMaxSize()
-                    .pointerInput(Unit) {
-                        detectDragGestures { change, dragAmount ->
-                            change.consume()
-                            // Sensitivity: roughly 180 degrees (PI) across 600dp
-                            val sensitivity = 3.14159f / 600f
-                            controller.onRotate(dragAmount.x * sensitivity)
-                        }
-                    }
-            )
-
-            FilterChip(
-                selected = dynamicCamera,
-                onClick = { dynamicCamera = !dynamicCamera },
-                label = {
-                    Text(
-                        text = stringResource(R.string.camera_dynamic),
-                        style = MaterialTheme.typography.labelSmall
-                    )
-                },
-                modifier = Modifier
-                    .align(Alignment.BottomEnd)
+                modifier = Modifier.fillMaxSize()
             )
         }
         return

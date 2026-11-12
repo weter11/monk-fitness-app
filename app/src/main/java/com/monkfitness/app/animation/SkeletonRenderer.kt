@@ -33,11 +33,10 @@ fun SkeletonRenderer(
     showGround: Boolean = true,
     highlightedJoint: Joint? = null,
     screenSpaceSettings: ScreenSpaceSettings = ScreenSpaceSettings.DEFAULT,
-    // The exercise's static frame, derived once by [CameraFraming.exerciseFrame] for the whole motion
-    // and applied to every frame of the rep — the default presentation, and the reason the subject
-    // does not push in and out as it moves. A caller with no exercise (a single off-screen frame)
-    // omits it and gets the frame derived from the frame itself ([CameraFraming.frameZoom]), which is
-    // also the opt-in dynamic "camera push-in" mode.
+    // A single off-screen frame (a validation pose, a bare snapshot) has no motion to derive an
+    // exercise frame from, so the caller omits [staticFrame] and the frame is fitted from that one
+    // frame's own drawn bounds ([CameraFraming.frameZoom]). The exercise hero always supplies
+    // [staticFrame]: its framing is fixed for the whole rep and never re-fitted per drawn frame.
     staticFrame: CameraFrame? = null
 ) {
     val style = engine.style
@@ -61,10 +60,9 @@ fun SkeletonRenderer(
         val height = size.height
 
         val finalizedPose = pipeline.produceFrame(pose, environment, supportedPoints).pose
-        // The default presentation draws every frame at the one frame its motion was fitted to
-        // (`staticFrame`), so the subject's size cannot breathe. Without one, the frame is derived
-        // from the bounds of the frame about to be drawn — the opt-in dynamic camera push-in
-        // (image-identical when the frame already fits).
+        // The exercise hero draws every frame at the one frame its motion was fitted to (`staticFrame`),
+        // so the subject's size cannot breathe. A caller without a motion (a bare off-screen frame)
+        // fits that one frame's own bounds.
         val frame = staticFrame
         if (frame != null) frame.applyTo(camera)
         else camera.zoom = framing.frameZoom(camera, finalizedPose, width, height)

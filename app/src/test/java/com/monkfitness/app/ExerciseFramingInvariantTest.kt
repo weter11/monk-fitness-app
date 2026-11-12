@@ -249,24 +249,6 @@ class ExerciseFramingInvariantTest {
             }
         }
 
-        // ... and the opt-in dynamic mode genuinely breathes, so the toggle is a mode and not a no-op
-        // (measured per-frame ranges: burpee 0.585..1.300, cossack squat 0.856..1.300, squat
-        // 0.849..1.200, kettlebell swing 0.900..1.233)
-        for (name in BREATHING_POSES) {
-            val definition = cameraOf(name)
-            val pipeline = SkeletonPipeline(DEF)
-            val zooms = PHASES.map { phase ->
-                val camera = Camera(definition)
-                camera.yaw = definition.defaultYaw
-                framing.frameZoom(camera, publishedFrameOf(name, phase, Side.RIGHT, pipeline), HERO.first, HERO.second)
-            }
-            assertTrue(
-                "$name: the dynamic mode must still re-frame every drawn frame (measured " +
-                    "${zooms.min()} .. ${zooms.max()}), while the exercise frame is one value " +
-                "(${frameOf(name, HERO).zoom})",
-                zooms.max() - zooms.min() > 0.05f
-            )
-        }
     }
 
     @Test
@@ -446,28 +428,6 @@ class ExerciseFramingInvariantTest {
     }
 
     @Test
-    fun theDynamicModeIsUnchangedAndOptIn() {
-        for (entry in DYNAMIC_MODE_PINS) {
-            val name = entry.key
-            val definition = cameraOf(name)
-            val camera = Camera(definition)
-            camera.yaw = definition.defaultYaw
-            val zoom = framing.frameZoom(
-                camera, publishedFrameOf(name, 0.5f, Side.RIGHT, SkeletonPipeline(DEF)), HERO.first, HERO.second
-            )
-            assertEquals(
-                "$name: the opt-in dynamic mode must stay exactly the per-frame fit C1 shipped",
-                entry.value.toDouble(), zoom.toDouble(), 0.001
-            )
-            assertTrue(
-                "$name: the two modes must be different rules (dynamic=$zoom, " +
-                    "exercise=${frameOf(name, HERO).zoom})",
-                abs(zoom - frameOf(name, HERO).zoom) > 0.01f
-            )
-        }
-    }
-
-    @Test
     fun propPosesKeepTheirFurniture() {
         var checked = 0
         for (name in productionPoseClasses()) {
@@ -563,13 +523,6 @@ class ExerciseFramingInvariantTest {
         val ALTERNATING_POSES = setOf("StaticBirdDogHoldPose", "AlternatingBirdDogPose")
 
         /**
-         * The poses whose rep moves fastest, measured as the per-frame fit's own range over the rep:
-         * burpee `0.585..1.300`, cossack squat `0.856..1.300`, squat `0.849..1.200`, kettlebell swing
-         * `0.900..1.233`. These are where the deleted camera push-in was at its most visible.
-         */
-        val BREATHING_POSES = listOf("BurpeePose", "CossackSquatPose", "SquatPose", "KettlebellSwingPose")
-
-        /**
          * The poses whose rep is a standing / overhead excursion: measured on the hero canvas, the
          * exercise frame is *larger* than the per-frame fit at the mid-rep frame (`StandardPullUp`
          * `0.654 -> 0.873`, `StepUp` `0.784 -> 1.061`, `JumpSquat` `0.766 -> 1.030`, the lunges
@@ -635,16 +588,6 @@ class ExerciseFramingInvariantTest {
             "WallSlidesPose" to 0.8894f,
             "FacePullPose" to 0.8736f,
             "BurpeePose" to 0.7709f
-        )
-
-        /**
-         * The per-frame fit at the mid-rep frame on the hero canvas, measured on this tree — the
-         * opt-in mode's own numbers, which the default-mode change must not have moved.
-         */
-        val DYNAMIC_MODE_PINS = mapOf(
-            "StandardPullUpPose" to 0.654f,
-            "SquatPose" to 1.114f,
-            "AirSquatPose" to 1.101f
         )
 
         /** The frames the hero derived, memoized by (pose class, canvas): the derivation plays the rep. */

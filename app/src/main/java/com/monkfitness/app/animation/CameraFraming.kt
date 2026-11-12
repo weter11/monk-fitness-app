@@ -30,7 +30,8 @@ data class CameraFrame(val zoom: Float, val centerX: Float, val centerY: Float) 
  * onto, and a frame derived from each drawn frame's own bounds makes the subject's size breathe as
  * the rep folds and unfolds. So [exerciseFrame] derives the frame once, from the exercise's whole
  * drawn motion at every yaw the pose declares reachable, and every drawn frame uses it; [frameZoom]
- * is the opt-in dynamic mode that re-derives it per drawn frame.
+ * is the per-frame fit used only where a single bare frame has no motion to fit against (off-screen
+ * validation poses and bare snapshots) — the exercise hero never uses it.
  *
  * Both obey the same ceiling: the frame never exceeds [Camera.authoredZoom], so a pose's composition
  * intent is an upper bound the runtime only ever clips against the surface it is given — the frame
@@ -219,7 +220,7 @@ class CameraFraming(
         measure.zoom = 1f
         measure.centerX = 0f
         measure.centerY = 0f
-        // The anchor is the pose's own: the dynamic mode touches the zoom alone.
+        // The anchor is the pose's own: the per-frame fit touches the zoom alone.
         val content = frameBox
         measureInto(pose, width, height, withGround = false, into = content)
 

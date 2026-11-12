@@ -1,6 +1,5 @@
 package com.monkfitness.app.ui.screens
 
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -26,8 +25,6 @@ import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CenterAlignedTopAppBar
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
@@ -54,15 +51,13 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
@@ -70,7 +65,8 @@ import com.monkfitness.app.R
 import com.monkfitness.app.data.model.Exercise
 import com.monkfitness.app.domain.prescription.PrescriptionDimension
 import com.monkfitness.app.platform.VibrationFeedback
-import com.monkfitness.app.ui.components.ExerciseHeroMedia
+import com.monkfitness.app.ui.components.HeroOverlay
+import com.monkfitness.app.ui.components.MediaHero
 import com.monkfitness.app.ui.components.MonkButton
 import com.monkfitness.app.ui.programs.ProgramSessionController
 import com.monkfitness.app.ui.programs.ProgramSessionNotice
@@ -90,41 +86,9 @@ private const val SECONDS_STEP = 5
 /** What separates two exercise names one completion's line lists. */
 private const val PERFORMED_NAME_SEPARATOR = ", "
 
-/** A card's own vertical cost that is not content: its padding and the gaps around the demo. */
-private val CARD_CHROME = 48.dp
-
-/**
- * What the demo is reduced to when there is no room for a preview: the height it held before it could be
- * previewed at all, so a tight screen is no worse than it was. Still an invitation to the full one.
- */
-private val HERO_COLLAPSED = 80.dp
-
-/** The smallest restore-demo that reads as the next movement, and its ceiling. */
-private val REST_HERO_MIN = 120.dp
-private val REST_HERO_MAX = 360.dp
-
-/** The active set's demo: a preview of the movement being done, not the screen's subject. */
-private val FOCUS_HERO_MIN = 120.dp
-private val FOCUS_HERO_MAX = 200.dp
-
-/**
- * The demo's height for the room there is.
- *
- * [availableHeight] is what the screen and the pinned controls leave and [cardBody] is what the card's own
- * text, timer and inputs already need, both measured — nothing here assumes a device. A preview too short
- * to read becomes the thumbnail rather than nothing: the tap is the way to the full demo.
- */
-private fun previewHeight(availableHeight: Dp, cardBody: Dp, min: Dp, max: Dp): Dp {
-    val room = availableHeight - cardBody - CARD_CHROME
-    return if (room >= min) room.coerceAtMost(max) else HERO_COLLAPSED
-}
-
-/** Reports a node's measured height, so a sibling can take what that node leaves. */
-@Composable
-private fun Modifier.reportHeight(onHeight: (Dp) -> Unit): Modifier {
-    val density = LocalDensity.current
-    return onSizeChanged { size -> onHeight(with(density) { size.height.toDp() }) }
-}
+/** The requested overlay-zone heights; HeroGeometry caps each to a fraction of the hero. */
+private const val HERO_OVERLAY_TOP_DP = 64f
+private const val HERO_OVERLAY_BOTTOM_DP = 56f
 
 /**
  * **The workout session screen** — the one production workout runtime.
@@ -478,6 +442,9 @@ private fun PresentingSession(
 
     // The demo the user opened, kept out of the timer state above so opening it cannot touch a countdown.
     var expandedDemo by remember { mutableStateOf<Exercise?>(null) }
+    val currentDemo = current?.let { exerciseOf(it.exerciseId) }
+    val restDemo = state.restNext?.let { next -> exerciseOf(next.exerciseId) }
+    val heroExercise = if (state.isResting) restDemo else currentDemo
 
     // The countdown writes what it has measured into the field the user confirms, so one value is stored
     // whether the set ran to zero or was stopped early.
@@ -504,22 +471,14 @@ private fun PresentingSession(
         }
     }
 
+    // Weighted hero (0.66) + weighted scrollable details (0.24), with wrap-content header and a
+    // pinned primary action: the hero is always the largest element and the primary action is always
+    // on screen — no measurement feedback loop, deterministic at every font scale.
     Column(modifier = Modifier.fillMaxSize()) {
-        var viewportHeight by remember { mutableStateOf(0.dp) }
-        var headerHeight by remember { mutableStateOf(0.dp) }
-        // The room the pinned controls leave, measured: they grow with the text scale, so the demo gives
-        // that height back rather than pushing them off the screen.
-        Column(
-            modifier = Modifier
-                .weight(1f)
-                .reportHeight { height -> viewportHeight = height }
-                .verticalScroll(rememberScrollState())
-        ) {
-            // The bar below the row is 10 dp and its gap 4 dp; the row itself is what grows.
+            // Compact session header: elapsed, logged sets, rest length. Wrap content so it grows
+            // with the font scale without taking space from the hero.
             Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .reportHeight { height -> headerHeight = height + 14.dp },
+                modifier = Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Column(modifier = Modifier.weight(1f)) {
@@ -544,37 +503,42 @@ private fun PresentingSession(
                     Text(text = stringResource(R.string.programs_session_rest, state.restSeconds))
                 }
             }
-            Spacer(modifier = Modifier.height(4.dp))
             LinearProgressIndicator(
                 progress = {
-                    if (state.prescribedSetCount == 0) {
-                        0f
-                    } else {
-                        state.confirmedSetCount.toFloat() / state.prescribedSetCount.toFloat()
-                    }
+                    if (state.prescribedSetCount == 0) 0f
+                    else state.confirmedSetCount.toFloat() / state.prescribedSetCount.toFloat()
                 },
+                modifier = Modifier.fillMaxWidth().height(4.dp)
+            )
+
+            // THE DOMINANT HERO. A 0.66 weight shares the flexible space with the details column
+            // (0.24), so the hero is always the largest element and the pinned primary action is
+            // always on screen — no measurement feedback loop, deterministic at every font scale.
+            MediaHero(
+                exercise = heroExercise,
+                overlay = sessionHeroOverlay(
+                    state = state,
+                    current = current,
+                    timed = timed,
+                    heroExercise = heroExercise,
+                    onExpand = { demo -> expandedDemo = demo }
+                ),
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(10.dp)
+                    .weight(0.66f)
             )
-            Spacer(modifier = Modifier.height(12.dp))
 
-            if (state.isResting) {
-                RestCard(
-                    state = state,
-                    nextDemo = state.restNext?.let { next -> exerciseOf(next.exerciseId) },
-                    availableHeight = viewportHeight - headerHeight,
-                    onExpandDemo = { demo -> expandedDemo = demo },
-                    onSkipRest = { controller.skipRest() },
-                    onExtendRest = { controller.extendRest(15) }
-                )
-            } else {
+            // Below the hero: the working controls and ALL secondary text, in a bounded scrollable
+            // column (0.24 of the flexible space) so the hero keeps its share at every font scale.
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .weight(0.24f)
+                    .verticalScroll(rememberScrollState())
+            ) {
                 current?.let { exercise ->
-                    FocusCard(
+                    ExerciseDetailsSection(
                         exercise = exercise,
-                        demo = exerciseOf(exercise.exerciseId),
-                        availableHeight = viewportHeight - headerHeight,
-                        onExpandDemo = { demo -> expandedDemo = demo },
                         actualValue = actualValue,
                         actualInputInvalid = actualInputInvalid,
                         loadValue = loadValue,
@@ -586,15 +550,11 @@ private fun PresentingSession(
                             actualInputInvalid = false
                         },
                         onLoadChange = { value ->
-                            loadValue = value.filter { character -> character.isDigit() || character == '.' || character == ',' }
+                            loadValue = value.filter { c -> c.isDigit() || c == '.' || c == ',' }
                             loadInputInvalid = false
                         },
                         onStep = { delta ->
-                            val step = if (exercise.dimension == PrescriptionDimension.TIME_BASED) {
-                                SECONDS_STEP
-                            } else {
-                                1
-                            }
+                            val step = if (exercise.dimension == PrescriptionDimension.TIME_BASED) SECONDS_STEP else 1
                             val next = (actualValue.toIntOrNull() ?: 0) + delta * step
                             actualValue = next.coerceAtLeast(1).toString()
                             actualInputInvalid = false
@@ -611,75 +571,73 @@ private fun PresentingSession(
                         onExerciseClick = { onExerciseClick(exercise.exerciseId) }
                     )
                 }
-            }
+                if (state.isResting) {
+                    RestControls(
+                        state = state,
+                        onSkipRest = { controller.skipRest() },
+                        onExtendRest = { controller.extendRest(15) }
+                    )
+                }
+                Spacer(modifier = Modifier.height(8.dp))
+                ExerciseStrip(
+                    exercises = state.exercises,
+                    onSelect = { id -> scope.launch { controller.focus(id) } }
+                )
 
-            Spacer(modifier = Modifier.height(12.dp))
-            ExerciseStrip(
-                exercises = state.exercises,
-                onSelect = { sessionExerciseId -> scope.launch { controller.focus(sessionExerciseId) } }
-            )
-        }
-
-        if (!state.isResting && current != null) {
-            Spacer(modifier = Modifier.height(8.dp))
-            MonkButton(
-                text = stringResource(R.string.programs_session_confirm_set),
-                onClick = {
-                    scope.launch {
-                        val stored = controller.confirmActualSet(
-                            actualValue,
-                            if (current.acceptsLoad) loadValue else ""
-                        )
-                        actualInputInvalid = !stored && SetEntry.repsOf(actualValue) == null
-                        loadInputInvalid = !stored &&
-                            current.acceptsLoad &&
-                            loadValue.isNotBlank() &&
-                            SetEntry.loadOf(loadValue) == null
-                        if (stored && vibrationEnabled) VibrationFeedback.buzz(context)
+                // Secondary controls (undo / skip / cancel / finish) are secondary text below the
+                // hero, not part of the pinned primary action — so they scroll with the details.
+                Spacer(modifier = Modifier.height(12.dp))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    OutlinedButton(
+                        onClick = { scope.launch { controller.undoLastSet() } },
+                        modifier = Modifier.weight(1f),
+                        enabled = state.confirmedSetCount > 0
+                    ) { Text(text = stringResource(R.string.undo_set)) }
+                    OutlinedButton(
+                        onClick = { scope.launch { controller.skipCurrentExercise() } },
+                        modifier = Modifier.weight(1f),
+                        enabled = current != null && current.isPerformable && current.completedSets == 0
+                    ) { Text(text = stringResource(R.string.programs_session_skip_exercise)) }
+                }
+                Spacer(modifier = Modifier.height(8.dp))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    OutlinedButton(onClick = onCancelClick, modifier = Modifier.weight(1f)) {
+                        Text(text = stringResource(R.string.programs_session_cancel))
                     }
-                },
-                enabled = state.canConfirmCurrent
-            )
-        }
-        Spacer(modifier = Modifier.height(8.dp))
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(12.dp)
-        ) {
-            OutlinedButton(
-                onClick = { scope.launch { controller.undoLastSet() } },
-                modifier = Modifier.weight(1f),
-                enabled = state.confirmedSetCount > 0
-            ) {
-                Text(text = stringResource(R.string.undo_set))
+                    Button(onClick = onFinishClick, modifier = Modifier.weight(1f)) {
+                        Text(text = stringResource(R.string.programs_session_finish))
+                    }
+                }
+                Spacer(modifier = Modifier.height(8.dp))
             }
-            OutlinedButton(
-                onClick = { scope.launch { controller.skipCurrentExercise() } },
-                modifier = Modifier.weight(1f),
-                enabled = current != null && current.isPerformable && current.completedSets == 0
-            ) {
-                Text(text = stringResource(R.string.programs_session_skip_exercise))
-            }
-        }
-        Spacer(modifier = Modifier.height(8.dp))
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(12.dp)
-        ) {
-            OutlinedButton(
-                onClick = onCancelClick,
-                modifier = Modifier.weight(1f)
-            ) {
-                Text(text = stringResource(R.string.programs_session_cancel))
-            }
-            Button(
-                onClick = onFinishClick,
-                modifier = Modifier.weight(1f)
-            ) {
-                Text(text = stringResource(R.string.programs_session_finish))
+
+            // The pinned PRIMARY ACTION only: reachable without scrolling at 325 dp, font 1.0.
+            if (!state.isResting && current != null) {
+                MonkButton(
+                    text = stringResource(R.string.programs_session_confirm_set),
+                    onClick = {
+                        scope.launch {
+                            val stored = controller.confirmActualSet(
+                                actualValue,
+                                if (current.acceptsLoad) loadValue else ""
+                            )
+                            actualInputInvalid = !stored && SetEntry.repsOf(actualValue) == null
+                            loadInputInvalid = !stored &&
+                                current.acceptsLoad && loadValue.isNotBlank() &&
+                                SetEntry.loadOf(loadValue) == null
+                            if (stored && vibrationEnabled) VibrationFeedback.buzz(context)
+                        }
+                    },
+                    enabled = state.canConfirmCurrent
+                )
             }
         }
-    }
 
     expandedDemo?.let { demo ->
         ExpandedDemo(demo = demo, onDismiss = { expandedDemo = null })
@@ -687,8 +645,108 @@ private fun PresentingSession(
 }
 
 /**
+ * The compact info overlay on the hero: exercise name and set N/M on the top scrim, target and the
+ * rest/set timer on the bottom scrim. Both zones are capped by the hero geometry, so the text can never
+ * grow into the safe band at font 1.0 / 1.3 / 1.5; overflow is truncated.
+ */
+@Composable
+private fun sessionHeroOverlay(
+    state: ProgramSessionUiState,
+    current: SessionExerciseUi?,
+    timed: SessionExerciseUi?,
+    heroExercise: Exercise?,
+    onExpand: (Exercise) -> Unit
+): HeroOverlay {
+    val name = current?.let { ex ->
+        if (ex.nameRes == 0) ex.exerciseId else stringResource(ex.nameRes)
+    } ?: ""
+    val setName = current?.let { stringResource(R.string.current_set_format, it.setNumber, it.setCount) } ?: ""
+    val target = when {
+        current == null || current.isFinished || current.skipped -> ""
+        current.dimension == PrescriptionDimension.TIME_BASED ->
+            stringResource(R.string.programs_session_seconds_target, current.nextTarget)
+        else -> stringResource(R.string.programs_session_reps_target, current.nextTarget)
+    }
+    val restOrTimer = when {
+        state.isResting -> stringResource(
+            R.string.timer_format
+        ).format(state.restSecondsLeft / 60, state.restSecondsLeft % 60)
+        timed != null && timed.isPerformable -> stringResource(
+            R.string.timer_format
+        ).format((timed.nextTarget) / 60, (timed.nextTarget) % 60)
+        else -> ""
+    }
+    val expandLabel = stringResource(R.string.programs_session_show_demo)
+    return HeroOverlay(
+        topDp = HERO_OVERLAY_TOP_DP,
+        bottomDp = HERO_OVERLAY_BOTTOM_DP,
+        topContent = {
+            Column(modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)) {
+                Text(
+                    text = name,
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = Color.White,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+                Text(
+                    text = setName,
+                    style = MaterialTheme.typography.labelMedium,
+                    color = Color.White,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
+        },
+        bottomContent = {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 12.dp, vertical = 6.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    if (target.isNotEmpty()) {
+                        Text(
+                            text = target,
+                            style = MaterialTheme.typography.titleSmall,
+                            color = Color.White,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
+                    if (restOrTimer.isNotEmpty()) {
+                        Text(
+                            text = restOrTimer,
+                            style = MaterialTheme.typography.labelMedium,
+                            color = Color.White,
+                            maxLines = 1
+                        )
+                    }
+                }
+                // The full-screen view still works (it is redundant now that the hero is dominant;
+                // its removal is proposed in the report for the owner to decide).
+                TextButton(
+                    onClick = { heroExercise?.let(onExpand) },
+                    modifier = Modifier.height(48.dp)
+                ) {
+                    Text(
+                        text = expandLabel,
+                        style = MaterialTheme.typography.labelSmall,
+                        color = Color.White,
+                        maxLines = 1
+                    )
+                }
+            }
+        }
+    )
+}
+
+/**
  * The demo at the size the preview could not afford: its own window, so the card behind it keeps composing
- * and every countdown on the screen keeps running while it is open.
+ * and every countdown on the screen keeps running while it is open. Now redundant with the dominant
+ * hero, but kept working; its removal is proposed in the report for the owner to decide.
  */
 @Composable
 private fun ExpandedDemo(demo: Exercise, onDismiss: () -> Unit) {
@@ -713,9 +771,17 @@ private fun ExpandedDemo(demo: Exercise, onDismiss: () -> Unit) {
                         fontWeight = FontWeight.Bold
                     )
                     Spacer(modifier = Modifier.height(16.dp))
-                    ExerciseHeroMedia(
+                    MediaHero(
                         exercise = demo,
-                        height = (room * 0.65f).coerceAtLeast(160.dp)
+                        overlay = HeroOverlay(
+                            topDp = 0f,
+                            bottomDp = 0f,
+                            topContent = {},
+                            bottomContent = {}
+                        ),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height((room * 0.65f).coerceAtLeast(160.dp))
                     )
                     Spacer(modifier = Modifier.weight(1f))
                     Button(onClick = onDismiss, modifier = Modifier.fillMaxWidth()) {
@@ -727,96 +793,13 @@ private fun ExpandedDemo(demo: Exercise, onDismiss: () -> Unit) {
     }
 }
 
-/** The demo at the height the caller measured, and a way to see it properly. */
+/**
+ * The secondary text and working controls below the hero (scrollable). The exercise name, set, target
+ * and timer are on the hero overlay; this is the notes/details and the set-recording inputs.
+ */
 @Composable
-private fun DemoPreview(exercise: Exercise, height: Dp, onExpand: () -> Unit) {
-    ExerciseHeroMedia(
-        exercise = exercise,
-        height = height,
-        modifier = Modifier.clickable(
-            onClickLabel = stringResource(R.string.programs_session_show_demo),
-            onClick = onExpand
-        )
-    )
-}
-
-@Composable
-private fun RestCard(
-    state: ProgramSessionUiState,
-    nextDemo: Exercise?,
-    availableHeight: Dp,
-    onExpandDemo: (Exercise) -> Unit,
-    onSkipRest: () -> Unit,
-    onExtendRest: () -> Unit
-) {
-    var headHeight by remember { mutableStateOf(0.dp) }
-    var tailHeight by remember { mutableStateOf(0.dp) }
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer)
-    ) {
-        Column(modifier = Modifier.padding(16.dp)) {
-            Column(modifier = Modifier.reportHeight { height -> headHeight = height }) {
-                Text(
-                    text = stringResource(R.string.rest),
-                    style = MaterialTheme.typography.titleMedium
-                )
-                Text(
-                    text = stringResource(R.string.timer_format)
-                        .format(state.restSecondsLeft / 60, state.restSecondsLeft % 60),
-                    style = MaterialTheme.typography.displayMedium,
-                    fontWeight = FontWeight.Bold
-                )
-            }
-            nextDemo?.let { demo ->
-                Spacer(modifier = Modifier.height(8.dp))
-                DemoPreview(
-                    exercise = demo,
-                    height = previewHeight(
-                        availableHeight = availableHeight,
-                        cardBody = headHeight + tailHeight,
-                        min = REST_HERO_MIN,
-                        max = REST_HERO_MAX
-                    ),
-                    onExpand = { onExpandDemo(demo) }
-                )
-                Spacer(modifier = Modifier.height(8.dp))
-            }
-            Column(modifier = Modifier.reportHeight { height -> tailHeight = height }) {
-                state.restNext?.let { next ->
-                    Text(
-                        text = stringResource(
-                            R.string.programs_session_rest_next,
-                            exerciseNameOf(next),
-                            next.setNumber
-                        ),
-                        style = MaterialTheme.typography.bodyLarge
-                    )
-                }
-                Spacer(modifier = Modifier.height(12.dp))
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(12.dp)
-                ) {
-                    OutlinedButton(onClick = onSkipRest, modifier = Modifier.weight(1f)) {
-                        Text(text = stringResource(R.string.programs_session_skip_rest))
-                    }
-                    OutlinedButton(onClick = onExtendRest, modifier = Modifier.weight(1f)) {
-                        Text(text = stringResource(R.string.programs_session_extend_rest))
-                    }
-                }
-            }
-        }
-    }
-}
-
-@OptIn(ExperimentalLayoutApi::class)
-@Composable
-private fun FocusCard(
+private fun ExerciseDetailsSection(
     exercise: SessionExerciseUi,
-    demo: Exercise?,
-    availableHeight: Dp,
-    onExpandDemo: (Exercise) -> Unit,
     actualValue: String,
     actualInputInvalid: Boolean,
     loadValue: String,
@@ -830,152 +813,127 @@ private fun FocusCard(
     onResetTimer: () -> Unit,
     onExerciseClick: () -> Unit
 ) {
-    var cardBody by remember { mutableStateOf(0.dp) }
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer)
-    ) {
-        Column(modifier = Modifier.padding(16.dp)) {
-            demo?.let { illustration ->
-                DemoPreview(
-                    exercise = illustration,
-                    height = previewHeight(availableHeight, cardBody, FOCUS_HERO_MIN, FOCUS_HERO_MAX),
-                    onExpand = { onExpandDemo(illustration) }
+    Column(modifier = Modifier.padding(horizontal = 4.dp)) {
+        TextButton(onClick = onExerciseClick) {
+            Text(text = stringResource(R.string.programs_session_exercise_details))
+        }
+        if (exercise.skipped) {
+            Text(
+                text = stringResource(R.string.programs_session_skipped),
+                style = MaterialTheme.typography.bodyLarge,
+                color = MaterialTheme.colorScheme.error
+            )
+        }
+        Spacer(modifier = Modifier.height(4.dp))
+        SetIndicators(exercise)
+        Spacer(modifier = Modifier.height(12.dp))
+
+        if (exercise.isPerformable) {
+            if (exercise.dimension == PrescriptionDimension.TIME_BASED) {
+                TimerDisplay(
+                    timeLeft = timeLeft,
+                    isRunning = timerRunning,
+                    onToggle = onToggleTimer,
+                    onReset = onResetTimer
                 )
                 Spacer(modifier = Modifier.height(12.dp))
             }
-
-            Column(
-                modifier = Modifier.reportHeight { height -> cardBody = height }
+            Text(
+                text = stringResource(
+                    when (exercise.dimension) {
+                        PrescriptionDimension.TIME_BASED -> R.string.programs_session_actual_seconds
+                        else -> R.string.programs_session_actual_reps
+                    }
+                ),
+                style = MaterialTheme.typography.labelLarge
+            )
+            Spacer(modifier = Modifier.height(4.dp))
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                Text(
-                    text = exerciseNameOf(exercise),
-                    style = MaterialTheme.typography.headlineSmall,
-                    fontWeight = FontWeight.Bold
+                OutlinedIconButton(onClick = { onStep(-1) }, modifier = Modifier.size(48.dp)) {
+                    Text(text = "−", style = MaterialTheme.typography.titleLarge)
+                }
+                OutlinedTextField(
+                    value = actualValue,
+                    onValueChange = onActualChange,
+                    singleLine = true,
+                    isError = actualInputInvalid,
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                    modifier = Modifier.weight(1f)
                 )
-                Spacer(modifier = Modifier.height(4.dp))
+                OutlinedIconButton(onClick = { onStep(1) }, modifier = Modifier.size(48.dp)) {
+                    Text(text = "+", style = MaterialTheme.typography.titleLarge)
+                }
+            }
+            if (actualInputInvalid) {
                 Text(
                     text = stringResource(
-                        R.string.current_set_format,
-                        exercise.setNumber,
-                        exercise.setCount
+                        when (exercise.dimension) {
+                            PrescriptionDimension.TIME_BASED -> R.string.programs_session_seconds_invalid
+                            else -> R.string.programs_session_reps_invalid
+                        }
                     ),
-                    style = MaterialTheme.typography.titleMedium
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.error
                 )
-                if (!exercise.isFinished && !exercise.skipped) {
+            }
+            if (exercise.acceptsLoad) {
+                Spacer(modifier = Modifier.height(12.dp))
+                Text(
+                    text = stringResource(R.string.programs_session_actual_load),
+                    style = MaterialTheme.typography.labelLarge
+                )
+                Spacer(modifier = Modifier.height(4.dp))
+                OutlinedTextField(
+                    value = loadValue,
+                    onValueChange = onLoadChange,
+                    singleLine = true,
+                    isError = loadInputInvalid,
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                    modifier = Modifier.fillMaxWidth()
+                )
+                if (loadInputInvalid) {
                     Text(
-                        text = when (exercise.dimension) {
-                            PrescriptionDimension.TIME_BASED ->
-                                stringResource(R.string.programs_session_seconds_target, exercise.nextTarget)
-
-                            else -> stringResource(R.string.programs_session_reps_target, exercise.nextTarget)
-                        },
-                        style = MaterialTheme.typography.bodyLarge,
-                        color = MaterialTheme.colorScheme.primary
-                    )
-                }
-                if (exercise.skipped) {
-                    Text(
-                        text = stringResource(R.string.programs_session_skipped),
-                        style = MaterialTheme.typography.bodyLarge,
+                        text = stringResource(R.string.programs_session_load_invalid),
+                        style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.error
                     )
                 }
-                TextButton(onClick = onExerciseClick) {
-                    Text(text = stringResource(R.string.programs_session_exercise_details))
-                }
-
-                Spacer(modifier = Modifier.height(8.dp))
-                SetIndicators(exercise)
-                Spacer(modifier = Modifier.height(12.dp))
-
-                if (exercise.isPerformable) {
-                    if (exercise.dimension == PrescriptionDimension.TIME_BASED) {
-                        TimerDisplay(
-                            timeLeft = timeLeft,
-                            isRunning = timerRunning,
-                            onToggle = onToggleTimer,
-                            onReset = onResetTimer
-                        )
-                        Spacer(modifier = Modifier.height(12.dp))
-                    }
-
-                    Text(
-                        text = stringResource(
-                            when (exercise.dimension) {
-                                PrescriptionDimension.TIME_BASED -> R.string.programs_session_actual_seconds
-                                else -> R.string.programs_session_actual_reps
-                            }
-                        ),
-                        style = MaterialTheme.typography.labelLarge
-                    )
-                    Spacer(modifier = Modifier.height(4.dp))
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        OutlinedIconButton(
-                            onClick = { onStep(-1) },
-                            modifier = Modifier.size(48.dp)
-                        ) {
-                            Text(text = "−", style = MaterialTheme.typography.titleLarge)
-                        }
-                        OutlinedTextField(
-                            value = actualValue,
-                            onValueChange = onActualChange,
-                            singleLine = true,
-                            isError = actualInputInvalid,
-                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                            modifier = Modifier.weight(1f)
-                        )
-                        OutlinedIconButton(
-                            onClick = { onStep(1) },
-                            modifier = Modifier.size(48.dp)
-                        ) {
-                            Text(text = "+", style = MaterialTheme.typography.titleLarge)
-                        }
-                    }
-                    if (actualInputInvalid) {
-                        Text(
-                            text = stringResource(
-                                when (exercise.dimension) {
-                                    PrescriptionDimension.TIME_BASED ->
-                                        R.string.programs_session_seconds_invalid
-
-                                    else -> R.string.programs_session_reps_invalid
-                                }
-                            ),
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.error
-                        )
-                    }
-
-                    if (exercise.acceptsLoad) {
-                        Spacer(modifier = Modifier.height(12.dp))
-                        Text(
-                            text = stringResource(R.string.programs_session_actual_load),
-                            style = MaterialTheme.typography.labelLarge
-                        )
-                        Spacer(modifier = Modifier.height(4.dp))
-                        OutlinedTextField(
-                            value = loadValue,
-                            onValueChange = onLoadChange,
-                            singleLine = true,
-                            isError = loadInputInvalid,
-                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
-                            modifier = Modifier.fillMaxWidth()
-                        )
-                        if (loadInputInvalid) {
-                            Text(
-                                text = stringResource(R.string.programs_session_load_invalid),
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.error
-                            )
-                        }
-                    }
-                }
             }
+        }
+    }
+}
+
+/** The rest interval's secondary controls, below the hero (the timer itself is on the overlay). */
+@Composable
+private fun RestControls(
+    state: ProgramSessionUiState,
+    onSkipRest: () -> Unit,
+    onExtendRest: () -> Unit
+) {
+    state.restNext?.let { next ->
+        Text(
+            text = stringResource(
+                R.string.programs_session_rest_next,
+                exerciseNameOf(next),
+                next.setNumber
+            ),
+            style = MaterialTheme.typography.bodyLarge
+        )
+        Spacer(modifier = Modifier.height(8.dp))
+    }
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
+        OutlinedButton(onClick = onSkipRest, modifier = Modifier.weight(1f)) {
+            Text(text = stringResource(R.string.programs_session_skip_rest))
+        }
+        OutlinedButton(onClick = onExtendRest, modifier = Modifier.weight(1f)) {
+            Text(text = stringResource(R.string.programs_session_extend_rest))
         }
     }
 }
