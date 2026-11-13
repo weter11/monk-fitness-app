@@ -13,11 +13,11 @@ object HeroGeometry {
     const val RIG_HEIGHT_FRACTION = 0.70f
 
     /**
-     * What the height is derived for, above [RIG_HEIGHT_FRACTION]: the frame the hero draws with is
-     * the motion's union box grown by its own sampling margin (and the outline stroke comes off the
-     * budget), so deriving the surface for exactly 70 % lands the drawn rig just under it.
+     * What the height is derived for, above [RIG_HEIGHT_FRACTION]: the rig's drawn height changes
+     * through the rep (measured 461-517 px for a Cat-Cow on this handset), and the criterion is read
+     * from one frame, so the surface is sized for the peak plus that swing rather than for 70 % exactly.
      */
-    const val RIG_NEED_FRACTION = 0.72f
+    const val RIG_NEED_FRACTION = 0.78f
 
     /** The hero may take at most this share of the content area, whatever the rig would like. */
     const val MAX_CONTENT_FRACTION = 0.45f
