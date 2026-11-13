@@ -249,9 +249,8 @@ class ExerciseFramingInvariantTest {
             }
         }
 
-        // ... and the opt-in dynamic mode genuinely breathes, so the toggle is a mode and not a no-op
-        // (measured per-frame ranges: burpee 0.585..1.300, cossack squat 0.856..1.300, squat
-        // 0.849..1.200, kettlebell swing 0.900..1.233)
+        // ... and the per-frame fit still re-frames a frame that does not fit, so the two rules stay
+        // distinct where the app uses each of them (the hero fits the motion, a bare frame fits itself)
         for (name in BREATHING_POSES) {
             val definition = cameraOf(name)
             val pipeline = SkeletonPipeline(DEF)
@@ -261,9 +260,9 @@ class ExerciseFramingInvariantTest {
                 framing.frameZoom(camera, publishedFrameOf(name, phase, Side.RIGHT, pipeline), HERO.first, HERO.second)
             }
             assertTrue(
-                "$name: the dynamic mode must still re-frame every drawn frame (measured " +
+                "$name: the per-frame fit must still re-frame each drawn frame (measured " +
                     "${zooms.min()} .. ${zooms.max()}), while the exercise frame is one value " +
-                "(${frameOf(name, HERO).zoom})",
+                    "(${frameOf(name, HERO).zoom})",
                 zooms.max() - zooms.min() > 0.05f
             )
         }
@@ -446,8 +445,8 @@ class ExerciseFramingInvariantTest {
     }
 
     @Test
-    fun theDynamicModeIsUnchangedAndOptIn() {
-        for (entry in DYNAMIC_MODE_PINS) {
+    fun thePerFrameFitIsUnchanged() {
+        for (entry in PER_FRAME_FIT_PINS) {
             val name = entry.key
             val definition = cameraOf(name)
             val camera = Camera(definition)
@@ -456,11 +455,11 @@ class ExerciseFramingInvariantTest {
                 camera, publishedFrameOf(name, 0.5f, Side.RIGHT, SkeletonPipeline(DEF)), HERO.first, HERO.second
             )
             assertEquals(
-                "$name: the opt-in dynamic mode must stay exactly the per-frame fit C1 shipped",
+                "$name: the per-frame fit a bare frame gets must stay exactly what it was",
                 entry.value.toDouble(), zoom.toDouble(), 0.001
             )
             assertTrue(
-                "$name: the two modes must be different rules (dynamic=$zoom, " +
+                "$name: the per-frame fit must differ from the exercise frame (per-frame=$zoom, " +
                     "exercise=${frameOf(name, HERO).zoom})",
                 abs(zoom - frameOf(name, HERO).zoom) > 0.01f
             )
@@ -639,9 +638,9 @@ class ExerciseFramingInvariantTest {
 
         /**
          * The per-frame fit at the mid-rep frame on the hero canvas, measured on this tree — the
-         * opt-in mode's own numbers, which the default-mode change must not have moved.
+         * numbers a bare frame gets, which the exercise frame must not have moved.
          */
-        val DYNAMIC_MODE_PINS = mapOf(
+        val PER_FRAME_FIT_PINS = mapOf(
             "StandardPullUpPose" to 0.654f,
             "SquatPose" to 1.114f,
             "AirSquatPose" to 1.101f

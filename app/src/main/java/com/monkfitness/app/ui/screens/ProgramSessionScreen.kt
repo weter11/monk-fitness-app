@@ -71,6 +71,7 @@ import com.monkfitness.app.data.model.Exercise
 import com.monkfitness.app.domain.prescription.PrescriptionDimension
 import com.monkfitness.app.platform.VibrationFeedback
 import com.monkfitness.app.ui.components.ExerciseHeroMedia
+import com.monkfitness.app.ui.components.MediaHero
 import com.monkfitness.app.ui.components.MonkButton
 import com.monkfitness.app.ui.programs.ProgramSessionController
 import com.monkfitness.app.ui.programs.ProgramSessionNotice
@@ -99,13 +100,12 @@ private val CARD_CHROME = 48.dp
  */
 private val HERO_COLLAPSED = 80.dp
 
+/** The gap between the media hero and the block of facts under it. */
+private val FOCUS_HERO_GAP = 8.dp
+
 /** The smallest restore-demo that reads as the next movement, and its ceiling. */
 private val REST_HERO_MIN = 120.dp
 private val REST_HERO_MAX = 360.dp
-
-/** The active set's demo: a preview of the movement being done, not the screen's subject. */
-private val FOCUS_HERO_MIN = 120.dp
-private val FOCUS_HERO_MAX = 200.dp
 
 /**
  * The demo's height for the room there is.
@@ -504,9 +504,14 @@ private fun PresentingSession(
         }
     }
 
-    Column(modifier = Modifier.fillMaxSize()) {
-        var viewportHeight by remember { mutableStateOf(0.dp) }
-        var headerHeight by remember { mutableStateOf(0.dp) }
+    var viewportHeight by remember { mutableStateOf(0.dp) }
+    var headerHeight by remember { mutableStateOf(0.dp) }
+    var contentHeight by remember { mutableStateOf(0.dp) }
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .reportHeight { height -> contentHeight = height }
+    ) {
         // The room the pinned controls leave, measured: they grow with the text scale, so the demo gives
         // that height back rather than pushing them off the screen.
         Column(
@@ -574,6 +579,7 @@ private fun PresentingSession(
                         exercise = exercise,
                         demo = exerciseOf(exercise.exerciseId),
                         availableHeight = viewportHeight - headerHeight,
+                        contentHeight = contentHeight,
                         onExpandDemo = { demo -> expandedDemo = demo },
                         actualValue = actualValue,
                         actualInputInvalid = actualInputInvalid,
@@ -816,6 +822,7 @@ private fun FocusCard(
     exercise: SessionExerciseUi,
     demo: Exercise?,
     availableHeight: Dp,
+    contentHeight: Dp,
     onExpandDemo: (Exercise) -> Unit,
     actualValue: String,
     actualInputInvalid: Boolean,
@@ -831,22 +838,27 @@ private fun FocusCard(
     onExerciseClick: () -> Unit
 ) {
     var cardBody by remember { mutableStateOf(0.dp) }
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer)
-    ) {
-        Column(modifier = Modifier.padding(16.dp)) {
-            demo?.let { illustration ->
-                DemoPreview(
-                    exercise = illustration,
-                    height = previewHeight(availableHeight, cardBody, FOCUS_HERO_MIN, FOCUS_HERO_MAX),
-                    onExpand = { onExpandDemo(illustration) }
-                )
-                Spacer(modifier = Modifier.height(12.dp))
-            }
-
+    Column(modifier = Modifier.fillMaxWidth()) {
+        demo?.let { illustration ->
+            // The hero is the screen's subject and carries nothing: everything that used to sit in the
+            // preview's card is below it, so the rig is never drawn under text.
+            MediaHero(
+                exercise = illustration,
+                contentHeight = contentHeight,
+                room = (availableHeight - cardBody - FOCUS_HERO_GAP).coerceAtLeast(0.dp),
+                onExpand = { onExpandDemo(illustration) }
+            )
+            Spacer(modifier = Modifier.height(FOCUS_HERO_GAP))
+        }
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer)
+        ) {
+            // Measured WITH the card's own padding, so the hero only takes what this block really leaves.
             Column(
-                modifier = Modifier.reportHeight { height -> cardBody = height }
+                modifier = Modifier
+                    .padding(16.dp)
+                    .reportHeight { height -> cardBody = height }
             ) {
                 Text(
                     text = exerciseNameOf(exercise),

@@ -9,6 +9,13 @@ interface AnimationController {
     val progress: Float
     val side: Side
     val cameraYawOffset: Float
+
+    /**
+     * The largest |[cameraYawOffset]| the surface can hold without cropping the rig. The hero sets it
+     * from the frame it fitted; a caller that draws no hero keeps the gesture's full reach.
+     */
+    var yawLimit: Float
+
     fun onRotate(delta: Float)
 }
 
@@ -16,9 +23,21 @@ private class BaseAnimationController : AnimationController {
     override var progress: Float by mutableFloatStateOf(0f)
     override var side: Side by mutableStateOf(Side.RIGHT)
     override var cameraYawOffset: Float by mutableFloatStateOf(0f)
+        private set
+    override var yawLimit: Float = MAX_YAW_LIMIT
+        set(value) {
+            field = value.coerceIn(0f, MAX_YAW_LIMIT)
+            // A surface that shrinks (a shorter hero at a larger text scale) may put the current
+            // viewpoint outside the new limit; the figure would then be cropped until the next drag.
+            cameraYawOffset = cameraYawOffset.coerceIn(-field, field)
+        }
 
     override fun onRotate(delta: Float) {
-        cameraYawOffset = (cameraYawOffset + delta).coerceIn(-1.5708f, 1.5708f)
+        cameraYawOffset = (cameraYawOffset + delta).coerceIn(-yawLimit, yawLimit)
+    }
+
+    private companion object {
+        const val MAX_YAW_LIMIT = 1.5708f
     }
 }
 
