@@ -167,10 +167,11 @@ class HeroFitTest {
             camera = authored,
             builder = builder,
             sides = sides,
-            fitReachableYaws = false
+            fitReachableYaws = false,
+            withMargin = false
         )
         val widthFit = (CONTENT_WIDTH_PX - 2f * extent.stroke) / extent.width
-        val rigHeightPx = extent.height * widthFit + 2f * extent.stroke
+        val rigHeightPx = extent.figureHeight * widthFit + 2f * extent.stroke
 
         val heroDp = HeroGeometry.heightDp(
             rigHeightPx = rigHeightPx,
@@ -201,8 +202,8 @@ class HeroFitTest {
             height = previewHeightPx
         )
 
-        val drawn = unionBox(builder, sides, declaration, frame, CONTENT_WIDTH_PX, heroHeightPx)
-        val preview = unionBox(builder, sides, declaration, previewFrame, PREVIEW_WIDTH_PX, previewHeightPx)
+        val drawn = unionBox(builder, sides, declaration, frame, CONTENT_WIDTH_PX, heroHeightPx, ground = false)
+        val preview = unionBox(builder, sides, declaration, previewFrame, PREVIEW_WIDTH_PX, previewHeightPx, ground = false)
         val rigWidthPx = drawn[1] - drawn[0]
         val rigHeightPxDrawn = drawn[3] - drawn[2]
         val previewWidthPx = preview[1] - preview[0]
@@ -216,8 +217,12 @@ class HeroFitTest {
             previewWidthPx = previewWidthPx,
             previewHeightPx = previewHeightPxDrawn,
             previewRatio = minOf(rigWidthPx / previewWidthPx, rigHeightPxDrawn / previewHeightPxDrawn),
-            containedAtDefault = drawn[0] >= -SLACK && drawn[1] <= CONTENT_WIDTH_PX + SLACK &&
-                drawn[2] >= -SLACK && drawn[3] <= heroHeightPx + SLACK,
+            // Containment is the frame's own claim, and the frame reserves the ground contact too.
+            containedAtDefault = run {
+                val box = unionBox(builder, sides, declaration, frame, CONTENT_WIDTH_PX, heroHeightPx, ground = true)
+                box[0] >= -SLACK && box[1] <= CONTENT_WIDTH_PX + SLACK &&
+                    box[2] >= -SLACK && box[3] <= heroHeightPx + SLACK
+            },
             containedYaw = framing.containedYawLimit(
                 camera = Camera(declaration),
                 builder = builder,
@@ -252,7 +257,7 @@ class HeroFitTest {
                 )
                 val pose = pipeline.produceFrame(builder, context).pose
                 val camera = cameraFor(declaration, declaration.defaultYaw + yawOffset, frame)
-                val box = drawnBox(pose, camera, width, height)
+                val box = drawnBox(pose, camera, width, height, ground = true)
                 worst = max(worst, max(max(-box[0], box[1] - width), max(-box[2], box[3] - height)))
             }
         }
@@ -265,7 +270,8 @@ class HeroFitTest {
         declaration: CameraDefinition,
         frame: CameraFrame,
         width: Float,
-        height: Float
+        height: Float,
+        ground: Boolean
     ): FloatArray {
         val union = floatArrayOf(Float.MAX_VALUE, -Float.MAX_VALUE, Float.MAX_VALUE, -Float.MAX_VALUE)
         val pipeline = SkeletonPipeline(DEF)
@@ -277,7 +283,7 @@ class HeroFitTest {
                     definition = DEF
                 )
                 val pose = pipeline.produceFrame(builder, context).pose
-                val box = drawnBox(pose, cameraFor(declaration, declaration.defaultYaw, frame), width, height)
+                val box = drawnBox(pose, cameraFor(declaration, declaration.defaultYaw, frame), width, height, ground)
                 union[0] = minOf(union[0], box[0])
                 union[1] = maxOf(union[1], box[1])
                 union[2] = minOf(union[2], box[2])
@@ -296,10 +302,11 @@ class HeroFitTest {
     }
 
     /**
-     * Everything the renderers stroke — bones, indicator discs, torso faces, and the contact shadows
-     * the fit includes as the floor the athlete is placed on.
+     * Everything the renderers stroke — bones, indicator discs and torso faces — plus, when [ground]
+     * is set, the contact shadows the frame also reserves. The figure alone is what a screenshot
+     * shows, so that is what the fill criteria are read from.
      */
-    private fun drawnBox(pose: SkeletonPose, camera: Camera, width: Float, height: Float): FloatArray {
+    private fun drawnBox(pose: SkeletonPose, camera: Camera, width: Float, height: Float, ground: Boolean): FloatArray {
         val buffer = ProjectedSkeleton()
         projector.project(pose, camera, engine, width, height, buffer, pose.environment.ground.level)
         val box = floatArrayOf(Float.MAX_VALUE, -Float.MAX_VALUE, Float.MAX_VALUE, -Float.MAX_VALUE)
@@ -334,12 +341,14 @@ class HeroFitTest {
             val half = STYLE.outlineWidth * 0.5f
             for (p in buffer.faces[i].points) include(p.x - half, p.x + half, p.y - half, p.y + half)
         }
-        val shadows: Array<ProjectedPoint> = buffer.shadowPoints
-        for (p in shadows) {
-            compensator.computeScale(p, camera.zoom, scale)
-            val rx = STYLE.shadowRadiusX * scale.shadowScale
-            val ry = STYLE.shadowRadiusY * scale.shadowScale
-            include(p.x - rx, p.x + rx, p.y - ry, p.y + ry)
+        if (ground) {
+            val shadows: Array<ProjectedPoint> = buffer.shadowPoints
+            for (p in shadows) {
+                compensator.computeScale(p, camera.zoom, scale)
+                val rx = STYLE.shadowRadiusX * scale.shadowScale
+                val ry = STYLE.shadowRadiusY * scale.shadowScale
+                include(p.x - rx, p.x + rx, p.y - ry, p.y + ry)
+            }
         }
         return box
     }
@@ -368,7 +377,11 @@ class HeroFitTest {
         /** The room left at font 1.0 on the handset, measured (details block + pinned controls). */
         const val ROOM_AT_FONT_1 = 279f
 
-        const val MOTION_SAMPLES = 16
+        /**
+         * Sampled at the resolution the frame itself is fitted with: a coarser sweep reports a shorter
+         * union than the one the frame reserves, and the fill would read low by a few per cent.
+         */
+        const val MOTION_SAMPLES = 32
         const val FORTY_FIVE = 0.7854f
         const val SLACK = 0.5f
 

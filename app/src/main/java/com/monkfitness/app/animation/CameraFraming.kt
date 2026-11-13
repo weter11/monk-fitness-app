@@ -33,8 +33,12 @@ const val FIT_ONLY_ZOOM_CEILING = Float.MAX_VALUE
 /**
  * The drawn extent of an exercise's whole motion at unit zoom, in anchor-free pixels, plus the fixed
  * outline the renderers stroke around it (a constant in pixels, independent of the zoom).
+ *
+ * [width] and [height] are the box the frame fits; [figureHeight] is the athlete alone, without the
+ * ground contact. The two differ because a contact shadow reaches past the figure — a surface sized
+ * from the box would come out too tall for the figure to fill.
  */
-data class RigExtent(val width: Float, val height: Float, val stroke: Float)
+data class RigExtent(val width: Float, val height: Float, val stroke: Float, val figureHeight: Float)
 
 /**
  * The viewport frame of the exercise hero: one zoom and one anchor for the whole motion.
@@ -99,8 +103,10 @@ class CameraFraming(
 
     // Reused pre-pass boxes: one per sampled yaw, one per sampled progress, plus the content box.
     private val yawBoxes = Array(YAW_SAMPLES + 1) { Edges() }
+    private val yawFigureBoxes = Array(YAW_SAMPLES + 1) { Edges() }
     private val progressBoxes = Array(PROGRESS_SAMPLES + 1) { Edges() }
     private val contentBox = Edges()
+    private val figureBox = Edges()
     private val frameBox = Edges()
 
     /**
@@ -133,12 +139,13 @@ class CameraFraming(
         width: Float,
         height: Float,
         ceiling: Float = camera.authoredZoom,
-        fitReachableYaws: Boolean = true
+        fitReachableYaws: Boolean = true,
+        withGround: Boolean = true
     ): CameraFrame {
         if (width <= 0f || height <= 0f) return CameraFrame(ceiling, camera.centerX, camera.centerY)
 
         val declaration = builder.metadata.camera
-        exerciseBounds(camera, builder, sides, declaration, fitReachableYaws)
+        exerciseBounds(camera, builder, sides, declaration, fitReachableYaws, withGround)
 
         // The drawn extent is the box scaled by the zoom plus the outline stroke, which is a constant
         // in pixels (see the class KDoc) — so it comes off the budget rather than scaling with the
@@ -157,8 +164,8 @@ class CameraFraming(
     }
 
     /**
-     * The box [exerciseFrame] fits, at unit zoom: how wide and tall the athlete and its ground contact
-     * get over the whole motion and the declared yaw range, plus the constant outline they are stroked
+     * The box [exerciseFrame] fits, at unit zoom: how wide and tall the athlete (and, when [withGround]
+     * is set, its ground contact) get over the whole motion, plus the constant outline they are stroked
      * with. A caller that must decide how tall a surface to give the rig reads this first — the drawn
      * size is the box times the zoom, and the zoom is the surface divided by the box.
      */
@@ -166,10 +173,12 @@ class CameraFraming(
         camera: Camera,
         builder: PoseBuilder,
         sides: List<Side>,
-        fitReachableYaws: Boolean = true
+        fitReachableYaws: Boolean = true,
+        withGround: Boolean = true,
+        withMargin: Boolean = true
     ): RigExtent {
-        exerciseBounds(camera, builder, sides, builder.metadata.camera, fitReachableYaws)
-        return RigExtent(contentBox.width, contentBox.height, contentBox.stroke)
+        exerciseBounds(camera, builder, sides, builder.metadata.camera, fitReachableYaws, withGround, withMargin)
+        return RigExtent(contentBox.width, contentBox.height, contentBox.stroke, figureBox.height)
     }
 
     /**
@@ -249,12 +258,15 @@ class CameraFraming(
         builder: PoseBuilder,
         sides: List<Side>,
         declaration: CameraDefinition,
-        fitReachableYaws: Boolean
+        fitReachableYaws: Boolean,
+        withGround: Boolean = true,
+        withMargin: Boolean = true
     ) {
         val pipeline = SkeletonPipeline(engine.definition)
         pipeline.resetHistory()
 
         contentBox.reset()
+        figureBox.reset()
         measure.pitch = camera.pitch
         measure.focalLength = camera.focalLength
         measure.zoom = 1f
@@ -284,8 +296,9 @@ class CameraFraming(
                 sampled.reset()
                 for (k in 0..yawCells) {
                     measure.yaw = if (yawCells == 0) yawFrom else yawFrom + yawSpan * k / yawCells
-                    measureInto(measure, frame, withGround = true, into = yawBoxes[k])
+                    measureInto(measure, frame, withGround = withGround, into = yawBoxes[k], figureInto = yawFigureBoxes[k])
                     sampled.include(yawBoxes[k])
+                    figureBox.include(yawFigureBoxes[k])
                     if (k >= 2) margins.include(yawBoxes[k - 2], yawBoxes[k - 1], yawBoxes[k])
                 }
             }
@@ -299,7 +312,9 @@ class CameraFraming(
             }
         }
 
-        contentBox.grow(margins)
+        // The margin is what stops the FIT clipping a peak that falls between samples; it is not part of
+        // the size the rig reads at, so a caller measuring the drawn rig asks for the box without it.
+        if (withMargin) contentBox.grow(margins)
     }
 
     /**
@@ -352,9 +367,11 @@ class CameraFraming(
         width: Float = 0f,
         height: Float = 0f,
         withGround: Boolean,
-        into: Edges
+        into: Edges,
+        figureInto: Edges? = null
     ) {
         into.reset()
+        figureInto?.reset()
         projector.project(
             pose = pose,
             camera = camera,
@@ -413,6 +430,9 @@ class CameraFraming(
                 if (faceStroke > stroke) stroke = faceStroke
             }
         }
+
+        // The figure is complete here: copy it before the ground extends the box.
+        if (figureInto != null) figureInto.include(into)
 
         if (withGround) {
             for (point in projected.shadowPoints) {

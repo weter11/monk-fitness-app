@@ -72,17 +72,21 @@ fun MediaHero(
         val sides = poseConfig?.let { config ->
             if (config.alternating) listOf(Side.RIGHT, Side.LEFT) else listOf(Side.RIGHT)
         }
-        // The rig's drawn height when the surface is exactly as wide as the hero: the box measured at
-        // unit zoom, scaled by the width fit. Independent of the hero's height, which is the point.
+        // The figure's drawn height when the surface is exactly as wide as the hero: the width fit the
+        // frame will use (the box includes the ground contact) applied to the figure alone, which is
+        // what fills the hero. Independent of the hero's own height, which is the point.
         val rigHeightPx = remember(poseConfig, widthPx) {
             if (poseConfig != null && sides != null) {
                 val extent = framing.rigExtent(
                     camera = Camera(poseConfig.builder.metadata.camera),
                     builder = poseConfig.builder,
                     sides = sides,
-                    fitReachableYaws = false
+                    fitReachableYaws = false,
+                    // The margin belongs to the fit, not to the size the figure reads at.
+                    withMargin = false
                 )
-                (widthPx - 2f * extent.stroke) / extent.width * extent.height + 2f * extent.stroke
+                val widthFit = (widthPx - 2f * extent.stroke) / extent.width
+                extent.figureHeight * widthFit + 2f * extent.stroke
             } else {
                 0f
             }
