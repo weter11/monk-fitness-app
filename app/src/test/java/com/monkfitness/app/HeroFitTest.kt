@@ -17,18 +17,21 @@ import com.monkfitness.app.animation.Side
 import com.monkfitness.app.animation.SkeletonDefinition
 import com.monkfitness.app.animation.SkeletonEngine
 import com.monkfitness.app.animation.SkeletonPipeline
-import com.monkfitness.app.animation.SkeletonProjector
 import com.monkfitness.app.animation.SkeletonPose
+import com.monkfitness.app.animation.SkeletonProjector
 import com.monkfitness.app.animation.SkeletonStyle
+import com.monkfitness.app.animation.YawLimits
+import com.monkfitness.app.poses.PoseRegistry
 import com.monkfitness.app.ui.components.HeroGeometry
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import kotlin.math.max
+import kotlin.math.min
 
 /**
  * The media hero's own contract, measured through the production projection path: the rig it draws
  * fills the surface, it is at least twice the small preview it replaced, it is not clipped at the
- * authored camera, and the rotation stops before the hero would crop it.
+ * authored camera, and the rotation the gesture is allowed is the rotation the hero can draw.
  *
  * The numbers are the handset's: a 325 dp-wide screen at density 502 gives 919 px of content width and
  * 2194 px (699 dp) of content area, which is the denominator of the hero's 45 % cap.
@@ -90,34 +93,63 @@ class HeroFitTest {
         }
     }
 
+    /**
+     * The criterion the hero's rotation exists for: at the clamp the figure is whole — nothing of it
+     * leaves the hero on either side, in any frame of the rep, at either end of the turn.
+     */
     @Test
-    fun rotationStopsBeforeTheHeroCropsTheRig() {
+    fun theRotationClampKeepsTheWholeFigureInsideTheHero() {
         for (family in FAMILIES) {
-            val m = measure(family, ROOM_AT_FONT_1)
-            // At or below the floor the drag still turns: a hero too tight to rotate is worse than a
-            // cropped extreme view, so the floor is what the user gets and the crop is reported.
-            val limit = HeroGeometry.yawLimit(m.containedYaw, m.declaredReach)
-            assertTrue(
-                "${family.name}: the rotation must never be blocked below the floor (limit=$limit)",
-                limit >= HeroGeometry.MIN_YAW_LIMIT - 1e-4f || limit >= m.declaredReach - 1e-4f
+            val hero = heroFor(family.name, MotionProbe.build(family.pose), family.sides(), ROOM_AT_FONT_1)
+            val plus = edgeMargin(hero, hero.limits.positive)
+            val minus = edgeMargin(hero, -hero.limits.negative)
+            println(
+                "clamp ${family.name}: +${degrees(hero.limits.positive)}deg/-${degrees(hero.limits.negative)}deg " +
+                    "margin+${"%.1f".format(plus)}px margin-${"%.1f".format(minus)}px"
             )
-            if (m.containedYaw >= HeroGeometry.MIN_YAW_LIMIT) {
+            for ((offset, margin) in listOf(hero.limits.positive to plus, -hero.limits.negative to minus)) {
                 assertTrue(
-                    "${family.name}: a rotation inside the limit must not crop the rig " +
-                        "(limit=${Math.toDegrees(m.containedYaw.toDouble()).toFloat()} deg, " +
-                        "crop at 45 deg=${m.cropAtFortyFive} px)",
-                    m.cropAtFortyFive <= 2f
-                )
-            } else {
-                // Reported, not asserted away: the hero crops this pose's extreme view by design.
-                println(
-                    "rotation clamp ${family.name}: contained=+" +
-                        "${Math.toDegrees(m.containedYaw.toDouble()).toFloat()} deg, kept=" +
-                        "${Math.toDegrees(limit.toDouble()).toFloat()} deg, crop at 45 deg=" +
-                        "${m.cropAtFortyFive} px per side"
+                    "${family.name}: at yaw offset ${degrees(offset)}deg the nearest edge of the figure is " +
+                        "${"%.1f".format(margin)} px outside the hero (margin must be >= 0)",
+                    margin >= -SLACK
                 )
             }
         }
+    }
+
+    /**
+     * The same criterion over the whole library, and the per-pose clamp the report quotes: a pose whose
+     * silhouette widens fast gets a few degrees, a slim one the gesture's full reach — all of it read
+     * off the rig, none of it a table.
+     */
+    @Test
+    fun everyPoseInTheLibraryIsContainedAtBothYawLimits() {
+        val ids = PoseRegistry.animationIds.sorted()
+        assertTrue("the library must expose its engine poses to this instrument", ids.size >= 60)
+
+        var narrowest = Float.MAX_VALUE
+        for (id in ids) {
+            val config = PoseRegistry.getPoseConfig(id)
+            assertTrue("$id is registered without a pose builder", config != null)
+            val sides = if (config!!.alternating) listOf(Side.RIGHT, Side.LEFT) else listOf(Side.RIGHT)
+            val hero = heroFor(id, config.builder, sides, ROOM_AT_FONT_1)
+            val plus = edgeMargin(hero, hero.limits.positive)
+            val minus = edgeMargin(hero, -hero.limits.negative)
+            narrowest = min(narrowest, min(plus, minus))
+            println(
+                "library clamp $id: +${degrees(hero.limits.positive)}/-${degrees(hero.limits.negative)}deg " +
+                    "minMargin=${"%.1f".format(min(plus, minus))}px"
+            )
+            for ((offset, margin) in listOf(hero.limits.positive to plus, -hero.limits.negative to minus)) {
+                assertTrue(
+                    "$id: at yaw offset ${degrees(offset)}deg the figure leaves the hero by " +
+                        "${"%.1f".format(-margin)} px (limits=+${degrees(hero.limits.positive)}/" +
+                        "-${degrees(hero.limits.negative)}deg)",
+                    margin >= -SLACK
+                )
+            }
+        }
+        println("library clamp: narrowest margin over ${ids.size} poses = ${"%.1f".format(narrowest)}px")
     }
 
     /** The measured table, printed so the report quotes the instrument rather than a hand reading. */
@@ -131,9 +163,7 @@ class HeroFitTest {
                         "rig=${"%.0f".format(m.rigWidthPx)}x${"%.0f".format(m.rigHeightPx)} " +
                         "ofH=${"%.3f".format(m.sharesOfHeight)} ofW=${"%.3f".format(m.sharesOfWidth)} " +
                         "preview=${"%.0f".format(m.previewWidthPx)}x${"%.0f".format(m.previewHeightPx)} " +
-                        "ratio=${"%.2f".format(m.previewRatio)} contained=${m.containedAtDefault} " +
-                        "yawLimit=${Math.toDegrees(m.containedYaw.toDouble()).toFloat()}deg " +
-                        "cropAt45=${m.cropAtFortyFive}px"
+                        "ratio=${"%.2f".format(m.previewRatio)} contained=${m.containedAtDefault}"
                 )
             }
         }
@@ -148,23 +178,107 @@ class HeroFitTest {
         val previewWidthPx: Float,
         val previewHeightPx: Float,
         val previewRatio: Float,
-        val containedAtDefault: Boolean,
-        val containedYaw: Float,
-        val declaredReach: Float,
-        val cropAtFortyFive: Float
+        val containedAtDefault: Boolean
     ) {
         val sharesOfHeight: Float get() = rigHeightPx / heroHeightPx
         val sharesOfWidth: Float get() = rigWidthPx / heroWidthPx
     }
 
+    /** The hero one pose gets at one layout: the surface, its frame, and the clamp that frame allows. */
+    private data class Hero(
+        val name: String,
+        val builder: PoseBuilder,
+        val sides: List<Side>,
+        val declaration: CameraDefinition,
+        val width: Float,
+        val height: Float,
+        val frame: CameraFrame,
+        val limits: YawLimits
+    )
+
+    private fun heroFor(name: String, builder: PoseBuilder, sides: List<Side>, roomDp: Float): Hero {
+        val declaration = builder.metadata.camera
+        val extent = framing.rigExtent(
+            camera = Camera(declaration),
+            builder = builder,
+            sides = sides,
+            fitReachableYaws = false,
+            withMargin = false
+        )
+        val widthFit = (CONTENT_WIDTH_PX - 2f * extent.stroke) / extent.width
+        val rigHeightPx = extent.figureHeight * widthFit + 2f * extent.stroke
+
+        val heroDp = HeroGeometry.heightDp(
+            rigHeightPx = rigHeightPx,
+            density = DENSITY,
+            contentHeightDp = CONTENT_HEIGHT_PX / DENSITY,
+            roomDp = roomDp
+        )
+        val heroHeightPx = heroDp * DENSITY
+
+        val frame = framing.exerciseFrame(
+            camera = Camera(declaration),
+            builder = builder,
+            sides = sides,
+            width = CONTENT_WIDTH_PX,
+            height = heroHeightPx,
+            ceiling = FIT_ONLY_ZOOM_CEILING,
+            fitReachableYaws = false
+        )
+
+        val contained = framing.containedYawLimits(
+            camera = Camera(declaration),
+            builder = builder,
+            sides = sides,
+            frame = frame,
+            width = CONTENT_WIDTH_PX,
+            height = heroHeightPx,
+            margin = CONTENT_WIDTH_PX * HeroGeometry.YAW_SAFETY_FRACTION
+        )
+
+        return Hero(
+            name = name,
+            builder = builder,
+            sides = sides,
+            declaration = declaration,
+            width = CONTENT_WIDTH_PX,
+            height = heroHeightPx,
+            frame = frame,
+            limits = HeroGeometry.yawLimits(contained, minOf(-declaration.minYaw, declaration.maxYaw))
+        )
+    }
+
+    /**
+     * The smallest gap between the drawn figure and the hero's four edges over the whole rep at one yaw
+     * offset, negative when it leaves the surface. Measured on the figure alone — the ground contact is
+     * what the clamp also reserves, and that only makes the clamp shorter.
+     */
+    private fun edgeMargin(hero: Hero, yawOffset: Float): Float {
+        var worst = Float.MAX_VALUE
+        val pipeline = SkeletonPipeline(DEF)
+        for (side in hero.sides) {
+            for (i in 0..MOTION_SAMPLES) {
+                val context = PoseContext(
+                    progress = i.toFloat() / MOTION_SAMPLES,
+                    side = side,
+                    definition = DEF
+                )
+                val pose = pipeline.produceFrame(hero.builder, context).pose
+                val camera = cameraFor(hero.declaration, hero.declaration.defaultYaw + yawOffset, hero.frame)
+                val box = drawnBox(pose, camera, hero.width, hero.height, ground = false)
+                worst = min(worst, min(min(box[0], hero.width - box[1]), min(box[2], hero.height - box[3])))
+            }
+        }
+        return worst
+    }
+
     private fun measure(family: Family, roomDp: Float): Measurement {
         val builder = MotionProbe.build(family.pose)
         val declaration = builder.metadata.camera
-        val authored = Camera(declaration)
-        val sides = listOf(Side.RIGHT)
+        val sides = family.sides()
 
         val extent = framing.rigExtent(
-            camera = authored,
+            camera = Camera(declaration),
             builder = builder,
             sides = sides,
             fitReachableYaws = false,
@@ -222,46 +336,8 @@ class HeroFitTest {
                 val box = unionBox(builder, sides, declaration, frame, CONTENT_WIDTH_PX, heroHeightPx, ground = true)
                 box[0] >= -SLACK && box[1] <= CONTENT_WIDTH_PX + SLACK &&
                     box[2] >= -SLACK && box[3] <= heroHeightPx + SLACK
-            },
-            containedYaw = framing.containedYawLimit(
-                camera = Camera(declaration),
-                builder = builder,
-                sides = sides,
-                frame = frame,
-                width = CONTENT_WIDTH_PX,
-                height = heroHeightPx
-            ),
-            declaredReach = minOf(-declaration.minYaw, declaration.maxYaw),
-            cropAtFortyFive = cropAt(builder, sides, declaration, frame, CONTENT_WIDTH_PX, heroHeightPx, FORTY_FIVE)
-        )
-    }
-
-    /** How far the rig leaves the hero, per side, at one yaw offset. */
-    private fun cropAt(
-        builder: PoseBuilder,
-        sides: List<Side>,
-        declaration: CameraDefinition,
-        frame: CameraFrame,
-        width: Float,
-        height: Float,
-        yawOffset: Float
-    ): Float {
-        var worst = 0f
-        val pipeline = SkeletonPipeline(DEF)
-        for (side in sides) {
-            for (i in 0..MOTION_SAMPLES) {
-                val context = PoseContext(
-                    progress = i.toFloat() / MOTION_SAMPLES,
-                    side = side,
-                    definition = DEF
-                )
-                val pose = pipeline.produceFrame(builder, context).pose
-                val camera = cameraFor(declaration, declaration.defaultYaw + yawOffset, frame)
-                val box = drawnBox(pose, camera, width, height, ground = true)
-                worst = max(worst, max(max(-box[0], box[1] - width), max(-box[2], box[3] - height)))
             }
-        }
-        return if (worst <= SLACK) 0f else worst
+        )
     }
 
     private fun unionBox(
@@ -358,7 +434,9 @@ class HeroFitTest {
         QUADRUPED_CATCOW("CatCowPose", false),
         QUADRUPED_PUSHUP("StandardPushUpPose", false),
         WIDE_LYING_BRIDGE("GluteBridgePose", true),
-        WIDE_LYING_TILT("PelvicTiltPose", true)
+        WIDE_LYING_TILT("PelvicTiltPose", true);
+
+        fun sides(): List<Side> = listOf(Side.RIGHT)
     }
 
     private companion object {
@@ -382,9 +460,10 @@ class HeroFitTest {
          * union than the one the frame reserves, and the fill would read low by a few per cent.
          */
         const val MOTION_SAMPLES = 32
-        const val FORTY_FIVE = 0.7854f
         const val SLACK = 0.5f
 
         val FAMILIES = Family.entries.toList()
+
+        fun degrees(radians: Float): String = "%.2f".format(Math.toDegrees(radians.toDouble()))
     }
 }

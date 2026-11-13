@@ -33,6 +33,7 @@ import com.monkfitness.app.animation.Side
 import com.monkfitness.app.animation.SkeletonDefinition
 import com.monkfitness.app.animation.SkeletonEngine
 import com.monkfitness.app.animation.SkeletonStyle
+import com.monkfitness.app.animation.YawLimits
 import com.monkfitness.app.animation.rememberAnimationController
 import com.monkfitness.app.data.model.Exercise
 import com.monkfitness.app.data.model.skeletonAnimation
@@ -117,23 +118,25 @@ fun MediaHero(
         }
         val containedYaw = remember(frame, widthPx, heightPx) {
             if (poseConfig != null && sides != null && frame != null) {
-                framing.containedYawLimit(
+                framing.containedYawLimits(
                     camera = Camera(poseConfig.builder.metadata.camera),
                     builder = poseConfig.builder,
                     sides = sides,
                     frame = frame,
                     width = widthPx,
-                    height = heightPx
+                    height = heightPx,
+                    // Room for the peak the scan's own sampling steps over.
+                    margin = widthPx * HeroGeometry.YAW_SAFETY_FRACTION
                 )
             } else {
-                0f
+                YawLimits(0f, 0f)
             }
         }
         if (controller != null && poseConfig != null) {
             val declared = poseConfig.builder.metadata.camera
             val reach = minOf(-declared.minYaw, declared.maxYaw)
-            // After layout: the limit describes this surface, and the drag runs on the frame after it.
-            SideEffect { controller.yawLimit = HeroGeometry.yawLimit(containedYaw, reach) }
+            // After layout: the limits describe this surface, and the drag runs on the frame after it.
+            SideEffect { controller.yawLimits = HeroGeometry.yawLimits(containedYaw, reach) }
         }
 
         Box(
@@ -168,13 +171,20 @@ fun MediaHero(
             // The one gesture layer, above the canvas: a drag turns the camera, a tap never reaches it
             // (the root's clickable owns that), and there is no text here to collide with either.
             if (controller != null) {
+                val densityValue = density.density
                 Box(
                     modifier = Modifier
                         .fillMaxSize()
-                        .pointerInput(controller) {
+                        .pointerInput(controller, densityValue) {
                             detectDragGestures { change, dragAmount ->
                                 change.consume()
-                                controller.onRotate(dragAmount.x * HeroGeometry.ROTATION_SENSITIVITY)
+                                // Read at drag time: the clamp describes this surface, and it is what
+                                // decides how fine the drag has to be for the pose to be aimable.
+                                val limits = controller.yawLimits
+                                val allowance =
+                                    if (dragAmount.x >= 0f) limits.positive else limits.negative
+                                val perPixel = HeroGeometry.rotationSensitivity(allowance, densityValue)
+                                controller.onRotate(dragAmount.x * perPixel)
                             }
                         }
                 )

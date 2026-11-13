@@ -84,6 +84,9 @@ object PoseRegistry {
         return PoseConfig(builder, alternating)
     }
 
+    /** Every animation the hero can draw with the engine. */
+    val animationIds: Set<String> get() = configRegistry.keys
+
     fun getDedicatedAnimationIds(): Set<String> {
         val animationIds = configRegistry.keys
         val builderToIds = mutableMapOf<Class<out PoseBuilder>, MutableSet<String>>()

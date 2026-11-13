@@ -1,5 +1,6 @@
 package com.monkfitness.app.ui.components
 
+import com.monkfitness.app.animation.YawLimits
 import kotlin.math.min
 
 /**
@@ -28,8 +29,20 @@ object HeroGeometry {
      */
     const val MIN_HEIGHT_DP = 191f
 
-    /** The rotation gesture never gives the user less than this, even where the hero crops. */
-    const val MIN_YAW_LIMIT = 0.7854f
+    /**
+     * The room the rotation clamp keeps clear of the hero's left and right edges, as a share of the
+     * hero's width: the scan that finds the largest un-cropped yaw samples the rep at finite resolution,
+     * so a peak between two of its samples is invisible to it and this inset absorbs it. Being a share
+     * of the hero, it holds at every surface size and text scale — and it is capped by the room the
+     * authored view leaves, because the frame is fitted so the figure fills the surface.
+     */
+    const val YAW_SAFETY_FRACTION = 0.02f
+
+    /**
+     * A drag shorter than this would put a pose's whole yaw allowance inside the touch slop, leaving no
+     * room to aim: below it the drag is slowed so reaching the clamp still takes a deliberate gesture.
+     */
+    const val MIN_YAW_DRAG_DP = 24f
 
     /** The gesture's own reach, mirrored from `AnimationController.onRotate`. */
     const val MAX_YAW_LIMIT = 1.5708f
@@ -60,10 +73,30 @@ object HeroGeometry {
     }
 
     /**
-     * The yaw the drag may reach: what the hero can draw without cropping, but never less than
-     * [MIN_YAW_LIMIT] — a hero too tight to turn at all is worse than a cropped extreme view — and
-     * never more than the pose declares.
+     * The turn the drag may reach: exactly what the hero can draw without cropping, each side kept
+     * inside the pose's own declared reach. There is deliberately no floor — any floor at all is a crop
+     * by construction, which is what a pose whose silhouette widens fast would get.
      */
-    fun yawLimit(containedRadians: Float, declaredReach: Float): Float =
-        maxOf(containedRadians, MIN_YAW_LIMIT).coerceIn(0f, declaredReach.coerceAtMost(MAX_YAW_LIMIT))
+    fun yawLimits(contained: YawLimits, declaredReach: Float): YawLimits {
+        val reach = declaredReach.coerceIn(0f, MAX_YAW_LIMIT)
+        return YawLimits(
+            negative = contained.negative.coerceIn(0f, reach),
+            positive = contained.positive.coerceIn(0f, reach)
+        )
+    }
+
+    /**
+     * Radians the camera turns per pixel of horizontal drag for a pose clamped at [limitRadians].
+     *
+     * The rate is the screen's own until the limit is small enough that reaching it would take less
+     * than [MIN_YAW_DRAG_DP] of drag — inside the touch slop, where the gesture would be recognised
+     * already past the clamp and the pose would snap instead of turning. There the rate is lowered so
+     * the clamp is reached by a deliberate drag and not by one flick; the clamp itself stays hard, so
+     * there is nothing at the boundary to oscillate.
+     */
+    fun rotationSensitivity(limitRadians: Float, density: Float): Float {
+        if (limitRadians <= 0f) return 0f
+        if (density <= 0f) return ROTATION_SENSITIVITY
+        return min(ROTATION_SENSITIVITY, limitRadians / (MIN_YAW_DRAG_DP * density))
+    }
 }

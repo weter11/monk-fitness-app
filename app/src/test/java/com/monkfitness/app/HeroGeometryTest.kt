@@ -1,5 +1,6 @@
 package com.monkfitness.app
 
+import com.monkfitness.app.animation.YawLimits
 import com.monkfitness.app.ui.components.HeroGeometry
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
@@ -7,7 +8,8 @@ import org.junit.Test
 
 /**
  * The hero's sizing rule, as arithmetic: the rig's own need decides the height, the 45 % cap and the
- * room the rest of the screen needs bound it, and the rotation floor is never below 45 degrees.
+ * room the rest of the screen needs bound it, and the rotation the drag may reach is the rotation the
+ * surface can draw — with no floor under it, because a floor is a crop.
  */
 class HeroGeometryTest {
 
@@ -56,30 +58,66 @@ class HeroGeometryTest {
     }
 
     @Test
-    fun theRotationNeverDropsBelowFortyFiveDegrees() {
+    fun theClampIsWhatTheSurfaceCanDrawAndNothingMore() {
+        val fiveDegrees = Math.toRadians(5.0).toFloat()
+        val asymmetric = HeroGeometry.yawLimits(YawLimits(negative = 0.2f, positive = 0.9f), declaredReach = 1.5708f)
         assertEquals(
-            "a hero that can hold a full turn keeps the gesture's reach",
-            HeroGeometry.MIN_YAW_LIMIT,
-            HeroGeometry.yawLimit(containedRadians = 0.2f, declaredReach = 1.5708f),
-            0.0001f
+            "each side keeps exactly what the surface can draw, and the sides differ",
+            0.2f,
+            asymmetric.negative,
+            1e-5f
+        )
+        assertEquals(0.9f, asymmetric.positive, 1e-5f)
+
+        val declared = HeroGeometry.yawLimits(
+            YawLimits(negative = fiveDegrees, positive = 0.9f),
+            declaredReach = fiveDegrees
         )
         assertEquals(
-            "a hero that can hold more than the floor keeps what it can hold",
-            0.9f,
-            HeroGeometry.yawLimit(containedRadians = 0.9f, declaredReach = 1.5708f),
-            0.0001f
+            "a side may never exceed the pose's own declared reach",
+            fiveDegrees,
+            declared.positive,
+            1e-5f
+        )
+
+        val full = HeroGeometry.yawLimits(YawLimits(negative = 3f, positive = 3f), declaredReach = 3f)
+        assertEquals("the gesture may never exceed its own reach", HeroGeometry.MAX_YAW_LIMIT, full.positive, 1e-5f)
+
+        val none = HeroGeometry.yawLimits(YawLimits(negative = 0f, positive = 0f), declaredReach = 1.5708f)
+        assertEquals("a surface that can hold no rotation at all does not turn", 0f, none.positive, 1e-5f)
+        assertEquals(0f, none.negative, 1e-5f)
+    }
+
+    @Test
+    fun aClampTooTightForTheTouchSlopIsTurnedMoreSlowly() {
+        val small = HeroGeometry.rotationSensitivity(Math.toRadians(5.0).toFloat(), density)
+        val deliberateDragPx = HeroGeometry.MIN_YAW_DRAG_DP * density
+
+        assertEquals(
+            "reaching a five-degree clamp must take a deliberate drag, not the touch slop",
+            Math.toRadians(5.0).toFloat(),
+            small * deliberateDragPx,
+            Math.toRadians(0.1).toFloat()
+        )
+        assertTrue(
+            "the rate must be below the screen's own for a clamp this small",
+            small < HeroGeometry.ROTATION_SENSITIVITY
+        )
+        assertTrue(
+            "an even smaller clamp must turn more slowly still",
+            HeroGeometry.rotationSensitivity(Math.toRadians(2.0).toFloat(), density) < small
         )
         assertEquals(
-            "a pose that declares less than the floor can only turn as far as it declares",
-            0.5f,
-            HeroGeometry.yawLimit(containedRadians = 0.2f, declaredReach = 0.5f),
-            0.0001f
+            "a pose with the gesture's full reach turns at the screen's own rate",
+            HeroGeometry.ROTATION_SENSITIVITY,
+            HeroGeometry.rotationSensitivity(HeroGeometry.MAX_YAW_LIMIT, density),
+            1e-6f
         )
         assertEquals(
-            "the gesture may never exceed its own reach",
-            HeroGeometry.MAX_YAW_LIMIT,
-            HeroGeometry.yawLimit(containedRadians = 3f, declaredReach = 3f),
-            0.0001f
+            "no allowance, no turn",
+            0f,
+            HeroGeometry.rotationSensitivity(0f, density),
+            0f
         )
     }
 }
