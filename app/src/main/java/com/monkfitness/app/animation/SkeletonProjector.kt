@@ -115,17 +115,60 @@ class SkeletonProjector {
         buffer: ProjectedSkeleton,
         groundLevel: Float
     ) {
+        // The floor is a lattice of screen-sized cells, not a patch of world space. A world patch is
+        // right at the zoom its pose was composed at and wrong at any other: the media hero fits the
+        // figure, so it draws a pose two to five times larger, and a cell authored at 65 world units
+        // then spans 120-300 px — the fourteen lines of a two-per-cent stroke read as two stray
+        // lines, which is no floor at all. So the cell is measured in pixels at the drawn zoom, and
+        // the patch is grown until it covers the surface, so the floor never ends inside it.
+        val zoom = camera.zoom.coerceAtLeast(MINIMUM_GRID_ZOOM)
+        val cosYaw = abs(cos(camera.yaw))
+        val sinYaw = abs(sin(camera.yaw))
+        val rise = abs(sin(camera.pitch))
+        // A ground point's screen travel per world unit. At the authored yaw the x axis runs mostly
+        // into depth and the z axis mostly across, so the two axes cover different screen dimensions
+        // and their extents are not interchangeable. A level camera draws no floor at all, so each
+        // divisor has a floor of its own rather than an infinity.
+        val xPerUnit = (cosYaw * zoom).coerceAtLeast(MINIMUM_GRID_ZOOM)
+        val yPerUnit = (sinYaw * rise * zoom).coerceAtLeast(MINIMUM_GRID_ZOOM)
+        val zPerUnit = (sinYaw * zoom).coerceAtLeast(MINIMUM_GRID_ZOOM)
+        var step = GRID_CELL_PX / max(xPerUnit, zPerUnit)
+        val halfX = max(GRID_MIN_HALF_SPAN, GROUND_COVER_FRACTION * height / yPerUnit)
+        val halfZ = max(GRID_MIN_HALF_SPAN, GROUND_COVER_FRACTION * width / zPerUnit)
+        // A surface large enough to need more lines than the buffer holds gets a coarser lattice
+        // rather than a truncated patch: the floor must still reach every edge of what is drawn.
+        val cells = 2f * (halfX + halfZ) / step + 2f
+        if (cells > buffer.gridLines.size) {
+            step = 2f * (halfX + halfZ) / (buffer.gridLines.size - 2)
+        }
+
         var lineIdx = 0
-        for (x in -260..260 step 65) {
+        val linesX = (halfX / step).toInt()
+        for (i in -linesX..linesX) {
             if (lineIdx >= buffer.gridLines.size) break
-            camera.project(tempV.set(x.toFloat(), groundLevel, -170f), width, height, buffer.gridLines[lineIdx].p1)
-            camera.project(tempV.set(x.toFloat(), groundLevel, 170f), width, height, buffer.gridLines[lineIdx].p2)
+            val line = buffer.gridLines[lineIdx]
+            camera.project(
+                tempV.set(i * step, groundLevel, -halfZ),
+                width, height, line.p1
+            )
+            camera.project(
+                tempV2.set(i * step, groundLevel, halfZ),
+                width, height, line.p2
+            )
             lineIdx++
         }
-        for (z in -170..170 step 65) {
+        val linesZ = (halfZ / step).toInt()
+        for (i in -linesZ..linesZ) {
             if (lineIdx >= buffer.gridLines.size) break
-            camera.project(tempV.set(-260f, groundLevel, z.toFloat()), width, height, buffer.gridLines[lineIdx].p1)
-            camera.project(tempV.set(260f, groundLevel, z.toFloat()), width, height, buffer.gridLines[lineIdx].p2)
+            val line = buffer.gridLines[lineIdx]
+            camera.project(
+                tempV.set(-halfX, groundLevel, i * step),
+                width, height, line.p1
+            )
+            camera.project(
+                tempV2.set(halfX, groundLevel, i * step),
+                width, height, line.p2
+            )
             lineIdx++
         }
         buffer.gridLineCount = lineIdx
@@ -135,5 +178,19 @@ class SkeletonProjector {
             val pt = pose.getJoint(id)
             camera.project(tempV.set(pt.x, groundLevel, pt.z), width, height, buffer.shadowPoints[i])
         }
+    }
+
+    private companion object {
+        /** The lattice's cell on screen: the same floor at any zoom, on any surface. */
+        const val GRID_CELL_PX = 64f
+
+        /** How far past each edge the floor reaches, so no edge shows the patch ending. */
+        const val GROUND_COVER_FRACTION = 0.62f
+
+        /** A floor smaller than this is not a floor: keeps a tiny surface from collapsing the patch. */
+        const val GRID_MIN_HALF_SPAN = 65f
+
+        /** A degenerate viewport divides the extents by zero; the floor still has to be drawn. */
+        const val MINIMUM_GRID_ZOOM = 1e-3f
     }
 }
