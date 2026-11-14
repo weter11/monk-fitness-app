@@ -1,7 +1,7 @@
 # Monk Human Framework — human character and anatomical presentation
 
 **Status:** architecture RFC, proposed for review. Nothing in this document is implemented by this change.
-**Base for this document:** `main` @ `40f8017` (`40f80179f7515c52e1719cde9ea6e4ba8c13094e`).
+**Base for this document:** `main` @ `16e0487` (`16e04874096989300a96f5c18416661337ed1eb4`).
 **Companion documents:** `docs/RFC_RUNTIME_SKELETON_ARCHITECTURE.md` (runtime ownership), `docs/ARCHITECTURE_V2.md`
 (carrier contract), `docs/CHARACTER_FRAMEWORK.md` and `docs/CHARACTER_RENDERING.md` (Filament work, both currently
 only on open PR #385), `docs/ENGINE_ARCHITECTURE.md` (engine map), `docs/VALIDATION.md` (validation subsystem).
@@ -73,7 +73,7 @@ requested in the task.
 **Out of scope:** implementation, production rendering changes, exercise-builder rewrites, workout/session logic, final
 character art, a complete muscle library, physics or biomechanical simulation, merging PR #384 or PR #385.
 
-**How the baseline was verified.** The repository was inspected at `main` (`40f8017`), not from earlier reports. The
+**How the baseline was verified.** The repository was inspected at `main` (`16e0487`), not from earlier reports. The
 Filament work was read from the two open PR heads (`fd549bd` for #384, `bcb3658` for #385) without changing either PR's
 state or merging anything. The humanoid test asset was parsed directly (`app/src/main/assets/characters/humanoid_v1.glb`
 on PR #385) to confirm joint count, triangle count and morph targets rather than trusting the generator's printout.
@@ -97,10 +97,10 @@ on PR #385) to confirm joint count, triangle count and morph targets rather than
 | Item | Value |
 | --- | --- |
 | Default branch | `main` |
-| Base SHA | `40f80179f7515c52e1719cde9ea6e4ba8c13094e` ("Merge pull request #386 from weter11/feat/set-load-kg") |
+| Base SHA | `16e04874096989300a96f5c18416661337ed1eb4` ("Merge pull request #390 from weter11/refactor/motion-core-ui-free") |
 | Working tree at branch creation | clean (`git status --porcelain` empty); this document is the only change on the branch |
 | Documentation branch | `docs/human-framework`, created from `origin/main` |
-| Engine sources on `main` | `app/src/main/java/com/monkfitness/app/animation` (8,904 lines), `.../poses` (10,639 lines) |
+| Engine sources on `main` | `app/src/main/java/com/monkfitness/app/animation` (8,144 lines in 47 files), `.../poses` (10,642 lines in 79 files) |
 | Registered pose builders | 66 (`AnimationRegistry.kt` — 66 `register(...)` call sites; the 67th textual match is the `fun register` declaration) |
 | Pose source files | 79 |
 | Joint identifiers | 33 (`animation/Joint.kt:3`) |
@@ -139,9 +139,9 @@ Load-bearing facts for a downstream consumer:
 - **`pose.joints[j]` are world positions and `pose.rotations[j]` are world rotations** after finalization; the 2D
   projector reads `getJointRotation(CHEST)` as "the first-class source of truth" for torso orientation
   (`animation/SkeletonProjector.kt:81-87`).
-- **The limb stage is live by default** (`animation/IkStage.kt:20`, `IK_STAGE_ACTIVE = true`) and is the sole active
+- **The limb stage is live by default** (`animation/IkStage.kt:18`, `IK_STAGE_ACTIVE = true`) and is the sole active
   limb solver; the authoring bake remains only as a rollout/differential path (RFC §5 R5, §8).
-- **Validation is a read-only observer of the published pose**, 18 rules (`animation/ExerciseValidator.kt:47-90`:
+- **Validation is a read-only observer of the published pose**, 18 rules (`animation/ExerciseValidator.kt:47-92`:
   `FINITE_COORDINATES`, `BONE_LENGTH`, `HEAD_VIEWPORT`, `FOOT_GROUND_PENETRATION`, `HAND_SLIDING`, `IK_CONSTRAINT_LIMIT`,
   `POSITION_DISCONTINUITY`, `VELOCITY_DISCONTINUITY`, `ACCELERATION_SPIKE`, `STATIC_SUPPORT_POLYGON`,
   `BILATERAL_SYMMETRY`, `HAND_SHOULDER_ALIGNMENT`, `IK_TARGET_UNREACHABLE`, `ANGULAR_JOINT_LIMIT`,
@@ -165,13 +165,13 @@ frame table that resolves this once.
 There are two shipped presentations, chosen per exercise:
 
 1. **Engine-driven vector skeleton.** `ExerciseAnimatedVisual` (`ui/components/ExerciseAnimation.kt:52`) resolves the pose
-   config, builds the pose, and calls `SkeletonRenderer` (`:124`), which is a Compose `Canvas` composable
-   (`animation/SkeletonRenderer.kt:23`). The renderer runs the pipeline itself (`:63`), projects the published joints
+   config, builds the pose, and calls `SkeletonRenderer` (`:136`), which is a Compose `Canvas` composable
+   (`render/SkeletonRenderer.kt:47`). The renderer runs the pipeline itself (`:86`), projects the published joints
    (`animation/SkeletonProjector.kt:21`), then draws:
    - bones as thick stroked lines, joints as filled circles, torso as eight-point filled faces
-     (`SkeletonRenderer.kt` draw loop, ~:90-170),
+     (`SkeletonRenderer.kt:112-189`),
    - painter's-algorithm depth sort by projected depth, with colour lerped by depth
-     (`SkeletonRenderer.kt`, insertion sort over `RenderItem.depth`),
+     (`SkeletonRenderer.kt:132-144`, insertion sort over `RenderItem.depth`),
    - all sizes from `SkeletonStyle` (`animation/SkeletonStyle.kt`): head radius 18, joint radius 9, limb thicknesses
      12–21, outline 2.
 2. **Legacy illustration path** for exercises with no registered procedural pose: `ui/components/animation/` has its own
@@ -206,7 +206,7 @@ touching `:app`.
   pipeline's history.
 - `MorphologyPreset` (`character/MorphologyPreset.kt:7`): four presets over five morph weights (neutral, slim, heavy,
   muscular). Comment says "vestigial body-shape parameters carried by the test asset".
-- `CharacterFeature` / `ActiveCharacter` (`character/CharacterFeature.kt:9,24`): the flag (`BuildConfig
+- `CharacterFeature` / `ActiveCharacter` (`character/CharacterFeature.kt:9,18`): the flag (`BuildConfig
   .FILAMENT_CHARACTER_ENABLED`, default false — `app/build.gradle.kts:31-32`, enabled only with
   `-Pmonk.filamentCharacter=true`) and a process-wide single-owner slot guard.
 - `CharacterStage` (`character/CharacterStage.kt:29`): a Compose `AndroidView`/`TextureView` host that builds the pose
@@ -219,10 +219,14 @@ touching `:app`.
 | File size | 2,060,808 bytes |
 | Nodes / joints | 35 nodes, 32 skin joints (`Hips, Spine, Chest, Neck, Head, Left/RightShoulder, Arm, ForeArm, Hand, 5 fingers, UpLeg, Leg, Foot, ToeBase, HeadTop_End`) |
 | Meshes / primitives | 2 meshes, 2 primitives (body + a `Ground` node inside the GLB) |
-| Triangles | 30,722 |
+| Triangles | 30,722 (30,720 body + 2 `Ground`) |
 | Morph targets | 5: `ShoulderWidth`, `ChestVolume`, `WaistWidth`, `LimbThickness`, `HeadScale` |
 | Materials / textures / animations | 2 materials, 0 images, 0 animation clips |
 | Bind pose | arms at the sides, matching the engine rest stance (required by rest-delta retarget — `docs/CHARACTER_FRAMEWORK.md` §3) |
+
+`humanoid_spike.glb` (PR #384) and `humanoid_v1.glb` (PR #385) are **byte-identical**: 2,060,808 bytes, sha256
+`ef643438b761de84504d45c87511c7d2ad5109996fa56ab77107fee1cde0e539`. A defect found in one is a defect in the other, and
+the `Ground` node is in both — the two PRs ship one asset under two names.
 
 Filament is pinned to **1.75.1** (`gradle/libs.versions.toml:15`): 1.76+ requires `compileSdk 37` and the app is on 34.
 The documented native payload is 7.4 MB arm64 and a debug APK with the asset is 18.8 MB (`docs/CHARACTER_FRAMEWORK.md` §1).
@@ -731,9 +735,9 @@ review. A role change is an anatomy review. Four reviewers, four diffs — that 
 
 **Coordinate conventions (verified):**
 
-- `+Y` is up; limbs are placed on `±Z` (`animation/BasePose.kt:63-64`, `poses/BaseSquatPose.kt:148-149`), so `Z` is the
+- `+Y` is up; limbs are placed on `±Z` (`animation/BasePose.kt:63-64`, `poses/BaseSquatPose.kt:42-45`), so `Z` is the
   lateral axis and `XY` is the sagittal plane. Pose authoring reaches forward along `+X` (air-squat counterbalance
-  `BaseSquatPose.kt:58`).
+  `BaseSquatPose.kt:42-43`).
 - **Naming trap:** `SkeletonDefinition.anatomicalForward` is `(0,0,1)` — but it is used as the *rotation axis* for
   sagittal spine bend (`BasePose.kt:208-214`), not as the direction the athlete faces. Anatomy authors must read it as
   "the lateral bend axis", not "forward".
@@ -1443,7 +1447,7 @@ a stage-5 item.
 | Filament version | 1.75.1 (`gradle/libs.versions.toml:15`) | 1.76+ needs `compileSdk 37`; the app is on 34. Upgrade is a separate change, not a prerequisite |
 | Native payload | 7.4 MB arm64 stripped (`docs/CHARACTER_FRAMEWORK.md` §1) | character is opt-in packaging; a dynamic feature or flavor split is packaging work, not architecture |
 | Backend | `DEFAULT`; Vulkan attempted only on explicit request, GLES fallback (`docs/CHARACTER_RENDERING.md` §5) | never assume Vulkan; the reported backend is `Engine.getBackend()` |
-| Engine lifetime | one engine, one active character, `ActiveCharacter` slot (`CharacterFeature.kt:24-30`) | layers are renderables in that one scene; a second live character is out of scope |
+| Engine lifetime | one engine, one active character, `ActiveCharacter` slot (`CharacterFeature.kt:18-24`) | layers are renderables in that one scene; a second live character is out of scope |
 | Pose handoff | `SkeletonPose` is reused; bone upload happens inside the producing call (`CharacterSession.kt:310-318`) | anatomy must run in the same window; no frame queue |
 | Surface | `TextureView` + `UiHelper`; `Choreographer` loop started on resume | surface gaps and context loss need the documented recovery path (`docs/CHARACTER_RENDERING.md` §4) |
 
@@ -1592,7 +1596,7 @@ Seven levels, each with one owner, one report and an explicit automation status.
 
 | Level | What it checks | Automated | In M1 | Failure means |
 | --- | --- | --- | --- | --- |
-| **L1 Motion** | 18 existing rules over joint-space geometry (`ExerciseValidator.kt:47-90`) | yes, unchanged | all | the pose/engine is wrong; block |
+| **L1 Motion** | 18 existing rules over joint-space geometry (`ExerciseValidator.kt:47-92`) | yes, unchanged | all | the pose/engine is wrong; block |
 | **L2 Rig** | bone coverage, rest invariant, inverse binds, side/handedness, unit scale, bone budget, landmark alignment (§6.6) | yes | all | the asset or map is wrong; block |
 | **L3 Attachments** | every attachment's joint exists; offset inside a segment envelope; L/R mirror; head count; origin ≠ insertion; span ≥ 2 segments | yes | all | the anatomy data is wrong; block |
 | **L4 Path** | every segment of the final polyline tested analytically against every obstacle (closed-form segment–ellipsoid), plus a sample-outside-inflated-surface check using the `ε_pen` numerical margin; unverifiable geometry reported `INVALID`; deterministic outcome for overlapping, nested and impossible routes; tangent and curvature continuity at entry/exit; temporal continuity; rest-length tolerance vs measured reference | yes, with adversarial fixtures | all | the solver or the data is wrong; block |
