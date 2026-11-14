@@ -59,9 +59,10 @@ The design rules that follow from that direction:
 
 The first useful deliverable (milestone **M1**, §15) is one character, driven by the real motion engine, playing at least
 three existing exercises, on one shared rig (a v1 scope constraint, §6.1), with eight muscles that follow the movement
-and whose attachments have passed a recorded anatomical review (§12.4), one morphology preset, and
-skin/superficial-muscle/skeleton layers. The full muscle library, the deep layer, organs, labels and education content
-are explicitly later.
+and whose attachments have passed a recorded anatomical review (§12.4), one morphology preset,
+skin/superficial-muscle/skeleton layers, and **tap hints on the rig** — labels anchored to attachment landmarks that name
+what is under the finger, with no deformation of their own. The full muscle library, the deep layer, organs, the full
+label/picking system and education content are explicitly later.
 
 ---
 
@@ -466,31 +467,58 @@ class AnatomyDefinition(
     val landmarks: List<LandmarkDefinition>
 )
 
-/** One frame of derived anatomy. Buffers are reused; consume before the next solve. */
-class AnatomyFrame(val muscleStates: Array<MuscleState>, val landmarks: FloatArray)
+/**
+ * One frame of derived anatomy. Every per-frame number lives in a preallocated parallel array indexed by head; the
+ * buffers are reused, so a consumer must finish before the next solve.
+ */
+class AnatomyFrame(headCount: Int, pointCapacity: Int, landmarkCount: Int) {
+    val lengths = FloatArray(headCount)          // along this head's path, wrap detours included
+    val restLengths = FloatArray(headCount)      // bind-pose length for this head and body profile
+    val tendonLengths = FloatArray(headCount)    // origin + insertion tendon portions
+    val strains = FloatArray(headCount)          // length / restLength - 1; reported, not a geometry input
+    val statuses = IntArray(headCount)           // PathStatus ordinal: VALID, or INVALID with a reason (§7.4.2)
+    val pointCounts = IntArray(headCount)
+    /** Path in engine world units, sampled at `pointCounts[head]` points; capacity includes the insertion allowance. */
+    val paths = FloatArray(headCount * pointCapacity)
+    val landmarks = FloatArray(landmarkCount * 3)
 
-class MuscleState(
-    val id: String,
-    val side: Side,
-    /** Head index within the definition; 0 for single-head muscles. Path and length are per head (§7.5). */
-    val headIndex: Int,
-    val headCount: Int,
-    /** Path in engine world units, sampled at `pointCount` points; capacity includes the insertion allowance (§7.4.1). */
-    val path: FloatArray,
-    val pointCount: Int,
-    val length: Float,          // along this head's path, including wrap detours
-    val restLength: Float,      // bind-pose length for this head and body profile
-    val tendonLength: Float,    // origin + insertion tendon portions
-    val strain: Float,          // length / restLength - 1; reported, not a geometry input
-    /** VALID, or INVALID with a reason and the failing sample indices (§7.4.2). */
-    val pathStatus: PathStatus
-)
+    /** One view per head, built once at construction; reading it allocates nothing. */
+    val muscleStates: List<MuscleState>
+}
+
+/**
+ * Read-only view over one head's slot in an [AnatomyFrame]. Identity and head metadata are static, from the definition;
+ * every per-frame value is a getter into the frame's arrays, so this type never owns a value.
+ */
+class MuscleState internal constructor(private val frame: AnatomyFrame, val head: Int) {
+    val id: String               // from the definition
+    val side: Side
+    val headIndex: Int           // 0 for single-head muscles; path and length are per head (§7.5)
+    val headCount: Int
+    val pointCount: Int get() = frame.pointCounts[head]
+    val length: Float get() = frame.lengths[head]
+    val restLength: Float get() = frame.restLengths[head]
+    val tendonLength: Float get() = frame.tendonLengths[head]
+    val strain: Float get() = frame.strains[head]
+    val pathStatus: PathStatus get() = PathStatus.entries[frame.statuses[head]]
+
+    /** Reads `frame.paths` at this head's offset; allocates nothing. */
+    fun pathPoint(index: Int, out: Vector3)
+}
 
 /** Pure: reads the published pose, writes only its own output buffer. */
 class AnatomySolver(private val definition: AnatomyDefinition) {
     fun solve(pose: SkeletonPose, profile: BodyProfile, out: AnatomyFrame): AnatomyFrame
 }
 ```
+
+**One allocation, then none per frame.** An earlier sketch declared `length`, `restLength`, `tendonLength`, `strain` and
+`pathStatus` as `val`s on `MuscleState` while saying the buffers were reused — with one state per head that is a fresh
+object graph every frame, exactly the allocation the carrier discipline exists to avoid. The values now live in the
+frame's parallel arrays and `MuscleState` is a read-only view over them: `frame.muscleStates` is built once, `solve`
+writes only arrays, and a consumer that needs a value later copies the number, not the state. The later sections still
+speak of `MuscleState.length`, `MuscleState.path`, `restLength`, `strain` and `pathStatus`; under this contract those are
+view getters over the frame, not fields of their own.
 
 ```kotlin
 // ---- Character Appearance Model --------------------------------------------
@@ -2071,6 +2099,8 @@ schedule risk, not the engineering one.
   passes; budgets reported.
 - **Manual acceptance:** no visible shear, no T-pose at frame 0, joints hold across a squat, a hinge and an overhead
   reach.
+- **Gate:** the character renders on a device, and Monk motion retargets to the rig correctly. FPS and thermal numbers are
+  recorded as information, not as a gate — the owner's decision is result first, optimisation later (§12.3).
 - **Risks:** rig art quality; scapula bone without a matching engine rotation would desync (mitigated by D6);
   toolchain pin.
 - **Effort:** 3–4 engineering weeks + 2–3 rig-art weeks.
@@ -2119,9 +2149,13 @@ schedule risk, not the engineering one.
    per-muscle findings against A1–A6, and unresolved limitations. A missing record fails M1 exactly as a red L4 does.
 8. Every claim in the demo's copy survives §11: no "simulated", no measured activation, no implied contraction
    magnitude.
+9. Tap hints on the rig: tapping an attachment landmark names the muscle attached there and the layer it belongs to. The
+   label is anchored to the landmark and the tap moves nothing — no deformation, no geometry keyed to selection. The full
+   picking and explanation system remains stage 7.
 
 **Explicitly not in M1:** authored muscle meshes (stage 3), activation colouring (stage 4), deep muscles, a second
-morphology preset (stage 5), organs, labels, picking, a muscle library beyond eight, and any claim of surface accuracy.
+morphology preset (stage 5), organs, the stage-7 label and picking system (M1 has only the attachment-landmark hints of
+item 9), a muscle library beyond eight, and any claim of surface accuracy.
 
 ### Stage 3 — Path-rigged authored muscle meshes
 
