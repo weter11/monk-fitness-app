@@ -16,6 +16,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.monkfitness.app.R
 import com.monkfitness.app.animation.*
+import com.monkfitness.app.render.SkeletonRenderer
 
 /**
  * The launch path for a validation pose: only the shared rendering pipeline, no workouts, execution,

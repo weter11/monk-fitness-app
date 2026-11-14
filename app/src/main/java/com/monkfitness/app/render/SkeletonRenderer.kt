@@ -1,4 +1,4 @@
-package com.monkfitness.app.animation
+package com.monkfitness.app.render
 
 import androidx.compose.foundation.Canvas
 import androidx.compose.runtime.Composable
@@ -9,6 +9,30 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.lerp
+import com.monkfitness.app.animation.BenchProp
+import com.monkfitness.app.animation.BoxProp
+import com.monkfitness.app.animation.Camera
+import com.monkfitness.app.animation.CameraFrame
+import com.monkfitness.app.animation.CameraFraming
+import com.monkfitness.app.animation.EnvironmentDefinition
+import com.monkfitness.app.animation.Joint
+import com.monkfitness.app.animation.ProjectedBone
+import com.monkfitness.app.animation.ProjectedFace
+import com.monkfitness.app.animation.ProjectedJoint
+import com.monkfitness.app.animation.ProjectedPoint
+import com.monkfitness.app.animation.ProjectedSkeleton
+import com.monkfitness.app.animation.ScreenSpaceCompensation
+import com.monkfitness.app.animation.ScreenSpaceScale
+import com.monkfitness.app.animation.ScreenSpaceSettings
+import com.monkfitness.app.animation.SkeletonEngine
+import com.monkfitness.app.animation.SkeletonPipeline
+import com.monkfitness.app.animation.SkeletonPose
+import com.monkfitness.app.animation.SkeletonProjector
+import com.monkfitness.app.animation.SkeletonStyle
+import com.monkfitness.app.animation.StepProp
+import com.monkfitness.app.animation.SupportPoint
+import com.monkfitness.app.animation.Vector3
+import com.monkfitness.app.animation.WallProp
 
 /**
  * Passive renderer: applies the pre-computed ScreenSpaceScale values from
@@ -204,8 +228,8 @@ private class RenderItem {
 
 private fun getZColor(depth: Float, isForeground: Boolean, style: SkeletonStyle): Color {
     val t = ((170f - depth) / 340f).coerceIn(0f, 1f)
-    val baseC = lerp(style.farColor, style.secondaryColor, t)
-    return if (isForeground) lerp(baseC, style.primaryColor, 0.3f) else baseC
+    val baseC = lerp(Color(style.farColor), Color(style.secondaryColor), t)
+    return if (isForeground) lerp(baseC, Color(style.primaryColor), 0.3f) else baseC
 }
 
 private fun androidx.compose.ui.graphics.drawscope.DrawScope.drawLinearBone(start: Offset, end: Offset, thickness: Float, color: Color) {

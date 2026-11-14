@@ -1,7 +1,6 @@
 package com.monkfitness.app.animation
 
-import androidx.compose.ui.graphics.Color
-
+/** Rig geometry in skeleton units. Colours are ARGB so the style carries no UI toolkit dependency. */
 data class SkeletonStyle(
     val headRadius: Float,
     val jointRadius: Float,
@@ -16,9 +15,9 @@ data class SkeletonStyle(
     val outlineWidth: Float,
     val shadowRadiusX: Float,
     val shadowRadiusY: Float,
-    val primaryColor: Color = Color(0xFF64F0DC),
-    val secondaryColor: Color = Color(0xFFB4C8DC),
-    val farColor: Color = Color(0xFF192337)
+    val primaryColor: Long = 0xFF64F0DC,
+    val secondaryColor: Long = 0xFFB4C8DC,
+    val farColor: Long = 0xFF192337
 ) {
     companion object {
         val DEFAULT = SkeletonStyle(

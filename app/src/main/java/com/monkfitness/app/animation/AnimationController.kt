@@ -1,10 +1,9 @@
 package com.monkfitness.app.animation
 
-import androidx.compose.animation.core.*
-import androidx.compose.runtime.*
-import kotlin.math.*
-
-@Stable
+/**
+ * Playback state of one rep: what the renderer draws and what the rotation gesture turns. Pure
+ * Kotlin — the observable Compose state lives on the UI side, which implements this contract.
+ */
 interface AnimationController {
     val progress: Float
     val side: Side
@@ -20,30 +19,13 @@ interface AnimationController {
     fun onRotate(delta: Float)
 }
 
-private class BaseAnimationController : AnimationController {
-    override var progress: Float by mutableFloatStateOf(0f)
-    override var side: Side by mutableStateOf(Side.RIGHT)
-    override var cameraYawOffset: Float by mutableFloatStateOf(0f)
-        private set
-    override var yawLimits: YawLimits = YawLimits(MAX_YAW_LIMIT, MAX_YAW_LIMIT)
-        set(value) {
-            field = YawLimits(
-                negative = value.negative.coerceIn(0f, MAX_YAW_LIMIT),
-                positive = value.positive.coerceIn(0f, MAX_YAW_LIMIT)
-            )
-            // A surface that shrinks (a shorter hero at a larger text scale) may put the current
-            // viewpoint outside the new limits; the figure would then be cropped until the next drag.
-            cameraYawOffset = cameraYawOffset.coerceIn(-field.negative, field.positive)
-        }
+internal const val MAX_YAW_LIMIT = 1.5708f
 
-    override fun onRotate(delta: Float) {
-        cameraYawOffset = clampedYawOffset(cameraYawOffset, delta, yawLimits)
-    }
-
-    private companion object {
-        const val MAX_YAW_LIMIT = 1.5708f
-    }
-}
+/** Clamps a declared allowance to the reach the gesture can use at all. */
+internal fun coerceYawLimits(value: YawLimits): YawLimits = YawLimits(
+    negative = value.negative.coerceIn(0f, MAX_YAW_LIMIT),
+    positive = value.positive.coerceIn(0f, MAX_YAW_LIMIT)
+)
 
 /**
  * Where a drag lands: the clamp is the surface's own edge, so a drag past it stays on the limit rather
@@ -54,113 +36,44 @@ private class BaseAnimationController : AnimationController {
 internal fun clampedYawOffset(current: Float, delta: Float, limits: YawLimits): Float =
     (current + delta).coerceIn(-limits.negative.coerceAtLeast(0f), limits.positive.coerceAtLeast(0f))
 
-@Composable
-fun rememberAnimationController(
-    metadata: PoseMetadata,
-    alternating: Boolean = false // Still needed for side-switching exercises
-): AnimationController {
-    val controller = remember { BaseAnimationController() }
-    val transition = rememberInfiniteTransition(label = "SkeletonAnimation")
-    val durationMs = (metadata.durationSeconds * 1000).toInt()
+/** The rep at [time] within its loop: how far through the motion and which side is playing. */
+internal data class LoopSample(val progress: Float, val side: Side)
 
+/**
+ * Maps a loop's own clock onto the rep. [time] runs over the mode's period — 0..2 for an alternating
+ * loop, 0..1 otherwise — so the caller owns only the tween that produces it.
+ */
+internal fun loopSample(metadata: PoseMetadata, time: Float, alternating: Boolean): LoopSample =
     when (metadata.loopMode) {
-        LoopMode.LOOP -> {
-            if (alternating) {
-                val totalProgress by transition.animateFloat(
-                    initialValue = 0f,
-                    targetValue = 2f,
-                    animationSpec = infiniteRepeatable(
-                        animation = tween(durationMillis = durationMs * 2, easing = LinearEasing),
-                        repeatMode = RepeatMode.Restart
-                    ),
-                    label = "AlternatingLoop"
-                )
-
-                LaunchedEffect(totalProgress) {
-                    controller.side = if (totalProgress < 1f) Side.RIGHT else Side.LEFT
-                    val p = if (totalProgress < 1f) totalProgress else totalProgress - 1f
-                    val t = if (p < 0.5f) p * 2f else (1f - p) * 2f
-                    controller.progress = MotionCurves.transform(metadata.motionCurve, t)
-                }
-            } else {
-                val p by transition.animateFloat(
-                    initialValue = 0f,
-                    targetValue = 1f,
-                    animationSpec = infiniteRepeatable(
-                        animation = tween(durationMillis = durationMs / 2, easing = LinearEasing),
-                        repeatMode = RepeatMode.Reverse
-                    ),
-                    label = "SimpleLoop"
-                )
-                LaunchedEffect(p) {
-                    controller.progress = p
-                    controller.side = Side.RIGHT
-                }
-            }
+        LoopMode.LOOP -> if (alternating) {
+            val side = if (time < 1f) Side.RIGHT else Side.LEFT
+            val p = if (time < 1f) time else time - 1f
+            val t = if (p < 0.5f) p * 2f else (1f - p) * 2f
+            LoopSample(MotionCurves.transform(metadata.motionCurve, t), side)
+        } else {
+            LoopSample(time, Side.RIGHT)
         }
-        LoopMode.HOLD -> {
-            val inFraction = metadata.breathInFraction
-            val holdFraction = metadata.breathHoldFraction
-            val outFraction = metadata.breathOutFraction
-            val inEnd = inFraction
-            val holdEnd = inEnd + holdFraction
-            val outEnd = holdEnd + outFraction
-
-            val breathTime by transition.animateFloat(
-                initialValue = 0f,
-                targetValue = 1f,
-                animationSpec = infiniteRepeatable(
-                    animation = tween(durationMillis = durationMs, easing = LinearEasing),
-                    repeatMode = RepeatMode.Restart
-                ),
-                label = "BreathingCycle"
-            )
-            LaunchedEffect(breathTime) {
-                controller.side = Side.RIGHT
-                controller.progress = when {
-                    breathTime < inEnd -> {
-                        val t = if (inEnd > 0f) breathTime / inEnd else 0f
-                        MotionCurves.transform(metadata.motionCurve, t)
-                    }
-                    breathTime < holdEnd -> 1f
-                    breathTime < outEnd -> {
-                        val t = if (outFraction > 0f) (breathTime - holdEnd) / outFraction else 0f
-                        1f - MotionCurves.transform(metadata.motionCurve, t)
-                    }
-                    else -> 0f
-                }
-            }
-        }
-        LoopMode.PING_PONG -> {
-            val p by transition.animateFloat(
-                initialValue = 0f,
-                targetValue = 1f,
-                animationSpec = infiniteRepeatable(
-                    animation = tween(durationMillis = durationMs, easing = FastOutSlowInEasing),
-                    repeatMode = RepeatMode.Reverse
-                ),
-                label = "PingPongLoop"
-            )
-            LaunchedEffect(p) {
-                controller.progress = p
-                controller.side = Side.RIGHT
-            }
-        }
-        LoopMode.ONCE -> {
-            val p by transition.animateFloat(
-                initialValue = 0f,
-                targetValue = 1f,
-                animationSpec = infiniteRepeatable( // Keep it infinite but clamped for now or use Animatable
-                    animation = tween(durationMillis = durationMs, easing = FastOutSlowInEasing),
-                    repeatMode = RepeatMode.Restart
-                ),
-                label = "Once"
-            )
-            LaunchedEffect(p) {
-                controller.progress = p
-                controller.side = Side.RIGHT
-            }
-        }
+        LoopMode.HOLD -> LoopSample(breathProgress(metadata, time), Side.RIGHT)
+        LoopMode.PING_PONG, LoopMode.ONCE -> LoopSample(time, Side.RIGHT)
     }
-    return controller
+
+/** A hold breathes in, holds and breathes out; the phases are fractions of the whole cycle. */
+private fun breathProgress(metadata: PoseMetadata, time: Float): Float {
+    val outFraction = metadata.breathOutFraction
+    val inEnd = metadata.breathInFraction
+    val holdEnd = inEnd + metadata.breathHoldFraction
+    val outEnd = holdEnd + outFraction
+
+    return when {
+        time < inEnd -> {
+            val t = if (inEnd > 0f) time / inEnd else 0f
+            MotionCurves.transform(metadata.motionCurve, t)
+        }
+        time < holdEnd -> 1f
+        time < outEnd -> {
+            val t = if (outFraction > 0f) (time - holdEnd) / outFraction else 0f
+            1f - MotionCurves.transform(metadata.motionCurve, t)
+        }
+        else -> 0f
+    }
 }

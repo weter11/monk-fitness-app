@@ -1,4 +1,9 @@
-package com.monkfitness.app.animation
+package com.monkfitness.app.render
+
+import com.monkfitness.app.animation.EnvironmentDefinition
+import com.monkfitness.app.animation.SkeletonDefinition
+import com.monkfitness.app.animation.SkeletonPose
+import com.monkfitness.app.animation.ValidationReport
 
 /** Target requirements, constraints and metadata for one automated generation run. */
 data class ExerciseGenerationRequest(

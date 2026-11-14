@@ -1,6 +1,13 @@
 package com.monkfitness.app
 
 import com.monkfitness.app.animation.*
+import com.monkfitness.app.render.ExerciseGenerationFeedback
+import com.monkfitness.app.render.ExerciseGenerationRequest
+import com.monkfitness.app.render.ExerciseGenerationResult
+import com.monkfitness.app.render.ExerciseSnapshot
+import com.monkfitness.app.render.ExerciseSnapshotSequence
+import com.monkfitness.app.render.GenerationIteration
+import com.monkfitness.app.render.GenerationScore
 import org.junit.Assert.*
 import org.junit.Test
 
