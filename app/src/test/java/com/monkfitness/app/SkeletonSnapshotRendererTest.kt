@@ -2,6 +2,9 @@ package com.monkfitness.app
 
 import android.graphics.Bitmap
 import com.monkfitness.app.animation.*
+import com.monkfitness.app.render.ExerciseSnapshot
+import com.monkfitness.app.render.ExerciseSnapshotSequence
+import com.monkfitness.app.render.SkeletonSnapshotRenderer
 import com.monkfitness.app.poses.HamstringStretchPose
 import org.junit.Assert.*
 import org.junit.Test

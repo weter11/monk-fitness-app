@@ -1,10 +1,38 @@
-package com.monkfitness.app.animation
+package com.monkfitness.app.render
 
 import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.graphics.Paint
 import android.graphics.Path
 import android.graphics.RectF
+import com.monkfitness.app.animation.BenchProp
+import com.monkfitness.app.animation.BoxProp
+import com.monkfitness.app.animation.Camera
+import com.monkfitness.app.animation.CameraFrame
+import com.monkfitness.app.animation.CameraFraming
+import com.monkfitness.app.animation.EnvironmentDefinition
+import com.monkfitness.app.animation.Joint
+import com.monkfitness.app.animation.PoseBuilder
+import com.monkfitness.app.animation.PoseContext
+import com.monkfitness.app.animation.ProjectedBone
+import com.monkfitness.app.animation.ProjectedFace
+import com.monkfitness.app.animation.ProjectedJoint
+import com.monkfitness.app.animation.ProjectedPoint
+import com.monkfitness.app.animation.ProjectedSkeleton
+import com.monkfitness.app.animation.ScreenSpaceCompensation
+import com.monkfitness.app.animation.ScreenSpaceScale
+import com.monkfitness.app.animation.ScreenSpaceSettings
+import com.monkfitness.app.animation.Side
+import com.monkfitness.app.animation.SkeletonDefinition
+import com.monkfitness.app.animation.SkeletonEngine
+import com.monkfitness.app.animation.SkeletonPipeline
+import com.monkfitness.app.animation.SkeletonPose
+import com.monkfitness.app.animation.SkeletonProjector
+import com.monkfitness.app.animation.SkeletonStyle
+import com.monkfitness.app.animation.StepProp
+import com.monkfitness.app.animation.SupportPoint
+import com.monkfitness.app.animation.Vector3
+import com.monkfitness.app.animation.WallProp
 
 /**
  * Non-Compose, off-screen renderer for SkeletonPose: snapshots, sprite sheets and contact sheets
@@ -435,8 +463,12 @@ class SkeletonSnapshotRenderer(
 
     private fun getZColor(depth: Float, isForeground: Boolean, style: SkeletonStyle): androidx.compose.ui.graphics.Color {
         val t = ((170f - depth) / 340f).coerceIn(0f, 1f)
-        val baseC = lerp(style.farColor, style.secondaryColor, t)
-        return if (isForeground) lerp(baseC, style.primaryColor, 0.3f) else baseC
+        val baseC = lerp(
+            androidx.compose.ui.graphics.Color(style.farColor),
+            androidx.compose.ui.graphics.Color(style.secondaryColor),
+            t
+        )
+        return if (isForeground) lerp(baseC, androidx.compose.ui.graphics.Color(style.primaryColor), 0.3f) else baseC
     }
 
     private fun lerp(

@@ -1,6 +1,7 @@
-package com.monkfitness.app.animation
+package com.monkfitness.app.render
 
 import android.graphics.Bitmap
+import com.monkfitness.app.animation.SkeletonPose
 
 data class ExerciseSnapshot(
     val frameIndex: Int,

@@ -1,4 +1,4 @@
-package com.monkfitness.app.animation
+package com.monkfitness.app.render
 
 import android.graphics.Bitmap
 import android.graphics.Canvas

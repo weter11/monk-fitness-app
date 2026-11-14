@@ -34,10 +34,10 @@ import com.monkfitness.app.animation.SkeletonDefinition
 import com.monkfitness.app.animation.SkeletonEngine
 import com.monkfitness.app.animation.SkeletonStyle
 import com.monkfitness.app.animation.YawLimits
-import com.monkfitness.app.animation.rememberAnimationController
 import com.monkfitness.app.data.model.Exercise
 import com.monkfitness.app.data.model.skeletonAnimation
 import com.monkfitness.app.poses.PoseRegistry
+import com.monkfitness.app.render.rememberAnimationController
 
 /**
  * The media hero shared by the workout session and the posture extra workout: the exercise drawn

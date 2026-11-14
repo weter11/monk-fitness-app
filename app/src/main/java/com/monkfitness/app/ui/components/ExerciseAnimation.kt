@@ -30,15 +30,15 @@ import com.monkfitness.app.animation.PoseContext
 import com.monkfitness.app.animation.Side
 import com.monkfitness.app.animation.SkeletonDefinition
 import com.monkfitness.app.animation.SkeletonEngine
-import com.monkfitness.app.animation.SkeletonRenderer
 import com.monkfitness.app.animation.SkeletonStyle
-import com.monkfitness.app.animation.rememberAnimationController
 import com.monkfitness.app.poses.PoseRegistry
 import com.monkfitness.app.ui.components.animation.Joint
 import com.monkfitness.app.ui.components.animation.SkeletonAnimation
 import com.monkfitness.app.ui.components.animation.SkeletonOverlay
 import com.monkfitness.app.ui.components.animation.SkeletonPose
+import com.monkfitness.app.render.SkeletonRenderer
 import com.monkfitness.app.ui.components.animation.poseAt
+import com.monkfitness.app.render.rememberAnimationController
 import kotlin.math.max
 import kotlin.math.sqrt
 
