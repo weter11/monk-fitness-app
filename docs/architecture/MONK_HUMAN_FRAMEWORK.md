@@ -550,7 +550,7 @@ library, one anatomy library and one animation library serve every body.
 
 | Requirement | Rule | Why |
 | --- | --- | --- |
-| Joint names | `Hips, Spine, Chest, Neck, Head, {Left,Right}Shoulder, {Left,Right}Scapula, {Left,Right}Arm, {Left,Right}ForeArm, {Left,Right}Hand, {Left,Right}UpLeg, {Left,Right}Leg, {Left,Right}Foot, {Left,Right}ToeBase` plus visual-only bones | the resolver matches normalized names (`MonkJointResolver.kt:12-34`, PR #385); keeping Mixamo-compatible names keeps third-party rigs usable |
+| Joint names | `Hips, Spine, Chest, Neck, Head, {Left,Right}Shoulder, {Left,Right}Scapula, {Left,Right}Arm, {Left,Right}ForeArm, {Left,Right}Hand, {Left,Right}UpLeg, {Left,Right}Leg, {Left,Right}Foot, {Left,Right}ToeBase` plus visual-only bones | the resolver matches normalized names (`MonkJointResolver.kt:12-34`, PR #385). Rigs are **first-party and built to `SkeletonDefinition`**: the Mixamo-compatible naming is a convention that keeps the map readable and reviewable, not a promise that a third-party rig can be dropped in — its bone lengths, bind pose and joint placement are calibrated to nothing in this engine (§6.6 A1/A2) |
 | Hierarchy | the 23 mapped bones keep their parent chain; scapula sits between clavicle and arm | the engine's girdle DOF (`CHEST → CLAVICLE → SCAPULA → SHOULDER`, `SkeletonFactory.kt:71-80`) only reaches the body if the rig has a scapula bone |
 | Rest pose | arms at the sides, matching the engine's rest stance; **not** a T-pose | rest-delta retarget multiplies the source delta onto the target rest (`PoseRetargeter.kt:58-68`); a T-pose bind leaves the figure in T-pose at every frame 0 |
 | Bind pose | identical to rest pose | the rest invariant test proves `identity` on every bone at neutral (`PoseRetargeterTest`, PR #385) |
@@ -558,9 +558,12 @@ library, one anatomy library and one animation library serve every body.
 | Scale | one uniform scale per character; no per-bone scaling for appearance | non-uniform bone scale distorts joint volume and is not a morphology tool |
 | Fingers | visual-only, 2 segments per finger or a single segment in tier `reduced` | the engine has no finger kinematics beyond `HAND_A`; the rig may add them as static/derived |
 
-`humanoid_v2` target bone counts: **23 mapped bones + up to 20 visual-only bones (fingers, jaw, eyes, twist) + muscle
-helper bones** (§7.5). The current PR #385 asset has 32 joints, 5 single-segment fingers per hand, no scapula, no twist
-bones. The scapula addition is the only rig change that materially affects anatomy quality.
+`humanoid_v2` target bone counts: **23 mapped bones + up to 30 visual-only bones (fingers, jaw, eyes, twist) + muscle
+helper bones** (§7.5). The 30 is a budget for the parts the rig may add: 20 finger segments (5 fingers × 2 segments ×
+2 hands), a jaw, two eyes and up to six twist bones (upper arm, forearm and thigh per side) reach 29 — visual only, in
+the sense that the engine has no joint for any of them. The current
+PR #385 asset has 32 joints, 5 single-segment fingers per hand, no scapula, no twist bones. The scapula addition is the
+only rig change that materially affects anatomy quality.
 
 **This is a v1 scope constraint, not an architectural law.** One rig is what makes M1 affordable: one `BoneMap`, one
 rest invariant, one pose library, one anatomy library. It is not a claim that a single rig, surface morphs and uniform
@@ -585,6 +588,23 @@ class BoneMap(
     val basis: Quat                                           // source -> target axis correction
 )
 ```
+
+**What a one-to-many split distributes.** It distributes a *rotation*, never quaternion components. An entry with weight
+`w` gives its bone the fractional rotation about the engine joint's own axis:
+
+```
+R_w = quatFromAxisAngle(axis(R), angle(R) · w)      // slerp from identity, by w
+```
+
+The list is ordered **proximal → distal**, and each entry is applied on top of its parent's fraction, so the last bone in
+the list carries the full rotation. With `Spine 0.6, Spine1 0.4` — both about the same axis — the composed rotation is
+`angle(R) · (0.6 + 0.4) = angle(R)`: the weights "sum to 1" in exactly that sense, a sum of fractional rotations of one
+axis, not a sum of independently meaningful numbers.
+
+**Component weighting is forbidden.** `q = normalize(Σ wᵢ qᵢ)` over quaternion components is not a rotation of the
+source's axis; unless the components are collinear it scales and shears the segment instead of splitting its rotation,
+and it fails silently because the result still normalises to a unit quaternion. A split whose entries do not share the
+joint's axis is a **map error reported at L2**, not something the runtime silently reinterprets.
 
 | Engine joint (segment role) | Rig bone | Notes |
 | --- | --- | --- |
@@ -622,6 +642,13 @@ test asset, not four M1 deliverables: M1 ships one preset, and four body familie
 either is the validation that makes presets safe: region masks around joint pivots and a rest-invariant check per preset.
 Without a mask, a shoulder-width morph drags the deltoid ring through the acromion and no joint-space rule can see it.
 
+**Morph targets deform soft tissue only.** A surface morph moves skin and muscle vertices. It never changes a bone's
+dimensions, a joint position or a segment length: a `ShoulderWidth` morph widens the deltoid surface and **must not widen
+a bone**, lengthen a clavicle or move the `SHOULDER_A` joint point, because that would change IK reach while the motion
+model believes nothing moved. The check is L6: **joint landmark positions are unchanged under every morph, within
+`ε_morph` (proposed, fixed at stage 1)**, measured on the same landmarks `RigLandmarkAlignmentTest` uses, so a morph that
+shifts a joint fails the preset instead of surfacing as a visual surprise.
+
 **A consequence that must be budgeted, not discovered:** a body morph target moves surface vertices, and muscle meshes
 are separate renderables. A muscle layer therefore does **not** inherit the body's morphs; either the muscle asset
 carries the matching morph targets, or the muscle layer is authored per body family. The anatomy *data* stays shared —
@@ -645,7 +672,10 @@ They are classified as an approximation (§11), not as anatomy.
     "muscles_deep": "characters/male_muscular/muscles_deep.glb"
   },
   "skeletonOverlay": "shared/skeleton_v1.glb",
-  "morphology": { "preset": "muscular", "weights": [1.0, 0.7, -0.35, 0.9, 0.05] },
+  "morphology": {
+    "preset": "muscular",
+    "weights": { "shoulderWidth": 1.0, "chestVolume": 0.7, "waistWidth": -0.35, "limbThickness": 0.9, "headScale": 0.05 }
+  },
   "materials": { "skin": "skin_03", "roughness": 0.55 },
   "heightMetres": 1.80,
   "quality": "standard",
@@ -653,10 +683,34 @@ They are classified as an approximation (§11), not as anatomy.
 }
 ```
 
+**Morph weights are named, not positional.** `weights` maps a morph target name to a weight. The preset supplies a
+default for every target it declares; an explicit entry overrides that one name and leaves the rest at the preset's
+values. A name the asset does not carry is a profile error, not a silent zero — neither rule is expressible in the
+positional array this replaces, where a reordered morph set silently reinterprets the body.
+
+**What range a weight may take — measured, not invented.** The GLB declares five position-delta targets
+(`ShoulderWidth`, `ChestVolume`, `WaistWidth`, `LimbThickness`, `HeadScale`) and **no weight range at all**: glTF morph
+weights are unbounded floats. The asset's only statement about magnitude is the delta authored at weight 1.0 — 55 mm,
+50 mm, 55 mm and 22 mm of displacement, and 10 % of head radius for `HeadScale` (`morph_deltas` in
+`spike-humanoid/tools/generate_humanoid_glb.py`, PR #384) — and the shipped presets span `−0.55 … 1.00`
+(`MorphologyPreset.kt:8-11`), which is the only evidence that negative weights are intended and that 1.0 is the authored
+extreme. The profile therefore **declares `min`/`max` per named morph**, checked by `MorphPresetTest` at L6; the numbers
+above are the asset's authored envelope, not a guess. Nothing in the asset stops a weight of 3.0 from rendering — this
+document refuses to ship a weight the asset was not authored for, and a name with no declared range is a profile error
+because it cannot be validated.
+
+**`heightMetres` is the calibration input, not a morphology control.** It is the `rigHeight` argument of
+`CharacterCalibration.unitScale` (`character/CharacterCalibration.kt:14-26`, PR #385) — the scale is
+`heightMetres / (HEAD_POS.y − min(TOE_F.y, TOE_B.y))`, evaluated on a throwaway `AirSquatPose` frame at progress 0 so
+calibration cannot advance the render pipeline's frame history. Today the runtime measures that height from the rig
+(`PoseRetargeter.restHeight()`: max − min of the rest world translations) rather than reading a profile field; recording
+it here is what makes a declared/measured mismatch detectable. It scales the character uniformly and cannot change a
+segment length — those live in the rig's bind pose and are a `SkeletonDefinition` matter (§6.1, §6.3).
+
 `anatomyOverrides` is the escape hatch for a body family whose *shared* attachment is measurably wrong (for example a
 pelvis-width-dependent origin). It must be sparse, named, and reviewed; it is not a per-character copy of the library.
-An override moves an attachment, never a rig bone or a joint: it cannot repair a rig-to-engine alignment residual
-(§6.6 A1/A2), which is an asset failure fixed in the rig or its calibration.
+An override moves an attachment, never a rig bone or a joint — for why that leaves it useless against an alignment
+residual, see the dedicated paragraph in §6.6.
 
 `BodyProfile` and the overrides are **anatomy inputs only**. They never reach the engine, never change a joint, a pose or
 a `SkeletonDefinition`, and cannot be used to move the body to meet a mesh (§6.6 A3). A profile field that would have to
@@ -688,9 +742,9 @@ is calibrated to the engine skeleton, and they stay coincident only while the se
 alignment invariant, and it belongs to the Character model — the owner of the asset — not to anatomy.
 
 **A1 — bind-stance landmark coincidence.** For every mapped joint `j`, at the bind stance, the rig bone head converted to
-engine space equals the engine joint position within `τ_bind`, and the rig bone's rest orientation equals the engine rest
-orientation within `τ_rot` (both proposed: 2 mm and 0.5°, fixed at stage 1 against the debug overlay). Checked by
-`RigLandmarkAlignmentTest` (L2).
+engine space equals the engine joint position within `τ_bind` = **0.5 mm**, and the rig bone's rest orientation equals the
+engine rest orientation within `τ_rot` = **0.5°** (both proposed, fixed at stage 1 against the debug overlay). Checked
+by `RigLandmarkAlignmentTest` (L2).
 
 **A2 — motion residual bound.** With A1 true and identical rotation deltas, a child bone head is displaced only by the
 segment-length error accumulated along its ancestor chain:
@@ -704,9 +758,15 @@ bound is reported per joint by `RigAlignmentResidualTest` (L2) together with the
 representative poses (squat bottom, push-up bottom, overhead reach). A measured residual above `τ_residual` (proposed
 5 mm at the most distal mapped joint) fails the asset, not the anatomy.
 
+**A1 is per joint; A2 accumulates along a chain, and A1 does not imply A2.** Every mapped head can sit inside 0.5 mm of
+its joint while A2 still exceeds 5 mm at the hand or the toe, because A2 sums the segment-length error down the ancestor
+chain and that sum grows with depth. The converse holds too: a chain can close within 5 mm at its distal joint with
+individual heads outside the 0.5 mm bound. Neither bound substitutes for the other, and neither is a pass on its own —
+**the measured residual at the three poses decides** which of the two a candidate asset actually fails.
+
 **A3 — the rig follows anatomy, never the reverse.** If the residual exceeds tolerance, the fix is a better rig (bone
-heads and lengths recalibrated to the engine skeleton) or a correction in the calibration (§6.6 A1/A2, L2). Anatomy is
-never nudged to fit a mesh, and a character is never allowed to move a joint to meet a muscle.
+heads and lengths recalibrated to the engine skeleton) or a correction in the calibration (§6.6 A1/A2, L2). An override
+cannot stand in for that fix — see the next paragraph.
 
 **`anatomyOverrides` cannot repair an alignment residual.** An override changes an *attachment offset* in the shared
 anatomy data (§6.4); it does not move a rig bone head, change a segment length, or alter a rest orientation — the three
@@ -1860,6 +1920,11 @@ individual reports say.
 9. **Which tool measures muscle-versus-skin intersection** — L6's "anatomy inside the body" and L5's self-intersection
    are not automated for M1 (§12.5). Building a mesh-intersection check is a tooling decision, not an architecture one;
    until it exists those checks are L7 judgements.
+10. **Lumbar curvature** — the engine has one `LUMBAR` and one `CHEST` joint, so the spine is two rigid segments. M1 can
+   show pelvic tilt and a whole-thorax rotation, but **not lumbar curvature (lordosis)**: a muscle whose path depends on
+   a lumbar curve is authored against a straight spine, and the limitation belongs in the review record (§12.4) rather
+   than in a pose. Known limit, not a blocker: an extra lumbar joint would change `SkeletonDefinition`, revalidate every
+   pose and recalibrate every rig (§6.1), and no stage in §15 budgets for that.
 
 **Known traps from the device run (spike #384).** Each cost a debugging cycle on real hardware, and each is a property of
 the current code, not of the model. PR #385 at `bcb3658` contains none of the first three fixes; a preparatory change is
