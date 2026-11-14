@@ -6,6 +6,7 @@ import android.content.pm.PackageManager
 import android.os.Build
 import com.google.android.filament.Engine
 import com.google.android.filament.Filament
+import com.google.android.filament.gltfio.Gltfio
 
 /** What the caller asks the runtime for. Production always uses [AUTO]. */
 enum class BackendRequest(val label: String) {
@@ -127,6 +128,9 @@ object FilamentEngines {
     fun create(request: BackendRequest): BackendSelection<Engine> =
         BackendSelector { backend ->
             Filament.init()
+            // gltfio ships its own JNI library; Filament.init() does not load it, and the first
+            // UbershaderProvider call throws UnsatisfiedLinkError without it.
+            Gltfio.init()
             Creation(Engine.create(backend))
         }.select(request)
 }

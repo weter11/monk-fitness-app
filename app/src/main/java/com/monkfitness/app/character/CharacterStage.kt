@@ -1,6 +1,7 @@
 package com.monkfitness.app.character
 
 import android.view.TextureView
+import android.view.View
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -15,8 +16,8 @@ import androidx.lifecycle.LifecycleEventObserver
 import com.monkfitness.app.animation.MotionCurves
 import com.monkfitness.app.animation.PoseContext
 import com.monkfitness.app.animation.SkeletonDefinition
-import com.monkfitness.app.animation.rememberAnimationController
 import com.monkfitness.app.poses.PoseRegistry
+import com.monkfitness.app.render.rememberAnimationController
 
 private class CharacterAttachment(
     val token: Any,
@@ -82,13 +83,19 @@ fun CharacterStage(
         }
     }
 
-    if (attachment.session != null) {
+    val session = attachment.session
+    if (session != null) {
         AndroidView(
             modifier = modifier.fillMaxSize(),
             factory = { context ->
                 TextureView(context).also { view ->
                     view.isOpaque = true
-                    attachment.session.attach(view)
+                    // UiHelper needs a live SurfaceTexture, which does not exist until the view is in
+                    // a window; attaching from the factory hands it a surface that is not there yet.
+                    view.addOnAttachStateChangeListener(object : View.OnAttachStateChangeListener {
+                        override fun onViewAttachedToWindow(v: View) = session.attach(view)
+                        override fun onViewDetachedFromWindow(v: View) = session.detach()
+                    })
                 }
             }
         )

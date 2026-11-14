@@ -64,7 +64,6 @@ class CharacterSession(
     private var retargeter: PoseRetargeter? = null
     private var morphology = MorphologyPreset.NEUTRAL
 
-    private var attached = false
     private var destroyed = false
     private var lastFrameNanos = 0L
     private var smoothedFps = 0f
@@ -221,6 +220,9 @@ class CharacterSession(
 
         view.setShadowType(View.ShadowType.PCF)
         view.setAntiAliasing(View.AntiAliasing.FXAA)
+        // A view with no scene draws nothing at all: the surface keeps its default black and even
+        // the clear colour never lands.
+        view.scene = scene
         view.camera = camera
         view.setPostProcessingEnabled(true)
 
@@ -240,9 +242,13 @@ class CharacterSession(
     }
 
     fun attach(textureView: TextureView) {
-        if (attached || destroyed) return
-        attached = true
+        if (destroyed) return
         uiHelper.attachTo(textureView)
+    }
+
+    fun detach() {
+        if (destroyed) return
+        uiHelper.detach()
     }
 
     fun start() {
@@ -274,6 +280,7 @@ class CharacterSession(
         indirectLight?.let { engine.destroyIndirectLight(it) }
         indirectLight = null
         engine.destroyRenderer(renderer)
+        // The view is bound to the scene, so it is torn down before the scene it points at.
         engine.destroyView(view)
         engine.destroyScene(scene)
         engine.destroyCameraComponent(cameraEntity)
