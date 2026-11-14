@@ -85,8 +85,9 @@ on PR #385) to confirm joint count, triangle count and morph targets rather than
 - The AA-3D weightlifter viewer is treated as an **external reference implementation**: its published muscle-data design
   is used as inspiration, its measured cost is used as a scale reference, and none of its numbers are treated as a
   specification for this app.
-- Unverified items are labelled. The build environment has no Android device; anything requiring a GPU, a driver or
-  sustained thermal behaviour is a device-validation item, not a claim.
+- Unverified items are labelled. The agent's build environment has no Android device; a phone does exist now, and one
+  spike run has been recorded (§3.4, §12.3). Anything requiring a GPU, a driver or sustained thermal behaviour is still
+  a device-validation item: recorded from a run, never inferred here.
 
 ---
 
@@ -231,13 +232,21 @@ the `Ground` node is in both — the two PRs ship one asset under two names.
 Filament is pinned to **1.75.1** (`gradle/libs.versions.toml:15`): 1.76+ requires `compileSdk 37` and the app is on 34.
 The documented native payload is 7.4 MB arm64 and a debug APK with the asset is 18.8 MB (`docs/CHARACTER_FRAMEWORK.md` §1).
 
+**One device run, informational.** The #384 spike was run on the owner's phone — Adreno 735, OpenGL ES 3.2, feature
+level 2 — and held ~59 fps on the skinned 30,720-triangle asset. That is one run of one asset on one device; it is
+recorded because it is the only device evidence the programme has, and it is not a budget, a floor for the reduced tier,
+or evidence about a mid-range device. By the owner's decision formal FPS and thermal gating is **deferred** — result
+first, optimisation later — so no stage gate depends on these numbers (§12.3). The three launch defects the run exposed
+are listed as known traps in §13.
+
 ### 3.5 What the AA-3D viewer contributes — and what it does not
 
 **Provenance, stated because it limits what these numbers can do.** The figures below are quoted from an external
 reference implementation's own page state, as reported in the review that produced this section. This document contains
 no URL for the artifact, so the numbers are **not reproducible from this repository and are not verified here**. They are
 used as a scale reference for what a browser-side implementation costs — never as a budget for this app, and never as
-evidence about a phone. Every device number in this framework comes from the stage-1 gate or does not exist.
+evidence about a phone. The only device numbers in this framework come from one run of the #384 spike (§3.4); they are
+informational, and no stage gate depends on them (§12.3).
 
 Measured on the referenced artifact (external site, model-generated page; numbers from the page's own
 `__SCENE_STATE__`): 92,610 triangles, 193 draw calls, ~57 fps at DPR 1 in headless Chrome; muscle geometry rebuilt from
@@ -262,7 +271,7 @@ What it does not contribute, and this framework deliberately rejects:
 - balance as a centre-of-mass box test, presented as physical plausibility;
 - a fixed 33-joint anatomical rig with per-rib and per-organ segments, which this engine's namespace does not have;
 - geometry rebuilt on the CPU every frame for the full library, which this framework assumes is unaffordable on a
-  mid-range phone — an assumption to be measured at stage 1, not a measurement;
+  mid-range phone — the single Adreno 735 run of §3.4 is the only evidence either way, and it is informational;
 - its length-to-thickness shape response, which this framework does not adopt (§7.6).
 
 ### 3.6 Gaps the framework must close
@@ -276,7 +285,7 @@ What it does not contribute, and this framework deliberately rejects:
 | No rig/asset validation | a wrong bone map, bind pose or weight set fails visually, late | Validation L2–L6 (§12) |
 | No anatomical acceptance gate | nothing distinguishes "the joints are right" from "the anatomy is right"; a plausible model can pass every numeric rule | L7 review (§12.4) |
 | No morph validation | morphology can silently break joints or anatomy | Validation L6 (§12) |
-| No device evidence | Filament FPS, thermal drift and context loss are unmeasured | Roadmap stage 1 gate (§15) |
+| Device evidence | one informational spike run (§3.4); an FPS budget, thermal drift and context loss are still unmeasured | stage 1 records a run; formal FPS/thermal gating is deferred by the owner (§12.3) |
 
 ---
 
@@ -1303,7 +1312,7 @@ input.
 | Muscle mesh authoring pipeline | strategy C needs meshes bound to helper bones | one Blender-based pipeline producing a GLB with helper bones + 4 weights; validate with the asset tool |
 | Left/right and origin/insertion conventions per muscle | mirroring errors are silent | the side check (§12 L2) plus a per-muscle review checklist |
 | Pennation / multi-head handling | biceps and triceps need two/three heads sharing one visual belly | model heads as separate paths with a shared mesh region; validate that head lengths differ plausibly |
-| Whether a single skin can hold all helper bones | Filament's per-renderable bone budget is engine- and driver-dependent and **unmeasured here** | measure on one device; if the budget is too small, split the muscle layer into regional renderables (§10.3) |
+| Whether a single skin can hold all helper bones | Filament's per-renderable bone budget is engine- and driver-dependent and **unmeasured on the phone** — the #384 run reports a frame rate, not the bone limit | measure on the target device; if the budget is too small, split the muscle layer into regional renderables (§10.3) |
 | Per-muscle cross-section behaviour, if it is ever wanted | no validated model exists; the cylinder law is a plausibility argument, not evidence (§7.6) | an imaging-based study of the specific muscles through their working ranges, with a stated tolerance — a research task, not an engineering one |
 
 ---
@@ -1495,11 +1504,12 @@ M1 total          ≈ Σ over heads of that, plus 2 × R per capped end
 
 At the declared defaults (N ≤ 48, R = 8) and eight muscles with one head each, that is ≈ 6.0 k triangles; a two-head
 muscle adds a second tube, and a flat sheet muscle uses a two-sided strip instead of a ring. Both `N` and `R` are
-declared in the quality tier, so the number is bounded before any device run. It is arithmetic, not a measurement: the
-device gate in stage 1 measures frame time and memory, and the measured number replaces the estimate in this table.
+declared in the quality tier, so the number is bounded before any device run. It is arithmetic, not a measurement:
+stage 1 records frame time and memory on the target device as information, not as a gate (§12.3), and a measured number
+replaces the estimate in this table when one exists.
 
 **Bone-budget risk.** A single skin holding every muscle's helper bones may exceed what Filament accepts per renderable
-on a given driver. That number is **unmeasured here**. The design therefore allows the muscle layer to be split into
+on a given driver. That number is **unmeasured on the phone**. The design therefore allows the muscle layer to be split into
 regional renderables (trunk, left arm, right arm, left leg, right leg, head), each with its own skin and helper range.
 The split is an asset decision recorded in the manifest, not a runtime guess.
 
@@ -1717,11 +1727,21 @@ property that the two checks disagree, and the L4 report records which check pro
 produces an `INVALID` result where the table expects `VALID` fails L4; a fixture that produces a path through geometry
 fails L4 twice — once for the geometry and once for accepting it.
 
-### 12.3 Device-only evidence (not claimed here)
+### 12.3 Device evidence
 
-Frame time, jank, thermal drift, surface recreation and context loss cannot be validated in this environment. They are
-gates on stage 1 and are recorded in `docs/CHARACTER_DEVICE_VALIDATION.md` (PR #385) with backend, FPS, p95 frame time
-and defects per device.
+A device exists. One run of the #384 spike on the owner's phone — Adreno 735, OpenGL ES 3.2, feature level 2 — held
+~59 fps on the skinned 30,720-triangle asset, and the launch defects that run exposed are recorded as known traps in §13.
+That is the whole of the device evidence: one device, one asset, one run; no p95, no thermal soak, no context-loss test,
+no second device.
+
+Frame time, jank, thermal drift, surface recreation and context loss therefore remain unmeasured as budgets.
+`docs/CHARACTER_DEVICE_VALIDATION.md` (PR #385) is the procedure that records backend, FPS, p95 frame time and defects
+per device; it has not been filled in by a machine run, and filling it in is device work, not agent work.
+
+**Formal FPS and thermal gating is deferred by the owner's decision.** The priority is a correct result first and
+optimisation later, so nothing in this document gates on a frame-rate or thermal number; those numbers are recorded as
+information. Stage 1's gate is that the character renders on a device and that Monk motion retargets to the rig
+correctly (§15).
 
 ### 12.4 Anatomical review gate (M1 acceptance)
 
@@ -1800,7 +1820,7 @@ individual reports say.
 | R1 | Filament toolchain pin (1.75.1, compileSdk 34) blocks needed features | medium | medium | keep the pin; treat the compileSdk upgrade as a separate change with its own CI | engineering |
 | R2 | Muscle authoring cost is much larger than estimated | high | high | M1 uses 8 muscles; strategy A proves the pipeline before art is commissioned | product + art |
 | R3 | Per-renderable bone budget too small for the library | medium | high | regional renderable split (§10.3); measure at stage 1 | engineering |
-| R4 | No device in the build environment | certain | medium | stage 1 device gate before any expansion; claims never stated without it | engineering |
+| R4 | Device evidence is one run on one phone | certain | medium | record each run (§12.3); generalise no number beyond the device it came from; FPS/thermal gating deferred by the owner | engineering |
 | R5 | Anatomy review capacity (physio/anatomist) is the bottleneck | high | high | batch reviews per layer; L3/L7 checklists reduce the time per muscle | product |
 | R6 | Morphs degrade joints silently | medium | medium | L6 rest invariant + joint-ring test | engineering |
 | R7 | Attachment data drifts when `SkeletonDefinition` changes | medium | high | one `unitsPerMetre`, rest-length test, definition version pin | engineering |
@@ -1840,6 +1860,26 @@ individual reports say.
 9. **Which tool measures muscle-versus-skin intersection** — L6's "anatomy inside the body" and L5's self-intersection
    are not automated for M1 (§12.5). Building a mesh-intersection check is a tooling decision, not an architecture one;
    until it exists those checks are L7 judgements.
+
+**Known traps from the device run (spike #384).** Each cost a debugging cycle on real hardware, and each is a property of
+the current code, not of the model. PR #385 at `bcb3658` contains none of the first three fixes; a preparatory change is
+bringing them into the stage-2 runtime before the framework builds on it.
+
+- **`Gltfio.init()` must accompany `Filament.init()`.** `libgltfio-jni.so` is packaged but not loaded by `Filament.init()`,
+  so the first `UbershaderProvider` call throws `UnsatisfiedLinkError`.
+- **Attach the `TextureView` to `UiHelper` only after `onViewAttachedToWindow`.** Attaching it from the Compose factory
+  hands `UiHelper` a view whose `SurfaceTexture` does not exist yet.
+- **`view.scene` must be assigned.** Without it nothing is drawn — not the character and not even the clear colour, so
+  the viewport keeps the surface's default black and the swap chain is never touched.
+- **`Renderer.readPixels` never fired its callback in the spike**, so image checks read `TextureView.getBitmap()` from
+  the view's own `SurfaceTexture` instead of the framebuffer.
+- **The fixed camera crops floor-level poses.** `lookAt(0.0, 1.05, 3.4)` with `setLensProjection(45.0, …)` frames a
+  standing figure; floor-level poses such as the plank fell outside the frame, so any image-based check must refit the
+  camera per pose.
+
+Two of the five are silent: a missing `view.scene` and a stale texture attachment both present as a black rectangle,
+which reads like a shader or asset defect rather than a wiring one — the reason they are recorded here instead of
+rediscovered on every device.
 
 ---
 
