@@ -79,7 +79,9 @@ class ProjectedSkeleton(
 ) {
     val indicators = Array(2) { ProjectedJoint() }
     val shadowPoints = Array(5) { ProjectedPoint() }
-    val gridLines = Array(20) { ProjectedGridLine() }
+    // The floor lattice is a screen-space grid over the surface, so its line count follows the
+    // surface's size rather than a fixed world patch; a hero at density 502 needs about sixty.
+    val gridLines = Array(96) { ProjectedGridLine() }
 
     var boneCount: Int = 0
     var faceCount: Int = 0

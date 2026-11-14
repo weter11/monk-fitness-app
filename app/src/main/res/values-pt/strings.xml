@@ -787,7 +787,6 @@
     <string name="validation_dead_hang_p3">Proporções dos braços e orientação dos punhos</string>
 
     <!-- C2 — the exercise hero's camera mode toggle: the opt-in dynamic "camera push-in" (per-frame framing). OFF by default; the default presentation draws the exercise at one static frame. -->
-    <string name="camera_dynamic">Câmera dinâmica</string>
 
     <string name="ok">OK</string>
 
@@ -1123,6 +1122,7 @@
     <string name="programs_session_result_cancelled">Treino cancelado</string>
     <string name="programs_session_exercise_details">Detalhes do exercício</string>
     <string name="programs_session_show_demo">Ver demonstração maior</string>
+    <string name="exercise_animation_hero">Animação do exercício</string>
     <string name="programs_session_notice_title">Aviso</string>
     <string name="programs_session_slot_unavailable">Este treino não pode ser iniciado a partir do plano ao qual pertence.</string>
     <string name="programs_session_already_in_progress">Este treino já está em andamento, mas a tentativa armazenada não pôde ser lida.</string>

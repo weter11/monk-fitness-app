@@ -787,7 +787,6 @@
     <string name="validation_dead_hang_p3">Arm proportions and wrist orientation</string>
 
     <!-- C2 — the exercise hero's camera mode toggle: the opt-in dynamic "camera push-in" (per-frame framing). OFF by default; the default presentation draws the exercise at one static frame. -->
-    <string name="camera_dynamic">Dynamic camera</string>
 
     <string name="ok">OK</string>
 
@@ -1123,6 +1122,7 @@
     <string name="programs_session_result_cancelled">Workout cancelled</string>
     <string name="programs_session_exercise_details">Exercise details</string>
     <string name="programs_session_show_demo">Show larger demo</string>
+    <string name="exercise_animation_hero">Exercise animation</string>
     <string name="programs_session_notice_title">Notice</string>
     <string name="programs_session_slot_unavailable">This workout cannot be started from the plan it belongs to.</string>
     <string name="programs_session_already_in_progress">This workout is already in progress, but the stored attempt could not be read.</string>

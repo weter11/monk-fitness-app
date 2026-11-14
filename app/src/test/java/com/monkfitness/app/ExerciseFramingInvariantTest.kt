@@ -48,12 +48,13 @@ import kotlin.math.min
  * The rule under test: [CameraFraming.exerciseFrame] derives the frame ONCE per exercise — the
  * largest zoom, not exceeding the pose's authored zoom, at which the athlete together with the drawn
  * ground contact stays inside the surface for every frame of the rep, at every yaw the pose's
- * declaration allows, centred on that content. The subject measured here is what the renderers
+ * declaration allows, and anchored so the athlete is centred — the footing may hang past an edge,
+ * because the floor does. The subject measured here is what the renderers
  * actually stroke ([drawnContent]), so the invariants are checked against what is drawn, not against
  * a model of it.
  *
- * Deliberately NOT asserted: the ground grid is laid out to a horizon that leaves the frame by
- * construction and is not framed, and a prop that already left the surface (the wall-slide's wall) is
+ * Deliberately NOT asserted: the ground grid is a lattice over the surface, not a subject with a
+ * horizon — it is not framed, and a prop that already left the surface (the wall-slide's wall) is
  * not required to come back — the rule frames the athlete and its footing. How large a *short, wide*
  * pose (a plank, a supine hold) should read is bounded here only by the authored zoom it is capped
  * at, which is the pose's own composition intent.
@@ -175,10 +176,18 @@ class ExerciseFramingInvariantTest {
         return floatArrayOf(minX - stroke, maxX + stroke, minY - stroke, maxY + stroke)
     }
 
-    /** How far the drawn content leaves the canvas, per edge (negative = inside), in pixels. */
+    /**
+     * How far the drawn content leaves the canvas, per edge (negative = inside), in pixels.
+     *
+     * The horizontal edges are read on the figure: the frame anchors the figure, and the contact
+     * shadow is floor dressing that may run past an edge onto the floor it belongs to. The vertical
+     * edges are still read with the footing, because the vertical anchor centres the athlete and its
+     * ground contact together.
+     */
     private fun overflow(buffer: ProjectedSkeleton, zoom: Float, canvas: Pair<Float, Float>): FloatArray {
-        val b = drawnContent(buffer, zoom, withGround = true)
-        return floatArrayOf(-b[0], b[1] - canvas.first, -b[2], b[3] - canvas.second)
+        val content = drawnContent(buffer, zoom, withGround = true)
+        val figure = drawnContent(buffer, zoom, withGround = false)
+        return floatArrayOf(-figure[0], figure[1] - canvas.first, -content[2], content[3] - canvas.second)
     }
 
     private fun describe(name: String, side: Side, phase: Float, yawOffset: Float, canvas: Pair<Float, Float>, zoom: Float, out: FloatArray): String =
@@ -249,9 +258,8 @@ class ExerciseFramingInvariantTest {
             }
         }
 
-        // ... and the opt-in dynamic mode genuinely breathes, so the toggle is a mode and not a no-op
-        // (measured per-frame ranges: burpee 0.585..1.300, cossack squat 0.856..1.300, squat
-        // 0.849..1.200, kettlebell swing 0.900..1.233)
+        // ... and the per-frame fit still re-frames a frame that does not fit, so the two rules stay
+        // distinct where the app uses each of them (the hero fits the motion, a bare frame fits itself)
         for (name in BREATHING_POSES) {
             val definition = cameraOf(name)
             val pipeline = SkeletonPipeline(DEF)
@@ -261,9 +269,9 @@ class ExerciseFramingInvariantTest {
                 framing.frameZoom(camera, publishedFrameOf(name, phase, Side.RIGHT, pipeline), HERO.first, HERO.second)
             }
             assertTrue(
-                "$name: the dynamic mode must still re-frame every drawn frame (measured " +
+                "$name: the per-frame fit must still re-frame each drawn frame (measured " +
                     "${zooms.min()} .. ${zooms.max()}), while the exercise frame is one value " +
-                "(${frameOf(name, HERO).zoom})",
+                    "(${frameOf(name, HERO).zoom})",
                 zooms.max() - zooms.min() > 0.05f
             )
         }
@@ -352,13 +360,13 @@ class ExerciseFramingInvariantTest {
     }
 
     @Test
-    fun theGroundIsPlacedJustBelowTheFigureAndTheContentIsCentred() {
+    fun theGroundIsPlacedJustBelowTheFigureAndTheFigureIsCentred() {
         for (name in productionPoseClasses()) {
             val frame = frameOf(name, HERO)
             val definition = cameraOf(name)
 
-            var envMinX = Float.MAX_VALUE
-            var envMaxX = -Float.MAX_VALUE
+            var figMinX = Float.MAX_VALUE
+            var figMaxX = -Float.MAX_VALUE
             var envMinY = Float.MAX_VALUE
             var envMaxY = -Float.MAX_VALUE
 
@@ -371,7 +379,7 @@ class ExerciseFramingInvariantTest {
                         val buffer = view(camera, pose, HERO)
                         val content = drawnContent(buffer, camera.zoom, withGround = true)
                         val athlete = drawnContent(buffer, camera.zoom, withGround = false)
-                        envMinX = min(envMinX, content[0]); envMaxX = max(envMaxX, content[1])
+                        figMinX = min(figMinX, athlete[0]); figMaxX = max(figMaxX, athlete[1])
                         envMinY = min(envMinY, content[2]); envMaxY = max(envMaxY, content[3])
 
                         assertTrue(
@@ -387,11 +395,13 @@ class ExerciseFramingInvariantTest {
             // Centred — what "derived, not a fixed anchor" looks like from the outside. The slack is 5%
             // of the surface: the box is grown per edge by the sampling margin the motion itself needs,
             // so a rep with a sharper excursion on one edge is centred to within it (measured worst case
-            // on this corpus: the burpee's jump, 14.8 px of 531).
+            // on this corpus: the burpee's jump, 14.8 px of 531). Horizontally it is the FIGURE that is
+            // centred: the ground contact is drawn from the athlete's own footing and may hang past an
+            // edge onto the floor beyond the surface.
             assertTrue(
-                "$name: the framed content must be centred horizontally (margins " +
-                    "$envMinX / ${HERO.first - envMaxX})",
-                abs(envMinX - (HERO.first - envMaxX)) <= 0.05f * HERO.first
+                "$name: the framed figure must be centred horizontally (margins " +
+                    "$figMinX / ${HERO.first - figMaxX})",
+                abs(figMinX - (HERO.first - figMaxX)) <= 0.05f * HERO.first
             )
             assertTrue(
                 "$name: the framed content must be centred vertically (margins " +
@@ -446,8 +456,8 @@ class ExerciseFramingInvariantTest {
     }
 
     @Test
-    fun theDynamicModeIsUnchangedAndOptIn() {
-        for (entry in DYNAMIC_MODE_PINS) {
+    fun thePerFrameFitIsUnchanged() {
+        for (entry in PER_FRAME_FIT_PINS) {
             val name = entry.key
             val definition = cameraOf(name)
             val camera = Camera(definition)
@@ -456,11 +466,11 @@ class ExerciseFramingInvariantTest {
                 camera, publishedFrameOf(name, 0.5f, Side.RIGHT, SkeletonPipeline(DEF)), HERO.first, HERO.second
             )
             assertEquals(
-                "$name: the opt-in dynamic mode must stay exactly the per-frame fit C1 shipped",
+                "$name: the per-frame fit a bare frame gets must stay exactly what it was",
                 entry.value.toDouble(), zoom.toDouble(), 0.001
             )
             assertTrue(
-                "$name: the two modes must be different rules (dynamic=$zoom, " +
+                "$name: the per-frame fit must differ from the exercise frame (per-frame=$zoom, " +
                     "exercise=${frameOf(name, HERO).zoom})",
                 abs(zoom - frameOf(name, HERO).zoom) > 0.01f
             )
@@ -639,9 +649,9 @@ class ExerciseFramingInvariantTest {
 
         /**
          * The per-frame fit at the mid-rep frame on the hero canvas, measured on this tree — the
-         * opt-in mode's own numbers, which the default-mode change must not have moved.
+         * numbers a bare frame gets, which the exercise frame must not have moved.
          */
-        val DYNAMIC_MODE_PINS = mapOf(
+        val PER_FRAME_FIT_PINS = mapOf(
             "StandardPullUpPose" to 0.654f,
             "SquatPose" to 1.114f,
             "AirSquatPose" to 1.101f

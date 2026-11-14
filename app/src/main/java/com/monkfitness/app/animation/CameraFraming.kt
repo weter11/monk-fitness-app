@@ -8,6 +8,9 @@ import kotlin.math.min
  * The frame an exercise is drawn at: one zoom and one anchor for every frame of its motion, so the
  * presentation cannot breathe as the rep folds and unfolds.
  */
+/** How far the drag may turn either side of the authored viewpoint, in radians, as magnitudes. */
+data class YawLimits(val negative: Float, val positive: Float)
+
 data class CameraFrame(val zoom: Float, val centerX: Float, val centerY: Float) {
 
     /** Writes only the zoom and the anchor onto [camera]. */
@@ -24,17 +27,37 @@ data class CameraFrame(val zoom: Float, val centerX: Float, val centerY: Float) 
 }
 
 /**
+ * A zoom ceiling at the fit itself: the frame is then limited by the surface alone, not by the zoom
+ * the pose was authored at. The media hero passes this, because it sizes its surface from the rig it
+ * must contain — the authored zoom belongs to a canvas the pose cannot know.
+ */
+const val FIT_ONLY_ZOOM_CEILING = Float.MAX_VALUE
+
+/**
+ * The drawn extent of an exercise's whole motion at unit zoom, in anchor-free pixels, plus the fixed
+ * outline the renderers stroke around it (a constant in pixels, independent of the zoom).
+ *
+ * [width] and [height] are the box the frame fits; [figureHeight] is the athlete alone, without the
+ * ground contact. The two differ because a contact shadow reaches past the figure — a surface sized
+ * from the box would come out too tall for the figure to fill.
+ */
+data class RigExtent(val width: Float, val height: Float, val stroke: Float, val figureHeight: Float)
+
+/**
  * The viewport frame of the exercise hero: one zoom and one anchor for the whole motion.
  *
  * A pose authors its viewpoint (`PoseMetadata.camera`) but not the surface the runtime draws it
  * onto, and a frame derived from each drawn frame's own bounds makes the subject's size breathe as
  * the rep folds and unfolds. So [exerciseFrame] derives the frame once, from the exercise's whole
  * drawn motion at every yaw the pose declares reachable, and every drawn frame uses it; [frameZoom]
- * is the opt-in dynamic mode that re-derives it per drawn frame.
+ * is the per-frame fit for a surface that has no motion to fit against (an off-screen validation
+ * pose, a bare snapshot) — the exercise hero never uses it.
  *
- * Both obey the same ceiling: the frame never exceeds [Camera.authoredZoom], so a pose's composition
- * intent is an upper bound the runtime only ever clips against the surface it is given — the frame
- * may shrink the subject, never blow a small pose up to fill a large canvas.
+ * Both obey the same ceiling by default: the frame never exceeds [Camera.authoredZoom], so a pose's
+ * composition intent is an upper bound the runtime only ever clips against the surface it is given —
+ * the frame may shrink the subject, never blow a small pose up to fill a large canvas. A caller that
+ * owns the composition (the media hero, which sizes its surface from the rig it must contain) passes
+ * its own ceiling instead.
  *
  * The subject is the athlete plus the floor it contacts: the drawn silhouette (joints, bones,
  * indicator discs, torso faces, sized by the same [SkeletonStyle] and [ScreenSpaceCompensation] the
@@ -83,15 +106,22 @@ class CameraFraming(
 
     // Reused pre-pass boxes: one per sampled yaw, one per sampled progress, plus the content box.
     private val yawBoxes = Array(YAW_SAMPLES + 1) { Edges() }
+    private val yawFigureBoxes = Array(YAW_SAMPLES + 1) { Edges() }
     private val progressBoxes = Array(PROGRESS_SAMPLES + 1) { Edges() }
     private val contentBox = Edges()
+    private val figureBox = Edges()
     private val frameBox = Edges()
 
     /**
      * The static frame of [builder]'s exercise on a [width] x [height] surface: the largest zoom, not
-     * exceeding [Camera.authoredZoom], at which the athlete and its ground contact stay inside the
-     * viewport for every frame of the motion the exercise plays ([sides]), at every yaw its
-     * declaration allows; plus the anchor that centres that content.
+     * exceeding [ceiling], at which the athlete and its ground contact stay inside the
+     * viewport for every frame of the motion the exercise plays ([sides]); plus the anchor that
+     * centres the athlete.
+     *
+     * [fitReachableYaws] decides which viewpoints that size must hold. The default reserves the
+     * widest silhouette the pose's declared yaw range can produce, so rotating never crops it — and
+     * costs the size of the default view. A surface fitted for one camera ([fitReachableYaws] false)
+     * is as large as the default view allows, which is what a hero that clamps its own rotation needs.
      *
      * The motion is read from [builder] itself, played through its own [SkeletonPipeline], so the
      * frames measured are the frames the pipeline publishes — the renderer's pipeline and its Frame
@@ -110,28 +140,162 @@ class CameraFraming(
         builder: PoseBuilder,
         sides: List<Side>,
         width: Float,
-        height: Float
+        height: Float,
+        ceiling: Float = camera.authoredZoom,
+        fitReachableYaws: Boolean = true,
+        withGround: Boolean = true
     ): CameraFrame {
-        val authored = camera.authoredZoom
-        if (width <= 0f || height <= 0f) return CameraFrame(authored, camera.centerX, camera.centerY)
+        if (width <= 0f || height <= 0f) return CameraFrame(ceiling, camera.centerX, camera.centerY)
 
         val declaration = builder.metadata.camera
-        exerciseBounds(camera, builder, sides, declaration, width, height)
+        exerciseBounds(camera, builder, sides, declaration, fitReachableYaws, withGround)
 
         // The drawn extent is the box scaled by the zoom plus the outline stroke, which is a constant
         // in pixels (see the class KDoc) — so it comes off the budget rather than scaling with the
         // box. The fit is then: scale the box until it fits, and centre it.
         val zoom = min(
-            authored,
+            ceiling,
             min(
                 (width - 2f * contentBox.stroke) / contentBox.width,
                 (height - 2f * contentBox.stroke) / contentBox.height
             )
         ).coerceAtLeast(MINIMUM_ZOOM)
 
-        val centerX = 0.5f - (contentBox.minX + contentBox.maxX) * 0.5f * zoom / width
+        // Horizontally the FIGURE is what is centred, not the box the fit measures: the ground contact
+        // is a shadow, and a pose whose footing sits off to one side would otherwise be drawn off
+        // centre, spending the room on one side of the drag's turn and leaving none on the other. The
+        // zoom is deliberately not re-derived from this — the figure's size is the fit's, not a
+        // bargain for the rotation.
+        val centred = if (figureBox.width > 0f) figureBox else contentBox
+        val centerX = 0.5f - (centred.minX + centred.maxX) * 0.5f * zoom / width
         val centerY = 0.5f - (contentBox.minY + contentBox.maxY) * 0.5f * zoom / height
         return CameraFrame(zoom, centerX, centerY)
+    }
+
+    /**
+     * The box [exerciseFrame] fits, at unit zoom: how wide and tall the athlete (and, when [withGround]
+     * is set, its ground contact) get over the whole motion, plus the constant outline they are stroked
+     * with. A caller that must decide how tall a surface to give the rig reads this first — the drawn
+     * size is the box times the zoom, and the zoom is the surface divided by the box.
+     */
+    fun rigExtent(
+        camera: Camera,
+        builder: PoseBuilder,
+        sides: List<Side>,
+        fitReachableYaws: Boolean = true,
+        withGround: Boolean = true,
+        withMargin: Boolean = true
+    ): RigExtent {
+        exerciseBounds(camera, builder, sides, builder.metadata.camera, fitReachableYaws, withGround, withMargin)
+        return RigExtent(contentBox.width, contentBox.height, contentBox.stroke, figureBox.height)
+    }
+
+    /**
+     * How far the drag may turn [camera] either side of [frame]'s view before the surface crops the
+     * figure, clamped to the pose's declared yaw range — one range, because the silhouette is not
+     * symmetric about the authored view and a symmetric limit would either crop the tight side or throw
+     * away the roomy one.
+     *
+     * The subject is the figure: the floor plane and its contact shadows leave the surface by design,
+     * like the grid. [margin] is the room kept clear of the left and right edges, capped by the room the
+     * authored view already leaves (the frame is fitted so the figure fills the surface), since a larger
+     * inset would reject that view itself. Each direction is scanned in [YAW_SCAN_STEP] steps, stopping
+     * at the first offset that does not fit and bisecting it to [YAW_REFINE_STEPS] halvings — a pose
+     * whose whole allowance is under one step would otherwise get nothing at all.
+     */
+    fun containedYawLimits(
+        camera: Camera,
+        builder: PoseBuilder,
+        sides: List<Side>,
+        frame: CameraFrame,
+        width: Float,
+        height: Float,
+        margin: Float = 0f
+    ): YawLimits {
+        val declaration = builder.metadata.camera
+        val reach = min(-declaration.minYaw, declaration.maxYaw).coerceIn(0f, MAXIMUM_YAW)
+        if (reach <= 0f) return YawLimits(0f, 0f)
+        if (width <= 0f || height <= 0f) return YawLimits(0f, 0f)
+
+        val pipeline = SkeletonPipeline(engine.definition)
+        val scratch = Camera()
+        // One box, reused: measureInto writes into it, and only the four edges are read.
+        val box = Edges()
+        val neutral = Edges()
+
+        fun aimed(offset: Float) {
+            scratch.yaw = camera.yaw + offset
+            scratch.pitch = camera.pitch
+            scratch.focalLength = camera.focalLength
+            scratch.zoom = frame.zoom
+            scratch.centerX = frame.centerX
+            scratch.centerY = frame.centerY
+        }
+
+        fun sweep(into: (Edges) -> Unit) {
+            // Every offset is measured from the same cold start, so two sweeps cannot differ by the
+            // history the previous one left in the pipeline.
+            pipeline.resetHistory()
+            for (side in sides) {
+                for (i in 0..PROGRESS_SAMPLES) {
+                    val context = PoseContext(
+                        progress = i.toFloat() / PROGRESS_SAMPLES,
+                        side = side,
+                        definition = engine.definition
+                    )
+                    val pose = pipeline.produceFrame(builder, context).pose
+                    measureInto(scratch, pose, width, height, withGround = false, into = box)
+                    into(box)
+                }
+            }
+        }
+
+        // The authored view is the reference: the margin can only be room that view leaves unused.
+        aimed(0f)
+        sweep { neutral.include(it) }
+        val inset = margin.coerceIn(0f, min(neutral.minX, width - neutral.maxX).coerceAtLeast(0f))
+
+        fun fits(offset: Float): Boolean {
+            aimed(offset)
+            var ok = true
+            sweep { edges ->
+                // The stroke is drawn outside the box the edges describe, so it comes off the surface
+                // the same way it comes off the fit's budget.
+                if (ok && (edges.minX - edges.stroke < inset - CONTAINMENT_SLACK ||
+                        edges.maxX + edges.stroke > width - inset + CONTAINMENT_SLACK ||
+                        edges.minY - edges.stroke < -CONTAINMENT_SLACK ||
+                        edges.maxY + edges.stroke > height + CONTAINMENT_SLACK)
+                ) {
+                    ok = false
+                }
+            }
+            return ok
+        }
+
+        // Every offset this returns has been through `fits`, so the result is always one the surface
+        // actually holds — the halvings only recover the range the coarse step gives away.
+        fun refine(sign: Float, fitBelow: Float, cropAbove: Float): Float {
+            var lo = fitBelow
+            var hi = cropAbove
+            repeat(YAW_REFINE_STEPS) {
+                val mid = (lo + hi) * 0.5f
+                if (fits(sign * mid)) lo = mid else hi = mid
+            }
+            return lo
+        }
+
+        fun limitToward(sign: Float): Float {
+            var lastFit = 0f
+            var step = YAW_SCAN_STEP
+            while (step <= reach) {
+                if (!fits(sign * step)) return refine(sign, lastFit, step)
+                lastFit = step
+                step += YAW_SCAN_STEP
+            }
+            return if (fits(sign * reach)) reach else refine(sign, lastFit, reach)
+        }
+
+        return YawLimits(negative = limitToward(-1f), positive = limitToward(1f))
     }
 
     /**
@@ -148,21 +312,25 @@ class CameraFraming(
         builder: PoseBuilder,
         sides: List<Side>,
         declaration: CameraDefinition,
-        width: Float,
-        height: Float
+        fitReachableYaws: Boolean,
+        withGround: Boolean = true,
+        withMargin: Boolean = true
     ) {
         val pipeline = SkeletonPipeline(engine.definition)
         pipeline.resetHistory()
 
         contentBox.reset()
+        figureBox.reset()
         measure.pitch = camera.pitch
         measure.focalLength = camera.focalLength
         measure.zoom = 1f
         measure.centerX = 0f
         measure.centerY = 0f
 
-        val yawFrom = declaration.defaultYaw + declaration.minYaw
-        val yawSpan = declaration.maxYaw - declaration.minYaw
+        // Fitted at the authored viewpoint, the frame is as large as the pose's own default view
+        // allows; the reachable yaws are then the drag's business, bounded by [containedYawLimit].
+        val yawFrom = if (fitReachableYaws) declaration.defaultYaw + declaration.minYaw else declaration.defaultYaw
+        val yawSpan = if (fitReachableYaws) declaration.maxYaw - declaration.minYaw else 0f
         val yawCells = if (yawSpan == 0f) 0 else YAW_SAMPLES
         // One margin object for both dimensions: each contributes the largest second difference of
         // its own grid, and the box grows by the larger of the two per edge.
@@ -182,8 +350,9 @@ class CameraFraming(
                 sampled.reset()
                 for (k in 0..yawCells) {
                     measure.yaw = if (yawCells == 0) yawFrom else yawFrom + yawSpan * k / yawCells
-                    measureInto(frame, width, height, withGround = true, into = yawBoxes[k])
+                    measureInto(measure, frame, withGround = withGround, into = yawBoxes[k], figureInto = yawFigureBoxes[k])
                     sampled.include(yawBoxes[k])
+                    figureBox.include(yawFigureBoxes[k])
                     if (k >= 2) margins.include(yawBoxes[k - 2], yawBoxes[k - 1], yawBoxes[k])
                 }
             }
@@ -197,7 +366,9 @@ class CameraFraming(
             }
         }
 
-        contentBox.grow(margins)
+        // The margin is what stops the FIT clipping a peak that falls between samples; it is not part of
+        // the size the rig reads at, so a caller measuring the drawn rig asks for the box without it.
+        if (withMargin) contentBox.grow(margins)
     }
 
     /**
@@ -207,7 +378,8 @@ class CameraFraming(
      *
      * Returns the authored zoom when the frame already fits, so assigning this back onto
      * [Camera.zoom] leaves already-fitting frames bit-identical. The measured subject is the athlete
-     * alone — the ground belongs to [exerciseFrame]'s composition, not to this rule.
+     * alone — the ground belongs to [exerciseFrame]'s composition, not to this rule. Used where one
+     * frame is all there is to fit (an off-screen validation pose, a bare snapshot).
      */
     fun frameZoom(camera: Camera, pose: SkeletonPose, width: Float, height: Float): Float {
         val authored = camera.authoredZoom
@@ -219,9 +391,9 @@ class CameraFraming(
         measure.zoom = 1f
         measure.centerX = 0f
         measure.centerY = 0f
-        // The anchor is the pose's own: the dynamic mode touches the zoom alone.
+        // The anchor is the pose's own: the per-frame fit touches the zoom alone.
         val content = frameBox
-        measureInto(pose, width, height, withGround = false, into = content)
+        measureInto(measure, pose, width, height, withGround = false, into = content)
 
         val anchorX = width * camera.centerX
         val anchorY = height * camera.centerY
@@ -239,18 +411,30 @@ class CameraFraming(
      * on the path edge) — and, when [withGround] is set, the contact shadows, drawn on the floor
      * plane as ellipses of `style.shadowRadiusX/Y` x `ScreenSpaceScale.shadowScale`. Shadow centres
      * and radii are both linear in the zoom, so the floor enters the closed form too.
+     *
+     * [width] and [height] are the surface only where [camera]'s anchor is non-zero; the measuring
+     * camera anchors at the origin, so the box is anchor-free and the surface is not passed.
+     *
+     * The compensation scale is read at the camera's own zoom: a caller that measures a *drawn* frame
+     * (the rotation clamp, whose camera carries the frame's zoom) gets the thickness and disc radii the
+     * renderers will actually stroke, while the fitting callers keep their unit-zoom camera and are
+     * unchanged. Reading it at `1f` in both cases under-measured a drawn frame by the zoom, which is how
+     * a clamp could claim containment while the figure was still cropped.
      */
     private fun measureInto(
+        camera: Camera,
         pose: SkeletonPose,
-        width: Float,
-        height: Float,
+        width: Float = 0f,
+        height: Float = 0f,
         withGround: Boolean,
-        into: Edges
+        into: Edges,
+        figureInto: Edges? = null
     ) {
         into.reset()
+        figureInto?.reset()
         projector.project(
             pose = pose,
-            camera = measure,
+            camera = camera,
             engine = engine,
             width = width,
             height = height,
@@ -266,7 +450,7 @@ class CameraFraming(
 
         for (i in 0 until projected.boneCount) {
             val bone = projected.bones[i]
-            compensator.computeScale(bone.p1, 1f, scale)
+            compensator.computeScale(bone.p1, camera.zoom, scale)
             val half = bone.thickness * scale.thicknessScale * 0.5f
             val x0 = minOf(bone.p1.x, bone.p2.x) - half
             val x1 = maxOf(bone.p1.x, bone.p2.x) + half
@@ -281,7 +465,7 @@ class CameraFraming(
         }
 
         for (indicator in projected.indicators) {
-            compensator.computeScale(indicator.point, 1f, scale)
+            compensator.computeScale(indicator.point, camera.zoom, scale)
             val radius = (if (indicator.id == Joint.HEAD_POS) style.headRadius else style.jointRadius) *
                 scale.radiusScale
             val x0 = indicator.point.x - radius
@@ -307,9 +491,12 @@ class CameraFraming(
             }
         }
 
+        // The figure is complete here: copy it before the ground extends the box.
+        if (figureInto != null) figureInto.include(into)
+
         if (withGround) {
             for (point in projected.shadowPoints) {
-                compensator.computeScale(point, 1f, scale)
+                compensator.computeScale(point, camera.zoom, scale)
                 val rx = style.shadowRadiusX * scale.shadowScale
                 val ry = style.shadowRadiusY * scale.shadowScale
                 val x0 = point.x - rx
@@ -413,5 +600,15 @@ class CameraFraming(
          */
         const val PROGRESS_SAMPLES = 32
         const val YAW_SAMPLES = 36
+
+        /** The rotation gesture's own reach, and the step the containment scan grows it by. */
+        const val MAXIMUM_YAW = 1.5708f
+        const val YAW_SCAN_STEP = 0.0873f
+
+        /** Halvings of the last step the scan fits in: `5 / 64` degrees of resolution on the clamp. */
+        const val YAW_REFINE_STEPS = 6
+
+        /** Float noise on the boundary, so a frame that lands exactly on the edge counts as inside. */
+        const val CONTAINMENT_SLACK = 0.01f
     }
 }

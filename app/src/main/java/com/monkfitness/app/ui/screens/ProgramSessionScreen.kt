@@ -5,6 +5,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
@@ -12,6 +13,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyRow
@@ -71,6 +73,7 @@ import com.monkfitness.app.data.model.Exercise
 import com.monkfitness.app.domain.prescription.PrescriptionDimension
 import com.monkfitness.app.platform.VibrationFeedback
 import com.monkfitness.app.ui.components.ExerciseHeroMedia
+import com.monkfitness.app.ui.components.MediaHero
 import com.monkfitness.app.ui.components.MonkButton
 import com.monkfitness.app.ui.programs.ProgramSessionController
 import com.monkfitness.app.ui.programs.ProgramSessionNotice
@@ -99,13 +102,12 @@ private val CARD_CHROME = 48.dp
  */
 private val HERO_COLLAPSED = 80.dp
 
+/** The gap between the media hero and the block of facts under it. */
+private val FOCUS_HERO_GAP = 8.dp
+
 /** The smallest restore-demo that reads as the next movement, and its ceiling. */
 private val REST_HERO_MIN = 120.dp
 private val REST_HERO_MAX = 360.dp
-
-/** The active set's demo: a preview of the movement being done, not the screen's subject. */
-private val FOCUS_HERO_MIN = 120.dp
-private val FOCUS_HERO_MAX = 200.dp
 
 /**
  * The demo's height for the room there is.
@@ -504,9 +506,14 @@ private fun PresentingSession(
         }
     }
 
-    Column(modifier = Modifier.fillMaxSize()) {
-        var viewportHeight by remember { mutableStateOf(0.dp) }
-        var headerHeight by remember { mutableStateOf(0.dp) }
+    var viewportHeight by remember { mutableStateOf(0.dp) }
+    var headerHeight by remember { mutableStateOf(0.dp) }
+    var contentHeight by remember { mutableStateOf(0.dp) }
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .reportHeight { height -> contentHeight = height }
+    ) {
         // The room the pinned controls leave, measured: they grow with the text scale, so the demo gives
         // that height back rather than pushing them off the screen.
         Column(
@@ -574,6 +581,7 @@ private fun PresentingSession(
                         exercise = exercise,
                         demo = exerciseOf(exercise.exerciseId),
                         availableHeight = viewportHeight - headerHeight,
+                        contentHeight = contentHeight,
                         onExpandDemo = { demo -> expandedDemo = demo },
                         actualValue = actualValue,
                         actualInputInvalid = actualInputInvalid,
@@ -816,6 +824,7 @@ private fun FocusCard(
     exercise: SessionExerciseUi,
     demo: Exercise?,
     availableHeight: Dp,
+    contentHeight: Dp,
     onExpandDemo: (Exercise) -> Unit,
     actualValue: String,
     actualInputInvalid: Boolean,
@@ -831,36 +840,47 @@ private fun FocusCard(
     onExerciseClick: () -> Unit
 ) {
     var cardBody by remember { mutableStateOf(0.dp) }
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer)
-    ) {
-        Column(modifier = Modifier.padding(16.dp)) {
-            demo?.let { illustration ->
-                DemoPreview(
-                    exercise = illustration,
-                    height = previewHeight(availableHeight, cardBody, FOCUS_HERO_MIN, FOCUS_HERO_MAX),
-                    onExpand = { onExpandDemo(illustration) }
-                )
-                Spacer(modifier = Modifier.height(12.dp))
-            }
-
+    Column(modifier = Modifier.fillMaxWidth()) {
+        demo?.let { illustration ->
+            // The hero is the screen's subject and carries nothing: everything that used to sit in the
+            // preview's card is below it, so the rig is never drawn under text.
+            MediaHero(
+                exercise = illustration,
+                contentHeight = contentHeight,
+                room = (availableHeight - cardBody - FOCUS_HERO_GAP).coerceAtLeast(0.dp),
+                onExpand = { onExpandDemo(illustration) }
+            )
+            Spacer(modifier = Modifier.height(FOCUS_HERO_GAP))
+        }
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer)
+        ) {
+            // Measured WITH the card's own padding, so the hero only takes what this block really leaves.
+            // The block is compact on purpose: the hero above it is the screen's subject, so these are
+            // captions, not headlines — a long exercise name must not push the fields off the screen.
             Column(
-                modifier = Modifier.reportHeight { height -> cardBody = height }
+                modifier = Modifier
+                    .padding(horizontal = 16.dp, vertical = 12.dp)
+                    .reportHeight { height -> cardBody = height }
             ) {
                 Text(
                     text = exerciseNameOf(exercise),
-                    style = MaterialTheme.typography.headlineSmall,
-                    fontWeight = FontWeight.Bold
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.Bold,
+                    // Two lines are the whole block's budget for a name; a long one must not push the
+                    // fields the user has to fill in below the fold.
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis
                 )
-                Spacer(modifier = Modifier.height(4.dp))
+                Spacer(modifier = Modifier.height(FOCUS_HERO_GAP))
                 Text(
                     text = stringResource(
                         R.string.current_set_format,
                         exercise.setNumber,
                         exercise.setCount
                     ),
-                    style = MaterialTheme.typography.titleMedium
+                    style = MaterialTheme.typography.bodyLarge
                 )
                 if (!exercise.isFinished && !exercise.skipped) {
                     Text(
@@ -870,7 +890,7 @@ private fun FocusCard(
 
                             else -> stringResource(R.string.programs_session_reps_target, exercise.nextTarget)
                         },
-                        style = MaterialTheme.typography.bodyLarge,
+                        style = MaterialTheme.typography.titleSmall,
                         color = MaterialTheme.colorScheme.primary
                     )
                 }
@@ -881,13 +901,22 @@ private fun FocusCard(
                         color = MaterialTheme.colorScheme.error
                     )
                 }
-                TextButton(onClick = onExerciseClick) {
-                    Text(text = stringResource(R.string.programs_session_exercise_details))
+                Spacer(modifier = Modifier.height(FOCUS_HERO_GAP))
+                // The details link shares the indicators' row: one line of chrome instead of two.
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    SetIndicators(exercise, modifier = Modifier.weight(1f))
+                    TextButton(
+                        onClick = onExerciseClick,
+                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp),
+                        modifier = Modifier.heightIn(min = 32.dp)
+                    ) {
+                        Text(
+                            text = stringResource(R.string.programs_session_exercise_details),
+                            style = MaterialTheme.typography.labelSmall
+                        )
+                    }
                 }
-
-                Spacer(modifier = Modifier.height(8.dp))
-                SetIndicators(exercise)
-                Spacer(modifier = Modifier.height(12.dp))
+                Spacer(modifier = Modifier.height(FOCUS_HERO_GAP))
 
                 if (exercise.isPerformable) {
                     if (exercise.dimension == PrescriptionDimension.TIME_BASED) {
@@ -982,8 +1011,9 @@ private fun FocusCard(
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun SetIndicators(exercise: SessionExerciseUi) {
+private fun SetIndicators(exercise: SessionExerciseUi, modifier: Modifier = Modifier) {
     FlowRow(
+        modifier = modifier,
         horizontalArrangement = Arrangement.spacedBy(6.dp),
         verticalArrangement = Arrangement.spacedBy(6.dp)
     ) {

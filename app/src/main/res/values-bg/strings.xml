@@ -787,7 +787,6 @@
     <string name="validation_dead_hang_p3">Пропорции на ръцете и ориентация на китките</string>
 
     <!-- C2 — the exercise hero's camera mode toggle: the opt-in dynamic "camera push-in" (per-frame framing). OFF by default; the default presentation draws the exercise at one static frame. -->
-    <string name="camera_dynamic">Динамична камера</string>
 
     <string name="ok">ОК</string>
 
@@ -1123,6 +1122,7 @@
     <string name="programs_session_result_cancelled">Тренировката е отменена</string>
     <string name="programs_session_exercise_details">Подробности за упражнението</string>
     <string name="programs_session_show_demo">Покажи по-голяма демонстрация</string>
+    <string name="exercise_animation_hero">Анимация на упражнението</string>
     <string name="programs_session_notice_title">Известие</string>
     <string name="programs_session_slot_unavailable">Тази тренировка не може да бъде започната от плана, към който принадлежи.</string>
     <string name="programs_session_already_in_progress">Тази тренировка вече е в ход, но запазеният опит не можа да бъде прочетен.</string>

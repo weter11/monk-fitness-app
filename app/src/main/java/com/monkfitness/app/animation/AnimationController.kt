@@ -9,6 +9,14 @@ interface AnimationController {
     val progress: Float
     val side: Side
     val cameraYawOffset: Float
+
+    /**
+     * How far [cameraYawOffset] may go either side of the authored view without the surface cropping
+     * the figure, as magnitudes. The hero sets them from the frame it fitted; a caller that draws no
+     * hero keeps the gesture's full reach.
+     */
+    var yawLimits: YawLimits
+
     fun onRotate(delta: Float)
 }
 
@@ -16,11 +24,35 @@ private class BaseAnimationController : AnimationController {
     override var progress: Float by mutableFloatStateOf(0f)
     override var side: Side by mutableStateOf(Side.RIGHT)
     override var cameraYawOffset: Float by mutableFloatStateOf(0f)
+        private set
+    override var yawLimits: YawLimits = YawLimits(MAX_YAW_LIMIT, MAX_YAW_LIMIT)
+        set(value) {
+            field = YawLimits(
+                negative = value.negative.coerceIn(0f, MAX_YAW_LIMIT),
+                positive = value.positive.coerceIn(0f, MAX_YAW_LIMIT)
+            )
+            // A surface that shrinks (a shorter hero at a larger text scale) may put the current
+            // viewpoint outside the new limits; the figure would then be cropped until the next drag.
+            cameraYawOffset = cameraYawOffset.coerceIn(-field.negative, field.positive)
+        }
 
     override fun onRotate(delta: Float) {
-        cameraYawOffset = (cameraYawOffset + delta).coerceIn(-1.5708f, 1.5708f)
+        cameraYawOffset = clampedYawOffset(cameraYawOffset, delta, yawLimits)
+    }
+
+    private companion object {
+        const val MAX_YAW_LIMIT = 1.5708f
     }
 }
+
+/**
+ * Where a drag lands: the clamp is the surface's own edge, so a drag past it stays on the limit rather
+ * than wrapping, springing back or accumulating invisible debt beyond it — the offset is a function of
+ * the offset the user can see, so the same drag back turns the figure back immediately, however small
+ * the allowance is.
+ */
+internal fun clampedYawOffset(current: Float, delta: Float, limits: YawLimits): Float =
+    (current + delta).coerceIn(-limits.negative.coerceAtLeast(0f), limits.positive.coerceAtLeast(0f))
 
 @Composable
 fun rememberAnimationController(
