@@ -369,36 +369,39 @@ Layers are independent of exercises: the exercise selects motion, the user selec
 Allowed edges only:
 
 ```
-animation (engine)  ←  anatomy  ←  character  ←  ui
-animation (engine)  ←  character
-character           →  (Filament only, at the renderer boundary)
+animation/ + poses/  ←  render/    ←  ui/
+animation/ + poses/  ←  anatomy    ←  character  ←  ui/
+animation/ + poses/  ←  character
+character            →  (Filament only, at the renderer boundary)
 ```
 
-Forbidden edges, enforced by an architecture test (§12):
+The motion core is `animation/` + `poses/`, and it is pure Kotlin: **no file in either package imports `androidx.*`**
+(Compose included), **`android.*`**, **`ui.*`**, **`render.*`** or **`com.google.android.filament.*`**. That is not an
+aspiration; it is what `ArchitectureBoundaryTest` (added by #390) asserts over every `.kt` file in the two packages:
 
-- `animation/` importing `anatomy/`, `character/`, or `com.google.android.filament.*`;
+| Test | What it rejects |
+| --- | --- |
+| `theMotionCoreImportsNoComposeOrFrameworkCode` | `androidx.compose.`, `android.`, `com.monkfitness.app.ui.`, `com.monkfitness.app.render.` |
+| `theMotionCoreImportsNoOtherAndroidxCode` | any other `androidx.` artifact — a core that pulls in one androidx library has started depending on the platform |
+
+There is no Compose allow-list inside `animation/` any more, because there is no Compose inside `animation/`. The 2D
+presentation and the playback adapter moved to `render/` (#390: `render/SkeletonRenderer.kt`,
+`render/ComposeAnimationController.kt`), which is where Compose code is allowed to live; `render/` depends on the motion
+core, never the reverse. A new Compose import in `animation/` or `poses/` fails the test on the next run.
+
+Forbidden edges:
+
+- `animation/` or `poses/` importing `anatomy/`, `character/`, `ui/`, `render/`, or `com.google.android.filament.*` —
+  `ui/` and `render/` are denied by `ArchitectureBoundaryTest` today; the rest are review obligations (§12.2 records the
+  test's scope, and a Filament import also drags in the `android.` prefix the test does reject);
 - `anatomy/` importing `character/`, Filament, or Android UI;
 - `character/` calling IK, constraint solving, or pose mutation;
 - any module other than the renderer importing `filament`/`gltfio`.
 
-**Compose in `animation/` is a named, frozen exception, not a free pass.** The motion core is pure Kotlin, but the package
-is not: the base already imports Compose in `AnimationController.kt`, `SkeletonRenderer.kt` and `SkeletonStyle.kt` — the
-playback controller and the 2D presentation, both of which live in `animation/` today. A blanket "no Compose in
-`animation/`" fence would therefore fail against the frozen baseline on the day it was written, and a rule that cannot
-hold is not a rule.
-
-The contract is an allow-list, and it is closed:
-
-| Rule | Enforcement |
-| --- | --- |
-| Compose imports in `animation/` are permitted only in `AnimationController.kt`, `SkeletonRenderer.kt`, `SkeletonStyle.kt` | `CharacterDependencyTest` compares the importing-file set against this list; a new file importing Compose fails |
-| No file in `animation/` may import `anatomy/`, `character/`, Filament, or any `ui/` package | same test, deny-list by package prefix |
-| The motion core — `SkeletonPipeline`, `ConstraintSolver`, `SkeletonPoseFinalizer`, `IkStage`, `SkeletonFactory`, `PoseDefinition`, `ExerciseValidator` — must stay free of Compose and Android UI | same test, explicit core file list |
-
-The clean fix is a package move (`ui/animation/` for the renderer and controller, leaving a pure `animation/` core), and
-it is deliberately **not** part of this RFC: it would touch production code and the 2D renderer's imports, which a
-documentation change must not do. The allow-list is the honest interim: it freezes today's exception, forbids growth, and
-keeps the core provably clean. §12.2 names the test.
+**Scope of the enforcement, stated so the table above is not read as more than it is.** `ArchitectureBoundaryTest` walks
+`animation/` and `poses/` only. The `anatomy/` and `character/` edges are architecture decisions reviewed by a human
+until those packages exist and are added to the test's source set; when they are, the same two-test shape extends to
+them. That is a gap in enforcement, not a licence.
 
 ---
 
@@ -1638,7 +1641,7 @@ Seven levels, each with one owner, one report and an explicit automation status.
 | `ProceduralTubeBudgetTest` | L5 (M1 subset) | generated triangles match the §10.3 formula for the declared `N` and `R`; no zero-area ring; all coordinates finite |
 | `MorphPresetTest` | L6 | rest invariant per preset; joint rings unmoved beyond tolerance |
 | `LayerToggleTest` | presentation | toggling a layer changes visibility only; no engine or pose rebuild; an evicted layer reloads and re-shows |
-| `CharacterDependencyTest` | architecture | Compose in `animation/` only in the three allow-listed files (§4.5); motion core free of Compose; `animation/` has no anatomy/character/Filament imports; `anatomy/` has no character/Android imports |
+| `ArchitectureBoundaryTest` | architecture | §4.5: every file in `animation/` and `poses/` imports no `androidx.*` (Compose included), `android.*`, `ui.*`, `render.*` or Filament — `theMotionCoreImportsNoComposeOrFrameworkCode` and `theMotionCoreImportsNoOtherAndroidxCode`; the `anatomy/` and `character/` edges are outside its source set, so they remain review obligations |
 | `AssetBudgetTest` | L5 | triangle/texture/bone budgets per tier from the manifest |
 
 All except `LayerToggleTest` are JVM tests (the character session itself requires a device). `LayerToggleTest` splits:
@@ -1830,9 +1833,10 @@ individual reports say.
    declared ellipsoid" (§7.4.1). A distance-based test (segment-to-ellipsoid distance ≥ ε) is a different computation and
    a different contract. Smallest resolution: state whether any consumer — rendering, review, or a future collision check
    — actually needs a distance, rather than an intersection verdict.
-8. **Whether to move the Compose-dependent files out of `animation/`** — §4.5 freezes today's three-file exception and
-   forbids growth. A package move would make the fence absolute and is a production-code change, so it needs the
-   maintainer's approval as its own PR; until then the allow-list is the contract.
+8. ~~Whether to move the Compose-dependent files out of `animation/`~~ — **resolved by #390**: the renderer and the
+   playback adapter live in `render/`, `animation/` and `poses/` carry no Compose or Android imports, and
+   `ArchitectureBoundaryTest` enforces it with no allow-list (§4.5). The question is kept as the record of why the move
+   happened, not as an open decision.
 9. **Which tool measures muscle-versus-skin intersection** — L6's "anatomy inside the body" and L5's self-intersection
    are not automated for M1 (§12.5). Building a mesh-intersection check is a tooling decision, not an architecture one;
    until it exists those checks are L7 judgements.
