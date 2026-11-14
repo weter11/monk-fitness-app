@@ -44,10 +44,10 @@ import java.io.File
  * drawn, not against a model of it.
  *
  * Deliberately NOT asserted: the ground grid, the contact shadows and the environment props (box,
- * step, bench, wall) are the floor and the pose's furniture, laid out to a horizon that leaves the
- * frame by construction — they are not the subject, and the fit does not move them. How large a
- * full-standing pose should read on a very small canvas (here it is shrunk to fit, which is
- * containment but not composition) is a presentation decision this instrument does not take.
+ * step, bench, wall) are the floor and the pose's furniture — they are not the subject, and the fit
+ * does not move them. How large a full-standing pose should read on a very small canvas (here it is
+ * shrunk to fit, which is containment but not composition) is a presentation decision this
+ * instrument does not take.
  */
 class ViewportFramingInvariantTest {
 

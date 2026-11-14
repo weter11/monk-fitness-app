@@ -67,8 +67,8 @@ class HeroFitTest {
                     m.previewRatio >= 2.0f
                 )
                 assertTrue(
-                    "${family.name} at room=$room dp: the frame must not clip the rig at the authored camera",
-                    m.containedAtDefault
+                    "${family.name} at room=$room dp: the frame must not clip the figure at the authored camera",
+                    m.figureContainedAtDefault
                 )
             }
         }
@@ -163,7 +163,7 @@ class HeroFitTest {
                         "rig=${"%.0f".format(m.rigWidthPx)}x${"%.0f".format(m.rigHeightPx)} " +
                         "ofH=${"%.3f".format(m.sharesOfHeight)} ofW=${"%.3f".format(m.sharesOfWidth)} " +
                         "preview=${"%.0f".format(m.previewWidthPx)}x${"%.0f".format(m.previewHeightPx)} " +
-                        "ratio=${"%.2f".format(m.previewRatio)} contained=${m.containedAtDefault}"
+                        "ratio=${"%.2f".format(m.previewRatio)} contained=${m.figureContainedAtDefault}"
                 )
             }
         }
@@ -178,7 +178,7 @@ class HeroFitTest {
         val previewWidthPx: Float,
         val previewHeightPx: Float,
         val previewRatio: Float,
-        val containedAtDefault: Boolean
+        val figureContainedAtDefault: Boolean
     ) {
         val sharesOfHeight: Float get() = rigHeightPx / heroHeightPx
         val sharesOfWidth: Float get() = rigWidthPx / heroWidthPx
@@ -331,9 +331,10 @@ class HeroFitTest {
             previewWidthPx = previewWidthPx,
             previewHeightPx = previewHeightPxDrawn,
             previewRatio = minOf(rigWidthPx / previewWidthPx, rigHeightPxDrawn / previewHeightPxDrawn),
-            // Containment is the frame's own claim, and the frame reserves the ground contact too.
-            containedAtDefault = run {
-                val box = unionBox(builder, sides, declaration, frame, CONTENT_WIDTH_PX, heroHeightPx, ground = true)
+            // Containment is the frame's own claim, read on the figure: the anchor centres the
+            // figure, so the contact shadow may run past an edge onto the floor it belongs to.
+            figureContainedAtDefault = run {
+                val box = unionBox(builder, sides, declaration, frame, CONTENT_WIDTH_PX, heroHeightPx, ground = false)
                 box[0] >= -SLACK && box[1] <= CONTENT_WIDTH_PX + SLACK &&
                     box[2] >= -SLACK && box[3] <= heroHeightPx + SLACK
             }

@@ -48,12 +48,13 @@ import kotlin.math.min
  * The rule under test: [CameraFraming.exerciseFrame] derives the frame ONCE per exercise — the
  * largest zoom, not exceeding the pose's authored zoom, at which the athlete together with the drawn
  * ground contact stays inside the surface for every frame of the rep, at every yaw the pose's
- * declaration allows, centred on that content. The subject measured here is what the renderers
+ * declaration allows, and anchored so the athlete is centred — the footing may hang past an edge,
+ * because the floor does. The subject measured here is what the renderers
  * actually stroke ([drawnContent]), so the invariants are checked against what is drawn, not against
  * a model of it.
  *
- * Deliberately NOT asserted: the ground grid is laid out to a horizon that leaves the frame by
- * construction and is not framed, and a prop that already left the surface (the wall-slide's wall) is
+ * Deliberately NOT asserted: the ground grid is a lattice over the surface, not a subject with a
+ * horizon — it is not framed, and a prop that already left the surface (the wall-slide's wall) is
  * not required to come back — the rule frames the athlete and its footing. How large a *short, wide*
  * pose (a plank, a supine hold) should read is bounded here only by the authored zoom it is capped
  * at, which is the pose's own composition intent.
@@ -175,10 +176,18 @@ class ExerciseFramingInvariantTest {
         return floatArrayOf(minX - stroke, maxX + stroke, minY - stroke, maxY + stroke)
     }
 
-    /** How far the drawn content leaves the canvas, per edge (negative = inside), in pixels. */
+    /**
+     * How far the drawn content leaves the canvas, per edge (negative = inside), in pixels.
+     *
+     * The horizontal edges are read on the figure: the frame anchors the figure, and the contact
+     * shadow is floor dressing that may run past an edge onto the floor it belongs to. The vertical
+     * edges are still read with the footing, because the vertical anchor centres the athlete and its
+     * ground contact together.
+     */
     private fun overflow(buffer: ProjectedSkeleton, zoom: Float, canvas: Pair<Float, Float>): FloatArray {
-        val b = drawnContent(buffer, zoom, withGround = true)
-        return floatArrayOf(-b[0], b[1] - canvas.first, -b[2], b[3] - canvas.second)
+        val content = drawnContent(buffer, zoom, withGround = true)
+        val figure = drawnContent(buffer, zoom, withGround = false)
+        return floatArrayOf(-figure[0], figure[1] - canvas.first, -content[2], content[3] - canvas.second)
     }
 
     private fun describe(name: String, side: Side, phase: Float, yawOffset: Float, canvas: Pair<Float, Float>, zoom: Float, out: FloatArray): String =
@@ -351,13 +360,13 @@ class ExerciseFramingInvariantTest {
     }
 
     @Test
-    fun theGroundIsPlacedJustBelowTheFigureAndTheContentIsCentred() {
+    fun theGroundIsPlacedJustBelowTheFigureAndTheFigureIsCentred() {
         for (name in productionPoseClasses()) {
             val frame = frameOf(name, HERO)
             val definition = cameraOf(name)
 
-            var envMinX = Float.MAX_VALUE
-            var envMaxX = -Float.MAX_VALUE
+            var figMinX = Float.MAX_VALUE
+            var figMaxX = -Float.MAX_VALUE
             var envMinY = Float.MAX_VALUE
             var envMaxY = -Float.MAX_VALUE
 
@@ -370,7 +379,7 @@ class ExerciseFramingInvariantTest {
                         val buffer = view(camera, pose, HERO)
                         val content = drawnContent(buffer, camera.zoom, withGround = true)
                         val athlete = drawnContent(buffer, camera.zoom, withGround = false)
-                        envMinX = min(envMinX, content[0]); envMaxX = max(envMaxX, content[1])
+                        figMinX = min(figMinX, athlete[0]); figMaxX = max(figMaxX, athlete[1])
                         envMinY = min(envMinY, content[2]); envMaxY = max(envMaxY, content[3])
 
                         assertTrue(
@@ -386,11 +395,13 @@ class ExerciseFramingInvariantTest {
             // Centred — what "derived, not a fixed anchor" looks like from the outside. The slack is 5%
             // of the surface: the box is grown per edge by the sampling margin the motion itself needs,
             // so a rep with a sharper excursion on one edge is centred to within it (measured worst case
-            // on this corpus: the burpee's jump, 14.8 px of 531).
+            // on this corpus: the burpee's jump, 14.8 px of 531). Horizontally it is the FIGURE that is
+            // centred: the ground contact is drawn from the athlete's own footing and may hang past an
+            // edge onto the floor beyond the surface.
             assertTrue(
-                "$name: the framed content must be centred horizontally (margins " +
-                    "$envMinX / ${HERO.first - envMaxX})",
-                abs(envMinX - (HERO.first - envMaxX)) <= 0.05f * HERO.first
+                "$name: the framed figure must be centred horizontally (margins " +
+                    "$figMinX / ${HERO.first - figMaxX})",
+                abs(figMinX - (HERO.first - figMaxX)) <= 0.05f * HERO.first
             )
             assertTrue(
                 "$name: the framed content must be centred vertically (margins " +

@@ -116,7 +116,7 @@ class CameraFraming(
      * The static frame of [builder]'s exercise on a [width] x [height] surface: the largest zoom, not
      * exceeding [ceiling], at which the athlete and its ground contact stay inside the
      * viewport for every frame of the motion the exercise plays ([sides]); plus the anchor that
-     * centres that content.
+     * centres the athlete.
      *
      * [fitReachableYaws] decides which viewpoints that size must hold. The default reserves the
      * widest silhouette the pose's declared yaw range can produce, so rotating never crops it — and
@@ -161,7 +161,13 @@ class CameraFraming(
             )
         ).coerceAtLeast(MINIMUM_ZOOM)
 
-        val centerX = 0.5f - (contentBox.minX + contentBox.maxX) * 0.5f * zoom / width
+        // Horizontally the FIGURE is what is centred, not the box the fit measures: the ground contact
+        // is a shadow, and a pose whose footing sits off to one side would otherwise be drawn off
+        // centre, spending the room on one side of the drag's turn and leaving none on the other. The
+        // zoom is deliberately not re-derived from this — the figure's size is the fit's, not a
+        // bargain for the rotation.
+        val centred = if (figureBox.width > 0f) figureBox else contentBox
+        val centerX = 0.5f - (centred.minX + centred.maxX) * 0.5f * zoom / width
         val centerY = 0.5f - (contentBox.minY + contentBox.maxY) * 0.5f * zoom / height
         return CameraFrame(zoom, centerX, centerY)
     }
