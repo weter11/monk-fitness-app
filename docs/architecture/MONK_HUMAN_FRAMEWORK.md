@@ -260,8 +260,10 @@ are listed as known traps in §13.
 ### 3.5 What the AA-3D viewer contributes — and what it does not
 
 **Provenance, stated because it limits what these numbers can do.** The figures below are quoted from an external
-reference implementation's own page state, as reported in the review that produced this section. This document contains
-no URL for the artifact, so the numbers are **not reproducible from this repository and are not verified here**. They are
+reference implementation's own page state, as reported in the review that produced this section. They are
+**owner-run, with no in-repo artefact** — no URL, no capture, no script, nothing this repository can re-execute — so the
+numbers are **not reproducible from here and are not verified here**, exactly as the Adreno run of §3.4 is a single
+recorded run rather than a measurement anyone can repeat. They are
 used as a scale reference for what a browser-side implementation costs — never as a budget for this app, and never as
 evidence about a phone. The only device numbers in this framework come from one run of the #384 spike (§3.4); they are
 informational, and no stage gate depends on them (§12.3).
@@ -1357,7 +1359,13 @@ enum class Segment {
 /** A point pinned to a canonical segment, in metres, segment rest frame (+X sagittal, +Y up, +Z lateral). */
 data class Attachment(val segment: Segment, val x: Float, val y: Float, val z: Float)
 
-/** A declared exemption from the clearance predicate: one obstacle, one head, one path interval (§7.4.1). */
+/**
+ * A declared exemption from the clearance predicate: one obstacle, one head, one path interval (§7.4.1).
+ *
+ * Keyed per HEAD (`headIndex`, the slot in [AnatomyFrame.heads]) and never per instance: a head is the thing that has a
+ * path. The renderability mask is keyed per `(muscleId, side)` and is the conjunction over that instance's heads (§7.4),
+ * so the two keyings are different on purpose and neither substitutes for the other.
+ */
 data class ContactExemption(
     val obstacleId: String,
     val headIndex: Int,
@@ -1505,7 +1513,7 @@ are `VALID`. `NOT_PROCESSED` is not renderable, for the same reason it is not `V
 | producer | `AnatomySolver.solve`, written in the same pass as the head statuses, so a mask cannot be a frame behind |
 | lifetime | one frame, exactly like the rest of the frame; `clear()` sets every entry `false` |
 | transport | a field of `AnatomyFrame`; `CharacterSceneFrame` (§10.2) receives the **prefiltered geometry list** built from it, which is the mandatory path — the renderer never re-derives the mask from statuses |
-| key | `(muscleId, side)`, never a head index: a head index is not an instance and a two-head muscle has one silhouette |
+| key | `(muscleId, side)`, never a head index: a head index is not an instance and a two-head muscle has one silhouette. **The two keyings are deliberate and ordered**: an exemption and every path check key on the **head** (§7.4.1c), while the mask keys on the **instance** and is the **conjunction over that instance's heads** — so a two-head muscle with one exempted head and one violation is unrenderable, and the exemption stays a per-head fact |
 | partial-head policy | **off by default.** A multi-head muscle is all-or-nothing; a per-head behaviour requires the definition to declare it explicitly and §12.4 to review the half-drawn silhouette as a separate criterion |
 
 The renderer consumes the mask or the prefiltered list, and the rules are these:
@@ -1531,7 +1539,11 @@ Three different checks are routinely conflated. This section keeps them apart, a
 criterion.
 
 **(a) Sample check — necessary, not sufficient.** Every sample of the final polyline lies outside every declared
-obstacle. This catches gross violations cheaply and bounds how far the projection step still has to move. It proves
+obstacle, **except inside that head's declared first-egress interval**, where the exemption of §7.4.1c (X5) applies: the
+check reads the same `(head, obstacle, arc-length interval)` mask as the endpoint check, construction, projection and the
+final validation, so a sample that is legitimately inside an exempted obstacle is not a violation and a sample inside the
+same obstacle outside the interval still is. This catches gross violations cheaply and bounds how far the projection step
+still has to move. It proves
 nothing about the segments between samples: two consecutive samples can both be outside an obstacle while the straight
 segment joining them passes through it, and a 1 cm sample spacing cannot see an obstacle thinner than 1 cm at all.
 
@@ -2135,7 +2147,10 @@ approach is `R·D/√(R² + D²)` for a waypoint at distance `D`, which is **bel
 rule below is not bookkeeping: an entry point that sits on the surface is a zero-clearance point, the predicate rejects it
 at every pass, and a construction that keeps it turns a clearable configuration into a `PASS_CAP` failure. First-pass
 rejection here, later successful escalation, and a terminal failure for the retained-entry variant are three different
-outcomes of one geometry, and the fixture table states which one each fixture expects.
+outcomes of one geometry, and the fixture table states which one each fixture expects: `single_obstacle` is the
+sample-anchored variant (pass 1 rejected, pass 2 clear) and `retained_entry_never_clears` is the same geometry with the
+entry/exit points kept (terminal `PASS_CAP`), so a reader who sees only one of the two rows should not conclude that the
+other is wrong.
 
 **Worked frame check — `rotated_anisotropic`.** One obstacle with local semi-axes 40 × 10 × 20 mm, `Rw` = +90° about Z
 (local X → world +Y), `eps_num` = 1e-5 m, chord `(−145, 0, 0) → (145, 0, 0)` mm in world X through `cw`. Here
@@ -2645,7 +2660,9 @@ specific total.
 **M1 has no helper bones at all.** Strategy A generates the tube geometry directly (§7.5, §7.6), so an M1 muscle layer is
 one dynamic mesh per layer and its skin carries **zero** helpers; the palette is the 33 base joints plus whatever visual
 bones the body rig adds. That is why M1 needs no split, and it is also why the later-stage experiment below is a
-*v2* measurement rather than an M1 one.
+*v2* measurement rather than an M1 one. **The two statements are consistent by stage, not in conflict**: "one dynamic
+mesh per layer" is the M1 (strategy A) case with no helpers, and "regional renderables with their own remapped palettes"
+is the v2 (strategy C) case where helper bones push the palette past 255 — no stage has both.
 FPS and thermal numbers remain informational (§12.3) and no stage gate depends on them.
 
 ### 10.4 Loading, caching, export and thumbnails
