@@ -475,7 +475,7 @@ its own remapped palette — is equally supported here, and is what the 255-bone
 2  character: PoseRetargeter.boneMatrices(pose, …) → base bones            [rotations from joints]
 3  anatomy:   AnatomySolver.solve(pose, def, bodyProfile) → AnatomyFrame    [paths, lengths]
 4  character: MuscleLayerSkinner.write(AnatomyFrame) → helper bones         [path-driven transforms]
-5  renderer:  upload both bone ranges + morph weights; render visible layers
+5  renderer:  upload every skin's palette + the prefiltered dynamic geometry + morph weights; render visible layers
 6  observers: RigValidator / AnatomyValidator / ExerciseValidator (read-only)
 ```
 
@@ -501,6 +501,12 @@ class AnatomyDefinition(
 )
 
 /**
+ * What the pass loop did for one head, kept apart from the geometric cause (`PathReason`, §7.4.1c). `CLEARED` means a
+ * pass was accepted; an exhausted search is `SEARCH_EXHAUSTED` or `PASS_CAP`, never `CLEARED`.
+ */
+enum class SearchOutcome { CLEARED, SEARCH_EXHAUSTED, PASS_CAP, NOT_PROCESSED }
+
+/**
  * One frame of derived anatomy. Every per-frame number lives in a preallocated parallel array indexed by head; the
  * buffers are reused, so a consumer must finish before the next solve.
  *
@@ -522,6 +528,7 @@ class AnatomyFrame(headCount: Int, pointCapacity: Int, landmarkCount: Int) {
      */
     val statuses = IntArray(headCount)
     val reasonCodes = IntArray(headCount)        // PathReason ordinal; NO_REASON only where status is VALID
+    val searchOutcomes = IntArray(headCount)     // SearchOutcome ordinal; what the loop did, never the geometric cause
     val failingSegments = IntArray(headCount)    // segment index, or NO_INDEX
     val failingObstacles = IntArray(headCount)   // index into the definition's obstacle list, or NO_INDEX
     val pointCounts = IntArray(headCount)
@@ -537,8 +544,9 @@ class AnatomyFrame(headCount: Int, pointCapacity: Int, landmarkCount: Int) {
     val muscleStates: List<MuscleState>
 
     /**
-     * Start of every solve: statuses NOT_PROCESSED, reasons NOT_PROCESSED, counts 0, indices NO_INDEX, lengths cleared.
-     * A head the solver never reaches keeps NOT_PROCESSED, which no consumer may read as VALID or as INVALID.
+     * Start of every solve: status, reason and outcome NOT_PROCESSED, counts 0, indices NO_INDEX, lengths and visibility
+     * cleared. A head the solver never reaches keeps NOT_PROCESSED in all three, which no consumer may read as VALID, as
+     * INVALID or as a result of the search.
      */
     fun clear()
 }
@@ -564,6 +572,7 @@ class MuscleState internal constructor(
     val relativePathLengthChange: Float get() = frame.relativePathLengthChanges[slot]
     val pathStatus: PathStatus get() = PathStatus.entries[frame.statuses[slot]]
     val reason: PathReason get() = PathReason.entries[frame.reasonCodes[slot]]
+    val searchOutcome: SearchOutcome get() = SearchOutcome.entries[frame.searchOutcomes[slot]]
     val failingSegment: Int get() = frame.failingSegments[slot]
     val failingObstacle: Int get() = frame.failingObstacles[slot]
 
@@ -600,9 +609,10 @@ write goes through the frame, which raises `BUFFER_CAPACITY` for that head (§7.
 truncating a path. `pointCapacity` is the post-insertion maximum: a capacity sized for the resampling `N` alone
 under-counts by exactly the points construction inserts, which is the defect this layout removes.
 
-**A status is never inherited, and "never reached" is its own state.** `clear()` sets every slot `NOT_PROCESSED`,
-`NOT_PROCESSED`, `NO_INDEX`, `pointCount = 0` before the solve touches anything, so a head the solver never reaches — a
-definition error, an early return, a reused buffer — reads `NOT_PROCESSED` rather than the last frame's `VALID`.
+**A status is never inherited, and "never reached" is its own state.** `clear()` writes `NOT_PROCESSED` to every
+slot's status, reason and outcome, `NO_INDEX` to both indices and `0` to `pointCount` before the solve touches
+anything, so a head the solver never reaches — a definition error, an early return, a reused buffer — reads
+`NOT_PROCESSED` rather than the last frame's `VALID`.
 `NO_REASON` is reserved for `VALID` and is therefore never a value `clear()` writes: an earlier revision wrote
 `INVALID + NO_REASON`, which the reason table itself forbids (NO_REASON is "only where the status is VALID"), so a
 consumer could not tell a clean start from a failure with a missing reason. Three states, three meanings:
@@ -1512,7 +1522,7 @@ are `VALID`. `NOT_PROCESSED` is not renderable, for the same reason it is not `V
 | --- | --- |
 | producer | `AnatomySolver.solve`, written in the same pass as the head statuses, so a mask cannot be a frame behind |
 | lifetime | one frame, exactly like the rest of the frame; `clear()` sets every entry `false` |
-| transport | a field of `AnatomyFrame`; `CharacterSceneFrame` (§10.2) receives the **prefiltered geometry list** built from it, which is the mandatory path — the renderer never re-derives the mask from statuses |
+| transport | a field of `AnatomyFrame`; `CharacterSceneFrame.geometry` (§10.2) is the **prefiltered geometry list** built from it, one `DynamicGeometrySlot` per drawn instance with a session-stable `slotId` — the renderer never re-derives the mask from statuses, and a slot that drops out of the list is cleared by id |
 | key | `(muscleId, side)`, never a head index: a head index is not an instance and a two-head muscle has one silhouette. **The two keyings are deliberate and ordered**: an exemption and every path check key on the **head** (§7.4.1c), while the mask keys on the **instance** and is the **conjunction over that instance's heads** — so a two-head muscle with one exempted head and one violation is unrenderable, and the exemption stays a per-head fact |
 | partial-head policy | **off by default.** A multi-head muscle is all-or-nothing; a per-head behaviour requires the definition to declare it explicitly and §12.4 to review the half-drawn silhouette as a separate criterion |
 
@@ -1782,11 +1792,18 @@ There is no "probably fine" outcome and no fall-through default. If the check ca
 *Default chosen, owner confirmation pending.* A reason is not a search outcome and a search outcome is not a geometric
 cause. So:
 
-- the **frame** exposes `searchOutcome` ∈ {`CLEARED`, `SEARCH_EXHAUSTED`, `PASS_CAP`} — what the construction did — and,
-  separately, `reason` (the table above) — the **last geometric cause** it hit. `CLEARED` with a geometric cause is a
-  normal state: every pass failed on `CLEARANCE_VIOLATION` or `TUBE_INVALID` at a named segment and the budget ran out.
-  A consumer that reads the cause as the outcome reports "geometry violation" for a search that simply stopped, and a
-  consumer that reads the outcome as the cause reports "exhausted" for a path that had one bad segment.
+- the **frame** carries it: `AnatomyFrame.searchOutcomes` (§5.3) holds the outcome per head ∈ {`CLEARED`,
+  `SEARCH_EXHAUSTED`, `PASS_CAP`} — what the construction did — while `reasonCodes` holds, separately, the **last
+  geometric cause** it hit. Both are per-head arrays with a `clear()` state, so a reused buffer cannot report the
+  previous frame's outcome, and `NOT_PROCESSED` means the head was never solved (§5.3), which is a bug and not a
+  result.
+- **`CLEARED` is success and nothing else.** A head is `CLEARED` when a pass was accepted, which implies `status =
+  VALID` and `reason = NO_REASON`; an exhausted search reports `PASS_CAP` or `SEARCH_EXHAUSTED` **with** the last
+  geometric cause (`CLEARANCE_VIOLATION` at a named segment, typically) — two fields, one record. An earlier revision
+  called `CLEARED` with a geometric cause a normal state, which left the outcome field unable to separate "the search
+  stopped" from "the path was accepted" and made the two-field fixture below unreachable. A consumer that reads the
+  cause as the outcome reports "geometry violation" for a search that simply stopped, and a consumer that reads the
+  outcome as the cause reports "exhausted" for a path that had one bad segment.
 - `NO_ROUTE` is **not produced in M1**: nothing in this design proves that no route exists between two fixed endpoints
   outside a set of ellipsoids, so a `NO_ROUTE` value would be a claim with no procedure behind it. The enum keeps the
   value, the reason table keeps the row, and the frame never emits it until a proof procedure is specified and reviewed.
@@ -2056,9 +2073,13 @@ Design notes:
 - **Length is arc length along the solved path.** A straight-chord measure reports shortening wherever a muscle wraps a
   joint, which inverts the sign of the reported change. This is the single most important correctness rule in the model.
 - **`restLength` comes from the same solver at the reference stance**, not from the definition's numbers, so the rest
-  state and the runtime can never disagree (this is also what the exporter bakes; §10.4). The **reference stance** is the
-  engine's rest stance of §6.1 — arms at the sides, the pose every builder starts from — and it is named in the
-  definition version. `restLength` must be finite and strictly greater than zero for every head; a head that cannot
+  state and the runtime can never disagree (this is also what the exporter bakes; §10.4). The **reference stance** is one
+  frame, named once: the **X1 bind frame** of §6.6 — the canonical straight-limbed A-pose computed from
+  `SkeletonDefinition`, arms at the sides — supplied to the solver as a `SkeletonPose` value (§10.4). It is *not* a
+  published pose and *not* `squat_standard` at progress 0: "the pose every builder starts from" was the wrong
+  description, because two builders can start from the same intent and still publish different stances, and a reference
+  stance that moved with a builder would make `restLength` a function of that builder. The frame's identity is named in
+  the definition version. `restLength` must be finite and strictly greater than zero for every head; a head that cannot
   produce one is `INVALID` with `REST_LENGTH_INVALID` (§7.4.1c) rather than dividing by it. A relative change computed
   against a zero or a NaN rest length is not a small error, it is a meaningless number that reads as a large one.
 - **A length comparison with literature is a record, not a number.** Where a measured reference exists, the comparison
@@ -2513,8 +2534,8 @@ Rules:
 - **One character, one pose authority — and as many skin palettes as the limit requires.** Every layer is posed from the
   same published pose through the same retargeter, and no layer may introduce a second skeleton or a second pose. That is
   **one pose authority, not one bone buffer**: a skin has its own joint order and inverse binds, so several renderables may
-  each read an explicitly owned, remapped palette (§5.1, §10.3) as long as every index has one owner and every palette is
-  derived from the same pose. The earlier wording — "all layers share one bone buffer" — contradicted both the ownership
+  each read an explicitly owned, remapped palette (`SkinPalette`, §10.2) as long as every index has one owner and every
+  palette is derived from the same pose. The earlier wording — "all layers share one bone buffer" — contradicted both the ownership
   table and the per-skin option the 255-bone limit forces.
 
 ### 9.2 Essential for the first useful version
@@ -2566,21 +2587,64 @@ a **stage-7** item (§15 — stage 5 is morphology v2, stage 7 is labels, pickin
 | Pose handoff | `SkeletonPose` is reused; bone upload happens inside the producing call (`CharacterSession.kt:310-318`) | anatomy must run in the same window; no frame queue |
 | Surface | `TextureView` + `UiHelper`; `Choreographer` loop started on resume | surface gaps and context loss need the documented recovery path (`docs/CHARACTER_RENDERING.md` §4) |
 
-The renderer is **not** allowed to know about exercises, poses, muscles, activation or anatomy. It receives a bone
-buffer, a morph weight vector, and visible renderables. Everything semantic is resolved before it.
+The renderer is **not** allowed to know about exercises, poses, muscles, activation or anatomy. It receives joint
+palettes, a prefiltered list of dynamic meshes, morph weights and visible layers — no names, no statuses, no reasons.
+Everything semantic is resolved before it.
 
 ### 10.2 Scene contract
 
 ```kotlin
-/** Everything the renderer needs for one frame; no exercise or anatomy types. */
+/** Everything the renderer needs for one frame; no exercise, anatomy or muscle types. */
 class CharacterSceneFrame(
-    val baseBones: FloatArray,        // column-major 4x4 per bone, skin order
-    val helperBones: FloatArray,      // appended range, same layout
-    val morphWeights: FloatArray,     // per renderable target set
-    val visibleLayers: Int,           // bitmask of CharacterLayer
-    val selectedMuscle: Int           // -1 for none; material parameter only
+    val palettes: Array<SkinPalette>,          // one per skin; each owns its joint order and remap
+    val geometry: Array<DynamicGeometrySlot>,  // the prefiltered list of §7.4, one slot per drawn instance
+    val morphWeights: Array<MorphWeightSet>,   // one per renderable, in the asset's own target-name order
+    val visibleLayers: Int,                    // bitmask of CharacterLayer
+    val selectedInstance: Int,                 // -1 for none; index into this frame's `geometry`, never a muscle id
+    val selectionRenderable: Int               // -1 for none; which renderable the tint applies to
 )
+
+/** One skin's palette: column-major 4x4 per joint, in THAT skin's joint order. Never one shared joint order. */
+class SkinPalette(val skinId: Int, val matrices: FloatArray, val jointCount: Int)
+
+/** One generated mesh, owned by the anatomy stage for exactly one frame and identified by a session-stable id. */
+class DynamicGeometrySlot(
+    val slotId: Int,          // stable for the session: the renderer keys its buffer on this, never on array position
+    val vertices: FloatArray, // 3 per vertex, engine units, ring-major
+    val indices: IntArray,
+    val vertexCount: Int,
+    val indexCount: Int,
+    val visible: Boolean      // false ⇒ clear this slot's buffer this frame (§7.4 renderability)
+)
+
+/** One renderable's morph weights, in the asset's `extras.targetNames` order (§6.4). */
+class MorphWeightSet(val renderableId: Int, val weights: FloatArray)
 ```
+
+**The contract carries what the layers *are*, not what they mean.** Two things the earlier four-field version could not
+express and the later stages require: **per-skin palettes** (§9.1, §10.3) and the **per-instance filter** of §7.4.
+
+`palettes` is a list keyed by `skinId`, not one array with an appended helper range. One pose authority, one palette per
+skin: a skin has its own joint order, inverse binds and remap, so `MuscleLayerSkinner.write` writes into the palette of
+the skin it was built for (§5.3) and each renderable names the palette it reads. That is what makes the v2 regional
+split expressible — three skins carry three palettes with independent helper ranges and index orders, and no consumer
+assumes the orders coincide. A single shared buffer remains an option (§5.1), not the contract, and no field of
+`CharacterSceneFrame` presumes it.
+
+`geometry` is the prefiltered list of §7.4: `CharacterSession` builds it from `AnatomyFrame.renderable` and
+`AnatomyFrame.paths`, one slot per drawn instance, and the renderer never receives a `MuscleState`, a `PathStatus` or a
+muscle id. Each slot's `slotId` is **stable for the session** so the renderer keys its GPU buffer on identity rather
+than on position in the array — which is what lets one invalid muscle disappear while its neighbours keep drawing. A
+layer bit cannot do that: it hides a whole layer.
+
+| Handoff fact | Rule |
+| --- | --- |
+| producer | `CharacterSession`, in the same call that solves anatomy and uploads the palettes (§5.2 steps 4–5), inside the carrier's valid window |
+| lifetime | one frame. The renderer copies vertices and matrices into its own buffers during that call and holds no reference afterwards; the frame's arrays are the anatomy stage's reusable buffers and are overwritten by the next solve |
+| clearing | a `slotId` in the renderer's map that is **absent** from this frame's `geometry`, or present with `visible = false`, is cleared before the frame is presented — no fade, no last-good tube (§7.4) |
+| prefiltering | `geometry` contains only instances whose `renderable` entry is `true`. That list is the only mask the renderer consumes, and it never re-derives one from a status array it cannot see |
+| selection | `selectedInstance` indexes the list the renderer just received; `-1` means none. Selection is a material parameter and moves no vertex (§7.6) |
+| anatomy semantics | none cross this boundary: no exercise, pose, muscle, role, reason or status |
 
 If a future renderer (or a thumbnail renderer, or a test double) can consume `CharacterSceneFrame`, the framework is
 correct. If a caller needs to pass a `SkeletonPose` into the renderer, the layering has been violated.
@@ -2641,7 +2705,7 @@ renderable** (`filament/include/filament/RenderableManager.h:419-450`, "up to 25
 `FILAMENT_CHECK_PRECONDITION` at `components.cpp:1037-1038`). Plan with **255** and record the discrepancy rather than
 relying on 256. `gltfio` passes the skin's **full joint count** to the renderable (`AssetLoader.cpp:926-928`), so
 splitting a mesh into several primitives does **not** reduce a shared skin's joint count: separate skins with their own
-remapped palettes are what reduce it.
+remapped palettes are what reduce it, and those palettes are what `CharacterSceneFrame.palettes` carries (§10.2).
 
 **313 is a hypothetical, and the quantity that actually binds is the per-skin palette.** The often-quoted
 `35 × 2 × 4 + 33 = 280 + 33 = 313` assumes 35 bilateral single-head muscles, four helpers per head on both sides, and one
@@ -2670,11 +2734,20 @@ FPS and thermal numbers remain informational (§12.3) and no stage gate depends 
 - **One GLB per layer.** Loaded with gltfio `AssetLoader`/`ResourceLoader`, memory-mapped, uncompressed
   (`noCompress += "glb"`, `app/build.gradle.kts:71`). Versioned by `assetVersion` in the manifest.
 - **Offline export uses the runtime's own maths.** The tool that places helper bones and validates muscle bind poses is a
-  JVM CLI module that depends on the pure-Kotlin `anatomy` package and a rest-stance pose. A Python re-implementation
-  would be a second source of truth for attachment and path maths and is explicitly rejected.
-- **Rest bind is the engine rest stance.** The exporter asks the anatomy solver for `restLength` and helper positions at
-  the bind stance; the GLB's inverse binds are computed from those positions. This is the only way the rest invariant
-  (bone matrices = identity at rest) can hold for muscles as well as for the body.
+  JVM CLI module that depends on the pure-Kotlin `anatomy` package and the **X1 bind frame** (§6.6). A Python
+  re-implementation would be a second source of truth for attachment and path maths and is explicitly rejected.
+- **There is one bind frame, and it is X1.** The exporter builds the canonical A-pose from `SkeletonDefinition` in
+  character-side code — the same builder the runtime uses — and asks the anatomy solver for `restLength` and helper
+  positions at that frame; the GLB's inverse binds are computed from those positions. This is the only way the rest
+  invariant (bone matrices = identity at rest) can hold for muscles as well as for the body, and it is why §10.5 checks
+  the exported bind against X1 and not against a published pose.
+- **How the synthetic frame reaches the solver without an engine change.** X1 is a `SkeletonPose` *value*: the builder
+  fills one from the definition (positions, identity rotations, `jointCount` entries) and `AnatomySolver.solve` is called
+  with it exactly as it is called with a published pose. The solver reads positions and never asks where a pose came
+  from, so no engine type, factory or pipeline stage changes: nothing publishes X1, no builder is modified, and the
+  frozen engine retains no frame for it. The earlier text called the exporter's input "a rest-stance pose" and "the
+  engine rest stance", which named neither the frame nor its provenance and left the bind check of §10.5 comparing
+  against a frame the exporter was never told to use.
 - **Thumbnails stay 2D** until a static-render pipeline exists: the proposal in `docs/CHARACTER_RENDERING.md` §7
   (one offscreen engine, one frame per key, LRU cache, 2D fallback) remains the plan. No animated 3D thumbnails.
 - **Surface lifecycle** is the existing `CharacterSession.destroy()` contract; layers add nothing to it except unloading
@@ -2685,22 +2758,33 @@ FPS and thermal numbers remain informational (§12.3) and no stage gate depends 
 ### 10.5 Asset validation requirements
 
 Each GLB is validated before it can be referenced by a profile (offline, plus a JVM test that parses the checked-in
-assets):
+assets). **The obligations are conditional on what a layer is**, because a rigid overlay has no skin: applying "inverse
+binds, weights, ≤ 4 influences" to `skeleton_v1.glb` either rejects a valid layer or leaves its real checks unstated.
+The `Applies to` column is the contract, and a check whose subject a layer does not have is not run against it — not
+quietly passed either, which is why the column names the layer rather than the check's name being assumed.
 
-| Check | Failure mode it prevents |
-| --- | --- |
-| Required bones present and mapped (`BoneMap`) | silent rest pose for a limb |
-| Bind pose == the X1 canonical A-pose (§6.6), rest invariant, all bones ≈ identity | figure in T-pose / sheared at frame 0 |
-| Inverse bind count == joint count, column-major float, no NaN | garbage skinning on some drivers |
-| Node hierarchy acyclic, one skeleton root | gltfio skin failure |
-| Morph targets: same count on every primitive of a mesh; names match the manifest; deltas finite | morph crash / wrong body |
-| Weights: sum ≈ 1, ≤ 4 influences, no zero-weight vertices | collapsing vertices |
-| Triangle and texture budgets per tier | unaffordable asset |
-| Bone budget per renderable (measured, not assumed) | runtime skin failure |
-| No embedded animation clips (the character is pose-driven) | two sources of motion |
-| No ground/helper nodes that the presenter must exclude by name | the PR #385 asset's `Ground` node is excluded by `skinnedNodes`, which is the right rule — extend it to all layers |
-| Anatomy attachment validity for every muscle in the layer (§12 L3) | a muscle attached to a joint that does not exist |
-| `assetVersion` / `anatomyVersion` / `rigVersion` recorded and matched | mixed-version skinning |
+| Check | Applies to | Failure mode it prevents |
+| --- | --- | --- |
+| Required bones present and mapped (`BoneMap`) | every skinned layer (skin, muscles at v2); for the overlay, its parented nodes resolve to mapped bones | silent rest pose for a limb |
+| Bind pose == the X1 canonical A-pose (§6.6), rest invariant, all bones ≈ identity | **skinned layers only** — the overlay is parented, not bound, and has no bind frame to compare | figure in T-pose / sheared at frame 0 |
+| Inverse bind count == joint count, column-major float, no NaN | **skinned layers only** | garbage skinning on some drivers |
+| Node hierarchy acyclic, one skeleton root | skinned layers (one root); acyclic only for the overlay | gltfio skin failure |
+| Morph targets: same count on every primitive of a mesh; names match the manifest; deltas finite | **the skin layer**; a muscle layer carries matching targets only from stage 3 (§6.3), and M1's is generated, not authored | morph crash / wrong body |
+| Weights: sum ≈ 1, ≤ 4 influences, no zero-weight vertices | **skinned layers only** | collapsing vertices |
+| Triangle and texture budgets per tier | every layer, against its own §10.3 row | unaffordable asset |
+| Bone budget per renderable (measured, not assumed) | **skinned layers**, on `palette(skin)` (§10.3) — the overlay has no palette | runtime skin failure |
+| No embedded animation clips (the character is pose-driven) | every layer | two sources of motion |
+| No ground/helper nodes that the presenter must exclude by name | every layer | the PR #385 asset's `Ground` node is excluded by `skinnedNodes`, which is the right rule — extend it to all layers |
+| Anatomy attachment validity for every muscle in the layer (§12 L3) | layers that carry muscle definitions (v2 authored layers) | a muscle attached to a joint that does not exist |
+| `assetVersion` / `anatomyVersion` / `rigVersion` recorded and matched | every layer | mixed-version skinning |
+
+**M1's muscle layer is not a GLB and is not validated as one.** Strategy A generates the tube mesh per frame (§7.4,
+§7.5), so the M1 muscle layer has no skin, no inverse binds, no morph targets and no bind frame; its structural checks
+are the L5 M1 subset of §12.5 — finite coordinates, no zero-area ring, triangle count equal to the §10.3 formula, one
+fan cap per end — run by `ProceduralTubeBudgetTest`. The skin and the skeleton overlay are GLBs and take the rows above
+that name them. An earlier revision applied every row to every layer, which is why the two statements looked
+contradictory: the generated layer satisfied no row because it has no asset, and the rigid overlay satisfied none
+because it has no skin.
 
 ### 10.6 Materials, lighting, shadows
 
@@ -2807,8 +2891,9 @@ Seven levels, each with one owner, one report and an explicit automation status.
 | `MuscleDirectionalExpectationTest` | L4 | only exercise- and muscle-specific expectations, each carrying a documented justification and source |
 | `MuscleRestLengthTest` | L4 | solved rest length matches the calibrated reference within tolerance |
 | `MuscleRenderabilityTest` | L4 / presentation | §7.4: an `INVALID` instance is masked and its geometry cleared in the same frame; **one invalid biceps-femoris head hides the whole instance and both sides keep independent masks**; the mask is the conjunction of the heads' statuses and `NOT_PROCESSED` is not renderable; an early return leaves every instance unrenderable rather than stale; valid → invalid → valid restores the path and the mask across carrier reuse |
-| `AnatomyFrameLayoutTest` | L4 | §5.3: the `3 · headCount · pointCapacity` stride addresses every point of every head; `pointCapacity` is the post-insertion maximum; an over-capacity head reports `BUFFER_CAPACITY` instead of growing or truncating; `clear()` leaves every slot `NOT_PROCESSED` with `reason = NOT_PROCESSED` and every `renderable` entry `false`; a solve that returns early leaves the untouched heads `NOT_PROCESSED` rather than `VALID` or `INVALID`; a reused buffer that is not cleared cannot show the previous frame's status; and a head that is simultaneously degenerate and inside an obstacle reports `DEGENERATE_SEGMENT` |
+| `AnatomyFrameLayoutTest` | L4 | §5.3: the `3 · headCount · pointCapacity` stride addresses every point of every head; `pointCapacity` is the post-insertion maximum; an over-capacity head reports `BUFFER_CAPACITY` instead of growing or truncating; `clear()` leaves every slot `NOT_PROCESSED` in **status, reason and `searchOutcome`** and every `renderable` entry `false`; a solve that returns early leaves the untouched heads `NOT_PROCESSED` rather than `VALID`, `INVALID` or a stale outcome; a reused buffer that is not cleared cannot show the previous frame's status **or outcome**; an accepted head reads `CLEARED` with `reason = NO_REASON` while an exhausted one reads `PASS_CAP` or `SEARCH_EXHAUSTED` with its own last geometric cause, so the two fields are asserted separately (X7); and a head that is simultaneously degenerate and inside an obstacle reports `DEGENERATE_SEGMENT` |
 | `MuscleGeometryOwnershipTest` | L4 / presentation | §7.6: toggling morphs or correctives leaves every `MuscleState` bit-identical, and nothing in `character/` writes `AnatomyFrame` |
+| `SceneFrameHandoffTest` | presentation | §10.2: `geometry` carries only instances whose `renderable` entry is `true`, one slot per instance, keyed by a `slotId` that is stable across a solve sequence; a slot absent from the next frame (its instance became `INVALID`) is cleared by id while its neighbours keep drawing, and a slot present with `visible = false` is cleared too; each `SkinPalette` is written in its own skin's joint order and `MuscleLayerSkinner` writes only the skin it was built for; and the renderer receives no muscle id, status or reason |
 | `ProceduralTubeBudgetTest` | L5 (M1 subset) | generated triangles match the §10.3 formula for the declared `N` and `R`; no zero-area ring; all coordinates finite |
 | `MorphPresetRangeTest` | L6 | every declared weight lies inside its target's declared `min`/`max`; every preset declares a value for every target; a name the asset does not carry fails rather than defaulting to zero |
 | `MorphRingPreservationTest` | L6 | the mesh ring masked around each joint pivot keeps its pivot-relative positions within `ε_morph` under every preset — the test that can fail, and the one that says anything about the surface a muscle sits under |
@@ -2920,7 +3005,7 @@ changes which predicate it calls changes its primary reason, so every row pins b
 | `after_smoothing_regression` | a configuration whose pre-smoothing polyline clears but whose 0.25-blend smoothed polyline does not | `VALID`, and the accepted polyline is the smoothed-then-projected one. A solver that validates **before** smoothing accepts a curve the predicate never saw; the fixture fails it. The pass loop's own step 4d is what catches this case and forces the retry |
 | `two_obstacle_oscillation` | two obstacles for which the detour side that clears one puts the path inside the other, alternating per pass | `INVALID` — `PASS_CAP`. Deterministic and terminating: the same input produces the same failure at the same pass, not a hang and not a different reason on a second run |
 | `search_exhausted` | an obstacle whose required detour distance exceeds the declared corridor limit | `INVALID` — `SEARCH_EXHAUSTED`, not `NO_ROUTE`: the search gave up, no impossibility was proved |
-| `no_valid_route` | obstacles that provably close the corridor between the attachments, with the proof recorded in the fixture | `INVALID` — `NO_ROUTE`; the frame reports it and nothing is drawn along it |
+| `closed_corridor_exhausted` | **pinned inputs:** attachments at `(0, 0, 0)` and `(290, 0, 0)` mm; one ellipsoid centred at `(145, 0, 0)` mm with semi-axes `(120, 40, 40)` mm, both attachments outside it (`Σ(pᵢ/Rᵢ)² = 1.4601`); tube radius 0; `corridorMetres = 0.030 m` (30 mm); `e = 0.01 mm` | `INVALID` — `SEARCH_EXHAUSTED` with `searchOutcome = SEARCH_EXHAUSTED`, and the frame emits **no** `NO_ROUTE` value (X7). The corridor is refused at pass 1 and that is arithmetic, not a theorem: `h(l̂_d) ≥ min R = 40 mm` for every unit direction (`h² = Σ(Rᵢ l̂ᵢ)² ≥ min R²`), so `d_1 = h + e ≥ 40.01 mm > 30 mm` and no pass can place a waypoint inside the declared corridor. This replaces the former `no_valid_route` row, which asserted `NO_ROUTE` for a geometry its own fixture claimed to prove and §7.4.1c forbids M1 from emitting; the replacement pins the **declared limit** that stopped the search, never an impossibility claim |
 | `pass_cap` | a configuration that exhausts the pass budget `K` without a candidate | `INVALID` — `PASS_CAP`; deterministic and terminating |
 | `two_obstacle_projection_cycle` | two spheres centred at `0` and `2`, radius `1.5`, a sample at `0.5` | `searchOutcome = PASS_CAP`, and the record shows the sample alternating `1.5 → 0.5 → 1.5` under ordered projection; an implementation that treats projection as convergent (iterating to a tolerance, or reporting the first projected position as final) cannot reproduce the sequence |
 | `final_clearance_and_budget_both_fail` | a final polyline that fails the predicate at one named segment **and** exhausts `K` at the same pass | one record: `searchOutcome = PASS_CAP` **and** `reason = CLEARANCE_VIOLATION` with the segment and obstacle index — the two fields are separate (X7), so neither overwrites the other |
