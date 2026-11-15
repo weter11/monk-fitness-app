@@ -2272,7 +2272,8 @@ to tell which one was the deliverable.
 | rectus femoris | 2 | one path per side | **routes over a femoral wrap and over patella-body points**; there is no patella frame (§7.3) | the patella approximation and the supported knee range are stated in the definition and reviewed per side |
 
 **Eight names, eighteen instances.** The M1 set is eight muscles, sixteen sides and two extra biceps-femoris heads:
-**18 tubes** at stage 2, which §10.3 budgets at 13,536 triangles for `N = 48`, `R = 8` (13,824 with caps). A count of
+**18 tubes** at stage 2, which §10.3 budgets at 13,536 triangles at the initial resampling cap (`N = 48`, `R = 8`) and
+13,824 with two fan caps per tube — a floor, since construction inserts points up to `pointCapacity`. A count of
 "eight" that means eight tubes under-budgets by more than half and loses the second head.
 
 **The trunk muscles are coarse visual surrogates, and the label is part of the data.** `rectus abdominis`,
@@ -2321,7 +2322,7 @@ freedom**, not missing numbers: each is either approximated with the approximati
 | Muscle mesh authoring pipeline | strategy C needs meshes bound to helper bones | one Blender-based pipeline producing a GLB with helper bones + 4 weights; validate with the asset tool |
 | Left/right and origin/insertion conventions per muscle | mirroring errors are silent | the side check (§12 L2) plus a per-muscle review checklist |
 | Pennation / multi-head handling | biceps and triceps need two/three heads sharing one visual belly | model heads as separate paths with a shared mesh region; validate that head lengths differ plausibly |
-| Whether a single skin can hold all helper bones | the limit is **known**: 255 bones per renderable documented, 256 in the implementation, and `gltfio` passes the skin's full joint count, so splitting a mesh does not reduce it (§10.3). v2 needs 313 | the regional split is mandatory for v2, not a contingency; M1 needs none because strategy A has no helper bones in M1 |
+| Whether a single skin can hold all helper bones | the limit is **known**: 255 bones per renderable documented (`RenderableManager.h`, Filament 1.75.1), 256 in the implementation, and `gltfio` passes the skin's full joint count to the renderable, so splitting a mesh into primitives does not reduce it (§10.3). The binding quantity is `palette(skin) = base + visual joints + 4 × (head-side instances on that skin)`, not the hypothetical 313 | the regional split is mandatory for v2, not a contingency; M1 needs none because strategy A has no helper bones in M1 |
 | Per-muscle cross-section behaviour, if it is ever wanted | no validated model exists; the cylinder law is a plausibility argument, not evidence (§7.6) | an imaging-based study of the specific muscles through their working ranges, with a stated tolerance — a research task, not an engineering one |
 
 ---
@@ -2549,7 +2550,8 @@ sides × heads, not muscles:
 
 ```
 triangles per tube = 2 × (N_final − 1) × R                     // N_final ≤ pointCapacity, R = ring sides
-caps               = 2 × R per capped end
+cap                = R triangles per capped end                 // a fan from the R ring vertices to one centre vertex
+caps per tube      = 2 × R                                     // two ends
 M1 total           = Σ over EVERY instance (both sides, every head) of that, plus its caps
 ```
 
@@ -2557,10 +2559,26 @@ The previous revision counted eight *heads* where there are sixteen *instances*:
 `N = 48`, `R = 8` is `16 × 2 × 47 × 8 = 16 × 752 = ` **12,032** triangles, and **12,288** with a cap at each end of every
 tube — not 6.0 k, which is half the object. The canonical M1 set (§7.7.1) is **18** instances rather than 16, because
 biceps femoris has two heads, so its uncapped cost is `18 × 752 = ` **13,536** and **13,824** with caps. A two-head muscle
-adds a tube, not a second muscle. A flat sheet uses a
+adds a tube, not a second muscle.
+
+**The cap topology is part of the number.** A fan cap is `R` triangles per end, so two caps add `2R = 16` per tube:
+`12,288` for 16 instances and `13,824` for 18. A rule that added `2R` **per end** (four times `R` per tube) would give
+`12,544` and `14,112` instead — 256 and 288 triangles more — so the topology has to be pinned before the total means
+anything, and it is: one fan per end, no inner cap, no duplicated ring. A flat sheet uses a
 two-sided strip instead of a ring and is covered by neither this formula nor the clearance guarantee (§7.4.1): its cost
 is `2 × (N_final − 1) × (W − 1)` quads for a `W`-station width, and its own envelope must be declared before it can be
 budgeted or certified. Both `N` and `R` are declared in the quality tier, so the number is bounded before any device run.
+
+**48 is the initial resampling cap, not a ceiling on the final polyline.** §7.4 step 3 resamples the control polyline at
+`N ≤ 48`, and step 4 then **inserts** detour points, so `N_final > N` is normal. The buffer is sized by `pointCapacity`,
+which is declared **per quality tier** and must be `≥ N_final`; the budget is therefore
+
+```
+M1 total = Σ over instances of [ 2 · (N_final − 1) · R + 2R ]      with N_final ≤ pointCapacity(tier)
+```
+
+and a tier that raises `pointCapacity` raises the total linearly. Budgeting at `N = 48` while the buffer admits 60 points
+under-counts by exactly the inserted points, which is the defect the `pointCapacity` field exists to remove (§5.3).
 It is arithmetic, not a measurement: stage 1 records frame time and memory as information, not as a gate (§12.3), and a
 measured number replaces the estimate when one exists.
 
@@ -2572,10 +2590,24 @@ relying on 256. `gltfio` passes the skin's **full joint count** to the renderabl
 splitting a mesh into several primitives does **not** reduce a shared skin's joint count: separate skins with their own
 remapped palettes are what reduce it.
 
-The arithmetic then decides the design: 35 muscles × 2 sides × 4 helpers + 33 joints = 280 + 33 = **313** bones, which
-exceeds 255 before a single finger or twist bone is counted — so the regional split (trunk, left arm, right arm, left
-leg, right leg, head) is **mandatory for v2**, not an option or a contingency. M1 needs no split at all: strategy A has
-no helper bones in M1 (§7.5, §7.6), so the muscle layer is one dynamic mesh per layer and the limit is not approached.
+**313 is a hypothetical, and the quantity that actually binds is the per-skin palette.** The often-quoted
+`35 × 2 × 4 + 33 = 280 + 33 = 313` assumes 35 bilateral single-head muscles, four helpers per head on both sides, and one
+skin carrying all 33 base joints. It is a scale reference, not a budget: the number a renderable is checked against is
+
+```
+palette(skin) = base + visual joints on that skin
+              + 4 × (head-side instances assigned to that skin)
+```
+
+which is a property of the **regional split**, not of the library size. A split that assigns a third of the instances to
+each of three regional skins carries roughly a third of the helpers each, and the split therefore has to be designed
+against the palette number rather than derived from 313. The 255 limit is what makes the split mandatory for v2 — not the
+specific total.
+
+**M1 has no helper bones at all.** Strategy A generates the tube geometry directly (§7.5, §7.6), so an M1 muscle layer is
+one dynamic mesh per layer and its skin carries **zero** helpers; the palette is the 33 base joints plus whatever visual
+bones the body rig adds. That is why M1 needs no split, and it is also why the later-stage experiment below is a
+*v2* measurement rather than an M1 one.
 FPS and thermal numbers remain informational (§12.3) and no stage gate depends on them.
 
 ### 10.4 Loading, caching, export and thumbnails
@@ -2973,8 +3005,10 @@ combination is not an M1 pass, whatever the individual reports say.
 
 **Unresolved, with the smallest resolving experiment:**
 
-1. **Bone budget per renderable** — load the 8-muscle layer with 32 helpers on one device; if it renders, double until
-   failure. Resolves the split threshold.
+1. **Bone budget per renderable** — load the 8-muscle layer with **72 helpers** on one device (18 head-side instances ×
+   4 helpers; an earlier revision said 32, which is two helpers per instance and a figure the strategy-C spec cannot
+   produce); if it renders, double until failure. Resolves the split threshold, and the measurement is against
+   `palette(skin)` (§10.3), not against the library total.
 2. **Strategy C authoring effort** — one muscle (rectus femoris) taken from attachment data to a path-rigged mesh end to
    end; measure artist hours. This decides the stage-3 art budget. M1 is defined as eight muscles (§15); if this
    experiment shows eight are unaffordable, the M1 definition changes in this document first — the experiment is a gate
