@@ -504,11 +504,15 @@ class AnatomyDefinition(
 
 /**
  * What the pass loop did for one head, kept apart from the geometric cause (`PathReason`, §7.4.1c). `CLEARED` means a
- * pass was accepted; an exhausted search is `SEARCH_EXHAUSTED` or `PASS_CAP`, never `CLEARED`; and a head a guard
- * rejected before the loop was entered is `REJECTED_BEFORE_SEARCH` — a reached head that neither passed nor exhausted a
- * search. `NOT_PROCESSED` is deliberately the **zero value**, so a fresh `IntArray` reads correctly before `clear()` runs.
+ * pass was accepted and an exhausted search is `SEARCH_EXHAUSTED` or `PASS_CAP`; `REJECTED_BEFORE_SEARCH` is a head a
+ * guard refused before a pass was entered, and `REJECTED_IN_SEARCH` is a head an abort stopped inside one — the two are
+ * different events with different reporting. `NOT_PROCESSED` is the **declared zero value**, so a fresh `IntArray` reads
+ * correctly before `clear()` runs; every other value keeps its ordinal, with the appended one last.
  */
-enum class SearchOutcome { NOT_PROCESSED, CLEARED, SEARCH_EXHAUSTED, PASS_CAP, REJECTED_BEFORE_SEARCH }
+enum class SearchOutcome {
+    NOT_PROCESSED, CLEARED, SEARCH_EXHAUSTED, PASS_CAP, REJECTED_BEFORE_SEARCH,
+    REJECTED_IN_SEARCH
+}
 
 /**
  * One frame of derived anatomy. Every per-frame number lives in a preallocated parallel array indexed by head; the
@@ -527,9 +531,10 @@ class AnatomyFrame(headCount: Int, pointCapacity: Int, landmarkCount: Int) {
     val relativePathLengthChanges = FloatArray(headCount)     // modelledPathLength / restLength - 1
 
     /**
-     * PathStatus ordinal — VALID, INVALID or NOT_PROCESSED. `NOT_PROCESSED` is ordinal 0 in both this enum and
-     * `SearchOutcome`, so a zero-initialised array is already correct; `clear()` re-asserts it. ("The solver never
-     * reached this head" and "the solver rejected this head" are different facts.)
+     * PathStatus ordinal — VALID, INVALID or NOT_PROCESSED. `NOT_PROCESSED` is the declared zero value of `PathStatus`,
+     * `PathReason` and `SearchOutcome` (§7.4.1c names the reason enum and its zero), so a zero-initialised array is
+     * already correct; `clear()` re-asserts it. ("The solver never reached this head" and "the solver rejected this
+     * head" are different facts.)
      */
     val statuses = IntArray(headCount)
     val reasonCodes = IntArray(headCount)        // PathReason ordinal; NO_REASON only where status is VALID
@@ -1546,7 +1551,7 @@ data class ContactExemption(
     val obstacleId: String,
     val headIndex: Int,
     val fromStation: Float,       // fractional arc length, 0.0 at the origin
-    val toStation: Float,         // the interval must contain the endpoint it exempts
+    val toStation: Float,         // reviewed bound on the EXEMPTED side (toStation for an origin, fromStation for an insertion)
     val source: String            // the L7 review row that justified it — no source, no exemption
 )
 
@@ -1729,7 +1734,7 @@ Three different checks are routinely conflated. This section keeps them apart, a
 criterion.
 
 **(a) Sample check — necessary, not sufficient.** Every sample of the final polyline lies outside every declared
-obstacle, **except inside that head's declared first-egress interval**, where the exemption of §7.4.1c (X5) applies: the
+obstacle, **except inside that head's reviewed transition envelope**, where the exemption of §7.4.1c (X5) applies: the
 check reads the same `(head, obstacle, arc-length interval)` mask as the endpoint check, construction, projection and the
 final validation, so a sample that is legitimately inside an exempted obstacle is not a violation and a sample inside the
 same obstacle outside the interval still is. This catches gross violations cheaply and bounds how far the projection step
@@ -2000,7 +2005,30 @@ read `NO_INDEX` as index 0.
 | 14 | `NO_ROUTE` | **proved** impossible: no route exists between the fixed endpoints outside the declared set. **Disabled in M1** — see below | `NO_INDEX` | `NO_INDEX` |
 | 15 | `UNSUPPORTED_GEOMETRY` | the muscle is a **sheet** (`flat = true`): a two-sided strip has no single radius, so no tube envelope exists to certify (§7.4.1 "flat sheet muscles") | `NO_INDEX` | `NO_INDEX` |
 | 16 | `NOT_PROCESSED` | the solve never reached this head — the `clear()` state, never a verdict (§5.3) | `NO_INDEX` | `NO_INDEX` |
+| 17 | `OPERAND_OUT_OF_BOUND` | a published coordinate, or a constructed detour, outside the declared `\|coordinate\| < 1024` bound (§7.4.1c deliverable 1) — a guard on the **inputs**, so `REJECTED_BEFORE_SEARCH` | `NO_INDEX` | `NO_INDEX` |
 | — | `NO_REASON` | only where the status is `VALID` | `NO_INDEX` | `NO_INDEX` |
+
+**The table's numbers are precedence, and the enum's order is not.** The row number is the *precedence* rank — the first
+matching row wins — while the array stores the enum's own ordinal, so the two orders are declared separately and neither
+is inferred from the other:
+
+```kotlin
+/** Declaration order is the stored ordinal; the numbered table above is the precedence order. NOT_PROCESSED is zero. */
+enum class PathReason {
+    NOT_PROCESSED,       // 0 — the clear() state and a fresh IntArray; never a verdict
+    NO_REASON,           // 1 — only where PathStatus is VALID
+    NON_FINITE_GEOMETRY, DEGENERATE_OBSTACLE, REST_LENGTH_INVALID, BUFFER_CAPACITY, ENDPOINT_INSIDE_OBSTACLE,
+    DEGENERATE_SEGMENT, SEGMENT_INTERSECTS_OBSTACLE, CLEARANCE_VIOLATION, TANGENT_DISCONTINUITY,
+    CURVATURE_VIOLATION, NO_GEOMETRIC_CAUSE, UNCERTIFIED_MINIMUM, UNRESOLVED_ROOT, NO_ROUTE,
+    UNSUPPORTED_GEOMETRY, OPERAND_OUT_OF_BOUND
+}
+```
+
+`NOT_PROCESSED` is the declared zero value, which is what makes a zero-initialised `reasonCodes` correct before
+`clear()` runs; the numbered table is not that declaration and an implementation that used its row order as the stored
+ordinal would read the wrong reason for every value. `OPERAND_OUT_OF_BOUND` is row 17 because rows 1–16 are cited by
+number elsewhere in this document and inserting a row above them would silently repoint those citations; it is
+nonetheless evaluated in the guard phase with rows 1–3, before any geometry runs.
 
 **Search outcomes are not in this table, and that is the point of the split.** `SEARCH_EXHAUSTED` and `PASS_CAP` are
 `SearchOutcome` values — what the loop did — and never reasons: a corridor refused at pass one has no final-predicate
@@ -2026,9 +2054,13 @@ There is no "probably fine" outcome and no fall-through default. If the check ca
   `SEARCH_EXHAUSTED`, `PASS_CAP`, `REJECTED_BEFORE_SEARCH`} — what the construction did — while `reasonCodes` holds,
   separately, the **last geometric cause** it hit. Both are per-head arrays with a `clear()` state, so a reused buffer
   cannot report the previous frame's outcome, and `NOT_PROCESSED` means the head was never solved (§5.3), which is a bug
-  and not a result. **`REJECTED_BEFORE_SEARCH` is the outcome the earlier revision was missing**: a reached head refused
-  by `REST_LENGTH_INVALID`, a non-finite operand or an unsupported sheet geometry has not passed and has not exhausted a
-  search, so calling it `CLEARED`, `SEARCH_EXHAUSTED` or `NOT_PROCESSED` would each be a lie about a different thing.
+  **`REJECTED_BEFORE_SEARCH` is the outcome a guard's refusal gets, and `REJECTED_IN_SEARCH` is the one an abort inside
+  a pass gets** — the pair an earlier revision collapsed into one. A head refused by `REST_LENGTH_INVALID` before a pass
+  existed has not passed and has not exhausted a search; a head whose pass ran out of buffer capacity, or whose
+  intermediate overflowed, *was* searched and stopped, so reporting it as "before the search" is false about a different
+  event — and it sends the fix to the input rather than to the buffer. `BUFFER_CAPACITY` in particular is decided
+  **while a pass is constructing** (§7.4 step 4), and step 4's own text says insertion can exceed capacity, so it cannot
+  be a pre-search refusal.
 - **Which combinations are legal, stated once.** Everything outside this table is a bug in the producer, and a consumer
   may assert on it:
 
@@ -2037,7 +2069,8 @@ There is no "probably fine" outcome and no fall-through default. If the check ca
   | `VALID` | `CLEARED` | `NO_REASON` — an accepted pass, and the only place `NO_REASON` appears |
   | `INVALID` | `SEARCH_EXHAUSTED` | the last geometric cause, or `NO_GEOMETRIC_CAUSE` when the corridor was refused before any candidate existed |
   | `INVALID` | `PASS_CAP` | the last geometric cause (`CLEARANCE_VIOLATION` typically), or `NO_GEOMETRIC_CAUSE` |
-  | `INVALID` | `REJECTED_BEFORE_SEARCH` | a guard or definition reason — `NON_FINITE_GEOMETRY`, `DEGENERATE_OBSTACLE`, `REST_LENGTH_INVALID`, `UNSUPPORTED_GEOMETRY`, `BUFFER_CAPACITY` |
+  | `INVALID` | `REJECTED_BEFORE_SEARCH` | a **guard on the inputs or the definition**, refused before any pass: `NON_FINITE_GEOMETRY` on a published input, `OPERAND_OUT_OF_BOUND`, `DEGENERATE_OBSTACLE`, `REST_LENGTH_INVALID`, `UNSUPPORTED_GEOMETRY` — indices `NO_INDEX`/`NO_INDEX` except a degenerate obstacle's own index |
+  | `INVALID` | `REJECTED_IN_SEARCH` | an **abort inside a pass**, which is not a pre-search refusal: `BUFFER_CAPACITY` (inserted points over `pointCapacity`, reported at the last segment, obstacle `NO_INDEX`), or `NON_FINITE_GEOMETRY` first appearing in an intermediate (`cw`, `R`, `q0`, `qd`), indices `NO_INDEX`/`NO_INDEX` |
   | `NOT_PROCESSED` | `NOT_PROCESSED` | `NOT_PROCESSED` — never solved |
 
   The two illegal shapes worth naming because they are the ones an implementation drifts into: `VALID` with any outcome
@@ -2056,9 +2089,10 @@ There is no "probably fine" outcome and no fall-through default. If the check ca
 - **Corridor exhaustion is `SEARCH_EXHAUSTED`**, never `NO_ROUTE` — including when the corridor is refused at pass 1,
   which is a limit on the declared `corridorMetres`, not a theorem about the geometry.
 - **Precedence is phase-specific, not one global order, and the phases do not overlap.** Definition- and guard-time
-  reasons (1, 2, 3 and 15) are decided before a path exists, so the outcome is `REJECTED_BEFORE_SEARCH` and no geometric
-  test is reported because none ran; capacity (4) is decided while a pass is constructing, so it too reports
-  `REJECTED_BEFORE_SEARCH` with the outcome's own name for why; a corridor refusal or an exhausted budget is decided by
+  reasons (1 on an input, 2, 3, 15 and 17) are decided before a path exists, so the outcome is
+  `REJECTED_BEFORE_SEARCH` and no geometric test is reported because none ran; capacity (4) — and row 1 when the
+  non-finite value first appears in an intermediate rather than in an input — is decided **inside** a pass, so it
+  reports `REJECTED_IN_SEARCH` with its own reason and indices; a corridor refusal or an exhausted budget is decided by
   the loop and reports `SEARCH_EXHAUSTED` or `PASS_CAP` with `NO_GEOMETRIC_CAUSE` unless a per-pair test had already
   produced a cause; and per-pair reasons (5–10, 12, 13) are decided by the final predicate in table order, reporting the
   loop's own outcome. Two implementations that hit a definition error and a geometric one therefore report the
@@ -2204,14 +2238,41 @@ no single radius, so this criterion cannot certify one. A sheet muscle is theref
 sheet envelope is specified (a declared half-thickness and a per-station width, with its own distance predicate), and M1
 ships no sheet muscle (§15).
 
-**X5 — an attachment-contact exemption is a single reviewed first-egress interval.** *Confirmed by owner.* An origin or
+**X5 — an attachment-contact exemption is a single reviewed transition envelope.** *Confirmed by owner.* An origin or
 insertion may legitimately sit inside an obstacle — a hip-flexor origin on the pelvis is the normal case, not a defect —
 so the exemption is declared, not inferred:
 `ContactExemption(obstacleId, headIndex, fromStation, toStation, source)`, with fractional arc-length stations. The pair
-`(head, obstacle)` gets **one** interval, the one that covers the exempted endpoint and runs to the **first egress** from
-that obstacle; **any re-entry after leaving is a violation**, not a second exempted interval. A second interval is not a
-narrower exemption, it is a different claim (that the muscle is inside the obstacle twice, with nothing said about the
-route between), and it is what an open-ended exemption degenerates into.
+`(head, obstacle)` gets **one** envelope, the one that covers the exempted endpoint and ends where the path first carries
+the ordinary margin from that obstacle; **any drop below the margin after that is a violation**, not a second exempted
+interval. A second interval is not a narrower exemption, it is a different claim (that the muscle is inside the obstacle
+twice, with nothing said about the route between), and it is what an open-ended exemption degenerates into.
+
+**The envelope ends on clearance, not on the surface, and the earlier "first surface egress" rule could not be satisfied.**
+A path that leaves a surface exits at `d = 0`, so the stations immediately after egress have `d → 0`, and the non-exempt
+check demands `g = d − r ≥ e` from every one of them: with a zero tube radius and `e = 0.01 mm`, a station `0.005 mm`
+outside fails, and the positive fixture could never be `VALID`. The reviewed rule is therefore the **transition
+envelope**, which ends where the path first *passes*:
+
+```
+bound    = toStation    for an origin exemption (fromStation = 0)
+         = fromStation  for an insertion exemption (toStation = 1)     // the end on the EXEMPTED side, never the far end
+scan     = outward from the exempted endpoint toward the far end
+effectiveTo = the FIRST station reached by that scan at which  d(t) − r(t) ≥ e
+            = bound, if no such station exists before it         // narrower, fail-closed, and the divergence is reported
+exempt(t)   = t between the exempted endpoint and effectiveTo, inclusive — and nothing beyond it
+```
+
+`d(t)` and `r(t)` are the solid distance and the modelled radius, which do not depend on the mask, so the boundary is
+computed from geometry alone and the mask cannot depend on its own result. Because the envelope ends exactly where the
+ordinary predicate begins to hold, every non-exempt station clears by `e` **by construction** and the positive fixture is
+satisfiable; because it ends the first time that happens, a later drop below `e` is outside the mask and is a violation.
+
+**The scan direction and the clamp are both decided by which end is exempted.** An origin exemption is clamped by
+`toStation` and scanned upward from station 0; an insertion exemption is clamped by `fromStation` and scanned **downward
+from station 1**. An earlier revision called `toStation` "the reviewed bound" in both cases, which for an insertion
+interval `[fromStation, 1]` clamps at the *far* end and exempts stations below the authored lower bound — an egress found
+at a smaller station would extend the exemption past the reviewed interval. Both orientations are fixtures, not a
+convention: `exempt_origin_success` and `exempt_insertion_success` (§12.2.1).
 
 **One mask, five consumers — and the mask is the *effective* interval, not the declared one.** The same
 `(head, obstacle, arc-length interval)` mask is applied identically by (a) the endpoint check, (b) the sample check, (c)
@@ -2230,23 +2291,26 @@ effectiveTo   = the FIRST EGRESS station from that obstacle on THIS path   // co
 exempt(t)     = t between effectiveFrom and effectiveTo              // and nothing after it
 ```
 
-- **Computed, or validated, against the current path.** `effectiveTo` is the first station at which the path leaves the
-  obstacle after the exempted endpoint. The declared `toStation` is a **reviewed bound** on it, not a substitute: if the
-  computed first egress lies beyond the declared bound, the declared bound is used (narrower, fail-closed) and the
+- **Computed, or validated, against the current path.** `effectiveTo` is the first station on the scan at which the
+  margin holds, and the declared station on the exempted side is a **reviewed bound** on it, not a substitute: if the
+  computed boundary lies beyond the declared bound, the declared bound is used — narrower, fail-closed — and the
   divergence is reported; if it lies inside, the computed value is used. A path mutation (construction, smoothing,
-  projection, insertion) recomputes both the stations and the egress — an exemption is anchored to the path, not to point
-  indices.
-- **Re-entry is checked explicitly, on the same path.** After the effective interval, any sample or segment inside that
+  projection, insertion) recomputes both the stations and the boundary — an exemption is anchored to the path, not to
+  point indices.
+- **Re-entry is checked explicitly, on the same path.** After the envelope, any sample or segment with `g < e` for that
   obstacle is a violation with the ordinary `SEGMENT_INTERSECTS_OBSTACLE` / `CLEARANCE_VIOLATION` reason. That check is a
-  first-egress test, not an interval-membership test, and it is the test `exempt_re_entry` pins.
+  first-margin test, not an interval-membership test, and it is the test `exempt_re_entry` pins.
 - **The same effective mask, in all five consumers.** A consumer that recomputes the interval differently — from the
   declared endpoint instead of the computed egress, or from a station list captured before a mutation — is the defect this
   rule removes, exactly as with the obstacle union of §7.4.2.
 
 The consequence for the fixtures: `exempt_then_penetrate` and `exempt_re_entry` are **negative controls**, and an
 implementation that passes them by treating the declared interval as the exemption is an implementation that fails them
-for the wrong reason on the next path shape. `exempt_origin_success` is the positive control, and its path leaves the
-obstacle once and never returns.
+for the wrong reason on the next path shape. `exempt_origin_success` and `exempt_insertion_success` are the positive
+controls — one per orientation — and each path reaches the margin once and never drops below it again.
+`exempt_re_entry_after_mutation` is the **mutation** control: the envelope is computed, the path is then mutated
+(smoothed, projected, or a point inserted), and a consumer that reuses the pre-mutation mask accepts a station the
+recomputed envelope excludes.
 
 **Endpoint inclusion, overlap and mutation.** `fromStation = 0` or `toStation = 1` must be the endpoint the exemption is
 for (a `0 … 1` interval is a definition error at L3, as is an exemption with no `source`). Overlapping exemptions on the
@@ -2261,13 +2325,16 @@ position (the attachment is anatomy, not a free variable), **exempting a whole o
 `source`** (it is a review judgement and carries the L7 row that made it). The report counts exemptions per muscle, so a
 muscle whose clearance rests mostly on exemptions is visible rather than silently green.
 
-Fixtures: `exempt_origin_success` (a head whose origin sits inside a declared obstacle, with the first-egress interval
-declared, is `VALID`); `exempt_then_penetrate` (the same exemption, a route that leaves and then passes through a
-non-exempt station of the same obstacle, is `INVALID`); and `exempt_re_entry` — the one that decides the rule. In one
-dimension against a unit sphere of zero radius, path `0.5 → 1.2 → 0.9 → 1.5` with exemption `[0, 0.7]`: the first egress
-is at `x = 1` (station `0.3125`), the path re-enters at `x = 1` on the way back down (station `0.5625`) and leaves again
-at `x = 1` (station `0.6875`), all three inside the exempted interval. **Under X5 the re-entry at stations `0.5625 …
-0.6875` is a violation**; an exemption interpreted as "everything before 0.7" accepts it.
+Fixtures: `exempt_origin_success` (a head whose origin sits inside a declared obstacle, with the transition envelope
+declared, is `VALID` — satisfiable because the envelope ends where the margin first holds); `exempt_insertion_success`
+(the same head with the exemption on the **insertion**, clamped by `fromStation` and scanned downward, also `VALID`);
+`exempt_then_penetrate` (the same exemption, a route that leaves and then passes through a non-exempt station of the same
+obstacle, is `INVALID`); and `exempt_re_entry` — the one that decides the rule. In one
+dimension against a unit sphere of zero tube radius, path `0.5 → 1.2 → 0.9 → 1.5` with exemption `[0, 0.7]`: the
+envelope boundary is just beyond `x = 1` (station `0.3125` plus a fraction of `e`), the path re-enters at `x = 1` on the
+way back down (station `0.5625`) and leaves again at `x = 1` (station `0.6875`). **Under X5 the re-entry at stations
+`0.5625 … 0.6875` is a violation** — the envelope closed at `0.3125`, long before it — while an exemption interpreted as
+"everything before 0.7" accepts it.
 
 **What this costs, stated rather than assumed.** Stage 1 accepts the overwhelming majority of segment–obstacle pairs with
 two distance comparisons and no root solve. Stage 3 runs on the remainder, and each evaluation is an Eberly
@@ -2546,9 +2613,11 @@ rule below is not bookkeeping: an entry point that sits on the surface is a zero
 at every pass, and a construction that keeps it turns a clearable configuration into a `PASS_CAP` failure. First-pass
 rejection here, later successful escalation, and a terminal failure for the retained-entry variant are three different
 outcomes of one geometry, and the fixture table states which one each fixture expects: `single_obstacle` is the
-sample-anchored variant (passes 1 and 2 rejected, pass 3 clear) and `retained_entry_never_clears` is the same geometry
-with the entry/exit points kept (terminal `PASS_CAP`), so a reader who sees only one of the two rows should not conclude
-that the other is wrong.
+sample-anchored variant — passes 1 and 2 are rejected **statically**, so the accepting index is `≥ 3` and the loop
+reports which one it was — and `retained_entry_never_clears` is the same geometry with the entry/exit points kept
+(terminal `PASS_CAP`), so a reader who sees only one of the two rows should not conclude that the other is wrong. The
+static figures bound the accepting index from below; they do not name it, and no row in either table calls pass 3
+accepted.
 
 **Worked frame check — `rotated_anisotropic`.** One obstacle with local semi-axes 40 × 10 × 20 mm, `Rw` = +90° about Z
 (local X → world +Y), so its **world** semi-axes are `(10, 40, 20)` mm; `eps_num` = 1e-5 m, chord
@@ -3286,7 +3355,7 @@ Seven levels, each with one owner, one report and an explicit automation status.
 | `BoneMapCoverageTest` | L2 | **23** mapped joints resolve and the **10** undrivable engine joints are declared, not accidental (X2) — derived from the required map of §6.2, not from the shipped asset's 21/12 inventory. The scapula pair is asserted by name, so a `BoneMap` that quietly omits `SCAPULA_A/P`, or a rig that carries no scapula bone, fails here rather than at A1 |
 | `RigSideTest` | L2 | `Left*` bones on the same side as anatomy side A in the rest pose |
 | `AnatomyDefinitionTest` | L3 | ids unique; attachments resolve; envelope bounds; L/R mirror; heads consistent |
-| `MusclePathGeometryTest` | L4 | arc length ≥ chord; every segment of the final polyline is CLEAR of every obstacle in the head's union under the three-stage state machine of §7.4.1, with the solid-distance predicate and the Lipschitz bracket — reported as conditional while the point-to-ellipsoid error is an estimate (§7.4.1b-1); every **non-exempt** sample lies outside the surface by at least `e`, read through the same `(head, obstacle, arc-length interval)` first-egress mask that construction, projection and the endpoint check use (§7.4.1a), so `exempt_origin_success` passes while a re-entry outside its interval still fails; repeatable across runs and buffer reuse on one device and configuration |
+| `MusclePathGeometryTest` | L4 | arc length ≥ chord; every segment of the final polyline is CLEAR of every obstacle in the head's union under the three-stage state machine of §7.4.1, with the solid-distance predicate and the Lipschitz bracket — reported as conditional while the point-to-ellipsoid error is an estimate (§7.4.1b-1); every **non-exempt** sample lies outside the surface by at least `e`, read through the same `(head, obstacle, arc-length interval)` transition-envelope mask that construction, projection and the endpoint check use (§7.4.1a), so both `exempt_origin_success` and `exempt_insertion_success` pass while a re-entry after the envelope, or after a path mutation, still fails; repeatable across runs and buffer reuse on one device and configuration |
 | `MusclePathObstacleFixtureTest` | L4 | the validator fixtures (§12.2.1) return the expected verdict, and the solver fixtures return the expected final path or the expected failure reason — never silently |
 | `failingObstacleIndexOrderTest` | L4 | §7.4.2: `failingObstacles` is a **definition** index — reordering `wrapSurfaces` and flipping another muscle's `global` flag between runs leaves the reported index naming the same obstacle; `AnatomyFrame.obstacleIndexMap[head]` maps the same union position to it and moves when the order moves; an obstacle absent from the head's union reports `NO_INDEX`, never `0`; and the map is **not** rewritten by `clear()` or by a solve, because it is definition data |
 | `MusclePathContinuityTest` | L4 | C0, tangent bound at entry/exit, curvature bound (gated); and, for the **observer's own correctness** (diagnostic, X6): a rigid translation of the whole body produces no alarm; a rotating or moving wrap is attributed and produces no alarm; an inserted sample does not shift a station; a deliberate branch switch alarms; the first frame produces no verdict; pause, resume, seek, backward time and a non-monotonic timestamp each reset rather than express a negative displacement; an `INVALID` frame resets the comparison and is recorded as a reset; `valid → invalid → valid` restores the path and does not compare across the gap; and no path is ever rate-limited |
@@ -3295,8 +3364,8 @@ Seven levels, each with one owner, one report and an explicit automation status.
 | `MuscleLengthScaleTest` | L4 | §13 question 12: a common similarity transform of the body, the attachments and **every** dimensional solver parameter leaves `relativePathLengthChange` unchanged (`scale_common_control`), while a recalibration at a different `unitsPerMetre` changes it (`recalibration_counterexample`) — the two together are what stop "dimensionless" being read as "calibration-free". It also **exercises the threshold branch**, not only the ratio: a common transform that keeps `\|restDir\| · s > 1` leaves the degeneracy verdict unchanged, and one that crosses the fixed floor in `τ_len · max(1, \|restDir\| · s)` must report the change (D4) |
 | `MuscleDirectionalExpectationTest` | L4 | only exercise- and muscle-specific expectations, each carrying a documented justification and source |
 | `MuscleRestLengthTest` | L4 | §7.4.4's **mandatory** half: the solver-derived rest length is finite, strictly positive and **reproducible** for every head — the same value across runs, buffer reuse and definition reload, computed at the X1 bind frame (§6.6). A zero, negative or NaN value reports `REST_LENGTH_INVALID` rather than dividing by it. The **conditional** half — a comparison against a named, sourced reference — is `MuscleLengthReferenceTest`, not this row: requiring a measured reference for every M1 head would contradict the evidence-gap rule of §7.4.4 |
-| `MuscleRenderabilityTest` | L4 / presentation | §7.4: an `INVALID` instance is masked and its geometry cleared in the same frame; **one invalid biceps-femoris head hides the whole instance and both sides keep independent masks**; the mask is the conjunction of the heads' statuses and `NOT_PROCESSED` is not renderable; an early return leaves every instance unrenderable rather than stale; valid → invalid → valid restores the path and the mask across carrier reuse |
-| `AnatomyFrameLayoutTest` | L4 | §5.3: the `3 · headCount · pointCapacity` stride addresses every point of every head; `pointCapacity` is the post-insertion maximum; an over-capacity head reports `BUFFER_CAPACITY` instead of growing or truncating; `clear()` leaves every slot `NOT_PROCESSED` in **status, reason and `searchOutcome`** and every `renderable` entry `false`; a **fresh, never-cleared** buffer reads `NOT_PROCESSED` in all three arrays, because that is ordinal 0 in both enums; a solve that returns early leaves the untouched heads `NOT_PROCESSED` rather than `VALID`, `INVALID` or a stale outcome; a reused buffer that is not cleared cannot show the previous frame's status **or outcome**; an accepted head reads `CLEARED` with `reason = NO_REASON` while an exhausted one reads `PASS_CAP` or `SEARCH_EXHAUSTED` with its own last geometric cause, so the two fields are asserted separately (X7); **each guard has its own case** — `NON_FINITE_GEOMETRY`, `DEGENERATE_OBSTACLE`, `REST_LENGTH_INVALID`, `UNSUPPORTED_GEOMETRY` and `BUFFER_CAPACITY` each yield `INVALID` + `REJECTED_BEFORE_SEARCH` + their own reason, never `CLEARED` and never `NO_GEOMETRIC_CAUSE`; a corridor refused before the first candidate yields `INVALID` + `SEARCH_EXHAUSTED` + `NO_GEOMETRIC_CAUSE`; the two illegal combinations (`VALID` with a non-`CLEARED` outcome, `INVALID` with `CLEARED`) are asserted to be absent; and a head that is simultaneously degenerate and inside an obstacle reports `DEGENERATE_SEGMENT` |
+| `MuscleRenderabilityTest` | L4 / presentation | §7.4: an `INVALID` instance is masked and its geometry cleared in the same frame; **one invalid biceps-femoris head hides the whole instance and both sides keep independent masks**; the mask is the conjunction of the heads' statuses and `NOT_PROCESSED` is not renderable; an early return leaves every instance unrenderable rather than stale; valid → invalid → valid restores the path and the mask across carrier reuse; and a two-head instance with one origin exempted and one head in violation is unrenderable, because the exemption is a per-head fact and the mask is per instance (§7.4) |
+| `AnatomyFrameLayoutTest` | L4 | §5.3: the `3 · headCount · pointCapacity` stride addresses every point of every head; `pointCapacity` is the post-insertion maximum; an over-capacity head reports `BUFFER_CAPACITY` instead of growing or truncating; `clear()` leaves every slot `NOT_PROCESSED` in **status, reason and `searchOutcome`** and every `renderable` entry `false`; a **fresh, never-cleared** buffer reads `NOT_PROCESSED` in all three arrays, because `NOT_PROCESSED` is the declared zero value of all three (`PathStatus`, `PathReason`, `SearchOutcome` — §5.3, §7.4.1c) and not an accident of one enum's ordering; a reason array read through `PathReason.entries` returns the reason the producer stored, **not** the reason's row number in the precedence table; a solve that returns early leaves the untouched heads `NOT_PROCESSED` rather than `VALID`, `INVALID` or a stale outcome; a reused buffer that is not cleared cannot show the previous frame's status **or outcome**; an accepted head reads `CLEARED` with `reason = NO_REASON` while an exhausted one reads `PASS_CAP` or `SEARCH_EXHAUSTED` with its own last geometric cause, so the two fields are asserted separately (X7); **each guard has its own case** — `NON_FINITE_GEOMETRY` on an input, `OPERAND_OUT_OF_BOUND`, `DEGENERATE_OBSTACLE`, `REST_LENGTH_INVALID` and `UNSUPPORTED_GEOMETRY` each yield `INVALID` + `REJECTED_BEFORE_SEARCH` + their own reason, never `CLEARED` and never `NO_GEOMETRIC_CAUSE`; `BUFFER_CAPACITY` and a `NON_FINITE_GEOMETRY` first raised in an intermediate yield `INVALID` + **`REJECTED_IN_SEARCH`** + their own reason, which is the case that separates the two refusal outcomes; a corridor refused before the first candidate yields `INVALID` + `SEARCH_EXHAUSTED` + `NO_GEOMETRIC_CAUSE`; the two illegal combinations (`VALID` with a non-`CLEARED` outcome, `INVALID` with `CLEARED`) are asserted to be absent, and a head refused before a pass is never reported `REJECTED_IN_SEARCH` while one aborted inside a pass is never reported `REJECTED_BEFORE_SEARCH`; and a head that is simultaneously degenerate and inside an obstacle reports `DEGENERATE_SEGMENT` |
 | `MuscleGeometryOwnershipTest` | L4 / presentation | §7.6: toggling morphs or correctives leaves every `MuscleState` bit-identical, and nothing in `character/` writes `AnatomyFrame` |
 | `SceneFrameHandoffTest` | presentation | §10.2: `geometry` carries only instances whose `renderable` entry is `true`, one slot per instance, keyed by a `slotId` that is stable across a solve sequence; a slot absent from the next frame (its instance became `INVALID`) is cleared by id while its neighbours keep drawing, and a slot present with `visible = false` is cleared too; each `SkinPalette` is written in its own skin's joint order and `MuscleLayerSkinner` writes only the skin it was built for; and the renderer receives no muscle id, status or reason |
 | `ProceduralTubeBudgetTest` | L5 (M1 subset) | generated triangles match the §10.3 formula for the declared `N` and `R`; no zero-area ring; all coordinates finite |
@@ -3390,9 +3459,11 @@ changes which predicate it calls changes its primary reason, so every row pins b
 | `minimum_at_endpoint_high` | the closest approach at `t = 1`, just below the margin | `INVALID` — `CLEARANCE_VIOLATION` |
 | `minimum_at_a_knot` | unit sphere; straight path `p(t) = (−1 + 2t, 1.10, 0)`; radius knots `(0, 0), (0.5, 0.30), (1, 0)`; `e = 1e-5`. Predictor: §7.4.1b **stage 3** | `INVALID` — `CLEARANCE_VIOLATION` at the knot: `min g = −0.20` at `t = 0.5`, where `d = 1.10 − 1 = 0.10` and `r = 0.30`; `g(0.4) = g(0.6) = −0.122`, so the minimum is on the knot and each adjacent piece evaluates it, giving the same answer with the pieces split coarsely and finely. Stage 1 cannot accept (`\|c − cw\| − h = 0.10` is not `> 1 + 0.30 + e`) and stage 2 finds no root (`Δ < 0`), so the row reaches stage 3 — and it is the only row whose minimum is a piece boundary |
 | `minimum_near_equality` | `min g` within one evaluation budget of `e` | `INVALID` — `UNCERTIFIED_MINIMUM`, never a coin flip on the last bit |
-| `exempt_origin_success` | a head whose origin sits inside a declared obstacle, exemption covering origin → first egress | `VALID` — X5's positive case |
+| `exempt_origin_success` | a head whose origin sits inside a declared obstacle, with the reviewed transition envelope declared (`fromStation = 0`, `toStation` the reviewed bound) and the path reaching `d − r ≥ e` before that bound | `VALID` — X5's positive case, and satisfiable **because** the envelope ends where the margin first holds: under a "first surface egress" rule the stations just after egress clear by `d → 0 < e` and no such fixture could be `VALID` |
+| `exempt_insertion_success` | the same head with the exemption on the **insertion** (`toStation = 1`, `fromStation` the reviewed bound), scanned **downward** from station 1 | `VALID` — the mirrored positive case. An implementation that clamps at `toStation = 1` and scans upward leaves the authored lower bound unenforced and accepts a path that clears the margin below `fromStation`; the pair exists because one orientation cannot test the other |
 | `exempt_then_penetrate` | the same exemption, a route that leaves and then passes through the same obstacle at a non-exempt station | `INVALID` — `CLEARANCE_VIOLATION`, full head validator |
-| `exempt_re_entry` | 1-D unit sphere, zero radius, path `0.5 → 1.2 → 0.9 → 1.5`, exemption `[0, 0.7]` | `INVALID` — re-entry at fractional stations `0.5625 … 0.6875` is a violation under X5, although every one of those stations is inside the exempted interval |
+| `exempt_re_entry` | 1-D unit sphere, zero tube radius, path `0.5 → 1.2 → 0.9 → 1.5`, exemption `[0, 0.7]` | `INVALID` — re-entry at fractional stations `0.5625 … 0.6875` is a violation under X5, although every one of those stations is inside the declared interval; the envelope closed at `0.3125` (just past `x = 1`) and everything after it is non-exempt |
+| `exempt_re_entry_after_mutation` | the `exempt_re_entry` geometry, with the envelope computed on the pre-mutation path and the path then **mutated** (one Catmull-Rom smoothing pass and one inserted waypoint, both from §7.4 step 4) before the sample and segment checks run | `INVALID` — the same re-entry, still a violation. It exists because the mask is anchored to **stations on the current path**: a consumer that computes the envelope once and reuses it after a mutation accepts a station the recomputed envelope excludes, and no fixture that never mutates can see that. The row also asserts the mutation moved at least one station, so it cannot pass by mutating nothing |
 | `pe_centre` | point at the obstacle centre | `d = 0`; the interior branch, no root solve |
 | `pe_principal_axis` | a point on each principal axis | the analytic distance per axis, `\|p_i\| − R_i` |
 | `pe_repeated_axis` | two equal semi-axes, `(2, 1, 1)`, `p = (3, 1, 0)` | the **general** ellipsoid distance, `d = 1.297184`; the sphere shortcut is reserved for three equal axes, because an oblate or prolate spheroid is not a sphere and the sphere formulas give `2.162278` (`R = 1`) or `1.162278` (`R = 2`) here |
@@ -3418,7 +3489,7 @@ changes which predicate it calls changes its primary reason, so every row pins b
 | `pass_cap` | a configuration that exhausts the pass budget `K` without a candidate | `INVALID` — `searchOutcome = PASS_CAP`, with the last per-pair reason it saw or `NO_GEOMETRIC_CAUSE` if it never saw one; deterministic and terminating |
 | `two_obstacle_projection_cycle` | two spheres centred at `0` and `2`, radius `1.5`, a sample at `0.5` | `searchOutcome = PASS_CAP`, and the record shows the sample alternating `1.5 → 0.5 → 1.5` under ordered projection; an implementation that treats projection as convergent (iterating to a tolerance, or reporting the first projected position as final) cannot reproduce the sequence |
 | `final_clearance_and_budget_both_fail` | a final polyline that fails the predicate at one named segment **and** exhausts `K` at the same pass | one record: `searchOutcome = PASS_CAP` **and** `reason = CLEARANCE_VIOLATION` with the segment and obstacle index — the two fields are separate (X7), so neither overwrites the other |
-| `retained_entry_never_clears` | the `single_obstacle` geometry with the entry/exit construction points retained | `INVALID` — `searchOutcome = PASS_CAP` with `reason = CLEARANCE_VIOLATION` on the segment that leaves the retained surface point, because the closest approach from a surface point to any waypoint is `R·D/√(R²+D²) < R`, so no escalation clears it (§7.4.5) |
+| `retained_entry_never_clears` | the `single_obstacle` geometry with the entry/exit construction points retained | `INVALID` — `searchOutcome = PASS_CAP` with **`reason = SEGMENT_INTERSECTS_OBSTACLE`** on the segment that leaves the retained surface point, decided at **stage 2**. The segment from the retained point `(20, 0)` to the pass-3 waypoint `(0, 45.0225)` in normalized coordinates has `q0 = (0, 2.251125)`, `qd = (1, −2.251125)`, `a = 6.067563765625`, `b = −10.13512753125`, `c0 = 4.067563765625`, `Δ = 4` and roots `[0.6703784, 1]`, so it **enters** the sphere: `CLEARANCE_VIOLATION` was this row's earlier expectation and contradicts the state machine, because a certified crossing precedes any clearance reason. The margin arithmetic is why it never clears (`R·D/√(R²+D²) < R` for every finite `D`), but the reason reported is the intersection the predicate actually found |
 
 **`outside_endpoints_crossing_obstacle`, constructed so it cannot pass by accident.** One ellipsoid with semi-axes
 4 mm × 2 mm × 2 mm centred on the straight chord between two attachments 0.29 m apart, with the polyline running along
@@ -3767,7 +3838,7 @@ The smallest experiment is kept against each row because a confirmed design stil
 | **X2** | **The ten finger bones stay**, as visual-only bones: no engine joint, no A1 row, excluded from `RigLandmarkAlignmentTest` and listed as unmapped, counted in the 30-bone visual budget (10 of 30), and inheriting their hand bone's frame parent-relative so the fingers follow the hand rigidly; the generator lays them along the X1 hand direction | §6.1, §6.2, §15 stage 1 | **reversed by owner: fingers kept** | render the hand at the smallest shipped size and check that the ten rigid finger bones read as a hand; if the silhouette fails, the fix is hand geometry, not finger articulation the engine does not have |
 | **X3** | **Position-driven retarget**: each mapped bone's rotation is the minimal rotation from the bind direction **the posed parent carries** (`a = B · R_target_world(parent) · B⁻¹ · d_bind_engine`) to the published segment direction, composed as `B⁻¹ · D · B · R_target_world(parent)` — **conjugated once, transported by the parent's posed rotation**, same frame rule as X9; the rig root uses the derived pelvis frame and the zero-length mapped joints inherit their parent's; `basis = Ry(+90°)`, `s = 235/0.95`, translation `B⁻¹ · Δp / s` (0 at the pelvis) | §6.2 (the rule), §11 (classification), §15 stage 1 | **confirmed by owner** | land the change behind the existing `PoseRetargeter` signature and compare A2 residuals before and after on the six named frames, with `PoseRetargeterBasisTest`'s parent-swing and wrong-basis controls red when the untransported composition is restored |
 | **X4** | **M1's UI shows `relativePathLengthChange` only**; absolute metres are withheld until a named calibration pair and an evidence-backed uncertainty exist, and `modelledPathLength` stays in the data and debug | §9.2, §12.5, §13 question 12, §15 stage 2 and M1 item 4 | **confirmed by owner** | name the pair, measure both spans on the stage-1 rig, and quote the uncertainty; only then is a metre value displayable |
-| **X5** | An attachment-contact **exemption is one reviewed first-egress interval**, and the mask every consumer applies is the **effective** one — the declared interval bounded by the first egress **computed on the current path**; any re-entry after leaving is a violation, and the same effective mask applies to endpoint, sample, construction, projection and final validation | §7.3 (`ContactExemption`), §7.4.1, §12.2.1 (`exempt_re_entry`) | **confirmed by owner** | run the 1-D re-entry fixture: the path re-enters at stations 0.5625–0.6875, which lie **inside** the declared `[0, 0.7]`, so an implementation that treats the interval as the exemption **accepts** them. Acceptance is the failure; the first-egress check must reject the re-entry, and a fixed interval cannot |
+| **X5** | An attachment-contact **exemption is one reviewed transition envelope**, and the mask every consumer applies is the **effective** one — the declared interval bounded, **on the exempted endpoint's side**, by the first station on the current path where `d − r ≥ e`; any drop below the margin after that is a violation, and the same effective mask applies to endpoint, sample, construction, projection and final validation | §7.3 (`ContactExemption`), §7.4.1, §12.2.1 (`exempt_re_entry`, `exempt_re_entry_after_mutation`) | **confirmed by owner** | run the 1-D re-entry fixture: the path re-enters at stations 0.5625–0.6875, which lie **inside** the declared `[0, 0.7]`, so an implementation that treats the interval as the exemption **accepts** them. Acceptance is the failure; the envelope check must reject the re-entry, and a fixed interval cannot |
 | **X6** | The **continuity observer is diagnostic only** and never a gate; **route hysteresis is removed from M1** | §7.4.3, §12.2 (`MusclePathContinuityTest`) | **confirmed by owner** | the observer-correctness fixtures: a rigid translation must not alarm, a branch switch must |
 | **X7** | **`NO_ROUTE` is disabled** until a proof procedure exists; the frame exposes a **terminal search outcome** (`SEARCH_EXHAUSTED` / `PASS_CAP`) separately from the **last geometric cause** | §7.4.1c, §7.4.5, §12.2.1 | **confirmed by owner** | `final_clearance_and_budget_both_fail`: one record, two fields, neither overwriting the other |
 | **X8** | **Categorical roles ship in M1**: schema, provenance/review validator and display gate, for exercises with a reviewed source only; the **pilot exercise list is owner-approved and fixed**: `squat`, `standard push-up`, `bird-dog`, `row_standard` | §7.3 (`MuscleRole.UNKNOWN`), §8, §9.2, §12.4 (RV4 poses), §12.5, §15 M1 item 10 | **confirmed by owner** | the validator runs on those four and every other exercise must display no role; the §12.4 pose set is drawn from them so that every M1 muscle is reviewed |
