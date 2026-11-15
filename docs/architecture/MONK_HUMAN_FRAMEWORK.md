@@ -798,20 +798,40 @@ which is neither the parent's fraction nor the child's, so the split distributes
 for. It fails silently because the result is still a unit quaternion. A split whose entries do not share the joint's
 axis is a **map error reported at L2**, not something the runtime silently reinterprets.
 
-**Multiplication order, bases and bind transforms, stated once** (all of §6.2). **X3 — the retarget is position-driven.**
-*Confirmed by owner.* The engine publishes positions, and the segment orientation the rig needs is the direction between
-two published positions — the same quantity §7.2 derives for anatomy. So a mapped bone's rotation is the **minimal
-rotation from its own bind direction to the published segment direction**, applied to its rest world rotation:
+**Multiplication order, bases, coordinate spaces and bind transforms, stated once** (all of §6.2). **X3 — the retarget is
+position-driven.** *Confirmed by owner.* The engine publishes positions, and the segment orientation the rig needs is the
+direction between two published positions — the same quantity §7.2 derives for anatomy. **Every rotation below is tagged
+with the coordinate space it lives in.** That tagging is load-bearing, not pedantry: `D` is computed from published
+engine positions while the rest rotation it multiplies is asset data, and a rotation matrix is not basis-free — a delta
+expressed on engine axes and applied to an asset-space frame is the same numbers giving a different physical rotation.
 
 ```
-d_bind(u)   = normalize(pivot(child_u) − pivot(u))            // ASSET space, the X1 bind pose (§6.6)
-B           = Ry(+90°)                                        // asset → engine axes
-d_seg(j)    = normalize(p_child − p_parent)                   // ENGINE space, published positions
-D(u)        = shortestRotation(B · d_bind(u), d_seg(joint(u)))  // the SAME rule and tie-break as X9 (§7.2, §7.4 step 1)
-R_target_world(u) = D(u) · R_target_rest_world(u)
+d_bind_asset(u)   = normalize(pivot(child_u) − pivot(u))        // ASSET space, the X1 bind pose (§6.6)
+B                 = Ry(+90°)                                    // asset → engine axes; B⁻¹ = Ry(−90°)
+d_bind_engine(u)  = B · d_bind_asset(u)                         // ENGINE space
+d_seg_engine(j)   = normalize(p_child − p_parent)               // ENGINE space, published positions
+D_engine(u)       = shortestRotation(d_bind_engine(u), d_seg_engine(joint(u)))  // ENGINE space; X9's rule and tie-break
+D_asset(u)        = B⁻¹ · D_engine(u) · B                       // ASSET space — the same rotation, where it is applied
+P_posed(u)        = R_target_world(parent)                      // ASSET space, this frame
+P_rest(u)         = R_target_rest_world(parent)                 // ASSET space, the bind pose
+R_target_world(u) = D_asset(u) · (P_posed(u) · P_rest(u)⁻¹) · R_target_rest_world(u)   // ASSET space
 R_local(u)        = R_target_world(parent)⁻¹ · R_target_world(u)
 translation       = asset metres, with the pelvis displaced by (p_PELVIS − rest pelvis) / s   // engine units → metres: divide
 ```
+
+**Three properties, and each one corrects a construction that looked right.** (i) *The delta is conjugated.* `D_engine`
+acts on engine axes, so it is converted once — `B⁻¹ · D_engine · B` — before it multiplies an asset-space rotation;
+using `D_engine` directly leaves an asset bind direction of `+Z` unchanged — the delta turns about `+Z`, so `+Z` is a fixed
+direction of it — and its engine image therefore stays `+X` while the published direction is `+Y`. The conjugation
+carries `+Z` to asset `+Y`, whose engine image is the published `+Y`. (ii) *Parent roll is carried, which is what makes
+this the same frame rule as X9 rather than merely the same direction rule.* The factor `P_posed · P_rest⁻¹` transports the
+parent's **posed** rotation onto its rest rotation, so a parent rolled 90° about a child direction that did not change
+hands the child that 90° of roll — X9's `R = D · P` keeps it, and a bare `D · R_rest` drops it, leaving two frames that
+agree on direction and disagree by 90° on every attachment offset. (iii) *The rest invariant survives.* At bind every
+factor is identity — `D = identity` because the directions agree, `P_posed = P_rest` because nothing has moved — so
+`R_target_world = R_target_rest_world`. All three are asserted through the real retarget construction, not against a
+matrix identity: a parent-roll case, a non-axis-aligned direction change under a non-identity basis, and a wrong-basis
+control (`PoseRetargeterBasisTest`, §12.2).
 
 `B = Ry(+90°)` is the one basis: **asset `+Z` forward and `+X` left → engine `+X` forward and `−Z` left**, checked on the
 asset's own bind pose (`LeftToeBase` sits at `+Z`, `LeftUpLeg` at `+X`). The uniform scale is `s = 235/0.95 = 247.3684`
@@ -819,19 +839,25 @@ asset's own bind pose (`LeftToeBase` sits at `+Z`, `LeftUpLeg` at `+X`). The uni
 engine's rest pelvis height, so the only translation the retarget applies is the joint's own displacement from that rest
 pelvis. **The conversion divides, because the units demand it**: an engine-space displacement is in units and the
 translation is in asset metres, so a 235-unit displacement is `235 / (235/0.95)` = **0.95 m**, while multiplying gives
-`235 × 247.3684 ≈ 58,131.58` — a metre squared per unit, not a length. Every other quantity in the block above is an
-asset-space rotation, which is why the pelvis is the only place the conversion appears at all. There is no rest-delta
-composition and no per-bone accumulation of residual error: each bone's world rotation is a function of its own two
-endpoints and the fixed basis, which is exactly why A1 and A2 are measurements of the *asset* and not of the retarget.
+`235 × 247.3684 ≈ 58,131.58` — a metre squared per unit, not a length. The **pelvis translation is the only place the
+unit conversion appears**, because every other quantity in the block is a rotation and a rotation is dimensionless;
+there is no second scale anywhere in the retarget. There is also no rest-delta **rotation** composition of the PR #385
+kind and no per-bone accumulation of residual error: each bone's world rotation is a deterministic function of its own
+two endpoints, its parent's posed rotation and the fixed basis. Deterministic is not error-free, though, and the parent
+factor is exactly where a rotation error propagates to every descendant — which is why A2 is measured on posed frames and
+a bind-stance result is not evidence about them (§6.6).
 
-Two properties follow, and both are tested: an arm whose bind direction and published direction agree gets `D = identity`
-and therefore the rest rotation (the rest invariant, `PoseRetargeterRestInvariantTest`), and a segment whose published
-direction is antiparallel to its bind direction has no minimal rotation — the antipodal tie-break of §7.2 decides, and
-continuity at that singularity is **not** promised there or here.
+Two degeneracies are inherited from §7.2 rather than decided here: a segment whose bind direction and published direction
+agree gets `D = identity` and therefore the transported rest rotation (the rest invariant, `PoseRetargeterRestInvariantTest`),
+and one whose published direction is antiparallel to its bind direction has no minimal rotation — the antipodal tie-break
+of §7.2 decides, and continuity at that singularity is **not** promised there or here.
 
 `R_target_rest_world` is still the bone's rest world rotation from the asset's bind pose, and it is still post-multiplied
 (a pre-multiplication applies it in source space). `NonCommutingSplitTest` (L2) drives a parent and a child about different
-axes and asserts the composed world rotation, so a reversed order or a dropped basis fails it.
+axes and asserts the composed world rotation, so a reversed order or a dropped basis fails it;
+`PoseRetargeterBasisTest` drives a **posed** frame through the real construction with a non-identity basis and asserts the
+resulting world direction **and** roll, which neither the identity case nor the bind-rest case can: both are satisfied by
+a retarget that ignores the basis entirely.
 
 **The optional `Spine1` split is deferred, and it is not lumbar curvature.** Two rigid segments cannot produce a curve
 (§13 question 10). It is a visual distribution of one `LUMBAR` rotation across two bones and is authored only if the
@@ -1031,9 +1057,10 @@ contract rather than a hope:
   unitsPerMetre)`, where `R_segment` comes from published **positions** and the declared roll (§7.2, §7.4 step 1) — not
   from the published joint rotation. Anatomy never reads a glTF bone, a bind matrix or a skin weight.
 - **The visual rig is posed by position-driven retarget.** Each mapped bone's rotation is the minimal rotation from its
-  bind direction to the published segment direction in the same frame rule anatomy uses (X3, §6.2); only the pelvis
-  translation is converted, and the rig's bone offsets stay in asset units. The rest-delta composition the PR #385 code
-  performs (`PoseRetargeter.kt:58-83`) is the code X3 replaces, not the contract.
+  bind direction to the published segment direction, **conjugated into asset space and transported by the parent's posed
+  rotation** — the same frame rule anatomy uses (X3, §6.2), so a parent's roll reaches its children exactly as it reaches
+  an anatomy segment frame's. Only the pelvis translation is converted, and the rig's bone offsets stay in asset units. The
+  rest-delta composition the PR #385 code performs (`PoseRetargeter.kt:58-83`) is the code X3 replaces, not the contract.
 
 Nothing in either rule forces the rig's bone *heads* to sit where the engine's joints are. They coincide only if the asset
 is calibrated to the engine skeleton, and they stay coincident only while the segment lengths agree. That is the
@@ -1043,6 +1070,17 @@ alignment invariant, and it belongs to the Character model — the owner of the 
 engine space equals the engine joint position within `τ_bind` = **0.5 mm**, and the rig bone's rest orientation equals the
 engine rest orientation within `τ_rot` = **0.5°** (both unchanged, fixed at stage 1). Checked by
 `RigLandmarkAlignmentTest` (L2).
+
+**A1 is a check of the asset and of the converter that measured it — not of the running retargeter.** It converts an asset
+point with `s · Ry(+90°) · p_asset` in the test, and a static converter that does so passes while the production
+`PoseRetargeter` still composes with `basis = Quat.IDENTITY` (`PoseRetargeter.kt:14`, and `CharacterSession.kt:152`
+constructs it with no basis). A green bind-landmark test therefore proves that the converter and the asset agree; it says
+nothing about which transform the runtime applies to a posed frame. That gap is closed by a **second** test through the
+real construction and upload path — `PoseRetargeterBasisTest` (§12.2) — which drives nonzero, asymmetric posed landmarks
+through `PoseRetargeter.boneMatrices` and the scene-frame upload and asserts the resulting world direction and roll, with a
+**wrong-basis control** (the same frame at `basis = IDENTITY`) that must fail. The division of labour is the one A1/A2
+already imply: **A1 is the bind-asset check, A2 is the sampled posed measurement, and the basis test is the runtime
+path's own check** — three different claims, and no one of them substitutes for another.
 
 **X1 — the bind stance is a canonical A-pose, and it is not an engine pose.** *Confirmed by owner.* The frame A1 measures
 against is computed **in character-side code from `SkeletonDefinition` alone** — segment lengths and the engine's own
@@ -1115,12 +1153,15 @@ the shipped asset (the v2 map has 23; this asset has no scapula, so there is no 
 
 The ΔY column reproduces the earlier six-value height table exactly (`+7.9`, `−19.4`, `+30.0`, `+6.7`, `+39.3`, `+89.3`)
 and adds what that table omitted: **`CHEST` at 175.1 mm** and **`LUMBAR` at 110.0 mm** vertically, and every ΔX/ΔZ
-component — the elbow 165.0 mm and the hand 128.2 mm out of plane, the knee 82.8 mm forward. **The worst mapped joint is
-the hand at 565.6 mm 3D** (550.1 mm vertical); 20 of the 21 joints are outside the 0.5 mm tolerance (only `PELVIS`
-coincides, which it must, because the registration is defined at the pelvis), and the median 3D residual is 60.2 mm.
-`τ_bind` is 0.5 mm, so the worst joint is **1131× the tolerance**. The residual is linear in `unitsPerMetre` when it is
-expressed in engine units and proportional to `1/unitsPerMetre` when it is expressed in metres (§7.2), so a change of
-calibration is **re-measured, never rescaled** — the two directions disagree about which way the number moves.
+component — the elbow 165.0 mm and the hand 128.2 mm out of plane, the knee 82.8 mm forward. **At the standing frame the
+worst mapped joint is the hand at 565.6 mm 3D** (550.1 mm vertical); 20 of the 21 joints are outside the 0.5 mm tolerance
+(only `PELVIS` coincides, which it must, because the registration is defined at the pelvis), and the median 3D residual
+is 60.2 mm. **This table is the posed standing-frame comparison, not the A1 result**: A1 is measured at the X1 bind frame,
+where the worst joint is `CHEST` at 175.1 mm (next paragraph), so A1 fails by **350.2×** the 0.5 mm tolerance and the
+column above is quoted for what it measures — the pose. The residual is **affine** in `unitsPerMetre` — `E − s·A`
+in engine units and `E/s − A` in metres, each with a non-zero intercept — not proportional to it, so a change of
+calibration is **re-measured, never rescaled**; the two spaces disagree about which way the number moves, and the §13
+question 12 worked example shows a naive rescale landing 111.7 mm away from the recomputed value.
 
 **Measured at the X1 bind frame too, and it still fails.** The same registration against the canonical A-pose instead of
 the standing frame puts the worst joint at **`CHEST`, 175.1 mm** (the asset's `Hips → Chest` span is 0.310 m against the
@@ -1137,9 +1178,9 @@ so the route to A1 was chosen explicitly rather than assumed.
   pivot arithmetic is why.** A bone head *is* the skinning pivot: the inverse bind is authored against it and every vertex
   weighted to the bone is expressed relative to it. Translating a pivot by `e` therefore moves that bone's vertices by
   `e` and shears the joint against its neighbours, so the "correction" is a surface deformation of exactly the residuals
-  in the table — **565.6 mm at the wrist, 167.5 mm at the elbow, 175.1 mm at the chest and 110.0 mm at the lumbar
-  spine**, up to 32 % of a 1.78 m figure's height. No weight set survives that, and the fix would have to re-weight the
-  mesh anyway, which is option (c) done worse.
+  measured at the **X1 bind frame** — **175.1 mm at the chest, 110.0 mm at the lumbar spine, 74.4 mm at the toe and
+  60.6 mm at the hand**, the chest figure alone being **9.8 %** of a 1.78 m figure's height. No weight set survives that,
+  and the fix would have to re-weight the mesh anyway, which is option (c) done worse.
 - **(b) Re-author the asset in Blender from the engine skeleton** — write the joint table with Blender's Python and export
   a GLB. **Unavailable in this environment:** the host is `aarch64` and `bpy` publishes no wheel for it, so the tool cannot
   run here at all. It remains the right option for the *art* pipeline on a workstation, which is why the generator below is
@@ -1151,7 +1192,7 @@ so the route to A1 was chosen explicitly rather than assumed.
   of the tool — the change is that its joint table is computed from the definition instead of hand-authored.
 - **(d) Keep the shipped asset and treat A1 as a measurement frame** — **valid only as the measurement frame.** That is
   exactly how the table above was produced, and it is the reason the asset's defects are known numbers instead of
-  impressions. It cannot be the deliverable: the rig it measures fails by 1131× the tolerance.
+  impressions. It cannot be the deliverable: the rig it measures fails A1 by 350.2× the tolerance at the X1 bind frame.
 
 **A2 — a measured residual on a named pose set. The global bound is withdrawn.** The earlier claim was that, with A1
 true and identical rotation deltas, a child bone head moves only by the segment-length error accumulated along its
@@ -1174,11 +1215,14 @@ the measurement that decides, on posed frames, whether the pair (rig, retarget) 
 promised that equal lengths were sufficient would be promising that a rotation error cancels, and it does not.
 
 A2 is therefore a **measurement**: for each mapped joint, the distance between the rig bone head (converted to engine
-space) and the engine joint, evaluated on a **named pose set** — the three poses `RigAlignmentResidualTest` runs, squat
-bottom, push-up bottom and overhead reach — and reported per joint and per pose against `τ_residual` (proposed 5 mm at
-the most distal mapped joint). Its coverage limits are part of the report: three of 66 pose builders is not a statement
-about the other 63, and no pose outside the set is covered. A residual above `τ_residual` on any pose in the set fails
-the asset, not the anatomy.
+space) and the engine joint, evaluated on a **named pose set** — **six poses**, the five of the §12.4 review set drawn
+from the four pilot exercises (squat bottom, squat top, `standard push-up` bottom, `bird-dog`, `row_standard` mid-pull)
+plus `overhead_reach`, which is kept because it is the straightest-limb overhead case the set would otherwise miss — and
+reported per joint and per pose against `τ_residual` (proposed 5 mm at the most distal mapped joint). The set is the same
+one RV4 reviews, deliberately: a rig whose posed alignment is measured on poses the anatomy review never sees is being
+certified for a configuration nobody approved. Its coverage limits are part of the report: six of 66 pose builders is not
+a statement about the other 60, and no pose outside the set is covered. A residual above `τ_residual` on any pose in the
+set fails the asset, not the anatomy.
 
 The equal-length/different-direction pair is a **control case** in `RigAlignmentResidualTest`: an implementation that
 reports a zero residual for it is still evaluating the withdrawn formula rather than measuring.
@@ -1186,7 +1230,7 @@ reports a zero residual for it is still evaluating the withdrawn formula rather 
 **A1 is per joint at bind; A2 is per joint per pose.** Every mapped head can sit inside 0.5 mm of its joint at bind
 while a posed frame exceeds 5 mm at the hand or the toe, because A1 is measured at one stance and a rotation error at an
 intermediate joint moves every descendant. The converse holds too: a chain can close within 5 mm at its distal joint in
-all three poses while individual heads sit outside the 0.5 mm bind bound. Neither measurement substitutes for the other,
+all six poses while individual heads sit outside the 0.5 mm bind bound. Neither measurement substitutes for the other,
 and neither is a pass on its own — **the measured residual at the named poses decides** which of the two a candidate
 asset actually fails.
 
@@ -1287,25 +1331,31 @@ roll convention of X9 (§13 question 11). The roll is an approximation, and §7.
 
 **X9 as a total rule — defined for every segment, including the degenerate ones.** `P` is the parent segment's frame
 (published positions, this table's rule applied to the parent), `restDir` the segment's direction in its own rest frame,
-`a = P · restDir`, `b = normalize(child − parent)` in world space, `D = shortestRotation(a, b)`, `R = D · P`. The rule is
-total because each of these is decided, not left to a caller:
+`a = P · restDir`, `b = normalize(child − parent)` in world space, `D = shortestRotation(a, b)`, `R = D · P`. Every
+quantity here is in **engine world space**; §6.2's retarget is the same construction carried through the basis, which is
+why it conjugates its delta and carries the parent's *posed* rotation — `R = D · P` already does both, by construction.
+The rule is total because each of these is decided, not left to a caller:
 
 | Case | Rule |
 | --- | --- |
 | order | `R = D · P`: the parent's frame is carried first, then the minimal rotation into the published direction. The reverse order rotates about the parent's axes and is wrong for every non-commuting pair |
 | near-zero length | `\|child − parent\| < τ_len · max(1, \|restDir\| · s)` → the segment is **treated as degenerate**, not normalised. `τ_len` is scale-aware (`1e-6` of the segment's own rest length in engine units) so a millimetre-scale attachment and a metre-scale segment use the same rule |
 | degenerate | inherit the parent's frame and the authored rest direction (no rotation), as the measured rows of this table require |
-| root | `PELVIS` has no parent: `P` is the world frame of the bind stance, and its `restDir` is the authored world direction |
+| root | `PELVIS` has no parent: `P` is the **derived root frame** — hip line `×` `PELVIS → CHEST` from published positions, stated below — carrying the authored pelvis rest direction, so an authored pelvis tilt is followed instead of discarded. A zero reference falls back to the bind world frame and marks the segment degenerate |
 | near-parallel | `\|a × b\| < τ_rot` and `a · b > 0` → `D = identity`, no normalisation of a tiny cross product |
-| near-antiparallel | `a · b < 0` and `\|a × b\| < τ_rot` → the **antipodal tie-break**: rotate by `π` about the world axis least aligned with `a` (x → y → z on ties), the same tie-break the construction uses (§7.4.5). `D` is then `−identity` in rotation terms — a half-turn, chosen deterministically |
-| continuity | **not promised at the antipodal singularity.** The two sides of `a · b = 0` give opposite half-turns about different axes, so a segment that passes through antiparallel flips. That is stated rather than hidden behind a threshold that only moves the flip |
+| near-antiparallel | `a · b < 0` and `\|a × b\| < τ_rot` → the **antipodal construction**: let `e` be the world axis least aligned with `a` (x → y → z on ties) and take `axis = normalize(a × e)`, which is perpendicular to `a` **by construction**; `D` is the half-turn by `π` about that axis. Rotating about an axis that is merely *least aligned* with `a` does not place `a` at `−a`: for `a = (1,1,1)/√3` and `b = −a` the tie-break picks `x`, and a half-turn about `x` lands at `acos(1/3) = 70.53°` from `b`. The axis is therefore projected out of `a` rather than chosen from the coordinate axes, and the two agree only when `a` happens to be a coordinate axis. `D` is a rotation by `π` — the quaternion `(0, axis)`, **not** `−identity`: the quaternion `−identity` is the identity rotation, whatever the sign convention |
+| continuity | **not promised at the antipodal singularity `a · b = −1`.** The two sides of `a · b = −1` give opposite half-turns about different axes, so a segment that passes through antiparallel flips. That is stated rather than hidden behind a threshold that only moves the flip |
 | invalid input | a non-finite coordinate or a zero `restDir` → the segment is `INVALID` with `NON_FINITE_GEOMETRY` (§7.4.1c), never a silently identity frame |
 
 Tests (`SegmentFrameDirectionTest`): near parallel (within `τ_rot`), near antiparallel approached **from both sides** (the
-two half-turns, and the flip between them as a documented discontinuity), zero length (degenerate → inherited frame), the
-root (`PELVIS`), and a straightening limb whose `b` rotates through `a` (frame continuous, no flip).
+two half-turns, and the flip between them as a documented discontinuity), a **non-axis-aligned antipode** — `a = (1,1,1)/√3`
+with `b = −a`, where the placed direction must equal `b` within `τ_rot` and a coordinate-axis half-turn misses it by
+70.53° — zero length (degenerate → inherited frame), the root (`PELVIS`), a **parent-roll** case (a parent rotated about a
+child direction that did not change: the frame's roll follows the parent, so direction agreement alone does not pass), and
+a straightening limb whose `b` rotates through `a` (frame continuous, no flip).
 
-**The roll bound, with its units.** The placed direction is exact; the roll about it is not. An attachment offset of `d`
+**The roll bound, with its units.** The placed direction is exact — including through the antipodal construction, which is
+why the construction is specified above rather than left to a tie-break; the roll about it is not. An attachment offset of `d`
 metres displaced by a roll error of `θ` radians moves by the chord **`2|d| sin(θ/2)`**, of which `|d| · θ` is the upper
 bound — the two agree to within 0.03 % at 5° and diverge only for large `θ`. Units: `|d|` in metres (the authored
 offset), `θ` in radians (per segment), the displacement in metres, all in the parent segment's frame. `θ` is
@@ -1350,13 +1400,42 @@ and `toes` (terminal — `HEAD_POS` and `TOE_*` have no child joint). That is **
 of the ankle in every frame measured, and an earlier revision's claim that `ANKLE → TOE` is coincident is false — it was
 probably a reading of the factory's identity offsets rather than of published positions.
 
-**The root fallback, stated because the pelvis has no parent frame.** For these rows the frame is the **parent segment's**
-frame with the authored rest direction, and an attachment authored on one of them is expressed in the parent's frame: a
-clavicle offset is a thorax offset. `PELVIS` is the root, so it has no parent segment: its fallback is the **world frame
-of the published pose at the bind stance** (identity at rest, §7.2 first bullet) — a declared, fixed frame, not the
-previous frame and not the pelvis node's published rotation, which §7.2 already shows is not the segment orientation.
-That is a property of the engine's solve topology (§4.1), not a defect this framework can fix, and it must not be hidden
-by a normalising a zero vector.
+**The root frame is derived too, and the first construction proposed for it does not exist.** For the coincidence rows the
+frame is the **parent segment's** frame with the authored rest direction, and an attachment authored on one of them is
+expressed in the parent's frame: a clavicle offset is a thorax offset. `PELVIS` is the root, so it has no parent segment,
+and a fixed bind-world frame is not good enough: the engine **authors pelvis rotation**, and a frozen frame throws it
+away. Two poses at the pinned base do exactly that — `declarePelvisTilt` writes `pelvis.localRotation` and registers the
+intent (`BasePose.kt:445-448`), `BaseSquatPose.kt:150-151` tilts by `-leanAngle` (`SquatPose.kt:9`: 0.40 rad at the
+bottom) and `BaseBirdDogPose.kt:82-83` tilts by `torsoPitch` (`:15`: `-π/2`, the spine flat to the floor). The limb-IK
+evidence of the bullet above says a limb joint's published rotation is its parent's, not its segment's; it does **not**
+say the root's is unusable, and at the root it is not.
+
+What the carrier publishes is enough to build the frame from positions alone, which is what keeps this table's rule
+uniform. `SkeletonPose` carries a world position and a world rotation for all 33 joints, written by
+`SkeletonNode.flatten` (`SkeletonNode.kt:73-77`; carrier at `PoseDefinition.kt:113`), and `PELVIS` is a root, so
+`roots.forEach { updateWorldTransforms(zeroVector, identityRotation) }` makes its published rotation exactly the authored
+tilt. The frame the pinned decision asked for — *hip line plus `PELVIS → LUMBAR`* — cannot be built as written: the
+`PELVIS → LUMBAR` pair measures **0.0000 in all 594 frames** (§7.2 above), because `LUMBAR` is a pass-through child. The
+available, non-degenerate substitute is measured the same way and is used instead:
+
+```
++Z_engine = normalize(HIP_F − HIP_B)          // the hip line: 2 × hipWidth = 44 units = 177.9 mm, never coincident
++Y_engine = normalize(CHEST − PELVIS)          // the torso: 120 units = 485.1 mm, orthogonalised against +Z
++X_engine = Y × Z                              // right-handed completion; the segment frame of §7.2
+```
+
+Both vectors are published positions, both are well conditioned (44 and 120 units against a 1e-6-unit degeneracy
+threshold), and the frame follows a pelvis tilt of any size — which is the point. **The honest limit is that `+Y` is the
+pelvis-plus-`LUMBAR` direction**: a `LUMBAR` bend would be absorbed into the pelvis frame rather than shown as a bend of
+its own. That is 0 in the two poses that author pelvis motion (their rotation is declared on `PELVIS`, `LUMBAR` carries
+identity), and it is bounded elsewhere by `2|d| sin(θ/2)` for the `LUMBAR` angle `θ` — the same expression the roll bound
+uses. The fixed bind-world frame this replaces is not bounded by a bend at all: it is wrong by the whole authored tilt,
+**22.92° in a squat bottom and 90° in bird-dog**, which displaces a 30 mm attachment by **11.92 mm** and **42.43 mm**
+respectively. That is a missing swing, not an unknown axial roll, and no roll measurement can recover it.
+Degeneracies are decided, not left to a normalise: a zero hip line (a rig with `hipWidth = 0`) is an L3 definition error,
+and a zero `PELVIS → CHEST` falls back to the bind world frame with the segment marked degenerate, per the `degenerate`
+row above — never a normalised zero vector. Stage 1 measures both frames, squat and bird-dog (§15), and `θ` for the
+pelvis segment is reported beside the other segments' rather than assumed to be zero.
 
 ### 7.3 Definition schema
 
@@ -2854,8 +2933,8 @@ change that quietly promotes an approximation to a claim.
 | --- | --- | --- | --- |
 | Analytic two-bone IK | established technique | no soft-tissue, no joint-surface contact | existing validator (L1) |
 | Contact settlement / posture CCD | established, bounded | iterative, not a physics solve | L1 + RFC R12 |
-| Position-driven retarget (X3) | established technique | rotations derived from two published positions plus a fixed `Ry(+90°)` basis; translation only at the pelvis, **divided** by `unitsPerMetre` (§6.2); the roll about the segment direction is the same approximation §7.2 carries, and continuity at an antiparallel bind direction is not promised | L2, and **not by the rest invariant alone**: `PoseRetargeterRestInvariantTest` proves rest identity, which `basis = IDENTITY` also satisfies, so it validates nothing about the basis; `RigLandmarkAlignmentTest` (A1, a *converted* asset point against a published joint) catches a wrong or missing basis, `RigSideTest` catches a side flip, `PoseRetargeterPelvisTranslationTest` catches a reversed translation conversion, and A2 is **measured** at three named poses (squat bottom, push-up bottom, overhead reach) — three of 66 builders, a sample and not a statement about the other 63 |
-| Segment frame from published positions + declared roll | approximation | the roll about the segment direction is arbitrary, so an attachment offset of `d` metres carries up to `d · θ` of error (chord `2\|d\| sin(θ/2)`); **four of fourteen** segment rows take their parent's frame in every frame measured (`pelvis` and `clavicle` coincident, `skull` and `toes` terminal), and the `hand` row in one builder of 66 (§7.2) | `SegmentFrameDirectionTest` (L2) |
+| Position-driven retarget (X3) | established technique | rotations derived from two published positions plus a fixed `Ry(+90°)` basis; translation only at the pelvis, **divided** by `unitsPerMetre` (§6.2); the roll about the segment direction is the same approximation §7.2 carries, and continuity at an antiparallel bind direction is not promised | L2, and **not by the rest invariant alone**: `PoseRetargeterRestInvariantTest` proves rest identity, which `basis = IDENTITY` also satisfies, so it validates nothing about the basis; `RigLandmarkAlignmentTest` (A1, a *converted* asset point against a published joint) catches a wrong or missing basis, `RigSideTest` catches a side flip, `PoseRetargeterPelvisTranslationTest` catches a reversed translation conversion, and A2 is **measured** at six named poses — the five of §12.4 RV4 plus overhead reach, six of 66 builders, a sample and not a statement about the other 60. The basis is asserted where it actually runs, not only where the test converts a point: `PoseRetargeterBasisTest` drives a posed frame through the real construction and upload path with a non-identity basis and a wrong-basis control |
+| Segment frame from published positions + declared roll | approximation | the roll about the segment direction is arbitrary, so an attachment offset of `d` metres carries up to `d · θ` of error (chord `2\|d\| sin(θ/2)`). **`θ` is not yet measured and adequacy is not claimed**: stage 1 measures it per segment against the pole-vector comparator, with `τ_roll` set there (§13 question 11). **Four of fourteen** segment rows take their parent's frame in every frame measured (`pelvis` and `clavicle` coincident, `skull` and `toes` terminal), the `hand` row in one builder of 66, and the `pelvis` root uses the derived hip-line frame so an authored pelvis tilt is followed (§7.2) | `SegmentFrameDirectionTest` (L2) |
 | Bone-name resolution with aliases | established technique | alias tables can map the wrong bone | L2 coverage + manual rig review |
 | Anatomical attachment points | **requires expert validation** | a plausible-looking point can still be wrong | L3 mechanical + L7 review (§12.4) |
 | Path + ellipsoid obstacle wrapping | approximation — geometric, not contact | ellipsoids stand in for bone and fascia; the clearance predicate is measured with a stated error budget (`eps_num`), and the approximation is the obstacle model, not the arithmetic | L4 fixtures + visual review |
@@ -2917,11 +2996,12 @@ Seven levels, each with one owner, one report and an explicit automation status.
 | Test | Level | Asserts |
 | --- | --- | --- |
 | `RigAssetContractTest` | L2 | every required bone present, bind == rest, inverse binds finite, ≤ 4 influences |
-| `PoseRetargeterRestInvariantTest` | L2 | neutral pose → identity on **every** bone — mapped and visual-only alike, so the 10 finger bones are asserted at identity too (they inherit the hand, and at bind the hand is at rest); exists in PR #385, extended to the v2 rig |
+| `PoseRetargeterRestInvariantTest` | L2 | neutral pose → identity on **every** bone — mapped and visual-only alike, so the 10 finger bones are asserted at identity too (they inherit the hand, and at bind the hand is at rest); exists in PR #385, extended to the v2 rig. **It cannot see the basis**: identity composed with identity is identity for any basis, which is why the next two rows exist |
+| `PoseRetargeterBasisTest` | L2 | §6.2 X3 through the **real** construction and upload path (`PoseRetargeter.boneMatrices` plus the scene-frame handoff): a **nonzero, asymmetric** posed frame with `basis = Ry(+90°)` yields the published segment direction **and** the parent's posed roll; the same frame at `basis = IDENTITY` is the wrong-basis **control** and must fail; and a parent rolled about an unchanged child direction moves the child's frame. Identity and bind-rest cases cannot pass this row |
 | `PoseRetargeterPelvisTranslationTest` | L2 | §6.2: a pose whose `PELVIS` sits **235 units** above rest translates `Hips` by **0.95 m** (`235 / (235/0.95)`), not by `235 · s ≈ 58,131.58`; the fixture uses a **non-zero** translation, because a test at zero displacement cannot see a reversed conversion |
 | `RigLandmarkAlignmentTest` | L2 | §6.6 A1: every **mapped** bone head coincides with its engine joint at the X1 bind frame within `τ_bind`; rest orientations within `τ_rot`. The 10 finger bones are **excluded from the comparison and listed as unmapped** (X2) — their report entry is inventory, not a residual, and keeping them cannot move the hand's own row; expected **red** on `humanoid_v1` against the recorded baseline (§6.6) |
-| `RigAlignmentResidualTest` | L2 | §6.6 A2: the **measured** residual per joint at the three named poses, within `τ_residual`; the equal-length/different-direction control case must report a non-zero residual, and no length-sum bound is computed |
-| `SegmentFrameDirectionTest` | L2 | §7.2/§7.4 step 1: a derived segment direction equals the published direction `p_child − p_parent` within `τ_dir` (proposed, fixed at stage 1); the roll convention is declared per segment and reproduced; run on real baseline poses over both hierarchies, both sides of every bilateral limb, one deliberately bent IK case, the measured degenerate rows (`pelvis`, `clavicle`, `skull`, `toes` — inherited frame, no zero-vector normalisation) and the manually overridden hand of `pike_pushup_standard`; plus near-parallel, near-antiparallel from both sides, zero length, root and straightening per X9 |
+| `RigAlignmentResidualTest` | L2 | §6.6 A2: the **measured** residual per joint at the six named poses (squat bottom and top, push-up bottom, bird-dog, row mid-pull, overhead reach), within `τ_residual`; the equal-length/different-direction control case must report a non-zero residual, and no length-sum bound is computed |
+| `SegmentFrameDirectionTest` | L2 | §7.2/§7.4 step 1: a derived segment direction equals the published direction `p_child − p_parent` within `τ_dir` (proposed, fixed at stage 1); the roll convention is declared per segment and reproduced; run on real baseline poses over both hierarchies, both sides of every bilateral limb, one deliberately bent IK case, the measured degenerate rows (`pelvis`, `clavicle`, `skull`, `toes` — inherited frame, no zero-vector normalisation) and the manually overridden hand of `pike_pushup_standard`; plus near-parallel, near-antiparallel from both sides, the **non-axis-aligned antipode** (`a = (1,1,1)/√3`, `b = −a`), **parent roll**, zero length, the derived root frame and straightening per X9 |
 | `NonCommutingSplitTest` | L2 | §6.2: a parent and child about different axes compose to the stated world rotation — a reversed `parent⁻¹ · child` order or a one-sided `B` fails |
 | `UnmappedBoneInheritanceTest` | L2 | §6.2: moving a mapped parent carries an unmapped child's world rotation within tolerance while the child's local rotation is unchanged; the twist policy is the declared one |
 | `BoneMapCoverageTest` | L2 | **23** mapped joints resolve and the **10** undrivable engine joints are declared, not accidental (X2) — derived from the required map of §6.2, not from the shipped asset's 21/12 inventory. The scapula pair is asserted by name, so a `BoneMap` that quietly omits `SCAPULA_A/P`, or a rig that carries no scapula bone, fails here rather than at A1 |
@@ -3190,7 +3270,7 @@ combination is not an M1 pass, whatever the individual reports say.
 | R10 | Left/right handedness mismatch between anatomy and rig | medium | medium | `RigSideTest`; asset fix, never a render-time flip | engineering |
 | R11 | L4 proves the polyline misses the ellipsoids, not that the rendered muscle or the anatomical surface does | medium | low | strategy A consumes the validated points unchanged and re-smoothing is forbidden (§7.4.1); the ellipsoid model is classified as an approximation (§11); L7 review covers what geometry cannot (§12.4) | engineering |
 | R12 | The §7.4.5 detour heuristic fails on a configuration where a valid route exists, producing `INVALID` frames | medium | medium | failure is explicit and blocks L4 rather than shipping a penetrating path; the fixture set states which configurations must succeed; new cases are added as fixtures, not fixed by loosening the check | engineering |
-| R13 | A new rig asset passes bind alignment but drifts in motion because segment lengths differ | medium | medium | §6.6 A2 **measures** the residual at three named poses — the length-sum bound is withdrawn as false — and `RigAlignmentResidualTest` is what reports it; the fix is the asset, never an anatomy nudge | engineering + art |
+| R13 | A new rig asset passes bind alignment but drifts in motion because segment lengths differ, or because the retarget composition accumulates direction error | medium | medium | §6.6 A2 **measures** the residual at the six named poses — the length-sum bound is withdrawn as false — and `RigAlignmentResidualTest` is what reports it. **The fix is the rig/retarget pair, never an anatomy nudge**: A2's equal-length counter-case shows that equal lengths still drift under a rest-delta composition, so the correction is in the asset or in the retarget that drives it, and A2 measures the result. Moving an attachment to hide the drift is forbidden — an override is not an input to either test (§6.6) | engineering + art |
 
 **Unresolved, with the smallest resolving experiment:**
 
@@ -3229,20 +3309,61 @@ combination is not an M1 pass, whatever the individual reports say.
    a lumbar curve is authored against a straight spine, and the limitation belongs in the review record (§12.4) rather
    than in a pose. Known limit, not a blocker: an extra lumbar joint would change `SkeletonDefinition`, revalidate every
    pose and recalibrate every rig (§6.1), and no stage in §15 budgets for that.
-11. **Roll convention for a position-derived segment frame (X9) — default chosen, owner confirmation pending.** The
-   segment frame is the minimal rotation taking `parentFrame · restDirection` to the published direction
-   `p_child − p_parent`, applied in the parent's frame (§7.2, §7.4 step 1). The roll about that direction is therefore
-   arbitrary, and an attachment offset `d` carries up to `|d| · θ` of error, where `θ` is the residual roll error for
-   that segment — declared per segment and measured at stage 1. Alternatives: an authored roll reference per segment (a
-   stable up-vector) or a rig bone-axis alignment. Default chosen because it needs no new authored data and is
-   deterministic; the cost is the stated error bound, which is why §11 classifies it as an approximation. Smallest
-   resolving experiment: measure `θ` for the eight M1 segments on the three named poses and decide whether the bound
-   holds for the widest attachment offset in the library.
-12. **The A1 baseline, the calibration pair, and what an absolute length means (X10) — default chosen, owner confirmation
-   pending.** The shipped `humanoid_v1` asset does not pass A1: its worst mapped joint is the hand at **565.6 mm** 3D
-   (550.1 mm vertical) against a 0.5 mm tolerance, 20 of 21 joints outside it (§6.6), and the default is to record that as
-   a known, measured baseline and make *a rig that passes A1* a stage-1 deliverable rather than to weaken A1 — a tolerance
-   chosen to fit the current asset measures nothing.
+11. **Roll convention for a position-derived segment frame (X9) — CLOSED: minimal rotation is the default roll
+   convention, confirmed by the owner, and its anatomical adequacy is not claimed.** The segment frame is the minimal
+   rotation taking `parentFrame · restDirection` to the published direction `p_child − p_parent`, applied in the parent's
+   frame (§7.2, §7.4 step 1). It is chosen as a **default** because it needs no new authored data and is deterministic —
+   not because a deterministic answer is an adequate one. The roll about that direction is arbitrary, an attachment offset
+   `d` carries up to `|d| · θ` of error, and **`θ` has never been measured**; every statement about it in this document is
+   a bound on an unmeasured quantity. Closing the question settles the convention, not the evidence, so three things are
+   now specified rather than deferred:
+
+   - **A named comparator, so `θ` has a reference at all.** A **pole-vector frame** derived from published joint positions
+     — the segment's bend plane, from `p_parent → p_mid → p_child` — is computed beside the minimal-rotation frame on
+     every measured frame, and the angle between the two rolls is the candidate `θ`. It needs no authored data either.
+     Two policies are declared with it, because a bend-plane reference has exactly one failure mode: **fallback** — when
+     the bend is below a declared angle threshold (`θ_bend_min`, set at stage 1), the bend plane is ill-conditioned and the
+     comparator falls back to the previous frame's pole vector, tagged `POLE_HELD` in the report; **continuity** — across
+     that threshold the comparator's roll may jump, so the report marks the transition and no `θ` is computed from a frame
+     whose pole was held. The comparator does **not** recover anatomical axial twist: it is a second geometric direction,
+     not a source of truth about rotation, and agreement with it is evidence about determinism and plausibility, never
+     about anatomy.
+   - **The experiment covers all four pilots, not three named poses.** `squat` (bottom and top), `standard push-up`
+     (bottom), `bird-dog` and `row_standard` (mid-pull) — the four exercises of X8 and the five poses of §12.4 RV4 —
+     because two of them are exactly where a bend-plane comparator is least stable (bird-dog's extended limbs, row's
+     authored elbow-pole intent, `RowsPose.kt:21-30` at the pinned base) and where the M1 eight muscles are loaded
+     differently. A three-pose set of squat, push-up and overhead reach would have measured the easy cases.
+   - **The criterion, its reference, its uncertainty and its threshold.** `θ` is measured per segment as the roll angle
+     between the minimal-rotation frame and the pole-vector frame, both built from the same published positions; the
+     reference roll is the **pole-vector frame**, and the uncertainty of the measurement is the frame's own quantisation
+     — the published positions are `Float`, so a segment of length `L` carries an angular uncertainty of about
+     `2 · ulp(L) / L`, reported with every `θ`. The pass criterion is `|d| · θ ≤ τ_roll` for the widest attachment offset
+     `d` in the M1 library (0.03 m today, from the placeholder coordinates of §7.3); **`τ_roll` is set at stage 1**, when
+     the first real attachments and the first measured `θ` exist, and it is recorded in the review file as a stage-1
+     deliverable. Fixing it now would be fixing a threshold before knowing either side of the comparison.
+
+   The alternatives that were considered and are not taken: an authored roll reference per segment (a stable up-vector —
+   more authoring, and it still has to be reviewed against anatomy) and a rig bone-axis alignment (couples anatomy to one
+   asset). They stay available as comparators; neither is the default. Worst case the measured `θ` is large and
+   `τ_roll` cannot be met on some segment: that is a finding about the convention, recorded per segment, and the answer is
+   an authored roll reference for that segment — not a weaker threshold.
+12. **The A1 baseline, the calibration pair, and what an absolute length means (X10) — CLOSED.** The shipped
+   `humanoid_v1` asset does not pass A1, and the baseline is recorded as a **measured fact of the X1 bind frame**: the
+   worst mapped joint is `CHEST` at **175.1 mm**, **350.2×** the 0.5 mm tolerance, with `LUMBAR` at 110.0 mm and only
+   `PELVIS` inside it (§6.6). The **565.6 mm** hand figure quoted in earlier revisions is a *different* measurement — the
+   posed standing frame, where the arms fold out for counterbalance — so it is kept as a **labelled posed comparison**
+   and no longer carries the A1 claim; a stage-1 gate that cited it was gating on the pose, not on the rig. What is
+   closed:
+   - **The baseline is recorded, not argued.** A1 is not weakened to fit the asset; a rig that passes A1 is the stage-1
+     deliverable (§15), and the failing numbers above are the evidence that the deliverable is real.
+   - **Metres stay out of the UI** (X4): the panels show `relativePathLengthChange` only, and `modelledPathLength` stays in
+     the data and the debug overlay.
+   - **`s` and the bind pose are per-body parameters tied to named landmarks, never to height.** `s` is
+     `PELVIS.y / trochanter height` (§7.2) and the bind pose is the X1 A-pose computed from `SkeletonDefinition`; a body
+     with a different `s` is a different calibration of the same rule, and no field of the document derives either from a
+     stance height, a crown height or a `heightMetres` value.
+   - **M1 is one generic reference body with a fixed `s`** = `235 / 0.95 = 247.3684` u/m. One body, one calibration, no
+     per-character scale until a rig profile revalidates it (§6.1); the four body families are stage 5.
 
    **Recommended default, and it is a decision about what M1 displays, not only about a constant (X4).** For M1 the only
    length readout in the UI is `relativePathLengthChange`; `modelledPathLength` in metres stays in the data and the debug
@@ -3250,18 +3371,36 @@ combination is not an M1 pass, whatever the individual reports say.
    and it is not that a ratio is free of the calibration — see the next paragraph.
 
    **"Dimensionless" is not "calibration-free", and the difference is measurable.** An attachment resolves as
-   `jointPosition + R_segment · (offsetMetres · s)` (§6.6), so a head's path length is `chord + s · Σ|offsets|` and its
-   relative change is
+   `jointPosition + R_segment · (offsetMetres · s)` (§6.6). Offsets are **transformed vectors**, and a path length is the
+   sum of the solved polyline's segment lengths — **not** `chord + s · Σ|offsets|`, which is false in both directions: two
+   10-unit offsets pointing *inward* along a 100-unit chord give an 80-unit path where that formula promises 120, and a
+   wrap detour lengthens the path by an amount no sum of offset lengths describes. The ratio is therefore stated for
+   **one constructed geometry**, not as a law: both attachment offsets lie along the chord and point away from each other,
+   so the resolved attachments are exactly `s · Σ|offsets|` further apart than the joint chord and the solved path is the
+   straight segment between them. Only in that case is the length `chord + s · Σ|offsets|`, and only there does
 
    ```
    (posed_chord + s·Σ|offsets|) / (rest_chord + s·Σ|offsets|) − 1
    ```
 
-   which depends on `s` whenever the offsets are non-zero and the path is not a pure chord. Worked example, reproduced
-   from the definition: rest length `100 + 0.1 s`, posed length `200 + 0.1 s`, offsets totalling 0.1 m —
-   **0.801688 at `s = 247.3684`** and **0.814848 at `s = 227.2222`**. Same muscle, same pose, two calibrations, and the
-   displayed number moves by 1.3 percentage points. So the field is dimensionless and **model-dependent**, and the panel
-   says "modelled".
+   hold. With rest `100 + 0.1 s`, posed `200 + 0.1 s` and offsets totalling 0.1 m — **0.801688 at `s = 247.3684`** and
+   **0.814848 at `s = 227.2222`**: same muscle, same pose, two calibrations, and the displayed number moves by **1.32
+   percentage points**. The argument only needs the ratio's *dependence* on `s`, which is why the constructed special case
+   is enough here and no general path-length formula is claimed.
+
+   **The residual is affine, not proportional, and every calibration is recomputed rather than rescaled.** For a fixed
+   engine coordinate `E` and asset coordinate `A` of the same landmark, the signed residual is
+
+   ```
+   offset_metres = E / s − A          // affine in 1/s, intercept −A
+   offset_units  = E − s · A          // affine in s,   intercept  E
+   ```
+
+   so neither is proportional to the constant, and a table scaled "linearly with `s`" is wrong in one of the two
+   directions whichever one it picks. Recomputed at the chest with `E = 355` units and `A = 1.26 m`: **175.106 mm** at
+   `s = 235/0.95` and **302.347 mm** at `s = 409/1.80`; naively rescaling the first by `s₁/s₂` gives **190.632 mm**,
+   which is **111.7 mm** away from the recomputed value. Rescaling a residual table is therefore never done in this
+   document: each row is recomputed at the calibration it is quoted against.
 
    **Scale invariance has exact preconditions.** The relative change is invariant only under a **common similarity
    transform of every geometric input and every dimensional solver parameter** — the attachment offsets, the obstacle
@@ -3288,27 +3427,31 @@ combination is not an M1 pass, whatever the individual reports say.
    the head centre against the asset's 0.180 m, which is what pulls a crown-based calibration down to 229.8.
 
    Smallest resolving experiment: build the stage-1 rig, measure both spans on it, and keep the pair whose landmarks
-   agree on that rig — then **re-measure** the §6.6 baseline on that rig rather than rescaling it. The ledger residual is
-   `offset = engineY / s − assetY`, which is proportional to `1/s` and not to `s`, while the same residual expressed in
-   engine units is proportional to `s`; a table scaled "linearly with the constant" would be wrong in one of the two
-   directions whichever direction it chose.
+   agree on that rig — then **re-measure** the §6.6 baseline on that rig rather than rescaling it. That is the rule the
+   affine form above forces: a residual is recomputed at the calibration it is quoted against, in either space, and a
+   table carried across a calibration change by scaling is wrong even when its direction of movement looks plausible.
 
-**Owner defaults applied in this revision (X1–X8).** Each is written above as the chosen design and repeated here as a
-decision of record, with the owner's status: **X1 and X3–X8 confirmed by owner**, **X2 reversed by owner (fingers kept)**,
-and **X9/X10 still pending** — question 11 and question 12 below keep their "default chosen, owner confirmation pending"
-labels, which are the only two that do.
+**Owner decisions of record (X1–X10).** Each is written above as the chosen design and repeated here as a decision of
+record, with the owner's status: **X1 and X3–X8 confirmed by owner**, **X2 reversed by owner (fingers kept)**, and **X9 and
+X10 closed by the owner as well**. "Closed" settles the question; it does not supply the evidence, so both closed rows
+carry a measurement obligation into stage 1 and question 11 and question 12 above state exactly what it is. X9 keeps minimal
+rotation as the default roll convention and **does not claim anatomical adequacy**; X10 records the A1 baseline as a
+measured fact at the X1 bind frame, keeps metres out of the UI, ties `s` and the bind pose to named landmarks rather than
+to a height, and fixes M1 to one generic reference body.
 The smallest experiment is kept against each row because a confirmed design still has to be measured, not assumed.
 
 | # | Default | Where it is applied | Status | Smallest resolving experiment |
 | --- | --- | --- | --- | --- |
 | **X1** | A1's bind frame is a **canonical straight-limbed A-pose** computed in character-side code from `SkeletonDefinition` segment lengths, not an engine pose and not the folded-arm standing frame | §6.6 (the pose and its 23 joint positions), §15 stage 1 | **confirmed by owner** | generate the rig from the definition and run `RigLandmarkAlignmentTest` against that frame; if the frame's limb directions disagree with the asset's bind, the generator is wrong, not the frame |
 | **X2** | **The ten finger bones stay**, as visual-only bones: no engine joint, no A1 row, excluded from `RigLandmarkAlignmentTest` and listed as unmapped, counted in the 30-bone visual budget (10 of 30), and inheriting their hand bone's frame parent-relative so the fingers follow the hand rigidly; the generator lays them along the X1 hand direction | §6.1, §6.2, §15 stage 1 | **reversed by owner: fingers kept** | render the hand at the smallest shipped size and check that the ten rigid finger bones read as a hand; if the silhouette fails, the fix is hand geometry, not finger articulation the engine does not have |
-| **X3** | **Position-driven retarget**: each mapped bone's rotation is the minimal rotation from its bind direction to the published segment direction, same segment-frame rule as anatomy; `basis = Ry(+90°)`, `s = 235/0.95`, translation 0 at the pelvis | §6.2 (the rule), §11 (classification), §15 stage 1 | **confirmed by owner** | land the change behind the existing `PoseRetargeter` signature and compare A2 residuals before and after on the three named poses |
+| **X3** | **Position-driven retarget**: each mapped bone's rotation is the minimal rotation from its bind direction to the published segment direction, **conjugated into asset space (`B⁻¹ · D · B`) and transported by the parent's posed rotation**, same frame rule as X9; `basis = Ry(+90°)`, `s = 235/0.95`, translation 0 at the pelvis | §6.2 (the rule), §11 (classification), §15 stage 1 | **confirmed by owner** | land the change behind the existing `PoseRetargeter` signature and compare A2 residuals before and after on the six named poses, with `PoseRetargeterBasisTest`'s wrong-basis control red |
 | **X4** | **M1's UI shows `relativePathLengthChange` only**; absolute metres are withheld until a named calibration pair and an evidence-backed uncertainty exist, and `modelledPathLength` stays in the data and debug | §9.2, §12.5, §13 question 12, §15 stage 2 and M1 item 4 | **confirmed by owner** | name the pair, measure both spans on the stage-1 rig, and quote the uncertainty; only then is a metre value displayable |
 | **X5** | An attachment-contact **exemption is one reviewed first-egress interval**; any re-entry after leaving is a violation, and the same mask applies to endpoint, sample, construction, projection and final validation | §7.3 (`ContactExemption`), §7.4.1, §12.2.1 (`exempt_re_entry`) | **confirmed by owner** | run the 1-D re-entry fixture: if the implementation accepts stations 0.5625–0.6875, the mask is not an interval |
 | **X6** | The **continuity observer is diagnostic only** and never a gate; **route hysteresis is removed from M1** | §7.4.3, §12.2 (`MusclePathContinuityTest`) | **confirmed by owner** | the observer-correctness fixtures: a rigid translation must not alarm, a branch switch must |
 | **X7** | **`NO_ROUTE` is disabled** until a proof procedure exists; the frame exposes a **terminal search outcome** (`SEARCH_EXHAUSTED` / `PASS_CAP`) separately from the **last geometric cause** | §7.4.1c, §7.4.5, §12.2.1 | **confirmed by owner** | `final_clearance_and_budget_both_fail`: one record, two fields, neither overwriting the other |
 | **X8** | **Categorical roles ship in M1**: schema, provenance/review validator and display gate, for exercises with a reviewed source only; the **pilot exercise list is owner-approved and fixed**: `squat`, `standard push-up`, `bird-dog`, `row_standard` | §7.3 (`MuscleRole.UNKNOWN`), §8, §9.2, §12.4 (RV4 poses), §12.5, §15 M1 item 10 | **confirmed by owner** | the validator runs on those four and every other exercise must display no role; the §12.4 pose set is drawn from them so that every M1 muscle is reviewed |
+| **X9** | **Minimal rotation stays the default roll convention**, confirmed as a **default** and **not** as evidence of anatomical adequacy; a **pole-vector frame** from published positions is the named comparator, with a declared fallback and continuity policy for near-straight limbs; the `pelvis` root takes a derived frame so an authored tilt is followed | §7.2 (the rule, the root frame, the roll bound), §11, §13 question 11, §15 stage 1 | **closed by owner — adequacy not claimed** | measure `θ` per segment on **all four pilots** (squat, standard push-up, bird-dog, `row_standard`) against the pole-vector comparator, report the `Float` quantisation as its uncertainty, and **set `τ_roll` on `\|d\| · θ` at stage 1** |
+| **X10** | **A1's baseline is the measured X1 bind-frame result** (`CHEST` 175.1 mm, 350.2×); 565.6 mm stays as a labelled posed comparison. Metres stay out of the UI (X4); `s` and the bind pose are per-body parameters tied to named landmarks, never to height; M1 is one generic reference body at a fixed `s = 247.3684` | §6.6, §9.2, §13 question 12, §15 stage 2 | **closed by owner** | build the stage-1 rig, measure both spans on it, keep the pair whose landmarks agree — and **recompute every residual at that calibration**, never rescale the old table |
 
 **Known traps from the device run (spike #384).** Each cost a debugging cycle on real hardware, and each is a property of
 the current code, not of the model. PR #385 at `bcb3658` contained none of the first three fixes; the current head
@@ -3368,6 +3511,21 @@ cover segment proportions, because a long-femur body is a different motion defin
 Supporting one means a new `SkeletonDefinition` id, a rig profile that still satisfies §6.1, and revalidation of every
 pose, attachment and retarget path. Deferred, not forbidden.
 
+**Scaling the visual asset is not the transform X10's invariance is about.** A profile's uniform scale changes the drawn
+size and the asset's metres; it does not scale the anatomy's attachment offsets, the obstacle radii, `eps_num`,
+`corridorMetres` or the 0.01 m resampling spacing, and it does not re-run the solve. The invariance §13 question 12 states
+holds only for a **common similarity transform of every geometric input and every dimensional solver parameter, applied
+with the same route and the same discretisation `N`** — so "uniform scale for size" here is a presentation change and says
+nothing about `relativePathLengthChange`. This decision is therefore about appearance; whether a size change touches the
+motion or anatomy solve is the separate question §6.1 answers (it does not, in v1).
+
+The fixed floor in `τ_len · max(1, |restDir| · s)` (§7.2) is the worked counterexample to reading invariance off the ratio
+alone: `max(1, ·)` is not homogeneous, so a body scaled down until `|restDir| · s < 1` keeps the same absolute threshold
+while every length around it shrinks, and a segment's degeneracy verdict then depends on the scale. `MuscleLengthScaleTest`
+consequently exercises the **branch**, not only the ratio: a common transform that keeps `|restDir| · s > 1` must leave the
+verdict unchanged, and one that crosses the floor must report the change — a test that only compares the ratio formula
+would pass while the solver's own threshold moved underneath it.
+
 **D5. How should muscle geometry react to length changes?**
 *Through the path only. M1 applies no cross-section response.* A muscle's length and position follow from its solved
 path; its cross-section is constant. This is the honest option: **the modelled path becomes shorter and that is all the
@@ -3377,10 +3535,15 @@ and activation never moves geometry in either case.
 
 **D6. How should scapula and shoulder-girdle motion influence muscle paths?**
 *Through attachments pinned to `SCAPULA_A/P` and `CLAVICLE_A/P`, plus one or two thorax wrap surfaces.* The engine
-already animates the girdle (`SkeletonFactory.kt:71-80`; scapular rotation is authored and solved), so the paths follow
-for free. What must not happen is a second shoulder model in the character layer (a look-at or an IK-driven scapula):
-that would be a competing solver and would desynchronise muscles from the mesh. The rig's scapula bone must consume the
-engine's scapula rotation, not a positional approximation.
+already animates the girdle (`SkeletonFactory.kt:71-80`; scapular motion is authored and solved), so the paths follow for
+free. What must not happen is a second shoulder model in the character layer (a look-at or an IK-driven scapula): that
+would be a competing solver and would desynchronise muscles from the mesh. **The rig's scapula bone is driven by the same
+position rule as every other mapped bone** — the minimal rotation from its bind direction to the published
+`SCAPULA → SHOULDER` direction, carried through the parent's posed rotation (§6.2, X3) — and not by an "engine scapula
+rotation". There is no such rotation to consume: the engine publishes positions, the published rotation of a girdle node
+is its parent's (§7.2), and requiring a rotation source that does not exist is what produced the earlier contradiction
+between this decision and the confirmed X3 rule. Direction and parent roll are what the rig needs, and both are functions
+of published positions.
 
 **D7. Authored activation per exercise, or derived from reusable rules?**
 *Authored per exercise, with reusable phase rules and a required source.* Deriving activation from joint angles or
@@ -3501,20 +3664,24 @@ schedule risk, not the engineering one.
   which had no scapula), the **10 undrivable engine joints are declared** (X2) and the **11 orphan
   asset bones are reported as visual-only**, not as failures; the visual-bone count is inside the 30-bone allowance
   (10 used, §6.1); side check passes; budgets reported; **A1 green on every mapped joint (≤ 0.5 mm, ≤ 0.5°)** with the
-  finger bones excluded from the comparison and listed as unmapped; A2 **measured** at the three named poses (5 mm), which is a measurement the
-  shipped asset has not had. The `humanoid_v1` baseline fails A1 at 1131× the tolerance (§6.6) and **has no A2
-  measurement at all**, so neither number is a formality: A1 is a construction property of the new rig, and A2 is the
-  first measurement anything in this programme has made on posed frames.
+  finger bones excluded from the comparison and listed as unmapped; A2 **measured** at the six named poses (5 mm), which is a measurement the
+  shipped asset has not had; and `PoseRetargeterBasisTest` green through the real construction and upload path, with its
+  wrong-basis control red. The `humanoid_v1` baseline fails A1 at **350.2×** the tolerance at the X1 bind frame
+  (`CHEST`, 175.1 mm; §6.6 — the 565.6 mm hand figure is the posed standing-frame comparison, not the A1 result) and
+  **has no A2 measurement at all**, so neither number is a formality: A1 is a construction property of the new rig, and A2
+  is the first measurement anything in this programme has made on posed frames.
 - **Manual acceptance:** no visible shear, no T-pose at frame 0, joints hold across a squat, a hinge and an overhead
   reach.
-- **Gate:** the character renders on a device, and **A1 is green on the new rig — which requires the X3 retarget change to
-  have landed first, because A1 measures a converted asset point against a published joint and the conversion is the
-  retarget's basis.** Without X3 the gate goes green on an unanimated figure: the rig would be measured at bind, pass, and
-  then be driven by a rest-delta path with no basis. A2 green is additionally required at the three named poses. FPS and
-  thermal numbers are recorded as information, not as a gate — the owner's decision is result first, optimisation later
-  (§12.3).
-- **Risks:** rig art quality; scapula bone without a matching engine rotation would desync (mitigated by D6);
-  toolchain pin; a generator whose morph re-banding silently changes the body's silhouette (mitigated by step 7 and L6).
+- **Gate:** the character renders on a device, **A1 is green on the new rig**, **A2 is green at the six named poses**, and
+  **`PoseRetargeterBasisTest` is green with its wrong-basis control red**. A1 alone does not carry this gate: it converts
+  an asset point in the test with `s · Ry(+90°) · p_asset`, so a converter that does that passes while the production
+  retargeter still composes with `basis = IDENTITY` — the gate would go green on an unanimated figure, measured at bind,
+  then driven by a rest-delta path with no basis. The runtime path is what `PoseRetargeterBasisTest` asserts, through the
+  real construction and upload path with nonzero asymmetric landmarks. FPS and thermal numbers are recorded as
+  information, not as a gate — the owner's decision is result first, optimisation later (§12.3).
+- **Risks:** rig art quality; scapula bone whose motion reaches it only through positions (mitigated by D6 and the
+  derived segment frames of §7.2); toolchain pin; a generator whose morph re-banding silently changes the body's
+  silhouette (mitigated by step 7 and L6).
 - **Effort:** 3–4 engineering weeks + 2–3 rig-art weeks.
 - **Art/expertise:** yes, rigging.
 
