@@ -1697,12 +1697,24 @@ enum class Segment {
 }
 
 /**
+ * Where an attachment's numbers came from. The only acceptable recorded value is `DERIVED_SEGMENT`; `UNRECORDED` is the
+ * declared default for data whose authoring frame nobody wrote down, and L3 reports it as **frame unverified** rather
+ * than passing it (§7.3, §12.4 RV1).
+ */
+enum class AttachmentFrame { DERIVED_SEGMENT, UNRECORDED }
+
+/**
  * A point pinned to a canonical segment, in metres, authored in that segment's **derived frame** (§7.2) — the frame that
  * gives the segment its direction, not the node's axes and not the world bind axes. Axes are `+Y` superior and `+X`/`+Z`
  * the sagittal and lateral axes with the sign the derived frame fixes, so at bind `+X` resolves along world `−X` and `+Z`
- * along world `−Z` (side `A`). Side `P` is the mirror: same numbers, `z` negated.
+ * along world `−Z` (side `A`). Side `P` is the mirror: same numbers, `z` negated. `frame` records which convention
+ * produced them, so the review gate reads a value instead of inferring one.
  */
-data class Attachment(val segment: Segment, val x: Float, val y: Float, val z: Float)
+data class Attachment(
+    val segment: Segment,
+    val x: Float, val y: Float, val z: Float,
+    val frame: AttachmentFrame = AttachmentFrame.UNRECORDED   // which convention produced these three numbers
+)
 
 /**
  * A declared exemption from the clearance predicate: one obstacle, one head, one path interval (§7.4.1).
@@ -1807,6 +1819,13 @@ one: a **solver-derived rest length** — the same solver at the X1 bind frame, 
 where the definition or §12.4 names one**, with the source, the reference stance and the uncertainty recorded. A head with
 no named external reference records an **evidence gap**, which is neither a pass nor an M1 blocker. This document makes no
 tape-measure claim: nothing here has been measured on a body.
+
+**Provenance is carried per attachment, not per instance, and that is the field the review gate closes.** Every `Attachment`
+— origin, insertion **and every waypoint** — declares `Attachment.frame`, so "which convention produced these numbers" is a
+value on the record rather than a convention inferred from the KDoc. A head can have correctly reviewed endpoints and a
+waypoint authored in the old node or world axes, and a per-instance check cannot see that mixed frame; RV1 (§12.4)
+therefore closes each attachment separately. `frame` defaults to `UNRECORDED`, and `UNRECORDED` is reported as **frame
+unverified**, never silently read as `DERIVED_SEGMENT`.
 
 **Whether each placeholder was authored against the derived segment frame is not recorded, and that is stated per instance
 rather than assumed for the set.** §7.7.1 fixes the M1 set at **18 head-side instances**; this section supplies one worked
@@ -3704,7 +3723,7 @@ Seven levels, each with one owner, one report and an explicit automation status.
 | --- | --- | --- | --- | --- |
 | **L1 Motion** | 18 existing rules over joint-space geometry (`ExerciseValidator.kt:47-92`) | yes, unchanged | all | the pose/engine is wrong; block |
 | **L2 Rig** | bone coverage, rest invariant, inverse binds, side/handedness, unit scale, bone budget, landmark alignment (§6.6) | yes | all | the asset or map is wrong; block |
-| **L3 Attachments** | every attachment's joint exists; the offset is **authored in the segment's derived frame (§7.2)** and the data names that frame rather than leaving it to be inferred; offset inside a segment envelope; L/R mirror; head count; origin ≠ insertion; span ≥ 2 segments. The frame's **sign** is a review fact, not an L3 fact: L3 can check that a declared frame is the one the resolver applies, and an instance whose authoring frame is unrecorded is reported **frame unverified** rather than passed (§7.3, §12.4 RV1) | yes | all | the anatomy data is wrong; block |
+| **L3 Attachments** | every attachment's joint exists; the offset is **authored in the segment's derived frame (§7.2)** and every attachment — origin, insertion **and waypoint** — carries `Attachment.frame` naming that convention rather than leaving it to be inferred; offset inside a segment envelope; L/R mirror; head count; origin ≠ insertion; span ≥ 2 segments. The frame's **sign** is a review fact, not an L3 fact: L3 can check that a declared frame is the one the resolver applies, and an attachment whose authoring frame is `UNRECORDED` puts its whole head-side instance in **frame unverified** rather than passed (§7.3, §12.4 RV1) | yes | all | the anatomy data is wrong; block |
 | **L4 Path** | every segment of the final polyline tested against every obstacle in the head's ordered union, in one exhaustive three-stage state machine — bounding-sphere clear, a quadratic **intersection test that requires a witness station** (a chord whose entry cannot beat the coefficient error, or cannot carry a proved enclosure for it, routes onward and is never called an intersection), then the finite-segment minimum of `d(t) − r(t)` (**solid** ellipsoid distance) with a Lipschitz bracket, the radius taper split at every knot, and `UNCERTAIN` failing closed — plus the sample-outside check; unverifiable geometry reported `INVALID` with a reason from the one table; deterministic outcome for overlapping, nested and closed routes; tangent and curvature continuity at entry/exit (gated); a **solver-derived rest length that is finite, strictly positive and reproducible** for every head (§7.4.4), and — **only where the definition or the review names one** — a comparison against a sourced external reference recorded with source, task, population and uncertainty, where a missing reference is an evidence gap and neither a pass nor a blocker. The continuity observer is **diagnostic only** and is not part of this gate (X6). The clearance floor itself is **conditional** on the input bounds, the error analysis of §7.4.1 and a bound for the point-to-ellipsoid solve — which §7.4.1b-1 does not yet have, so **no numerical floor is claimed until it does** | yes, with adversarial fixtures | all | the solver or the data is wrong; block |
 | **L5 Mesh** | self-intersection, degenerate triangles, weight sums, volume sanity per muscle, helper-bone bind match | partly (tool) | **subset** (§12.5) | the mesh is wrong; block release, not build |
 | **L6 Morphology** | declared ranges respected per target; **mesh** ring/mask vertices relative to joint pivots within `ε_morph`; delta bounds | **yes — the morph and ring checks only** | **subset** (§12.5) | a preset breaks the surface the muscles sit under; block the preset. A bone-landmark rest invariant is **not** an L6 assertion: a vertex-only morph cannot move a bone, so it is tautological. **"Anatomy still inside the body" is not automated and is not L6**: it needs a mesh-intersection tool M1 does not ship, so it is an L7 RV2/RV3 judgement (§12.5, §13 question 9) |
@@ -3942,7 +3961,7 @@ approving the wrong one:
 
 | # | Criterion | What "pass" means |
 | --- | --- | --- |
-| RV1 | Attachment locations, authoring frame and sign | each origin and insertion lands on the landmark named in the definition, within the tolerance stated in the review record; **and the frame the offsets were authored in is confirmed per instance, not assumed.** The record names, for each of the 18 M1 head-side instances of §7.3, the instance's status, and closes a **frame unverified** row only with a **left/right** check (the instance and its mirror land on opposite sides of the derived frame's `+Z`, on the cited landmark pair) **and** an **anterior/posterior** check (an origin the definition calls anterior lands on the anterior landmark the review cites). A 180° error about `Y` leaves every symmetry check and every L3 envelope test satisfied, so an instance with neither check is unverified and M1 does not accept it |
+| RV1 | Attachment locations, authoring frame and sign | each origin, insertion **and every waypoint** lands on the landmark named in the definition, within the tolerance stated in the review record; **and the frame each of them was authored in is confirmed per attachment, not assumed and not inferred from its neighbours.** The record names, for each of the 18 M1 head-side instances of §7.3, the instance's status **and the status of every attachment it carries — origins, insertions and waypoints — because a head with reviewed endpoints and an unreviewed waypoint passes any per-instance check while mixing two frames**, and closes a **frame unverified** row only with a **left/right** check (the attachment and its mirror land on opposite sides of the derived frame's `+Z`, on the cited landmark pair) **and** an **anterior/posterior** check (an attachment the definition calls anterior lands on the anterior landmark the review cites), applied to each attachment of the instance. A 180° error about `Y` leaves every symmetry check and every L3 envelope test satisfied, so an attachment with neither check is unverified and M1 does not accept it |
 | RV2 | Position relative to bones and body surface | the belly sits in the correct compartment: not inside bone, not outside skin, not on the wrong side of a joint |
 | RV3 | Visible intersections | no intersection with skin or with an adjacent muscle in any reviewed pose, at the layer visibility the milestone ships |
 | RV4 | Plausible shape and path across poses | path and silhouette read as that muscle in every pose of the M1 review set — five poses from the four pilot exercises of X8 — plus any pose the reviewer asks for. The set is chosen so that **every M1 muscle is posed for review at least once**: `squat` bottom and top (gluteus maximus, gluteus medius, biceps femoris on both heads, rectus femoris, erector spinae, rectus abdominis), `standard push-up` bottom (the abdominal wall in a second configuration: rectus abdominis, external oblique, erector spinae), `bird-dog` (erector spinae, external oblique, gluteus maximus and gluteus medius in a hip-extension configuration) and `row_standard` mid-pull (**latissimus dorsi**, whose humeral insertion no squat, push-up or bird-dog pose carries through a pull). **Latissimus dorsi is the muscle the set exists for**: a review built only from squat and push-up poses would leave one of the eight unreviewed and still look complete. A pose outside the set is outside the review, not inside a guarantee. **Pose coverage is not builder coverage, and this set is A2's whole set**: squat top and bottom are two frames of one builder, so these five frames come from four registered builders, and A2 measures the same five from the same four (§6.6) — the asymmetry an earlier revision carried, where A2 measured a sixth frame this criterion never reviewed, is closed by dropping that frame. What neither criterion reaches is **arm elevation above shoulder height**, which no M1 pilot exercise needs and which the record below carries as a limitation |
