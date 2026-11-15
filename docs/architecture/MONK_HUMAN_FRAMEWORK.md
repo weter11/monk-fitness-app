@@ -488,41 +488,70 @@ class AnatomyDefinition(
 /**
  * One frame of derived anatomy. Every per-frame number lives in a preallocated parallel array indexed by head; the
  * buffers are reused, so a consumer must finish before the next solve.
+ *
+ * `headCount` is the number of *instances*: Σ over muscles of heads × sides. `pointCapacity` is the post-insertion
+ * maximum, not the resampling `N` of §7.4 step 3, because step 4 inserts points.
  */
 class AnatomyFrame(headCount: Int, pointCapacity: Int, landmarkCount: Int) {
-    val lengths = FloatArray(headCount)          // along this head's path, wrap detours included
-    val restLengths = FloatArray(headCount)      // bind-pose length for this head and body profile
-    val tendonLengths = FloatArray(headCount)    // origin + insertion tendon portions
-    val strains = FloatArray(headCount)          // length / restLength - 1; reported, not a geometry input
-    val statuses = IntArray(headCount)           // PathStatus ordinal: VALID, or INVALID with a reason (§7.4.2)
+    /** Identity per slot, in a fixed order: the only key a consumer may use. Backs `MuscleState.id`/`side`/`headIndex`. */
+    val heads: List<MuscleHeadId>
+
+    val modelledPathLengths = FloatArray(headCount)          // along this head's path, wrap detours included
+    val restLengths = FloatArray(headCount)                  // same solver at the reference stance; finite and > 0
+    val visualTendonPortionLengths = FloatArray(headCount)    // authored visual partition, not a measured tendon
+    val relativePathLengthChanges = FloatArray(headCount)     // modelledPathLength / restLength - 1
+
+    /** PathStatus ordinal. `clear()` writes INVALID to every slot; a status is never left over from the last frame. */
+    val statuses = IntArray(headCount)
+    val reasonCodes = IntArray(headCount)        // PathReason ordinal; NO_REASON only where status is VALID
+    val failingSegments = IntArray(headCount)    // segment index, or NO_INDEX
+    val failingObstacles = IntArray(headCount)   // index into the definition's obstacle list, or NO_INDEX
     val pointCounts = IntArray(headCount)
-    /** Path in engine world units, sampled at `pointCounts[head]` points; capacity includes the insertion allowance. */
-    val paths = FloatArray(headCount * pointCapacity)
+
+    /** Path points, engine world units. Stride: `head * 3 * pointCapacity + point * 3 + {x, y, z}`. */
+    val paths = FloatArray(headCount * 3 * pointCapacity)
     val landmarks = FloatArray(landmarkCount * 3)
 
     /** One view per head, built once at construction; reading it allocates nothing. */
     val muscleStates: List<MuscleState>
+
+    /** Start of every solve: statuses INVALID, reasons NO_REASON, counts 0, indices NO_INDEX, lengths cleared. */
+    fun clear()
 }
 
 /**
- * Read-only view over one head's slot in an [AnatomyFrame]. Identity and head metadata are static, from the definition;
- * every per-frame value is a getter into the frame's arrays, so this type never owns a value.
+ * Read-only view over one head's slot in an [AnatomyFrame]. Identity and metadata are backed by the immutable
+ * definition; every per-frame value is a getter into the frame's arrays, so this type never owns a value.
  */
-class MuscleState internal constructor(private val frame: AnatomyFrame, val head: Int) {
-    val id: String               // from the definition
-    val side: Side
-    val headIndex: Int           // 0 for single-head muscles; path and length are per head (§7.5)
-    val headCount: Int
-    val pointCount: Int get() = frame.pointCounts[head]
-    val length: Float get() = frame.lengths[head]
-    val restLength: Float get() = frame.restLengths[head]
-    val tendonLength: Float get() = frame.tendonLengths[head]
-    val strain: Float get() = frame.strains[head]
-    val pathStatus: PathStatus get() = PathStatus.entries[frame.statuses[head]]
+class MuscleState internal constructor(
+    private val frame: AnatomyFrame,
+    private val slot: Int,
+    private val definition: MuscleDefinition   // id, name, side, layer: static, never per frame
+) {
+    val id: String get() = definition.id
+    val name: String get() = definition.name
+    val side: Side get() = frame.heads[slot].side
+    val headIndex: Int get() = frame.heads[slot].headIndex   // 0 for single-head muscles (§7.5)
+    val headCount: Int get() = definition.heads.size
+    val pointCount: Int get() = frame.pointCounts[slot]
+    val modelledPathLength: Float get() = frame.modelledPathLengths[slot]
+    val restLength: Float get() = frame.restLengths[slot]
+    val visualTendonPortionLength: Float get() = frame.visualTendonPortionLengths[slot]
+    val relativePathLengthChange: Float get() = frame.relativePathLengthChanges[slot]
+    val pathStatus: PathStatus get() = PathStatus.entries[frame.statuses[slot]]
+    val reason: PathReason get() = PathReason.entries[frame.reasonCodes[slot]]
+    val failingSegment: Int get() = frame.failingSegments[slot]
+    val failingObstacle: Int get() = frame.failingObstacles[slot]
 
     /** Reads `frame.paths` at this head's offset; allocates nothing. */
     fun pathPoint(index: Int, out: Vector3)
+
+    /** Zero-allocation read-only view over this head's whole path; valid until the next solve. */
+    val path: PathView
 }
+
+/** Segment index and obstacle index have no value when the head is VALID; -1 is that no-value convention. */
+const val NO_INDEX = -1
 
 /** Pure: reads the published pose, writes only its own output buffer. */
 class AnatomySolver(private val definition: AnatomyDefinition) {
@@ -534,9 +563,24 @@ class AnatomySolver(private val definition: AnatomyDefinition) {
 `pathStatus` as `val`s on `MuscleState` while saying the buffers were reused — with one state per head that is a fresh
 object graph every frame, exactly the allocation the carrier discipline exists to avoid. The values now live in the
 frame's parallel arrays and `MuscleState` is a read-only view over them: `frame.muscleStates` is built once, `solve`
-writes only arrays, and a consumer that needs a value later copies the number, not the state. The later sections still
-speak of `MuscleState.length`, `MuscleState.path`, `restLength`, `strain` and `pathStatus`; under this contract those are
-view getters over the frame, not fields of their own.
+writes only arrays, and a consumer that needs a value later copies the number, not the state.
+
+**Nothing outside the frame reads `paths` directly.** A path is read either through `pathPoint(index, out)` — which
+bounds-checks `index` against `pointCount` and returns the point in the caller's vector — or through `path`, a
+zero-allocation view whose `get(index, out)` does the same and whose `size` is `pointCount`. Both address the slot with
+the documented `head * 3 * pointCapacity + point * 3` stride, so no consumer re-derives an offset and no consumer can
+hold a reference to the buffer past the next solve.
+
+**The array layout is a contract, with overflow checks.** `paths` is `3 · headCount · pointCapacity` floats and every
+write goes through the frame, which raises `BUFFER_CAPACITY` for that head (§7.4.1) rather than growing an array or
+truncating a path. `pointCapacity` is the post-insertion maximum: a capacity sized for the resampling `N` alone
+under-counts by exactly the points construction inserts, which is the defect this layout removes.
+
+**A status is never inherited.** `clear()` sets every slot `INVALID`, `NO_REASON`, `NO_INDEX`, `pointCount = 0` before
+the solve touches anything, so a head the solver never reaches — a definition error, an early return, a reused buffer —
+reads `INVALID` rather than the last frame's `VALID`. Reason precedence is fixed and deterministic, and it is stated once
+in the authoritative reason table (§7.4.1c): the first matching row in table order wins, so two implementations that hit
+two conditions report the same reason.
 
 ```kotlin
 // ---- Character Appearance Model --------------------------------------------
@@ -555,7 +599,8 @@ class MuscleLayerSkinner(
     fun write(frame: AnatomyFrame, baseWorld: FloatArray, out: FloatArray)
 }
 
-data class MuscleHeadId(val muscleId: String, val headIndex: Int)
+/** Per-instance identity. `side` is part of the key: a bilateral muscle is two instances with independent paths. */
+data class MuscleHeadId(val muscleId: String, val side: Side, val headIndex: Int)
 ```
 
 ```kotlin
@@ -928,7 +973,8 @@ The design separates four objects that a naive implementation would fuse into on
 
 1. **`MuscleDefinition`** — static: name, side, layer, origin and insertion attachments, waypoints, width/thickness
    profile, tendon fractions, wrap surfaces, role memberships. Text, reviewable, character-independent.
-2. **`MuscleState`** — per frame: solved path, arc length, rest length, strain, tendon lengths. No geometry.
+2. **`MuscleState`** — per frame: solved path, `modelledPathLength`, `restLength`, `relativePathLengthChange`,
+   `visualTendonPortionLength`. No geometry.
 3. **Muscle geometry** — the visible mesh, produced by a renderable strategy (§7.5) from the path.
 4. **Muscle activation** — exercise semantics (§8), never a property of the definition.
 
@@ -1121,9 +1167,9 @@ for each head:
         every segment disjoint from every (inflated) obstacle, every sample outside the inflated surface by the
         ε_pen numerical margin;
         any failure, or any result the check cannot establish, → PathStatus.INVALID, stop.
-  7  length = Σ |p[i] − p[i−1]|          // along the solved path, NOT the straight chord
-  8  tendonLength = originFraction * length + insertionFraction * length
-  9  strain = length / restLength − 1     // reported; never a geometry input (§7.6)
+  7  modelledPathLength = Σ |p[i] − p[i−1]|    // along the solved path, NOT the straight chord
+  8  visualTendonPortionLength = (originFraction + insertionFraction) * modelledPathLength
+  9  relativePathLengthChange = modelledPathLength / restLength − 1   // reported; never a geometry input (§7.6)
 ```
 
 Step 4 inserts points, so the path buffer is sized for `N_max` plus a declared insertion allowance; exceeding it is
@@ -1132,6 +1178,25 @@ Step 4 inserts points, so the path buffer is sized for `N_max` plus a declared i
 `MuscleState` therefore carries a `PathStatus` — `VALID`, or `INVALID` with a reason and the failing segment and
 obstacle indices. A consumer may not read a missing status as `VALID`, and no layer draws an `INVALID` path as if it
 were anatomy.
+
+**Renderability is per instance, and it is a mask rather than a hint.** The frame publishes a per-instance renderability
+bit; the character layer consumes either that bit or a prefiltered dynamic-geometry list built from it, and the rules are
+these:
+
+- `INVALID` hides that instance **in the same frame** — no fade, no retry, no "last good path" — and its previously
+  uploaded geometry is cleared, so a stale tube cannot be drawn along the last valid route while the solver reports a
+  failure.
+- A multi-head muscle is **all-or-nothing**: one invalid head hides the whole instance, because a muscle drawn with one
+  of its heads missing is a shape no reviewer approved. A per-head behaviour is allowed only if the definition declares
+  it explicitly and §12.4 reviews the half-drawn silhouette as a separate criterion.
+- The reason is **diagnostic only**. It goes to the validator report and the debug overlay; it never reaches user-facing
+  copy, and it never selects a colour that implies anatomy.
+- **The skeleton is untouched.** A hidden muscle never freezes, hides or moves a joint — the path is hidden, the pose is
+  not (§11, hard rule 1).
+
+`MuscleRenderabilityTest` (L4/presentation) drives valid → invalid → valid on one instance across carrier reuse and
+asserts the mask, the cleared geometry and the restored path. A stale buffer that survives an invalid frame is exactly
+the failure it exists to catch, and a test that only checks the first valid frame cannot see it.
 
 #### 7.4.1 Obstacle validation contract
 
@@ -1345,8 +1410,16 @@ Design notes:
 
 - **Length is arc length along the solved path.** A straight-chord measure reports shortening wherever a muscle wraps a
   joint, which inverts the sign of the reported change. This is the single most important correctness rule in the model.
-- **`restLength` comes from the same solver at the bind stance**, not from the definition's numbers, so the rest state
-  and the runtime can never disagree (this is also what the exporter bakes; §10.4).
+- **`restLength` comes from the same solver at the reference stance**, not from the definition's numbers, so the rest
+  state and the runtime can never disagree (this is also what the exporter bakes; §10.4). The **reference stance** is the
+  engine's rest stance of §6.1 — arms at the sides, the pose every builder starts from — and it is named in the
+  definition version. `restLength` must be finite and strictly greater than zero for every head; a head that cannot
+  produce one is `INVALID` with `REST_LENGTH_INVALID` (§7.4.1c) rather than dividing by it. A relative change computed
+  against a zero or a NaN rest length is not a small error, it is a meaningless number that reads as a large one.
+- **A length comparison with literature is a record, not a number.** Where a measured reference exists, the comparison
+  states: the source, the model or subject it came from, the pose or joint configuration, the normalisation used (muscle
+  length over which span, at which reference), the tolerance, and the uncertainty. A row with no source is an **evidence
+  gap** and is displayed as one — never as a pass, and never as a zero.
 - **No joint motion is written.** The solver reads `pose` and writes only `AnatomyFrame`.
 
 #### 7.4.5 Route construction (bounded heuristic)
@@ -1443,7 +1516,7 @@ that set is a research question, not a regression.
 The contract that makes them interchangeable is the path, not the mesh:
 
 ```
-MuscleState.path  ──►  A: tube generator  ──► dynamic vertex buffer
+MuscleState.pathPoint(i, out)  ──►  A: tube generator  ──► dynamic vertex buffer
                   └─►  C: helper bone transforms ──► skinned mesh (bones authored at the rest path)
 ```
 
@@ -1491,8 +1564,8 @@ about *ownership and evidence*, not about a single writer:
 | Per-muscle animation curve or timeline | — | nothing defensible | **no** | forbidden outright |
 
 The testable consequence, and the reason this is a contract rather than a slogan: for a fixed `SkeletonPose`, toggling
-morphs or correctives may change vertices, but must leave every `MuscleState` — path, `pointCount`, length, rest length,
-strain, `PathStatus` — bit-identical. `MuscleGeometryOwnershipTest` (L4/presentation boundary) asserts exactly that, and
+morphs or correctives may change vertices, but must leave every `MuscleState` — path, `pointCount`,
+`modelledPathLength`, `restLength`, `relativePathLengthChange`, `PathStatus` — bit-identical. `MuscleGeometryOwnershipTest` (L4/presentation boundary) asserts exactly that, and
 also asserts the converse: nothing in the character layer writes `AnatomyFrame`.
 
 One honest caveat about strategy C: as helpers separate along the path, linear-blend skinning stretches the mesh between
@@ -1525,8 +1598,8 @@ shipped:
 
 **Forbidden, per §11:** any bulge keyed to activation; any per-muscle animation curve; any cross-section change not
 derived from a measured length (M1 has none); any substitute heuristic ("thicker when the exercise is harder", "pulse on
-the concentric phase"). `strain` is reported for the length readout and the education panel; it is never a geometry
-input.
+the concentric phase"). `relativePathLengthChange` is reported for the length readout and the education panel; it is
+never a geometry input.
 
 ### 7.7 Layers, and what is deferred
 
@@ -1886,6 +1959,8 @@ Seven levels, each with one owner, one report and an explicit automation status.
 | `MuscleLengthReferenceTest` | L4 | length matches expert-reviewed reference data where it exists, within the stated tolerance; absent reference data is reported as a gap, not a pass |
 | `MuscleDirectionalExpectationTest` | L4 | only exercise- and muscle-specific expectations, each carrying a documented justification and source |
 | `MuscleRestLengthTest` | L4 | solved rest length matches the calibrated reference within tolerance |
+| `MuscleRenderabilityTest` | L4 / presentation | §7.4: an `INVALID` instance is masked and its geometry cleared in the same frame; multi-head is all-or-nothing; valid → invalid → valid restores the path across carrier reuse |
+| `AnatomyFrameLayoutTest` | L4 | §5.3: the `3 · headCount · pointCapacity` stride addresses every point of every head; `pointCapacity` is the post-insertion maximum; an over-capacity head reports `BUFFER_CAPACITY` instead of growing or truncating; `clear()` leaves every slot `INVALID` |
 | `MuscleGeometryOwnershipTest` | L4 / presentation | §7.6: toggling morphs or correctives leaves every `MuscleState` bit-identical, and nothing in `character/` writes `AnatomyFrame` |
 | `ProceduralTubeBudgetTest` | L5 (M1 subset) | generated triangles match the §10.3 formula for the declared `N` and `R`; no zero-area ring; all coordinates finite |
 | `MorphPresetTest` | L6 | rest invariant per preset; joint rings unmoved beyond tolerance |
