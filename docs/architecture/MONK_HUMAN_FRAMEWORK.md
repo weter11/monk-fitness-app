@@ -1865,15 +1865,22 @@ d(t) = Euclidean distance from p(t) to the closed SOLID ellipsoid, in engine uni
        a = qd·qd,   b = 2 q0·qd,   c0 = q0·q0 − 1,   Δ = b² − 4 a c0
    Δ, t0 and t1 say whether the chord enters and where, which is what the failure report names.
    They are never the verdict, and Δ > Δ_tol is not an intersection.
-   INTERSECT requires a WITNESS STATION t_m — the midpoint of the root interval's overlap
-   with [0, 1] — at which the same rounded coefficients give
-       s(t_m) = q0·q0 + 2·t_m·(q0·qd) + t_m²·(qd·qd)   ≤   1 − κ_s,
-       κ_s = κ_c · (s(t_m) + 1),        κ_c = 1e-12
-   A station that wins by more than the declared forward error of the coefficient formation is
-   inside the closed solid, so the pair is an intersection whatever the roots' last bits do.
-   INVALID, SEGMENT_INTERSECTS_OBSTACLE, d = 0 < r is reported only for a witnessed entry.
-   No witness → UNCERTAIN → stage 3, which decides on distance. A chord whose c0 is lost to the
-   subtraction, or whose only contact with [0, 1] is an endpoint, has no witness.
+   INTERSECT requires BOTH of:
+     (i) a WITNESS STATION t_m — the midpoint of the root interval's overlap with [0, 1] —
+         at which the same rounded coefficients give
+             s(t_m) = q0·q0 + 2·t_m·(q0·qd) + t_m²·(qd·qd)   ≤   1 − κ_s,
+             κ_s = κ_c · (s(t_m) + 1)
+     (ii) a PROVED ENCLOSURE for the operations that formed q0, qd and s on THIS input:
+          either κ_s is a forward-error bound derived for the represented inputs, or the
+          input lies inside declared supported geometry (an axis-ratio and scale range) on
+          which κ_s has been proved. κ_c = 1e-12 is NEITHER: it is not a universal bound
+          over the permitted positive-axis domain (a false witness is reproducible below).
+   Without (ii) a station that beats κ_s routes to stage 3 as UNCERTAIN — not INTERSECT.
+   The enclosure condition is recorded per pair beside the verdict.
+   INVALID, SEGMENT_INTERSECTS_OBSTACLE, d = 0 < r is reported only for a witnessed entry
+   whose enclosure holds; an unproved witness reports UNCERTIFIED_MINIMUM after stage 3.
+   No witness → UNCERTAIN → stage 3, which decides on distance. A chord whose c0 is lost to
+   the subtraction, or whose only contact with [0, 1] is an endpoint, has no witness.
    The root interval is still necessary: an empty overlap has no candidate station at all, and
    that is a segment that misses (fixture tangent_off_segment_clear). It is not sufficient —
    both Float chords below have a non-empty overlap and no entry.
@@ -1894,6 +1901,15 @@ d(t) = Euclidean distance from p(t) to the closed SOLID ellipsoid, in engine uni
    miss becomes CLEAR or INVALID; stage 3 never runs for a pair stage 1 cleared.
 ```
 
+**A stage-1 `CLEAR` is not subject to the fail-closed rule, and that is a proof rather than an exception.** The global
+rule in §7.4.1c makes every pair with no bound on the point-to-ellipsoid distance `UNCERTAIN`; a stage-1 pair is not such
+a pair, because its `CLEAR` rests on `|c − cw| − h > max_R + max_r + e` — one inequality over published positions, the
+declared obstacle radii and the path's own tube radius, with no root solve and no distance evaluation anywhere in it. Such
+a pair is **independently cleared by a proved sphere test** and never reaches the branch that reports
+`UNCERTIFIED_MINIMUM`. Two limits keep this from becoming a loophole: condition (a)'s operand bound still applies to a
+stage-1 operand, and a pair that *fails* stage 1 by any margin is `UNCERTAIN` rather than clear — failing a sufficient
+condition proves nothing about the opposite, which is why stage 1 can accept early and can never reject.
+
 **Why a witness, and the two `Float` chords that show an interval is not one.** `c0 = q0·q0 − 1` subtracts two numbers
 that are both close to 1 exactly when the segment grazes the surface, so the excess it should carry can vanish below the
 mantissa. **(i)** Unit sphere, two `Float`-representable endpoints `(1, v, 0)` and `(1, 2v, 0)` with
@@ -1909,14 +1925,46 @@ band, so it routes onward), and the witness rule does: `s(0) = 1 > 1 − κ_s`, 
 pair is strictly outside throughout, with exact squared excess `9.999999434361379e-19` at that endpoint and exact lower
 root `1 + 5.0e-19`. `|c0| = 3 > κ_c·(q0·q0 + 1) = 5e-12`, so **the coefficient band passes it**: an interval test alone
 certifies an intersection for a segment that never enters. The witness rule refuses it as well — `s(1) = 1` exactly —
-so the pair goes to stage 3, where `min d ≈ 1e-9 < e` and the verdict is `CLEARANCE_VIOLATION`: the right reason, not
-`SEGMENT_INTERSECTS_OBSTACLE`.
+so the pair goes to stage 3, where the verdict is `CLEARANCE_VIOLATION`: the right reason, not
+`SEGMENT_INTERSECTS_OBSTACLE`. **The distance there is not `1e-9` and not `v`.** The nearest point of that segment has
+exact binary32 coordinate `v = 9.9999997171806853657471947371959686279296875e−10` beyond the unit sphere, so the distance
+to the **solid** is `√(1 + v²) − 1 = 4.999999717180689…e−19` — `v²/2` to first order, not `v`. `v` is the *coordinate*
+excess and `v²` is the squared excess; both earlier figures (`min d ≈ 1e-9`, and the same value printed in the fixture
+row) confused the three by nine orders of magnitude. A direct binary64 evaluation of `√(1 + v²) − 1` returns **`0`** by
+cancellation — `1 + v²` rounds to `1` — so it is not a reference either, and no resolved non-zero distance may be inferred
+from it. The verdict does not change: `4.999999717e−19 < e`, so the pair is a `CLEARANCE_VIOLATION` for the reason stated.
 
 Neither chord is a false CLEAR; both are false *certificates* and false *reasons*, and a reason that names the wrong
 failure sends the fix to the wrong place. `raw_near_surface_vanishing_excess` pins chord (i) and `raw_stage2_edge_touch`
 pins chord (ii) (§12.2.1): both must report `UNCERTAIN` at stage 2 and let stage 3 decide on distance. The rule is
 deliberately stated as a witness rather than as a tighter band, because (ii) has no cancellation in `c0` at all — no band
 on `c0` or on `Δ` can see it.
+
+**A witness is not a certificate, and the band that admits it is not a bound.** The two chords above show that a *root
+interval* is not an intersection; a third case shows that a *witness* is not one either. The coefficients are formed from
+represented operands, and the error of forming them is not bounded by `κ_c = 1e-12` over the permitted positive-axis
+domain — the transform, the subtraction and the thin-axis division can each lose a term far larger than that. Represented
+`Float` operands, with semi-axes `R = (1, 1.0000000168623835263871646450439811815158464014530181884765625e−16, 1)`, centre
+`cw = (0, 1.0000000036274937255387218471014421083964407444000244140625e−15, 0)`, endpoints `(−100, −100, 0)` and
+`(100, 100, 0)` and a 45° obstacle rotation whose binary64 entries are `±0.70710678118654757273731092936941422522068023681640625`:
+
+| quantity | binary64 evaluation of the written formulas | 100-digit reference on the same represented inputs |
+| --- | --- | --- |
+| `q0` | `(−141.4213562373095, 0, 0)` | `(−141.42135623730951, −7.0710677182806743, 0)` |
+| `a, b, c0` | `80000, −80000, 19999` | `80000.0000000000…, −80000.00000000…, 20048.999998676514` |
+| `Δ` / `Δ_tol` | `320000` / `0.01279968` | `Δ < 0` — no real roots |
+| `s(t_m)` at `t_m = 0.5` | **`0`** → witness, `s ≤ 1 − κ_s` | min normalised squared distance over `[0,1]` = **`49.999998676511057826257702406844`** |
+
+The failure is not in `Δ` and it is not a band problem: the transform subtracts the `1e−15` centre displacement from a
+coordinate of magnitude `100`, where binary64 spacing is `1.4e−14`, so the displacement is **gone before the thin-axis
+division** and the segment appears to pass through the centre — `s(0.5) = 0` exactly. The exact arithmetic puts the closest
+approach `7.0710677…` semi-axes away, comfortably outside the solid, so this is a **false intersection**: the wrong reason
+on a pair that is clear, which sends the fix to the muscle's path instead of to the arithmetic. A second `Float` scale
+(all coordinates and semi-axes divided by 100) returns the same witness, so it is not a one-off scale. **The revision under
+review permits this**, and the consequence is the rule above: a witness without a proved enclosure is `UNCERTAIN`, so
+`κ_c` is documented as an allowance that has to be **earned** by deliverable (2) or by a declared supported geometry, not
+as a bound it already has. The fixture that would exercise the proven branch is deferred with that deliverable; until it
+exists, every witnessed pair this document can construct also carries an unproved enclosure and fails closed.
 
 **`d` is a solid distance, and the difference is not cosmetic.** The distance from a point to an ellipsoid *surface*
 is not convex inside the body — for the unit sphere the surface distance at `x = −1, 0, 1` is `0, 1, 0` — so a
@@ -2008,7 +2056,7 @@ verdict no longer rests on the discriminant.
 | Precision | `Double` throughout the test; the published pose is `Float`, so that quantisation is an input to the budget below, not a term the test can remove |
 | Verdict | the finite-segment minimum predicate `min_t (d(t) − r(t)) ≥ e` — not a discriminant sign, not a root interval |
 | Discriminant and roots | `Δ`, `t0`, `t1` are **diagnostics only**: they say whether the segment enters and where, which is what the failure report needs. They never produce CLEAR, and they never produce INTERSECT without a witness station |
-| Witness band | `κ_c = 1e-12`, relative to `s(t_m) + 1` — the declared forward-error allowance on the coefficient formation. A station must beat it to be a witness; a pair with no such station is UNCERTAIN, never INTERSECT |
+| Witness band | `κ_c = 1e-12`, relative to `s(t_m) + 1` — an **allowance, not a bound**: it is not a valid forward-error bound for the coefficient formation over the permitted positive-axis domain, and the review script produces a false witness inside it (§7.4.1b). A station must beat it **and** carry a proved enclosure to be a witness; a pair with a station that beats only `κ_c` is `UNCERTAIN`, never `INTERSECT` |
 | Fail-closed band | `abs(Δ) ≤ Δ_tol` → stage 3 (never CLEAR). `Δ < −Δ_tol` → stage 3 as well; it proves the segment cannot *enter*, not that it clears by `e` |
 | Degenerate segment | `a = 0` (zero length): the segment is a point, and the point-to-ellipsoid distance decides; inside → `DEGENERATE_SEGMENT` |
 | Non-finite intermediates | overflow, NaN or infinity in `cw`, `R`, `q0`, `qd`, `Δ` or `e` → `NON_FINITE_GEOMETRY`, not a verdict |
@@ -2078,7 +2126,7 @@ read `NO_INDEX` as index 0.
 | 4 | `BUFFER_CAPACITY` | inserted points exceed `pointCapacity` (§5.3) | last segment | `NO_INDEX` |
 | 5 | `ENDPOINT_INSIDE_OBSTACLE` | a resolved attachment is inside a declared obstacle in this pose | 0 or last | index |
 | 6 | `DEGENERATE_SEGMENT` | a zero-length segment whose **point is inside** an obstacle (§7.4.1b: `a = 0` is decided before the quadratic, because the quadratic divides by `a`) | index | index |
-| 7 | `SEGMENT_INTERSECTS_OBSTACLE` | stage 2: the segment enters the ellipsoid — a **witness station** `t_m` with `s(t_m) ≤ 1 − κ_s`, and a root interval whose overlap with `[0, 1]` contains it. An interval that merely touches `[0, 1]` at an endpoint is not this row | index | index |
+| 7 | `SEGMENT_INTERSECTS_OBSTACLE` | stage 2: the segment enters the ellipsoid — a **witness station** `t_m` with `s(t_m) ≤ 1 − κ_s`, a root interval whose overlap with `[0, 1]` contains it, **and a proved enclosure for `κ_s` on this input** (§7.4.1b). An interval that merely touches `[0, 1]` at an endpoint is not this row, and neither is a station that beats an unproved `κ_c` | index | index |
 | 8 | `CLEARANCE_VIOLATION` | stage 3: the segment misses the surface but `min (d − r) < e` | index | index |
 | 9 | `TANGENT_DISCONTINUITY` | the entry/exit kink exceeds `θ_max` (§7.4.3) | index | index |
 | 10 | `CURVATURE_VIOLATION` | an interior turn exceeds `θ_max` at the declared spacing (§7.4.3) | index | `NO_INDEX` |
@@ -2210,19 +2258,30 @@ why the old table's "3.05e-5 units = half an ulp at 500" was a factor of two off
 | point-to-ellipsoid root solve | **unproved estimate** — `2.9e-12 m` for a 200 mm axis | §7.4.1b-1 retracts `B ≤ 2⁻³⁶ · max(R)`: the stopping rule's bracket is uncertified and the residual is rounded, so this row is arithmetic on a target, not a bound. Deliverable (4) below must supply the bound before the term can be summed |
 | minimisation | `L · w_n / 2` | the Lipschitz bracket of §7.4.1b — proved for an exact `g`, so it is a term of the budget and not a second estimate |
 | `Float` rounding of the published path | included above | the polyline is read as published, so its quantisation is an input, not a term the solver can remove |
-| **`B` — the declared budget *estimate*** | **8.27e-6 m** | the sum of the three terms *as estimates*: 8.142e-6 + 1.234e-7 + an unproved root term of 2.9e-12. One term is an estimate, so `B` is an estimate and the floor below is conditional on deliverable (4) |
+| **`B` — the declared budget *estimate*** | **8.27e-6 m** displayed; `8.2657214…e-6 m` unrounded | the sum of the three terms *as estimates*: 8.1423…e-6 + 1.2336893…e-7 + an unproved root term of 2.9e-12. One term is an estimate, so `B` is an estimate; the arithmetic below uses the unrounded sum and says which figure it used |
 | **`eps_num`** | **1e-5 m** = 2.4737e-3 units | **1.21 × `B` on the estimate.** Arithmetic, not a margin claim: until (4) makes `B` a bound, this ratio says what the margin *would* cover, not what it covers |
 
-**The margin factor is arithmetic on estimates, and the floor is what the estimates leave.** `eps_num / B = 1.21` *on the
-estimate*; subtracting the budget estimate and the drawn-vertex vector term leaves `eps_num − B − q_vertex,3D ≈
-**1.5206e-6 m**` — not `1e-5 m`, and not `1.61e-6 m` either, which was this paragraph's figure while the vertex term was a
-single coordinate's half-ulp. Reproducible as `66 · 2⁻¹⁵ · (0.95/235) = 8.142e-6`, plus `2⁻¹⁵ · (0.95/235) = 1.234e-7` for
-the radius and an unproved `2⁻³⁶ · 0.2 = 2.9e-12` for the root solve, less `√3 · 2⁻¹⁵ · (0.95/235) = 2.1368e-7` for the
-vertex. **No part of that is a bound today**: two of its terms are estimates (the root solve and, through it, `B`), so the
-floor is a number the conditions below have to earn, and `eps_num` is 1.21× an estimate rather than 1.21× a proved budget —
-thin either way, which is why the predicate fails closed. The earlier revision reported 1.2× and 2.4× as two alternative
-factors for the same budget, the arithmetic signature of counting one ulp and half an ulp against the same geometry;
-there is one budget, one factor, and now one stated trust level for each term.
+**The margin factor is arithmetic on estimates, and the number it leaves is an illustration under named conditions — not
+a claim, and not a floor this document asserts.** `eps_num / B = 1.21` *on the estimate*; subtracting the budget estimate
+and the drawn-vertex term leaves `eps_num − B − q_vertex,3D = **1.5206e−6 m**` — not `1e−5 m`, and not `1.61e−6 m` either,
+which was this paragraph's figure while the vertex term was a single coordinate's half-ulp. Reproducible as
+`66 · 2⁻¹⁵ · (0.95/235) = 8.1423495…e−6`, plus `2⁻¹⁵ · (0.95/235) = 1.2336893…e−7` for the radius and an unproved
+`2.9e−12` for the root solve — giving `B = 8.2657214…e−6` — less `√3 · 2⁻¹⁵ · (0.95/235) = 2.1368126e−7` under the old
+vertex term, or `√3 · 2⁻¹⁴ · (0.95/235) = 4.2736252e−7` under the corrected one (the 1024-binade case below), which gives
+**1.3069e−6 m**.
+
+**Three things about that subtraction are stated so nobody reads it as a bound.** (i) The root term is a target, so `B` is
+an estimate. (ii) The vertex term bounds the *representation* of a vertex, over output coordinates inside a declared
+binade, not the tube the renderer builds. (iii) `1.5206e−6` uses the **unrounded** sum: the `8.27e−6` displayed in the
+table gives `1e−5 − 8.27e−6 − 2.1368e−7 = **1.51632e−6**`, and quoting either figure as *the* floor would be quoting a
+rounding difference as the arithmetic. The sensitivity is the point: **raise the budget term by `2e−6 m` and the remainder
+is `−4.7940e−7 m`** — the number is positive only because this estimate is small, and a future valid bound larger by that
+amount turns it negative. That is why condition (d) is open and why the document claims no numerical clearance floor:
+`eps_num` is 1.21× an estimate rather than 1.21× a proved budget, and `1.5206e−6` is the arithmetic of that distinction
+rather than a margin. The earlier revision reported `1.2×` and `2.4×` as two alternative factors for the same budget — the
+arithmetic signature of counting one ulp and half an ulp against the same geometry — and said the floor "follows once (d)
+is supplied", which was false: (a)–(c) are conditions too, and supplying *some* bound for (d) does not establish that the
+bound is at most `8.265721…e−6`.
 
 **The drawn tube is not automatically inside the object the predicate accepts, and the inscribed-polygon argument does
 not make it so.**
@@ -2234,22 +2293,37 @@ thing between a vertex and the accepted surface is its representation. The rende
 drawn vertex can sit outside the accepted tube, and the amount is a **vector** rather than that scalar: three coordinates
 each carry their own half-ulp error, and the vertex moves by their Euclidean combination.
 
-**A half-ulp is per coordinate, and one coordinate's worth does not bound the vertex.** Centre `(512, 512, 512)`, binary32
+**A half-ulp is per coordinate, and the coordinate's own binade decides which half-ulp.** Centre `(512, 512, 512)`, binary32
 radius `5.999999848427251e-5`, radial direction `(1,1,1)/√3`: each ideal coordinate `512.0000346410153` rounds to
 `512.0000610351562`, so the rounded vertex sits `4.571599318863259e-5` units outside the exact circle — `1.8481e-7 m`,
 which is **1.50 × the scalar `1.2337e-7 m` term** and is therefore not covered by it. A tube tangent perpendicular to that
-radial direction admits the example; it is a geometric probe of the rounding, not an observed renderer failure. The bound
-that does cover it is `q_vertex,3D = √3 · q_vertex = 2.1368e-7 m`: each coordinate's error is at most half an ulp of that
-coordinate's magnitude, so `\|e\| ≤ √3 · 2⁻¹⁵` units and every drawn vertex lies at most `r + \|e\|` from the centre. For
+radial direction admits the example; it is a geometric probe of the rounding, not an observed renderer failure. For
 comparison, the example an earlier revision quoted — centre `512`, radius `9.999999747378752e-5` (the binary32 value of
 `1e-4`), the unrounded vertex `512.0000999999975` rounding to `512.0001220703125` — is `2.207e-5` units (`8.92e-8 m`, 0.36
-of an ulp) outside, and it is covered by the scalar term **only because its radial direction is a single axis**. The worst
-case is a diagonal one, and that is the case the term has to cover.
+of an ulp) outside, and it is covered by the scalar term **only because its radial direction is a single axis**.
 
-The vertex term is therefore **carried, not argued away**: it is `2.1368e-7 m`, it is not in `B` (which estimates the
-*published inputs*, not the drawn output), and the conditional floor below is quoted with it subtracted. It bounds the
-**representation** of a vertex the renderer is handed; it is not a bound on the tube the renderer builds from it. The term
-that remains outside the budget entirely is unchanged: rig registration (§11).
+The round-trip interval is the right object: an ideal coordinate lies within **half an ulp of the coordinate it rounded
+to**, `[x_out − ulp(x_out)/2, x_out + ulp(x_out)/2]`, each of the three contributes independently, and therefore
+`‖e‖ ≤ √3 · max_i ulp(x_i^out)/2`. **The binade is the output's, not the input's, and one crossing doubles the term** —
+which is exactly what the operand guard does *not* bound. Take binary32 centre coordinates all exactly
+`1023.99993896484375`, binary32 radius exactly `0.000230000005103647708892822265625` and radial direction `(1,1,1)/√3`:
+every input coordinate and the radius are below 1024, but the ideal vertex coordinate is `1024.0000717554086102063…`,
+which rounds to binary32 **`1024.0001220703125`** — binade `[1024, 2048)`, half-ulp `2⁻¹⁴`. The radial excess is
+`8.7147969915e−5` units, **`3.5230030e−7 m`**: it **exceeds** `√3 · 2⁻¹⁵` (`2.1368126e−7 m`) by **1.649×** and is covered by
+`√3 · 2⁻¹⁴` (`4.2736252e−7 m`) with **1.213×** headroom. The earlier `√3 · q` form was right *when the output coordinate
+stayed in the lower binade* — the diagonal `512` example is that case — and wrong at the boundary, because a guard on the
+**predicate operands** says nothing about the coordinate a generated vertex rounds to.
+
+The vertex term is therefore `q_vertex,3D = √3 · ½ulp(x_out)` evaluated **per vertex from its own output coordinates**,
+and the global form `√3 · 2⁻¹⁴ = 4.2736e−7 m` is quoted **only** under the extra condition that every generated output
+coordinate is below 2048 engine units. That condition follows from `|coordinate| < 1024` plus a semi-axis below 1024
+units — true for every M1 obstacle, since a 200 mm axis is 49.5 units, but stated rather than assumed because it is
+exactly the kind of "obvious" step that the 1024 case above shows is not implied by the operand guard.
+
+The vertex term is therefore **carried, not argued away**: it is not in `B` (which estimates the *published inputs*, not the
+drawn output), and the conditional floor below is quoted with it subtracted. It bounds the **representation** of a vertex
+the renderer is handed; it is not a bound on the tube the renderer builds from it. The term that remains outside the budget
+entirely is unchanged: rig registration (§11).
 
 | Term *not in* `eps_num` | Value | Where it comes from |
 | --- | --- | --- |
@@ -2274,13 +2348,22 @@ a certificate. The guarantee is therefore stated with its conditions attached:
 > that head, except on the exemption intervals of X5. In every other case the pair is `UNCERTAIN` →
 > `UNCERTIFIED_MINIMUM`, and **no floor is claimed for it**. Condition (d) is not met by this document.
 
-With `B = 8.27e-6 m` (an estimate), `eps_num = 1e-5 m` and the drawn-vertex term `q_vertex,3D = 2.1368e-7 m` (a bound on
-the representation, not on the rendered tube), the conditional floor is **1.5206e-6 m**. It is positive, and it is
-conditional on (a)–(d) — of which (d) is open, so the document claims **no numerical clearance floor today**; what it
-claims is that a floor of `1.5206e-6 m` follows once (d) is supplied, and that no pair may pass as clear until the
-comparison that decided it is a bound. That is the whole claim: a positive floor under conditions the document states, in
-engine space, about a surrogate shape and a surrogate obstacle set. It is **not** a statement about real bone, fascia or
-skin, and **not** a statement about the swept volume between two frames (§7.4.3).
+**One class of pair is outside that sentence, and it is the class that was proved independently.** A pair cleared by
+stage 1 is not "every other case": it never consults the point-to-ellipsoid distance, so (d) is not a precondition of its
+`CLEAR` and it is not `UNCERTAIN`. The reconciliation is stated once here because the two rules used to read as a
+contradiction — §7.4.1b says a stage-1 clear stops, and this paragraph used to say every pair lacking (d) fails closed —
+and a reader could not tell which applied to a pair that both describes.
+
+With `B = 8.2657214…e−6 m` (an estimate), `eps_num = 1e−5 m` and the drawn-vertex term under its corrected,
+binade-aware form `q_vertex,3D = 4.2736e−7 m` (a bound on the representation, not on the rendered tube), the illustrative
+remainder is **1.3069e−6 m**; under the old `√3 · 2⁻¹⁵` term it is `1.5206e−6 m`, and under the displayed `8.27e−6` it is
+`1.51632e−6 m`. **None of the three is claimed as a clearance floor.** The document claims no numerical floor today,
+because (d) is open and because a floor is only as good as the weakest term in the subtraction; what it claims is that
+(a)–(d) are the conditions under which a positive remainder of this size would follow, that a differently-sized bound for
+(d) moves the remainder — `+2e−6 m` makes it `−4.7940e−7 m` — and that no pair may pass as clear until the comparison that
+decided it is a bound. That is the whole claim: a conditional arithmetic statement, in engine space, about a surrogate
+shape and a surrogate obstacle set. It is **not** a statement about real bone, fascia or skin, and **not** a statement
+about the swept volume between two frames (§7.4.3).
 
 **What has to become true before the floor is unconditional — an implementation-stage deliverable, not this document's.**
 Five items, each with the bound it needs, and no attempt at a forward-error proof here:
@@ -2289,10 +2372,12 @@ Five items, each with the bound it needs, and no attempt at a forward-error proo
    acknowledges; a pose builder or a corridor escalation that leaves it must be rejected at L3/L4 with
    `NON_FINITE_GEOMETRY` or a declared `OPERAND_OUT_OF_BOUND`, never silently evaluated. Until that check exists the
    bound is a claim about the fixtures, not about the system.
-2. **A per-operation bound for both moving geometries.** The budget covers input quantisation and the transform chain,
-   and the obstacle is evaluated in its own frame — but the analysis of the *relative* motion of path and obstacle (two
-   independently rounded chains) is not written down anywhere in this document, and until it is, the sum is one-sided in
-   name only.
+2. **A per-operation bound for both moving geometries, including the coefficient formation.** The budget covers input
+   quantisation and the transform chain, and the obstacle is evaluated in its own frame — but the analysis of the *relative*
+   motion of path and obstacle (two independently rounded chains) is not written down anywhere in this document, and
+   neither is the forward error of `q0`, `qd` and `s(t)` beyond the allowance `κ_c`. Until both are written, the sum is
+   one-sided in name only and stage 2's witness has no enclosure to rest on (§7.4.1b), which is why a witnessed entry is
+   `UNCERTAIN` today.
 3. **Certified comparisons inside the minimiser.** Golden-section discards a bracket half on every iteration on the basis
    of two floating-point values; retaining the minimiser across a near-tie needs the comparison to be resolved with a
    bound, or the certificate's `min over the n evaluated points` can be the second-best point. The bracket width term
@@ -2305,8 +2390,10 @@ Five items, each with the bound it needs, and no attempt at a forward-error proo
    surface for an interior root. Until an implementation supplies that, `B` is an estimate, the root term in the budget
    table is a target, and no numerical clearance floor is claimed. The failure mode in the meantime is
    `UNCERTIFIED_MINIMUM`, which blocks L4 rather than clearing a path.
-5. **The final representation.** A bound on the **vertex as a vector**, not per coordinate: `q_vertex,3D = √3 · q_vertex`
-   above, since each of the three coordinates carries its own half-ulp; and the projected polyline is consumed as
+5. **The final representation.** A bound on the **vertex as a vector** from its own **output** binade:
+   `q_vertex,3D = √3 · ½ulp(x_out)`, or the global `√3 · 2⁻¹⁴` only while every generated output coordinate is below 2048
+   engine units. Each of the three coordinates carries its own half-ulp, the half-ulp is the output coordinate's (a value
+   that crosses 1024 doubles it — `3.5230030e−7 m` on the boundary case above), and the projected polyline is consumed as
    published, so no downstream consumer may re-smooth it (§7.4.1, "what it does not cover").
 
 With (1)–(5) in place the floor can be stated unconditionally; with the current text it is stated conditionally on (a)–(d)
@@ -2346,9 +2433,33 @@ exempt(t)   = t between the exempted endpoint and effectiveTo, inclusive — and
 ```
 
 `d(t)` and `r(t)` are the solid distance and the modelled radius, which do not depend on the mask, so the boundary is
-computed from geometry alone and the mask cannot depend on its own result. Because the envelope ends exactly where the
-ordinary predicate begins to hold, every non-exempt station clears by `e` **by construction** and the positive fixture is
-satisfiable; because it ends the first time that happens, a later drop below `e` is outside the mask and is a violation.
+computed from geometry alone and the mask cannot depend on its own result. **The envelope is a mask, not a certificate.**
+It says which stations are exempt; it does not say the rest are clear, and it cannot. Two facts have to be stated
+together, because the earlier text stated only the first and drew the wrong conclusion from it:
+
+- **A station found at `d − r ≥ e` satisfies the inequality at that station only.** Every station after it is non-exempt
+  and must be **checked** by the ordinary stage-3 bracket, whose `lower(n)` must itself be `≥ e`. The envelope cannot
+  make a later station clear, and a path that reaches the margin, dips back inside it, and stays outside the solid is a
+  `CLEARANCE_VIOLATION` with the ordinary reason.
+- **A boundary at exact equality cannot be certified at all.** Unit sphere, zero tube radius, path `x: 0.5 → 1.5`,
+  illustrative exactly representable margin `e = 0.0078125`: the first station with `d − r ≥ e` is `x = 1.0078125`
+  (`t = 0.5078125`), so the clipped non-exempt piece has its minimum **at** `e`. Stage 1 cannot fire (`|c − cw| − h = 0.5`
+  is not `> 1 + 0 + e`), and the specified 30-step bracket over the clipped piece returns `lower = 0.00781236772694730`
+  against `upper = 0.0078125` — **`UNCERTAIN`**; `n = 40` is still `UNCERTAIN` (`lower = 0.00781249892…`), because
+  subtracting a positive bracket remainder from an endpoint minimum exactly equal to `e` cannot prove `lower ≥ e`. The
+  verdict is `UNCERTIFIED_MINIMUM`, which is the fail-closed answer and the correct one.
+
+**So a positive fixture needs provable slack, and the two positive exemption fixtures declare it.** `exempt_origin_success`
+and `exempt_insertion_success` must put the clipped non-exempt portion **strictly above** `e`, with a finite bracket that
+still certifies it: each declares a slack `σ` at its boundary with `g(boundary) ≥ e + σ` and `σ ≥ L·w_n/2 + B_eval`, and
+asserts `lower(n) ≥ e`. For the pinned geometry above `L·w_30/2 = 1.322731e−7 m`, so the fixtures use `σ = 1e−6 m` —
+7.6× the widest half-width the pinned search produces on a 1 m piece — and a fixture whose boundary lands inside `σ` of `e`
+is `UNCERTAIN`, not `VALID`.
+
+**No analytic equality case is claimed**, and that is the conservative branch of the choice. An equality case would need a
+separately proved `lower(n) = e` for a named geometry; this document has none, so equality at the boundary is `UNCERTAIN`
+and fails closed. The alternative — clipping at equality and calling the result `VALID` — is exactly what the bracket
+above refuses, and a fixture written that way could only pass an implementation whose bracket is not a bound.
 
 **The scan direction and the clamp are both decided by which end is exempted.** An origin exemption is clamped by
 `toStation` and scanned upward from station 0; an insertion exemption is clamped by `fromStation` and scanned **downward
@@ -2363,16 +2474,16 @@ construction, (d) projection and (e) the final validation. A solver that project
 validates against a masked one produces a path neither of them would accept, so the mask is a parameter of the predicate,
 not a special case inside one caller.
 
-But an interval alone does not express X5's rule, and pretending it does is how the re-entry fixture gets accepted: the
-declared `fromStation … toStation` covers **every** station in that range, including stations the path re-enters after
-leaving, so a mask that is literally "everything before `toStation`" exempts exactly the violation it exists to forbid.
-The mask the five consumers use is therefore the **effective** one:
-
-```
-effectiveFrom = the endpoint the exemption is for                    // 0 or 1, as declared
-effectiveTo   = the FIRST EGRESS station from that obstacle on THIS path   // computed, not declared
-exempt(t)     = t between effectiveFrom and effectiveTo              // and nothing after it
-```
+An interval alone does not express X5's rule, and the effective mask is the one the five consumers use. The declared
+`fromStation … toStation` covers **every** station in that range, including stations the path re-enters after leaving, so a
+mask that is literally "everything before `toStation`" exempts exactly the violation it exists to forbid. The mask is
+therefore the **effective** interval of the block above — `effectiveFrom` the exempted endpoint, `effectiveTo` the first
+station on the outward scan at which `d(t) − r(t) ≥ e`, clamped toward that endpoint and bounded by the declared station on
+the exempted side — and this document defines it **once**. An earlier revision carried a second block in this section that
+said "the **first EGRESS** station from that obstacle" with no clamp in its pseudocode; surface egress and margin
+clearance are different stations (for a unit sphere, zero radius and `e > 0` they are `x = 1` and `x = 1 + e`), so
+implementing the second block for any one consumer produced a mask different from the other four. It is deleted rather than
+reconciled, and the definition above is the only one.
 
 - **Computed, or validated, against the current path.** `effectiveTo` is the first station on the scan at which the
   margin holds, and the declared station on the exempted side is a **reviewed bound** on it, not a substitute: if the
@@ -2383,9 +2494,14 @@ exempt(t)     = t between effectiveFrom and effectiveTo              // and noth
 - **Re-entry is checked explicitly, on the same path.** After the envelope, any sample or segment with `g < e` for that
   obstacle is a violation with the ordinary `SEGMENT_INTERSECTS_OBSTACLE` / `CLEARANCE_VIOLATION` reason. That check is a
   first-margin test, not an interval-membership test, and it is the test `exempt_re_entry` pins.
+- **Later stations are checked, not cleared by construction.** The boundary is the *first* station that clears, so every
+  station after it is non-exempt and is tested by the same predicate; nothing in the mask promises that a later station
+  still clears, and the example in the paragraph above (`1 + e/2`, outside the solid, inside the margin) is a violation.
+  The boundary search's **own** uncertainty is fail-closed on the same terms: a boundary whose bracket cannot certify
+  `g ≥ e` leaves the pair `UNCERTAIN`, never an exemption.
 - **The same effective mask, in all five consumers.** A consumer that recomputes the interval differently — from the
-  declared endpoint instead of the computed egress, or from a station list captured before a mutation — is the defect this
-  rule removes, exactly as with the obstacle union of §7.4.2.
+  declared endpoint instead of the computed boundary, or from a station list captured before a mutation — is the defect
+  this rule removes, exactly as with the obstacle union of §7.4.2.
 
 The consequence for the fixtures: `exempt_then_penetrate` and `exempt_re_entry` are **negative controls**, and an
 implementation that passes them by treating the declared interval as the exemption is an implementation that fails them
@@ -3405,7 +3521,7 @@ Seven levels, each with one owner, one report and an explicit automation status.
 | **L1 Motion** | 18 existing rules over joint-space geometry (`ExerciseValidator.kt:47-92`) | yes, unchanged | all | the pose/engine is wrong; block |
 | **L2 Rig** | bone coverage, rest invariant, inverse binds, side/handedness, unit scale, bone budget, landmark alignment (§6.6) | yes | all | the asset or map is wrong; block |
 | **L3 Attachments** | every attachment's joint exists; offset inside a segment envelope; L/R mirror; head count; origin ≠ insertion; span ≥ 2 segments | yes | all | the anatomy data is wrong; block |
-| **L4 Path** | every segment of the final polyline tested against every obstacle in the head's ordered union, in one exhaustive three-stage state machine — bounding-sphere clear, a quadratic **intersection test that requires a witness station** (a chord whose entry cannot beat the coefficient error routes onward and is never called an intersection), then the finite-segment minimum of `d(t) − r(t)` (**solid** ellipsoid distance) with a Lipschitz bracket, the radius taper split at every knot, and `UNCERTAIN` failing closed — plus the sample-outside check; unverifiable geometry reported `INVALID` with a reason from the one table; deterministic outcome for overlapping, nested and closed routes; tangent and curvature continuity at entry/exit (gated); a **solver-derived rest length that is finite, strictly positive and reproducible** for every head (§7.4.4), and — **only where the definition or the review names one** — a comparison against a sourced external reference recorded with source, task, population and uncertainty, where a missing reference is an evidence gap and neither a pass nor a blocker. The continuity observer is **diagnostic only** and is not part of this gate (X6). The clearance floor itself is **conditional** on the input bounds, the error analysis of §7.4.1 and a bound for the point-to-ellipsoid solve — which §7.4.1b-1 does not yet have, so **no numerical floor is claimed until it does** | yes, with adversarial fixtures | all | the solver or the data is wrong; block |
+| **L4 Path** | every segment of the final polyline tested against every obstacle in the head's ordered union, in one exhaustive three-stage state machine — bounding-sphere clear, a quadratic **intersection test that requires a witness station** (a chord whose entry cannot beat the coefficient error, or cannot carry a proved enclosure for it, routes onward and is never called an intersection), then the finite-segment minimum of `d(t) − r(t)` (**solid** ellipsoid distance) with a Lipschitz bracket, the radius taper split at every knot, and `UNCERTAIN` failing closed — plus the sample-outside check; unverifiable geometry reported `INVALID` with a reason from the one table; deterministic outcome for overlapping, nested and closed routes; tangent and curvature continuity at entry/exit (gated); a **solver-derived rest length that is finite, strictly positive and reproducible** for every head (§7.4.4), and — **only where the definition or the review names one** — a comparison against a sourced external reference recorded with source, task, population and uncertainty, where a missing reference is an evidence gap and neither a pass nor a blocker. The continuity observer is **diagnostic only** and is not part of this gate (X6). The clearance floor itself is **conditional** on the input bounds, the error analysis of §7.4.1 and a bound for the point-to-ellipsoid solve — which §7.4.1b-1 does not yet have, so **no numerical floor is claimed until it does** | yes, with adversarial fixtures | all | the solver or the data is wrong; block |
 | **L5 Mesh** | self-intersection, degenerate triangles, weight sums, volume sanity per muscle, helper-bone bind match | partly (tool) | **subset** (§12.5) | the mesh is wrong; block release, not build |
 | **L6 Morphology** | declared ranges respected per target; **mesh** ring/mask vertices relative to joint pivots within `ε_morph`; delta bounds | **yes — the morph and ring checks only** | **subset** (§12.5) | a preset breaks the surface the muscles sit under; block the preset. A bone-landmark rest invariant is **not** an L6 assertion: a vertex-only morph cannot move a bone, so it is tautological. **"Anatomy still inside the body" is not automated and is not L6**: it needs a mesh-intersection tool M1 does not ship, so it is an L7 RV2/RV3 judgement (§12.5, §13 question 9) |
 | **L7 Anatomical review** | RV1–RV6 in §12.4: attachment locations, position vs bone and body surface, visible intersections, shape/path plausibility across poses, preset consistency, provenance | no — human, **required for M1** | all | the model is not accepted; M1 does not ship |
@@ -3537,14 +3653,15 @@ changes which predicate it calls changes its primary reason, so every row pins b
 | `raw_interior_control` | the same geometry with the segment outside: `q0 = (1.3,0,0)`, `qd = (0.4,0,0)` | `VALID` — the near-miss control, so the pair cannot pass by rejecting every interior-ish chord |
 | `raw_shallow_crossing` | unit sphere; `q0 = (−2, 0.998, 0)`, `qd = (4, 0, 0)`, tube radius 0 — a chord whose closest approach is 0.002 units inside the surface | `INVALID` — `SEGMENT_INTERSECTS_OBSTACLE`, decided at **stage 2**: `a = 16`, `b = −16`, `c0 = 3.996004`, `Δ = 0.255744` against `Δ_tol = 5.117e-10`, roots `[0.48420, 0.51580] ⊂ [0, 1]`. Not "inside the `Δ_tol` band" — the band here is nine orders of magnitude narrower than `Δ` — and no `min g` is computed, because a shallow crossing is still a crossing |
 | `raw_shallow_crossing_control` | the same chord offset outward to `q0 = (−2, 1.002, 0)`, closest approach 0.002 units outside; `Δ = −0.256256` | `VALID` — stage 3 at `t = 0.5`, `min d = 0.002` and `min g = +0.002 ≥ e`; the near-miss control, so the pair cannot pass by rejecting every chord that comes close |
-| `raw_near_surface_vanishing_excess` | unit sphere; `Float`-representable endpoints `(1, v, 0)` and `(1, 2v, 0)` with `v = 9.999999717180685e−10`; every point strictly outside, squared excess `= v² = 9.999999434361379e−19` | `INVALID` — **`CLEARANCE_VIOLATION`**, decided at **stage 3**, and **never** `SEGMENT_INTERSECTS_OBSTACLE`. In binary64 `q0·q0` rounds to `1`, so `c0 = 0`, `a = v² = 9.999999434361379e−19`, **`b = 2v² = 1.9999998868722757e−18`** (`a = b = v²` was this row's earlier error), `Δ = b² = 3.999999547489116e−36 > Δ_tol` and the roots are `[−2, 0]`, an interval whose only contact with `[0, 1]` is `t = 0`, where `s = 1`; the witness rule refuses the stage-2 verdict and the distance decides (`min d ≈ 1e-9 < e`). An implementation with neither the band nor a witness reports an intersection for a segment that never enters the obstacle |
+| `raw_near_surface_vanishing_excess` | unit sphere; `Float`-representable endpoints `(1, v, 0)` and `(1, 2v, 0)` with `v = 9.999999717180685e−10`; every point strictly outside, squared excess `= v² = 9.999999434361379e−19` | `INVALID` — **`CLEARANCE_VIOLATION`**, decided at **stage 3**, and **never** `SEGMENT_INTERSECTS_OBSTACLE`. In binary64 `q0·q0` rounds to `1`, so `c0 = 0`, `a = v² = 9.999999434361379e−19`, **`b = 2v² = 1.9999998868722757e−18`** (`a = b = v²` was this row's earlier error), `Δ = b² = 3.999999547489116e−36 > Δ_tol` and the roots are `[−2, 0]`, an interval whose only contact with `[0, 1]` is `t = 0`, where `s = 1`; the witness rule refuses the stage-2 verdict and the distance decides: the nearest point's exact binary32 coordinate excess is `v = 9.9999997171806853657471947371959686279296875e−10`, so the **solid** distance is `√(1 + v²) − 1 = 4.999999717180689…e−19`, far below `e` — **not** `v`, and **not** `1e-9`, which is what this row printed before the arithmetic was done. A direct binary64 evaluation returns `0` by cancellation and is not a reference. An implementation with neither the band nor a witness reports an intersection for a segment that never enters the obstacle |
 | `raw_stage2_edge_touch` | unit sphere; `Float` endpoints `(2, 0, 0)` and `(1, 9.999999717180685e−10, 0)` — strictly outside throughout, exact squared excess `9.999999434361379e−19` at the second endpoint and exact lower root `1 + 5.0e-19` | `INVALID` — **`CLEARANCE_VIOLATION`** at **stage 3**, never `SEGMENT_INTERSECTS_OBSTACLE`. Binary64 gives `a = 1`, `b = −4`, `c0 = 3`, `Δ = 4`, `Δ_tol = 2.8e-11`, roots `[1, 3]`; `\|c0\| = 3` clears the coefficient band, so only the witness rule can refuse it (`s(1) = 1`). The row exists because a **large** `c0` looks safe and is not: the lost excess is at the far endpoint, and no band on `c0` or `Δ` can see it |
 | `minimum_at_endpoint_low` | the closest approach at `t = 0`, just above the margin | `VALID` — the endpoint is always evaluated, so a search that starts inside the bracket cannot miss it |
 | `minimum_at_endpoint_high` | the closest approach at `t = 1`, just below the margin | `INVALID` — `CLEARANCE_VIOLATION` |
 | `minimum_at_a_knot` | unit sphere; straight path `p(t) = (−1 + 2t, 1.10, 0)`; radius knots `(0, 0), (0.5, 0.30), (1, 0)`; `e = 1e-5`. Predictor: §7.4.1b **stage 3** | `INVALID` — `CLEARANCE_VIOLATION` at the knot: `min g = −0.20` at `t = 0.5`, where `d = 1.10 − 1 = 0.10` and `r = 0.30`; `g(0.4) = g(0.6) = −0.122`, so the minimum is on the knot and each adjacent piece evaluates it, giving the same answer with the pieces split coarsely and finely. Stage 1 cannot accept (`\|c − cw\| − h = 0.10` is not `> 1 + 0.30 + e`) and stage 2 finds no root (`Δ < 0`), so the row reaches stage 3 — and it is the only row whose minimum is a piece boundary |
 | `minimum_near_equality` | `min g` within one evaluation budget of `e` | `INVALID` — `UNCERTIFIED_MINIMUM`, never a coin flip on the last bit |
-| `exempt_origin_success` | a head whose origin sits inside a declared obstacle, with the reviewed transition envelope declared (`fromStation = 0`, `toStation` the reviewed bound) and the path reaching `d − r ≥ e` before that bound | `VALID` — X5's positive case, and satisfiable **because** the envelope ends where the margin first holds: under a "first surface egress" rule the stations just after egress clear by `d → 0 < e` and no such fixture could be `VALID` |
-| `exempt_insertion_success` | the same head with the exemption on the **insertion** (`toStation = 1`, `fromStation` the reviewed bound), scanned **downward** from station 1 | `VALID` — the mirrored positive case. An implementation that clamps at `toStation = 1` and scans upward leaves the authored lower bound unenforced and accepts a path that clears the margin below `fromStation`; the pair exists because one orientation cannot test the other |
+| `exempt_origin_success` | a head whose origin sits inside a declared obstacle, with the reviewed transition envelope declared (`fromStation = 0`, `toStation` the reviewed bound) and the path reaching `d − r ≥ e + σ` before that bound, with the slack **declared as part of the fixture**: `σ = 1e-6 m`, which exceeds the widest bracket half-width the pinned search produces (`L·w_30/2 = 1.322731e-7 m`, 7.6×) | `VALID` — X5's positive case. The slack is what makes it satisfiable: the clipped non-exempt piece must have `lower(n) ≥ e`, and a boundary at exact equality returns `UNCERTAIN` (§7.4.1c), so a fixture without `σ` would pin a verdict the bracket cannot reach |
+| `exempt_boundary_equality` | the same geometry with the boundary landing **exactly** at `d − r = e` (`σ = 0`): unit sphere, zero tube radius, path `x: 0.5 → 1.5`, `e = 0.0078125`, boundary station `x = 1.0078125` | `INVALID` — **`UNCERTIFIED_MINIMUM`**, never `VALID`. The pinned 30-step bracket gives `lower = 0.00781236772694730 < e = upper`, and `n = 40` is still short (`0.00781249892…`): subtracting a positive bracket remainder from a minimum exactly equal to `e` cannot prove `lower ≥ e`. The row exists so that "clip at equality and accept" fails a fixture rather than passing one |
+| `exempt_insertion_success` | the same head with the exemption on the **insertion** (`toStation = 1`, `fromStation` the reviewed bound), scanned **downward** from station 1, with the same declared slack `σ = 1e-6 m` at the boundary | `VALID` — the mirrored positive case. An implementation that clamps at `toStation = 1` and scans upward leaves the authored lower bound unenforced and accepts a path that clears the margin below `fromStation`; the pair exists because one orientation cannot test the other, and the slack exists because the bracket cannot certify equality in either orientation |
 | `exempt_then_penetrate` | the same exemption, a route that leaves and then passes through the same obstacle at a non-exempt station | `INVALID` — `CLEARANCE_VIOLATION`, full head validator |
 | `exempt_re_entry` | 1-D unit sphere, zero tube radius, path `0.5 → 1.2 → 0.9 → 1.5`, exemption `[0, 0.7]` | `INVALID` — re-entry at fractional stations `0.5625 … 0.6875` is a violation under X5, although every one of those stations is inside the declared interval; the envelope closed at `0.3125` (just past `x = 1`) and everything after it is non-exempt |
 | `exempt_re_entry_after_mutation` | the `exempt_re_entry` geometry, with the envelope computed on the pre-mutation path and the path then **mutated** (one Catmull-Rom smoothing pass and one inserted waypoint, both from §7.4 step 4) before the sample and segment checks run | `INVALID` — the same re-entry, still a violation. It exists because the mask is anchored to **stations on the current path**: a consumer that computes the envelope once and reuses it after a mutation accepts a station the recomputed envelope excludes, and no fixture that never mutates can see that. The row also asserts the mutation moved at least one station, so it cannot pass by mutating nothing |
@@ -3554,7 +3671,7 @@ changes which predicate it calls changes its primary reason, so every row pins b
 | `pe_tiny_axis` | axes `(0.5, 200, 200)` mm — a 400:1 ratio | **two independent checks.** (a) The **distance**: `p = (2, 0, 0)` returns `1.5` and `p = (0, 250, 0)` returns `50`, both analytic on an axis (`\|p_i\| − R_i`), and the off-axis point `p = (2, 50, 0)` returns `1.515877` against the reference value. (b) The **error, measured not asserted**: `\|d − d_ref\|` against the 100-digit reference is recorded beside the reported residual `η`, and the row passes on the **distance** only; it does **not** pass by quoting `B ≤ 2⁻³⁶ · max(R)`, because §7.4.1b-1 no longer claims that bound — the recorded error is what deliverable (4) has to beat, and a routine that meets (a) by rounding `d` onto the reference fails it |
 | `pe_interior` | a point strictly inside | `d = 0` |
 | `pe_tangent` | a point on the surface, `Σ(pᵢ/Rᵢ)² = 1` | `d = 0` from the **interior/surface branch**: `≤ 1` includes equality, so no root solve is entered and there is no bracket to return. The row that exercises the bracket near the surface is `pe_near_boundary` |
-| `pe_near_boundary` | a point 1e-6 units outside | `d` within the bound, not 0 and not `2e-6` |
+| `pe_near_boundary` | a point 1e-6 units outside | **an observed comparison, not a bound check.** The row records the returned `d`, its 100-digit reference and the absolute error beside the reported residual `η`, and requires only that `d` is non-zero and lies between `0` and `2e-6`. It does **not** assert that `d` is "within the bound": `B_est` is a residual-based estimate that exceeds itself on a represented input (§7.4.1b-1), so a fixture that treated it as a bound would turn a measured error into an apparent contract — which is what the earlier version of this row did |
 
 **Solver fixtures — obstacle configuration in, final path or failure out.**
 
@@ -3815,22 +3932,38 @@ combination is not an M1 pass, whatever the individual reports say.
      The withdrawn form `2 · ulp(L) / L` understates it by two orders of magnitude on a represented input: real
      endpoints `(599.9999697876, 600)` and `(600.0000302124, 601)` round to `Float` `(600, 600)` and `(600, 601)`, so
      the published direction loses `6.04248e-5 rad` while that formula, at `L ≈ 1`, reports `2.38419e-7 rad` — a factor
-     of **253**. The reported uncertainty is therefore the first-order estimate
+     of **253**. What is reported instead is a **labelled heuristic**:
 
      ```
-     δθ  ≤  4 · q / (L · sin θ_bend)          q = the half-ulp of the largest published coordinate magnitude,
-                                               L = the shorter of the two bend-plane legs, θ_bend the bend angle
+     δθ  ≈  4 · q / (L · sin θ_bend)      // HEURISTIC. Not an upper bound; no ≤ is claimed and nothing is gated on it.
+                                          // q = the half-ulp of the largest published coordinate magnitude,
+                                          // L = the shorter of the two bend-plane legs, θ_bend the bend angle
      ```
 
-     which is stated as an **estimate, not a certificate**: it is the sensitivity of the bend-plane normal to a
-     coordinate error of `q` in each of three points, and it is unbounded as `θ_bend → 0`, which is exactly why the
-     comparator reports `UNAVAILABLE` rather than a number when `sin θ_bend` is below `θ_bend_min`, or when the estimate
-     exceeds a ceiling set at stage 1 **beside `τ_roll`**. Until that ceiling exists the estimate is reported with every
-     `θ` and no pass/fail is read from it, because a threshold invented before the first measurement would be a number
-     this document cannot justify. The pass criterion is `|d| · θ ≤ τ_roll` for the widest attachment offset
-     `d` in the M1 library (0.03 m today, from the placeholder coordinates of §7.3); **`τ_roll` is set at stage 1**, when
-     the first real attachments and the first measured `θ` exist, and it is recorded in the review file beside the
-     `UNAVAILABLE` rows. Fixing it now would be fixing a threshold before knowing either side of the comparison.
+     **It bounds nothing, and the earlier revision wrote an inequality that a represented input violates.** Exact
+     binary32 published points `P0 = (600, 600, 600)`, `P1 = (601, 599, 600)`,
+     `P2 = (602.010009765625, 598.010009765625, 599.97998046875)`; binary64 pre-rounding points `P0 + (h,h,h)`,
+     `P1 − (h,h,h)`, `P2 + (h,h,h)` with exactly `h = 0.0000302124022937277914024889469146728515625`, each of which rounds
+     back to the `Float` point listed. With `q = 2⁻¹⁵ = 0.000030517578125`, `L = √2` and `sin θ_bend ≈ 0.017334817526`,
+     the form returns **0.00497938588731411 rad**, while the 100-digit cross-product reference gives a bend-normal angular
+     error of **0.008537134229444975 rad** — **1.7145×** the alleged bound. Subtracting the first leg's own swing
+     (`0.00007400496938822332 rad`) still leaves **0.00846312926 rad**, above it. So the form is reported beside every
+     `θ` as an order-of-magnitude indicator of conditioning, it never sets availability, it never gates a row, and no
+     `τ_roll` comparison consumes it. A validated 3-D error bound may replace it at stage 1; until one exists, `θ` is
+     reported with a heuristic and with `UNAVAILABLE` wherever the threshold rule below applies.
+
+     **Availability is decided by the threshold, not by the heuristic.** The one threshold is a **sine**:
+     `sinBendMin`, a stage-1 field, compared against `sin θ_bend` — never against `θ_bend` in radians and never against
+     both. The angle form is not a second rule: `arcsin(sinBendMin)` is quoted in the review file for a reader's
+     convenience and is used nowhere in code. One threshold, because the two forms disagree on legal inputs: for the
+     exact points `(0,0,0) → (1,0,0) → (2, 0.125, 0)` the bend angle is `0.124354994546761438 rad` and its sine is
+     `0.124034734589208454`; with an illustrative binary32 threshold `0.1242000013589859` the **angle** rule measures the
+     frame and the **sine** rule reports `UNAVAILABLE`, for the same triple. The sine is the quantity the conditioning
+     needs and the one the heuristic is written in, so the sine is the threshold. The pass criterion remains
+     `|d| · θ ≤ τ_roll` for the widest attachment offset `d` in the M1 library (0.03 m today, from the placeholder
+     coordinates of §7.3); **`τ_roll` is set at stage 1**, when the first real attachments and the first measured `θ`
+     exist, and it is recorded in the review file beside the `UNAVAILABLE` rows. Fixing it now would be fixing a
+     threshold before knowing either side of the comparison.
 
    The alternatives that were considered and are not taken: an authored roll reference per segment (a stable up-vector —
    more authoring, and it still has to be reviewed against anatomy) and a rig bone-axis alignment (couples anatomy to one
