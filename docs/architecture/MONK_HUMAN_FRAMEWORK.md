@@ -1675,6 +1675,9 @@ data class ContactExemption(
     val headIndex: Int,
     val fromStation: Float,       // fractional arc length, 0.0 at the origin
     val toStation: Float,         // reviewed bound on the EXEMPTED side (toStation for an origin, fromStation for an insertion)
+    val envelopeSlackMetres: Float = 0f,  // σ: the envelope runs to the first station at g >= e + σ (§7.4.1c). 0 leaves it at
+                                          // the first-margin station, which no bracket can certify — so a positive
+                                          // exemption must declare one
     val source: String            // the L7 review row that justified it — no source, no exemption
 )
 
@@ -2541,15 +2544,19 @@ twice, with nothing said about the route between), and it is what an open-ended 
 A path that leaves a surface exits at `d = 0`, so the stations immediately after egress have `d → 0`, and the non-exempt
 check demands `g = d − r ≥ e` from every one of them: with a zero tube radius and `e = 0.01 mm`, a station `0.005 mm`
 outside fails, and the positive fixture could never be `VALID`. The reviewed rule is therefore the **transition
-envelope**, which ends where the path first *passes*:
+envelope**, which ends where the path first *passes* — by the declared `σ`, so the station it ends on is not one the
+bracket could refuse:
 
 ```
 bound    = toStation    for an origin exemption (fromStation = 0)
          = fromStation  for an insertion exemption (toStation = 1)     // the end on the EXEMPTED side, never the far end
 scan     = outward from the exempted endpoint toward the far end
-effectiveTo = the FIRST station reached by that scan at which  d(t) − r(t) ≥ e
+effectiveTo = the FIRST station reached by that scan at which  d(t) − r(t) ≥ e + σ
             = bound, if no such station exists before it         // narrower, fail-closed, and the divergence is reported
 exempt(t)   = t between the exempted endpoint and effectiveTo, inclusive — and nothing beyond it
+σ           = ContactExemption.envelopeSlackMetres (§7.3): the exemption's declared envelope width in metres,
+              authored and reviewed per (head, obstacle) and 0 by default. It is NOT a clearance claim: a station
+              inside [e, e + σ) is exempt rather than certified, and a station at e + σ is the first non-exempt one
 ```
 
 `d(t)` and `r(t)` are the solid distance and the modelled radius, which do not depend on the mask, so the boundary is
@@ -2562,19 +2569,23 @@ together, because the earlier text stated only the first and drew the wrong conc
   make a later station clear, and a path that reaches the margin, dips back inside it, and stays outside the solid is a
   `CLEARANCE_VIOLATION` with the ordinary reason.
 - **A boundary at exact equality cannot be certified at all.** Unit sphere, zero tube radius, path `x: 0.5 → 1.5`,
-  illustrative exactly representable margin `e = 0.0078125`: the first station with `d − r ≥ e` is `x = 1.0078125`
-  (`t = 0.5078125`), so the clipped non-exempt piece has its minimum **at** `e`. Stage 1 cannot fire (`|c − cw| − h = 0.5`
+  illustrative exactly representable margin `e = 0.0078125`: with `σ = 0` the first station with `d − r ≥ e` is
+  `x = 1.0078125` (`t = 0.5078125`), so the clipped non-exempt piece has its minimum **at** `e`. Stage 1 cannot fire (`|c − cw| − h = 0.5`
   is not `> 1 + 0 + e`), and the specified 30-step bracket over the clipped piece returns `lower = 0.00781236772694730`
   against `upper = 0.0078125` — **`UNCERTAIN`**; `n = 40` is still `UNCERTAIN` (`lower = 0.00781249892…`), because
   subtracting a positive bracket remainder from an endpoint minimum exactly equal to `e` cannot prove `lower ≥ e`. The
   verdict is `UNCERTIFIED_MINIMUM`, which is the fail-closed answer and the correct one.
 
-**So a positive fixture needs provable slack, and the two positive exemption fixtures declare it.** `exempt_origin_success`
-and `exempt_insertion_success` must put the clipped non-exempt portion **strictly above** `e`, with a finite bracket that
-still certifies it: each declares a slack `σ` at its boundary with `g(boundary) ≥ e + σ` and `σ ≥ L·w_n/2 + B_eval`, and
-asserts `lower(n) ≥ e`. For the pinned geometry above `L·w_30/2 = 1.322731e−7 m`, so the fixtures use `σ = 1e−6 m` —
-7.6× the widest half-width the pinned search produces on a 1 m piece — and a fixture whose boundary lands inside `σ` of `e`
-is `UNCERTAIN`, not `VALID`.
+**So a positive fixture needs a boundary that is provably above the margin, and the boundary rule supplies one by ending the
+envelope at `e + σ`, never at `e`.** No slack is claimed *at* the first-margin station: that station has `g = e` by
+definition, the clipped piece has its minimum there, and the bracket subtracts `L·w_n/2 + B_eval` from that minimum, so
+`lower(n) < e` however many iterations run. That case is `exempt_boundary_equality` and its verdict is `UNCERTAIN`. What
+makes the two positive fixtures satisfiable is that their envelopes **end past** the first-margin station, at the first
+station whose `g` reaches `e + σ`: there `g(boundary) ≥ e + σ`, and `σ ≥ L·w_n/2 + B_eval` is what turns that into
+`lower(n) ≥ e`. For the pinned geometry above `L·w_30/2 = 1.322731e−7 m`, so the fixtures declare `σ = 1e−6 m` — 7.6× the
+pinned half-width alone, 3.9× once the `1.2337e−7 m` radius-rounding term inside `B_eval` is added — and the same path with
+`σ = 0` is the
+equality fixture, not a second positive one.
 
 **No analytic equality case is claimed**, and that is the conservative branch of the choice. An equality case would need a
 separately proved `lower(n) = e` for a named geometry; this document has none, so equality at the boundary is `UNCERTAIN`
@@ -2598,17 +2609,17 @@ An interval alone does not express X5's rule, and the effective mask is the one 
 `fromStation … toStation` covers **every** station in that range, including stations the path re-enters after leaving, so a
 mask that is literally "everything before `toStation`" exempts exactly the violation it exists to forbid. The mask is
 therefore the **effective** interval of the block above — `effectiveFrom` the exempted endpoint, `effectiveTo` the first
-station on the outward scan at which `d(t) − r(t) ≥ e`, clamped toward that endpoint and bounded by the declared station on
-the exempted side — and this document defines it **once**. An earlier revision carried a second block in this section that
+station on the outward scan at which `d(t) − r(t) ≥ e + σ` (the same `σ`-station the block above defines), clamped toward
+that endpoint and bounded by the declared station on the exempted side — and this document defines it **once**. An earlier revision carried a second block in this section that
 said "the **first EGRESS** station from that obstacle" with no clamp in its pseudocode; surface egress and margin
 clearance are different stations (for a unit sphere, zero radius and `e > 0` they are `x = 1` and `x = 1 + e`), so
 implementing the second block for any one consumer produced a mask different from the other four. It is deleted rather than
 reconciled, and the definition above is the only one.
 
 - **Computed, or validated, against the current path.** `effectiveTo` is the first station on the scan at which the
-  margin holds, and the declared station on the exempted side is a **reviewed bound** on it, not a substitute: if the
-  computed boundary lies beyond the declared bound, the declared bound is used — narrower, fail-closed — and the
-  divergence is reported; if it lies inside, the computed value is used. A path mutation (construction, smoothing,
+  margin plus the declared `σ` holds, and the declared station on the exempted side is a **reviewed bound** on it, not
+  a substitute: if the computed boundary lies beyond the declared bound, the declared bound is used — narrower,
+  fail-closed — and the divergence is reported; if it lies inside, the computed value is used. A path mutation (construction, smoothing,
   projection, insertion) recomputes both the stations and the boundary — an exemption is anchored to the path, not to
   point indices.
 - **Re-entry is checked explicitly, on the same path.** After the envelope, any sample or segment with `g < e` for that
@@ -2618,7 +2629,7 @@ reconciled, and the definition above is the only one.
   station after it is non-exempt and is tested by the same predicate; nothing in the mask promises that a later station
   still clears, and the example in the paragraph above (`1 + e/2`, outside the solid, inside the margin) is a violation.
   The boundary search's **own** uncertainty is fail-closed on the same terms: a boundary whose bracket cannot certify
-  `g ≥ e` leaves the pair `UNCERTAIN`, never an exemption.
+  `g ≥ e + σ` leaves the pair `UNCERTAIN`, never an exemption.
 - **The same effective mask, in all five consumers.** A consumer that recomputes the interval differently — from the
   declared endpoint instead of the computed boundary, or from a station list captured before a mutation — is the defect
   this rule removes, exactly as with the obstacle union of §7.4.2.
@@ -2645,7 +2656,8 @@ position (the attachment is anatomy, not a free variable), **exempting a whole o
 muscle whose clearance rests mostly on exemptions is visible rather than silently green.
 
 Fixtures: `exempt_origin_success` (a head whose origin sits inside a declared obstacle, with the transition envelope
-declared, is `VALID` — satisfiable because the envelope ends where the margin first holds); `exempt_insertion_success`
+declared, is `VALID` — satisfiable because the envelope ends at the first station that clears the margin **plus the declared
+`σ`**, so the clipped piece starts above `e` rather than at it); `exempt_insertion_success`
 (the same head with the exemption on the **insertion**, clamped by `fromStation` and scanned downward, also `VALID`);
 `exempt_then_penetrate` (the same exemption, a route that leaves and then passes through a non-exempt station of the same
 obstacle, is `INVALID`); and `exempt_re_entry` — the one that decides the rule. In one
@@ -3795,9 +3807,9 @@ everything.
 | `minimum_at_endpoint_high` | the closest approach at `t = 1`, just below the margin | `INVALID` — `CLEARANCE_VIOLATION` |
 | `minimum_at_a_knot` | unit sphere; straight path `p(t) = (−1 + 2t, 1.10, 0)`; radius knots `(0, 0), (0.5, 0.30), (1, 0)`; `e = 1e-5`. Predictor: §7.4.1b **stage 3** | `INVALID` — `CLEARANCE_VIOLATION` at the knot: `min g = −0.20` at `t = 0.5`, where `d = 1.10 − 1 = 0.10` and `r = 0.30`; `g(0.4) = g(0.6) = −0.122`, so the minimum is on the knot and each adjacent piece evaluates it, giving the same answer with the pieces split coarsely and finely. Stage 1 cannot accept (`\|c − cw\| − h = 0.10` is not `> 1 + 0.30 + e`) and stage 2 finds no root (`Δ < 0`), so the row reaches stage 3 — and it is the only row whose minimum is a piece boundary |
 | `minimum_near_equality` | `min g` within one evaluation budget of `e` | `INVALID` — `UNCERTIFIED_MINIMUM`, never a coin flip on the last bit |
-| `exempt_origin_success` | a head whose origin sits inside a declared obstacle, with the reviewed transition envelope declared (`fromStation = 0`, `toStation` the reviewed bound) and the path reaching `d − r ≥ e + σ` before that bound, with the slack **declared as part of the fixture**: `σ = 1e-6 m`, which exceeds the widest bracket half-width the pinned search produces (`L·w_30/2 = 1.322731e-7 m`, 7.6×) | `VALID` — X5's positive case. The slack is what makes it satisfiable: the clipped non-exempt piece must have `lower(n) ≥ e`, and a boundary at exact equality returns `UNCERTAIN` (§7.4.1c), so a fixture without `σ` would pin a verdict the bracket cannot reach |
-| `exempt_boundary_equality` | the same geometry with the boundary landing **exactly** at `d − r = e` (`σ = 0`): unit sphere, zero tube radius, path `x: 0.5 → 1.5`, `e = 0.0078125`, boundary station `x = 1.0078125` | `INVALID` — **`UNCERTIFIED_MINIMUM`**, never `VALID`. The pinned 30-step bracket gives `lower = 0.00781236772694730 < e = upper`, and `n = 40` is still short (`0.00781249892…`): subtracting a positive bracket remainder from a minimum exactly equal to `e` cannot prove `lower ≥ e`. The row exists so that "clip at equality and accept" fails a fixture rather than passing one |
-| `exempt_insertion_success` | the same head with the exemption on the **insertion** (`toStation = 1`, `fromStation` the reviewed bound), scanned **downward** from station 1, with the same declared slack `σ = 1e-6 m` at the boundary | `VALID` — the mirrored positive case. An implementation that clamps at `toStation = 1` and scans upward leaves the authored lower bound unenforced and accepts a path that clears the margin below `fromStation`; the pair exists because one orientation cannot test the other, and the slack exists because the bracket cannot certify equality in either orientation |
+| `exempt_origin_success` | a head whose origin sits inside a declared obstacle, with the reviewed transition envelope declared (`fromStation = 0`, `toStation` the reviewed bound) and the path reaching `d − r ≥ e + σ` before that bound, with the slack **declared as part of the fixture**: `σ = 1e-6 m`, which exceeds the widest bracket half-width the pinned search produces (`L·w_30/2 = 1.322731e-7 m`, 7.6×) | `VALID` — X5's positive case. The slack is what makes it satisfiable, and it is the **`σ`-envelope** that supplies it: the boundary is the first station whose `g` reaches `e + σ`, so the clipped non-exempt piece starts at `g = e + σ = 0.0078135` rather than at `e = 0.0078125`, and the pinned 30-step bracket returns `lower(30) = 0.007813367727216046` (binary64) against `e = 0.0078125` — `VALID`. The same path with `σ = 0` is `exempt_boundary_equality` and returns `UNCERTAIN`: no slack exists at the first-margin station itself |
+| `exempt_boundary_equality` | the same geometry with the boundary landing **exactly** at `d − r = e` (`σ = 0`): unit sphere, zero tube radius, path `x: 0.5 → 1.5`, `e = 0.0078125`, boundary station `x = 1.0078125` | `INVALID` — **`UNCERTIFIED_MINIMUM`**, never `VALID`. The pinned 30-step bracket gives `lower = 0.00781236772694730 < e = upper`, and `n = 40` is still short (`0.00781249892…`): subtracting a positive bracket remainder from a minimum exactly equal to `e` cannot prove `lower ≥ e`. The row exists so that "clip at equality and accept" fails a fixture rather than passing one. **`σ = 0` puts the boundary on the first-margin station, where `g` equals `e` exactly, and that is the station at which no slack exists** — which is why this row cannot be turned into a positive one, and why the two `..._success` rows declare `σ = 1e-6 m` (§7.4.1c) |
+| `exempt_insertion_success` | the same head with the exemption on the **insertion** (`toStation = 1`, `fromStation` the reviewed bound), scanned **downward** from station 1, with the same declared slack `σ = 1e-6 m` at the boundary | `VALID` — the mirrored positive case. An implementation that clamps at `toStation = 1` and scans upward leaves the authored lower bound unenforced and accepts a path that clears the margin below `fromStation`; the pair exists because one orientation cannot test the other, and the slack exists because the bracket cannot certify a first-margin boundary in either orientation — the envelope must end on `e + σ`, not on `e`, in both scan directions |
 | `exempt_then_penetrate` | the same exemption, a route that leaves and then passes through the same obstacle at a non-exempt station | `INVALID` — `CLEARANCE_VIOLATION`, full head validator |
 | `exempt_re_entry` | 1-D unit sphere, zero tube radius, path `0.5 → 1.2 → 0.9 → 1.5`, exemption `[0, 0.7]` | `INVALID` — re-entry at fractional stations `0.5625 … 0.6875` is a violation under X5, although every one of those stations is inside the declared interval; the envelope closed at `0.3125` (just past `x = 1`) and everything after it is non-exempt |
 | `exempt_re_entry_after_mutation` | the `exempt_re_entry` geometry, with the envelope computed on the pre-mutation path and the path then **mutated** (one Catmull-Rom smoothing pass and one inserted waypoint, both from §7.4 step 4) before the sample and segment checks run | `INVALID` — the same re-entry, still a violation. It exists because the mask is anchored to **stations on the current path**: a consumer that computes the envelope once and reuses it after a mutation accepts a station the recomputed envelope excludes, and no fixture that never mutates can see that. The row also asserts the mutation moved at least one station, so it cannot pass by mutating nothing |
