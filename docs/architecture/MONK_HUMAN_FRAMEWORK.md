@@ -482,7 +482,8 @@ class AnatomyDefinition(
     val muscles: List<MuscleDefinition>,
     val segments: List<SegmentDefinition>,   // anatomical names for the canonical segment frames
     val wrapSurfaces: List<WrapSurface>,
-    val landmarks: List<LandmarkDefinition>
+    val landmarks: List<LandmarkDefinition>,
+    val epsNumMetres: Float          // the numeric margin of §7.4.1: one value per version, never a per-call argument
 )
 
 /**
@@ -1067,7 +1068,13 @@ vector.
 
 ```kotlin
 enum class MuscleLayer { SUPERFICIAL, DEEP }
-enum class MuscleRole { PRIME_MOVER, SYNERGIST, STABILISER }
+
+/**
+ * Categorical roles only — no intensity, no numeric activation (§8.1). `ANTAGONIST` is in the enum because §8.1 needs
+ * the word; it is authored only where reviewed, movement-specific evidence supports it and is never inferred from an
+ * eccentric phase.
+ */
+enum class MuscleRole { PRIME_MOVER, SYNERGIST, STABILISER, ANTAGONIST }
 
 /** The canonical segment frames of §7.2. One enum value per row of that table; no free-form strings. */
 enum class Segment {
@@ -1079,6 +1086,15 @@ enum class Segment {
 /** A point pinned to a canonical segment, in metres, segment rest frame (+X sagittal, +Y up, +Z lateral). */
 data class Attachment(val segment: Segment, val x: Float, val y: Float, val z: Float)
 
+/** A declared exemption from the clearance predicate: one obstacle, one head, one path interval (§7.4.1). */
+data class ContactExemption(
+    val obstacleId: String,
+    val headIndex: Int,
+    val fromStation: Float,       // fractional arc length, 0.0 at the origin
+    val toStation: Float,         // the interval must contain the endpoint it exempts
+    val source: String            // the L7 review row that justified it — no source, no exemption
+)
+
 data class MuscleDefinition(
     val id: String,                       // "rectus_femoris"
     val name: String,                     // "Rectus femoris"
@@ -1087,9 +1103,13 @@ data class MuscleDefinition(
     val widthMetres: Float,               // belly width at rest
     val thicknessMetres: Float,           // belly depth at rest
     val tendon: TendonSpec,               // origin/insertion fractions of the path
-    val wraps: List<String>,              // wrap-surface ids this path is projected outside of
+    val wraps: List<String>,              // wrap-surface ids; an id that does not resolve is an L3 error, never a skip
     val flat: Boolean = false,            // sheet muscles (pecs, lats, intercostals)
-    val profile: Float = 0.5f             // belly position along the path, 0..1
+    val profile: Float = 0.5f,            // belly position along the path, 0..1
+    val radiusKnots: List<Pair<Float, Float>>,   // (station, radiusMetres): the taper of §7.4.1, non-negative, finite
+    val passCap: Int = 8,                        // K, the construction pass budget (§7.4 step 4)
+    val corridorMetres: Float,                   // bounds the detour escalation d_k (§7.4.5)
+    val contactExemptions: List<ContactExemption> = emptyList()
 )
 
 data class MuscleHead(val origin: Attachment, val insertion: Attachment, val waypoints: List<Attachment> = emptyList())
@@ -1098,9 +1118,23 @@ data class WrapSurface(
     val id: String,
     val segment: Segment,                 // the obstacle follows this segment's frame every frame (§7.4.1)
     val centreMetres: Triple<Float, Float, Float>,
-    val radiiMetres: Triple<Float, Float, Float>   // ellipsoid only; a capsule is a different shape and a different test
+    val radiiMetres: Triple<Float, Float, Float>,  // ellipsoid only; a capsule is a different shape and a different test
+    val global: Boolean = false           // in EVERY head's union, whether or not the muscle lists it (§7.4.2)
 )
 ```
+
+**Every parameter has exactly one owner.** `AnatomyDefinition.version` is the schema-and-data version, and
+`epsNumMetres` belongs to it — one value per version, not a per-call argument, because changing it invalidates every
+fixture signed against the old one (§7.4.1). `passCap`, `corridorMetres` and `radiusKnots` belong to the **muscle**,
+because they describe that muscle's route and its tube. `global` belongs to the **obstacle**, because it says who must
+see it. A parameter with no named owner is a parameter two subsystems will disagree about.
+
+**Ids are resolved, not looked up hopefully.** Every `wraps` entry must resolve to a `WrapSurface.id` in the same
+definition; an unknown id is a **definition error at L3**, not a silently ignored obstacle, because a skipped wrap is a
+muscle routed through a bone that nobody is told about. A `global` obstacle is never named in a muscle's list — it is
+unioned in (§7.4.2) — and naming it there is an L3 error too, since it makes the definition's meaning depend on whether
+the id is also global. Duplicate obstacle ids, a duplicate id inside one list, and a `ContactExemption` naming an
+obstacle the head never sees are the same class of error.
 
 `Segment` is a closed enum precisely so an attachment cannot name a frame that does not exist. `PATELLA_REF` is **not** a
 segment: the patella is a sesamoid in the tendon, not a canonical frame, so a muscle inserting "at the patella" names the
@@ -1125,7 +1159,11 @@ A concrete entry, with the schema's intent made explicit:
   "thicknessMetres": 0.028,
   "tendon": { "originFraction": 0.10, "insertionFraction": 0.16 },
   "wraps": ["hip_capsule"],
-  "profile": 0.45
+  "profile": 0.45,
+  "radiusKnots": [[0.0, 0.006], [0.10, 0.024], [0.84, 0.024], [1.0, 0.004]],
+  "passCap": 8,
+  "corridorMetres": 0.12,
+  "contactExemptions": []
 }
 ```
 
