@@ -1299,6 +1299,15 @@ for this skeleton at any frame, which is why stage 1's deliverable is a **re-aut
 **Stage 1's deliverable is a rig that passes A1** (§15); until that rig exists, `RigLandmarkAlignmentTest` is expected to
 be red on `humanoid_v1`, and A1 is not weakened to make the current asset green.
 
+**The recorded baseline is the position half of A1, and the rest-orientation half has none.** Both tables above measure bone
+*heads*. A1's second half — the rig bone's rest orientation against the engine's, within `τ_rot` = 0.5° — has **no recorded
+baseline at all**: no parse of the shipped asset's rest rotations was made for this document, so nothing here says whether
+`humanoid_v1` would pass or fail that row, and no number is quoted for it in either direction. An **asset parse at rest**
+is therefore a **stage-1 deliverable** alongside the position parse that already exists: every bone's local rotation read
+from the GLB, carried through the `Ry(+90°)` basis into engine space and compared with the engine rest the generator
+writes — `B⁻¹ · I · B = I` (§15 stage 1, step 8). Until that parse is recorded, the rest-orientation row is a criterion
+with no measurement behind it on any asset, the shipped one included, and a green position half says nothing about it.
+
 **How an A1-passing rig is obtained: four options, decided.** The baseline above is not a rig anyone can fix in place,
 so the route to A1 was chosen explicitly rather than assumed.
 
@@ -2043,6 +2052,24 @@ review permits this**, and the consequence is the rule above: a witness without 
 as a bound it already has. The fixture that would exercise the proven branch is deferred with that deliverable; until it
 exists, every witnessed pair this document can construct also carries an unproved enclosure and fails closed.
 
+**`κ_c` is an allowance, and the enclosure deliverable is what earns it.** It buys nothing today: a station that beats it
+is `UNCERTAIN` unless it also carries a proved enclosure, so the only thing that can turn it into a usable threshold is
+**deliverable (2) of §7.4.1c** — the forward-error analysis of `q0`, `qd` and `s(t)` over the permitted positive-axis
+domain — or a declared supported geometry on which that analysis has been done. It is named in **exactly eight
+locations**, so a rename is a mechanical pass over them and nothing else depends on the spelling:
+
+1. the stage-2 block's conditions (i)–(ii), where `κ_s = κ_c · (s(t_m) + 1)`;
+2. the coefficient test in the chord-(ii) discussion (`|c0| = 3 > κ_c·(q0·q0 + 1)`);
+3. the paragraph withdrawing the bound ("the error of forming them is not bounded by `κ_c = 1e-12`");
+4. the paragraph that calls it an allowance to be earned;
+5. **this paragraph**, including the quoted names in this list;
+6. the **Witness band** row of the numeric policy below;
+7. reason table row 7, `SEGMENT_INTERSECTS_OBSTACLE`;
+8. deliverable (2) of §7.4.1c.
+
+**No other text references it** — no fixture row, no interface, no test name and no enum value does. A ninth site is the
+signal that the rename moved a definition rather than a spelling.
+
 **`d` is a solid distance, and the difference is not cosmetic.** The distance from a point to an ellipsoid *surface*
 is not convex inside the body — for the unit sphere the surface distance at `x = −1, 0, 1` is `0, 1, 0` — so a
 minimisation over it has an interior maximum and a golden-section search over `[0, 1]` can converge into the wrong
@@ -2119,12 +2146,15 @@ clears can be built but never counted as clear when the bracket cannot show it.
 relative bound on the two products whose difference forms `Δ`, so it scales with the geometry instead of being a fixed
 absolute epsilon. `κ` is about 4,000× the double-precision noise floor for a `Δ` of order 1 (≈2.2e-16 relative), which is
 what makes the band a band rather than a bit test — and it is deliberately loose, because the band's only effect here is
-to route a pair to stage 3. A chord inside the band is never cleared by the quadratic. Measured under a
-discriminant-only verdict (the earlier design), the band's failure mode is a **false INVALID**: 200,000 near-tangent
-chords sampled across it produced **0 unsafe CLEAR verdicts**, every error falling in the safe direction. This document
-therefore does not claim the quadratic is "exact for the stated arithmetic": cancellation in `c0 = q0·q0 − 1` happens
-upstream of `Δ_tol`, so no tolerance on `Δ` can recover it. Interval arithmetic is not required either, because the
-verdict no longer rests on the discriminant.
+to route a pair to stage 3. A chord inside the band is never cleared by the quadratic. **No sampling census is offered for
+the band and none is retained.** An earlier revision reported a count of near-tangent chords sampled across it as evidence
+that the band's errors fell in the safe direction; that figure is withdrawn — there is no artefact behind it that anyone
+could re-run, and the question it answered has moved. Under a discriminant-only verdict the band's failure mode was indeed
+a **false INVALID**, routing a grazing chord to a stage that could not clear it; with `Δ` demoted to a diagnostic the band
+cannot produce a verdict at all, so "how often is it wrong" no longer bears on anything, and its actual cost is one stage-3
+evaluation per pair. This document therefore does not claim the quadratic is "exact for the stated arithmetic":
+cancellation in `c0 = q0·q0 − 1` happens upstream of `Δ_tol`, so no tolerance on `Δ` can recover it. Interval arithmetic
+is not required either, because the verdict no longer rests on the discriminant.
 
 **Numeric policy.**
 
@@ -4409,7 +4439,11 @@ schedule risk, not the engineering one.
   trivially — identity composed with identity is identity for every basis. The basis that *runs* is therefore covered by
   `PoseRetargeterBasisTest` and by nothing else: `RigLandmarkAlignmentTest` performs its own `s · Ry(+90°) · p_asset`
   conversion and never observes the runtime transform, `RigSideTest` observes handedness only, and the rest invariant
-  observes neither (§6.6).
+  observes neither (§6.6). **And the wrong-basis control cannot be asserted in engine space at all**: dropping the basis
+  inside `B⁻¹ · D · B` is algebraically invisible in the engine image — both forms read back as `D` once the basis is
+  undone, so an assertion written as an engine-space direction passes either way and the control could never fail — which
+  is why the test drives `PoseRetargeter.boneMatrices` and the scene-frame handoff and asserts the rotation **in asset
+  space**, where the difference actually lives (§12.2).
 - **Dependencies:** the character runtime from PR #385 **merged or rebased onto `main` at `23ef1c0` or later** — the
   runtime, `PoseRetargeter` and Filament 1.75.1 exist nowhere else (§3.1), so this stage cannot start before that; art
   for the base body.
