@@ -503,9 +503,11 @@ class AnatomyDefinition(
 
 /**
  * What the pass loop did for one head, kept apart from the geometric cause (`PathReason`, §7.4.1c). `CLEARED` means a
- * pass was accepted; an exhausted search is `SEARCH_EXHAUSTED` or `PASS_CAP`, never `CLEARED`.
+ * pass was accepted; an exhausted search is `SEARCH_EXHAUSTED` or `PASS_CAP`, never `CLEARED`; and a head a guard
+ * rejected before the loop was entered is `REJECTED_BEFORE_SEARCH` — a reached head that neither passed nor exhausted a
+ * search. `NOT_PROCESSED` is deliberately the **zero value**, so a fresh `IntArray` reads correctly before `clear()` runs.
  */
-enum class SearchOutcome { CLEARED, SEARCH_EXHAUSTED, PASS_CAP, NOT_PROCESSED }
+enum class SearchOutcome { NOT_PROCESSED, CLEARED, SEARCH_EXHAUSTED, PASS_CAP, REJECTED_BEFORE_SEARCH }
 
 /**
  * One frame of derived anatomy. Every per-frame number lives in a preallocated parallel array indexed by head; the
@@ -524,8 +526,9 @@ class AnatomyFrame(headCount: Int, pointCapacity: Int, landmarkCount: Int) {
     val relativePathLengthChanges = FloatArray(headCount)     // modelledPathLength / restLength - 1
 
     /**
-     * PathStatus ordinal — VALID, INVALID or NOT_PROCESSED. `clear()` writes NOT_PROCESSED to every slot (not INVALID
-     * with no reason: "the solver never reached this head" and "the solver rejected this head" are different facts).
+     * PathStatus ordinal — VALID, INVALID or NOT_PROCESSED. `NOT_PROCESSED` is ordinal 0 in both this enum and
+     * `SearchOutcome`, so a zero-initialised array is already correct; `clear()` re-asserts it. ("The solver never
+     * reached this head" and "the solver rejected this head" are different facts.)
      */
     val statuses = IntArray(headCount)
     val reasonCodes = IntArray(headCount)        // PathReason ordinal; NO_REASON only where status is VALID
@@ -545,9 +548,19 @@ class AnatomyFrame(headCount: Int, pointCapacity: Int, landmarkCount: Int) {
     val muscleStates: List<MuscleState>
 
     /**
+     * Per head, the ordered union of §7.4.2 as definition indices: `obstacleIndexMap[head][unionIndex]` is the index into
+     * `AnatomyDefinition.wrapSurfaces`. Built once with the frame — the union does not depend on the pose or the solve, so
+     * this is static per `(definition version, head)` and is the only sanctioned route from a union position to the
+     * definition's file order. `failingObstacles` is a definition index; a consumer that needs a projection-order
+     * position reads it here, and `NO_INDEX` is never read as `0`.
+     */
+    val obstacleIndexMap: List<IntArray>
+
+    /**
      * Start of every solve: status, reason and outcome NOT_PROCESSED, counts 0, indices NO_INDEX, lengths and visibility
      * cleared. A head the solver never reaches keeps NOT_PROCESSED in all three, which no consumer may read as VALID, as
-     * INVALID or as a result of the search.
+     * INVALID or as a result of the search. `obstacleIndexMap` is **not** cleared: it is definition data, not per-frame
+     * state.
      */
     fun clear()
 }
@@ -1629,6 +1642,18 @@ The renderer consumes the mask or the prefiltered list, and the rules are these:
 - **The skeleton is untouched.** A hidden muscle never freezes, hides or moves a joint — the path is hidden, the pose is
   not (§11, hard rule 1).
 
+**The per-instance mask is exact only for generated geometry, and strategy C owes its own mechanism.** Dropping a
+`DynamicGeometrySlot` hides exactly one generated tube, because that slot *is* the geometry. The same act does not hide
+part of an already-loaded authored mesh: a shared skin, a regional renderable and a layer bit each hide neighbours too, and
+`selectedInstance` indexes the dynamic list, so it has nothing to say about an authored instance. **M1 is unaffected** —
+it ships strategy A, whose muscle layer is one dynamic mesh per layer with no skin and no helpers (§10.3) — and this
+section's contract is therefore unchanged for M1. What strategy C must supply is stated as a **stage-3 gate** rather than
+designed here:
+per-instance visibility **and** selection of authored muscle meshes; a renderer-neutral carrier for both, keeping the
+boundary rule of §10.2 intact (no muscle id, status or reason reaches the renderer); and an asset partition that makes one
+instance addressable at all. The stage-3 exercise of the valid → invalid → valid sequence runs with neighbouring authored
+instances visible, because the failure mode being guarded is a mask that hides more than the invalid instance.
+
 `MuscleRenderabilityTest` (L4/presentation) drives valid → invalid → valid on one instance across carrier reuse and
 asserts the mask, the cleared geometry and the restored path. A stale buffer that survives an invalid frame is exactly
 the failure it exists to catch, and a test that only checks the first valid frame cannot see it.
@@ -1878,14 +1903,19 @@ read `NO_INDEX` as index 0.
 | 8 | `CLEARANCE_VIOLATION` | stage 3: the segment misses the surface but `min (d − r) < e` | index | index |
 | 9 | `TANGENT_DISCONTINUITY` | the entry/exit kink exceeds `θ_max` (§7.4.3) | index | index |
 | 10 | `CURVATURE_VIOLATION` | an interior turn exceeds `θ_max` at the declared spacing (§7.4.3) | index | `NO_INDEX` |
-| 11 | `SEARCH_EXHAUSTED` | the corridor limit was reached without a candidate (§7.4.5) | `NO_INDEX` | index |
-| 12 | `PASS_CAP` | the pass budget `K` was reached without a candidate (§7.4.5) | `NO_INDEX` | `NO_INDEX` |
-| 13 | `UNCERTIFIED_MINIMUM` | stage 3's certificate could not decide either side (`lower < e ≤ upper`) | index | index |
-| 14 | `UNRESOLVED_ROOT` | the point-to-ellipsoid bracket found no root for a finite, positive-axis input | index | index |
-| 15 | `NO_ROUTE` | **proved** impossible: no route exists between the fixed endpoints outside the declared set. **Disabled in M1** — see below | `NO_INDEX` | `NO_INDEX` |
-| 16 | `UNSUPPORTED_GEOMETRY` | the muscle is a **sheet** (`flat = true`): a two-sided strip has no single radius, so no tube envelope exists to certify (§7.4.1 "flat sheet muscles") | `NO_INDEX` | `NO_INDEX` |
-| 17 | `NOT_PROCESSED` | the solve never reached this head — the `clear()` state, never a verdict (§5.3) | `NO_INDEX` | `NO_INDEX` |
+| 11 | `NO_GEOMETRIC_CAUSE` | the loop stopped before any per-pair test produced a cause — a definition guard rejected the head, the buffer cap was hit, or the corridor was refused before the first candidate. **The sentinel for "no geometric cause exists"**, never a stand-in for a cause that does (§7.4.1c, X7) | `NO_INDEX` | `NO_INDEX` |
+| 12 | `UNCERTIFIED_MINIMUM` | stage 3's certificate could not decide either side (`lower < e ≤ upper`) | index | index |
+| 13 | `UNRESOLVED_ROOT` | the point-to-ellipsoid bracket found no root for a finite, positive-axis input | index | index |
+| 14 | `NO_ROUTE` | **proved** impossible: no route exists between the fixed endpoints outside the declared set. **Disabled in M1** — see below | `NO_INDEX` | `NO_INDEX` |
+| 15 | `UNSUPPORTED_GEOMETRY` | the muscle is a **sheet** (`flat = true`): a two-sided strip has no single radius, so no tube envelope exists to certify (§7.4.1 "flat sheet muscles") | `NO_INDEX` | `NO_INDEX` |
+| 16 | `NOT_PROCESSED` | the solve never reached this head — the `clear()` state, never a verdict (§5.3) | `NO_INDEX` | `NO_INDEX` |
 | — | `NO_REASON` | only where the status is `VALID` | `NO_INDEX` | `NO_INDEX` |
+
+**Search outcomes are not in this table, and that is the point of the split.** `SEARCH_EXHAUSTED` and `PASS_CAP` are
+`SearchOutcome` values — what the loop did — and never reasons: a corridor refused at pass one has no final-predicate
+cause at all, and listing the refusal as a reason would make "the search stopped" and "this segment is 0.3 mm too close"
+the same column. When no per-pair test ran, the reason is `NO_GEOMETRIC_CAUSE`, which is a statement that none exists
+rather than a cause.
 
 **Guards run before geometry, and each phase has its own order.** A non-finite operand cannot be classified by any
 geometric test, so rows 1 and 2 are evaluated **before** the state machine runs at all; a zero-length segment is decided
@@ -1901,11 +1931,26 @@ There is no "probably fine" outcome and no fall-through default. If the check ca
 **X7 — `NO_ROUTE` is disabled until a proof procedure exists, and the two kinds of outcome are separate fields.**
 *Confirmed by owner.* A reason is not a search outcome and a search outcome is not a geometric cause. So:
 
-- the **frame** carries it: `AnatomyFrame.searchOutcomes` (§5.3) holds the outcome per head ∈ {`CLEARED`,
-  `SEARCH_EXHAUSTED`, `PASS_CAP`} — what the construction did — while `reasonCodes` holds, separately, the **last
-  geometric cause** it hit. Both are per-head arrays with a `clear()` state, so a reused buffer cannot report the
-  previous frame's outcome, and `NOT_PROCESSED` means the head was never solved (§5.3), which is a bug and not a
-  result.
+- the **frame** carries it: `AnatomyFrame.searchOutcomes` (§5.3) holds the outcome per head ∈ {`NOT_PROCESSED`, `CLEARED`,
+  `SEARCH_EXHAUSTED`, `PASS_CAP`, `REJECTED_BEFORE_SEARCH`} — what the construction did — while `reasonCodes` holds,
+  separately, the **last geometric cause** it hit. Both are per-head arrays with a `clear()` state, so a reused buffer
+  cannot report the previous frame's outcome, and `NOT_PROCESSED` means the head was never solved (§5.3), which is a bug
+  and not a result. **`REJECTED_BEFORE_SEARCH` is the outcome the earlier revision was missing**: a reached head refused
+  by `REST_LENGTH_INVALID`, a non-finite operand or an unsupported sheet geometry has not passed and has not exhausted a
+  search, so calling it `CLEARED`, `SEARCH_EXHAUSTED` or `NOT_PROCESSED` would each be a lie about a different thing.
+- **Which combinations are legal, stated once.** Everything outside this table is a bug in the producer, and a consumer
+  may assert on it:
+
+  | status | outcome | reason |
+  | --- | --- | --- |
+  | `VALID` | `CLEARED` | `NO_REASON` — an accepted pass, and the only place `NO_REASON` appears |
+  | `INVALID` | `SEARCH_EXHAUSTED` | the last geometric cause, or `NO_GEOMETRIC_CAUSE` when the corridor was refused before any candidate existed |
+  | `INVALID` | `PASS_CAP` | the last geometric cause (`CLEARANCE_VIOLATION` typically), or `NO_GEOMETRIC_CAUSE` |
+  | `INVALID` | `REJECTED_BEFORE_SEARCH` | a guard or definition reason — `NON_FINITE_GEOMETRY`, `DEGENERATE_OBSTACLE`, `REST_LENGTH_INVALID`, `UNSUPPORTED_GEOMETRY`, `BUFFER_CAPACITY` |
+  | `NOT_PROCESSED` | `NOT_PROCESSED` | `NOT_PROCESSED` — never solved |
+
+  The two illegal shapes worth naming because they are the ones an implementation drifts into: `VALID` with any outcome
+  but `CLEARED`, and `INVALID` with `CLEARED`. Both are rejected by `AnatomyFrameLayoutTest` (§12.2).
 - **`CLEARED` is success and nothing else.** A head is `CLEARED` when a pass was accepted, which implies `status =
   VALID` and `reason = NO_REASON`; an exhausted search reports `PASS_CAP` or `SEARCH_EXHAUSTED` **with** the last
   geometric cause (`CLEARANCE_VIOLATION` at a named segment, typically) — two fields, one record. An earlier revision
@@ -1919,11 +1964,16 @@ There is no "probably fine" outcome and no fall-through default. If the check ca
   `SEARCH_EXHAUSTED` and `PASS_CAP` are the honest names for "the search gave up".
 - **Corridor exhaustion is `SEARCH_EXHAUSTED`**, never `NO_ROUTE` — including when the corridor is refused at pass 1,
   which is a limit on the declared `corridorMetres`, not a theorem about the geometry.
-- **Precedence is phase-specific, not one global order.** The table is ordered within each phase: definition-time reasons
-  (1, 2, 3) are decided before a path exists; construction-time reasons (4, 11, 12) are decided by the pass loop; and
-  per-pair reasons (5, 6, 7, 8, 13, 14, and the continuity rows 9, 10) are decided by the final predicate in table order.
-  Two implementations that hit a definition error and a geometric one therefore report the same reason (the
-  definition-time row) instead of depending on which check ran first.
+- **Precedence is phase-specific, not one global order, and the phases do not overlap.** Definition- and guard-time
+  reasons (1, 2, 3 and 15) are decided before a path exists, so the outcome is `REJECTED_BEFORE_SEARCH` and no geometric
+  test is reported because none ran; capacity (4) is decided while a pass is constructing, so it too reports
+  `REJECTED_BEFORE_SEARCH` with the outcome's own name for why; a corridor refusal or an exhausted budget is decided by
+  the loop and reports `SEARCH_EXHAUSTED` or `PASS_CAP` with `NO_GEOMETRIC_CAUSE` unless a per-pair test had already
+  produced a cause; and per-pair reasons (5–10, 12, 13) are decided by the final predicate in table order, reporting the
+  loop's own outcome. Two implementations that hit a definition error and a geometric one therefore report the
+  definition-time row under the same outcome instead of depending on which check ran first — and a fixture that expects
+  `PASS_CAP` **with** `CLEARANCE_VIOLATION` is now consistent with the table rather than an exception to it, because the
+  pass cap is an outcome and the clearance is a reason.
 - Fixture `final_clearance_and_budget_both_fail` pins the combination: a final polyline that fails the predicate at a
   named segment **and** exhausts the pass budget reports `searchOutcome = PASS_CAP` with `reason =
   CLEARANCE_VIOLATION` at that segment and obstacle — one record, two fields, neither overwriting the other.
@@ -2043,10 +2093,40 @@ that obstacle; **any re-entry after leaving is a violation**, not a second exemp
 narrower exemption, it is a different claim (that the muscle is inside the obstacle twice, with nothing said about the
 route between), and it is what an open-ended exemption degenerates into.
 
-**One mask, five consumers.** The same `(head, obstacle, arc-length interval)` mask is applied identically by
-(a) the endpoint check, (b) the sample check, (c) construction, (d) projection and (e) the final validation. A solver that
-projects against an unmasked obstacle and validates against a masked one produces a path neither of them would accept, so
-the mask is a parameter of the predicate, not a special case inside one caller.
+**One mask, five consumers — and the mask is the *effective* interval, not the declared one.** The same
+`(head, obstacle, arc-length interval)` mask is applied identically by (a) the endpoint check, (b) the sample check, (c)
+construction, (d) projection and (e) the final validation. A solver that projects against an unmasked obstacle and
+validates against a masked one produces a path neither of them would accept, so the mask is a parameter of the predicate,
+not a special case inside one caller.
+
+But an interval alone does not express X5's rule, and pretending it does is how the re-entry fixture gets accepted: the
+declared `fromStation … toStation` covers **every** station in that range, including stations the path re-enters after
+leaving, so a mask that is literally "everything before `toStation`" exempts exactly the violation it exists to forbid.
+The mask the five consumers use is therefore the **effective** one:
+
+```
+effectiveFrom = the endpoint the exemption is for                    // 0 or 1, as declared
+effectiveTo   = the FIRST EGRESS station from that obstacle on THIS path   // computed, not declared
+exempt(t)     = t between effectiveFrom and effectiveTo              // and nothing after it
+```
+
+- **Computed, or validated, against the current path.** `effectiveTo` is the first station at which the path leaves the
+  obstacle after the exempted endpoint. The declared `toStation` is a **reviewed bound** on it, not a substitute: if the
+  computed first egress lies beyond the declared bound, the declared bound is used (narrower, fail-closed) and the
+  divergence is reported; if it lies inside, the computed value is used. A path mutation (construction, smoothing,
+  projection, insertion) recomputes both the stations and the egress — an exemption is anchored to the path, not to point
+  indices.
+- **Re-entry is checked explicitly, on the same path.** After the effective interval, any sample or segment inside that
+  obstacle is a violation with the ordinary `SEGMENT_INTERSECTS_OBSTACLE` / `CLEARANCE_VIOLATION` reason. That check is a
+  first-egress test, not an interval-membership test, and it is the test `exempt_re_entry` pins.
+- **The same effective mask, in all five consumers.** A consumer that recomputes the interval differently — from the
+  declared endpoint instead of the computed egress, or from a station list captured before a mutation — is the defect this
+  rule removes, exactly as with the obstacle union of §7.4.2.
+
+The consequence for the fixtures: `exempt_then_penetrate` and `exempt_re_entry` are **negative controls**, and an
+implementation that passes them by treating the declared interval as the exemption is an implementation that fails them
+for the wrong reason on the next path shape. `exempt_origin_success` is the positive control, and its path leaves the
+obstacle once and never returns.
 
 **Endpoint inclusion, overlap and mutation.** `fromStation = 0` or `toStation = 1` must be the endpoint the exemption is
 for (a `0 … 1` interval is a definition error at L3, as is an exemption with no `source`). Overlapping exemptions on the
@@ -2120,13 +2200,14 @@ an error). The rules make the outcome deterministic and reviewable:
 - **`failingObstacles` indexes the definition's obstacle list, not the union.** The reported index is into
   `AnatomyDefinition.wrapSurfaces` — the immutable, versioned list, in file order — because that is the list a reviewer
   can open and the list that does not change when another muscle's `global` flag changes. A consumer that needs the
-  per-head union position (a projection-order diagnostic, for instance) reads a **published mapping**
-  `head → IntArray(unionSize) { definitionIndex }` from the same frame; it never assumes the two orders coincide, and it
-  never treats `NO_INDEX` as index `0`. Test `failingObstacleIndexOrderTest` reorders the declared obstacles and flips a
-  `global` flag between runs and asserts the reported index still names the same obstacle, and that an absent obstacle
-  reports `NO_INDEX` rather than the first entry. Validation tests every segment against every obstacle individually, so
-  overlap and nesting need no special case — the union falls out of the per-obstacle tests. Only projection order is
-  affected.
+  per-head union position (a projection-order diagnostic, for instance) reads `AnatomyFrame.obstacleIndexMap[head]` — the
+  published mapping on the frame itself (§5.3), built once per definition version, never re-derived per solve — and it
+  never assumes the two orders coincide, and never treats `NO_INDEX` as index `0`. Test
+  `failingObstacleIndexOrderTest` (§12.2) reorders the declared obstacles and flips a `global` flag between runs and
+  asserts the reported index still names the same obstacle, that the mapping's union position moves with it, and that an
+  absent obstacle reports `NO_INDEX` rather than the first entry. Validation tests every segment against every obstacle
+  individually, so overlap and nesting need no special case — the union falls out of the per-obstacle tests. Only
+  projection order is affected.
 - **Nested obstacles.** A sample inside a nested pair is pushed out of each in declaration order until it leaves both or
   the pass cap is reached. An "outer" surface that does not contain its declared inner obstacle is a **definition
   error** (L3), not a runtime condition to paper over.
@@ -2136,10 +2217,11 @@ an error). The rules make the outcome deterministic and reviewable:
   checks every resolved attachment against every obstacle **in the current pose** and returns `INVALID` with
   `ENDPOINT_INSIDE_OBSTACLE` when one is inside. That is a runtime condition, not evidence that the static data is wrong,
   and the two must be reported differently: L3 blocks the definition; the solver blocks the frame.
-- **Failure is named by what actually happened, and the three names are not interchangeable.** `PASS_CAP` means the pass
-  budget `K` ran out; `SEARCH_EXHAUSTED` means the corridor limit was reached without a candidate; `NO_ROUTE` means the
-  impossibility was **proved** — no route exists between the fixed endpoints outside the declared set — and it is
-  reserved for that, never used as the name for "the search gave up" (§7.4.5). `ENDPOINT_INSIDE_OBSTACLE` is a separate
+- **Failure is named by what actually happened, and the names are not interchangeable.** `PASS_CAP` means the pass
+  budget `K` ran out and `SEARCH_EXHAUSTED` means the corridor limit was reached without a candidate; **both are search
+  outcomes in `searchOutcomes`, not reasons** (X7), so the reason field carries the last geometric cause or
+  `NO_GEOMETRIC_CAUSE`. `NO_ROUTE` means the impossibility was **proved** — no route exists between the fixed endpoints
+  outside the declared set — and it is a reason the frame never emits in M1. `ENDPOINT_INSIDE_OBSTACLE` is a separate
   runtime condition (§7.4.1c). If the final polyline fails the check instead, the reason comes from the reason table.
   Either way it is reported, counted by the fixture, and blocks L4. A path through geometry is never accepted because it
   is the closest thing the solver found, and an exhausted search is never reported as a proof.
@@ -3080,6 +3162,7 @@ Seven levels, each with one owner, one report and an explicit automation status.
 | `AnatomyDefinitionTest` | L3 | ids unique; attachments resolve; envelope bounds; L/R mirror; heads consistent |
 | `MusclePathGeometryTest` | L4 | arc length ≥ chord; every segment of the final polyline is certified clear of every obstacle in the head's union under the three-stage state machine of §7.4.1, with the solid-distance predicate and the Lipschitz certificate; every **non-exempt** sample lies outside the surface by at least `e`, read through the same `(head, obstacle, arc-length interval)` first-egress mask that construction, projection and the endpoint check use (§7.4.1a), so `exempt_origin_success` passes while a re-entry outside its interval still fails; repeatable across runs and buffer reuse on one device and configuration |
 | `MusclePathObstacleFixtureTest` | L4 | the validator fixtures (§12.2.1) return the expected verdict, and the solver fixtures return the expected final path or the expected failure reason — never silently |
+| `failingObstacleIndexOrderTest` | L4 | §7.4.2: `failingObstacles` is a **definition** index — reordering `wrapSurfaces` and flipping another muscle's `global` flag between runs leaves the reported index naming the same obstacle; `AnatomyFrame.obstacleIndexMap[head]` maps the same union position to it and moves when the order moves; an obstacle absent from the head's union reports `NO_INDEX`, never `0`; and the map is **not** rewritten by `clear()` or by a solve, because it is definition data |
 | `MusclePathContinuityTest` | L4 | C0, tangent bound at entry/exit, curvature bound (gated); and, for the **observer's own correctness** (diagnostic, X6): a rigid translation of the whole body produces no alarm; a rotating or moving wrap is attributed and produces no alarm; an inserted sample does not shift a station; a deliberate branch switch alarms; the first frame produces no verdict; pause, resume, seek, backward time and a non-monotonic timestamp each reset rather than express a negative displacement; an `INVALID` frame resets the comparison and is recorded as a reset; `valid → invalid → valid` restores the path and does not compare across the gap; and no path is ever rate-limited |
 | `MuscleLengthDeterminismTest` | L4 | the same pose produces the same length **bit-identically** across runs, buffer reuse and definition reload. **No temporal-continuity bound is asserted here**: a length or path change across a sampled motion is a diagnostic row from the continuity observer (§7.4.3), not a verdict, because X6 keeps the observer out of every gate and a route-branch switch can change the path discontinuously with no defensible universal bound |
 | `MuscleLengthReferenceTest` | L4 | length matches expert-reviewed reference data **where such data is named**, within the stated tolerance; where it is not named the row reports an evidence gap, which is **not** a pass and **not** an M1 blocker (§7.4.4) |
@@ -3087,7 +3170,7 @@ Seven levels, each with one owner, one report and an explicit automation status.
 | `MuscleDirectionalExpectationTest` | L4 | only exercise- and muscle-specific expectations, each carrying a documented justification and source |
 | `MuscleRestLengthTest` | L4 | §7.4.4's **mandatory** half: the solver-derived rest length is finite, strictly positive and **reproducible** for every head — the same value across runs, buffer reuse and definition reload, computed at the X1 bind frame (§6.6). A zero, negative or NaN value reports `REST_LENGTH_INVALID` rather than dividing by it. The **conditional** half — a comparison against a named, sourced reference — is `MuscleLengthReferenceTest`, not this row: requiring a measured reference for every M1 head would contradict the evidence-gap rule of §7.4.4 |
 | `MuscleRenderabilityTest` | L4 / presentation | §7.4: an `INVALID` instance is masked and its geometry cleared in the same frame; **one invalid biceps-femoris head hides the whole instance and both sides keep independent masks**; the mask is the conjunction of the heads' statuses and `NOT_PROCESSED` is not renderable; an early return leaves every instance unrenderable rather than stale; valid → invalid → valid restores the path and the mask across carrier reuse |
-| `AnatomyFrameLayoutTest` | L4 | §5.3: the `3 · headCount · pointCapacity` stride addresses every point of every head; `pointCapacity` is the post-insertion maximum; an over-capacity head reports `BUFFER_CAPACITY` instead of growing or truncating; `clear()` leaves every slot `NOT_PROCESSED` in **status, reason and `searchOutcome`** and every `renderable` entry `false`; a solve that returns early leaves the untouched heads `NOT_PROCESSED` rather than `VALID`, `INVALID` or a stale outcome; a reused buffer that is not cleared cannot show the previous frame's status **or outcome**; an accepted head reads `CLEARED` with `reason = NO_REASON` while an exhausted one reads `PASS_CAP` or `SEARCH_EXHAUSTED` with its own last geometric cause, so the two fields are asserted separately (X7); and a head that is simultaneously degenerate and inside an obstacle reports `DEGENERATE_SEGMENT` |
+| `AnatomyFrameLayoutTest` | L4 | §5.3: the `3 · headCount · pointCapacity` stride addresses every point of every head; `pointCapacity` is the post-insertion maximum; an over-capacity head reports `BUFFER_CAPACITY` instead of growing or truncating; `clear()` leaves every slot `NOT_PROCESSED` in **status, reason and `searchOutcome`** and every `renderable` entry `false`; a **fresh, never-cleared** buffer reads `NOT_PROCESSED` in all three arrays, because that is ordinal 0 in both enums; a solve that returns early leaves the untouched heads `NOT_PROCESSED` rather than `VALID`, `INVALID` or a stale outcome; a reused buffer that is not cleared cannot show the previous frame's status **or outcome**; an accepted head reads `CLEARED` with `reason = NO_REASON` while an exhausted one reads `PASS_CAP` or `SEARCH_EXHAUSTED` with its own last geometric cause, so the two fields are asserted separately (X7); **each guard has its own case** — `NON_FINITE_GEOMETRY`, `DEGENERATE_OBSTACLE`, `REST_LENGTH_INVALID`, `UNSUPPORTED_GEOMETRY` and `BUFFER_CAPACITY` each yield `INVALID` + `REJECTED_BEFORE_SEARCH` + their own reason, never `CLEARED` and never `NO_GEOMETRIC_CAUSE`; a corridor refused before the first candidate yields `INVALID` + `SEARCH_EXHAUSTED` + `NO_GEOMETRIC_CAUSE`; the two illegal combinations (`VALID` with a non-`CLEARED` outcome, `INVALID` with `CLEARED`) are asserted to be absent; and a head that is simultaneously degenerate and inside an obstacle reports `DEGENERATE_SEGMENT` |
 | `MuscleGeometryOwnershipTest` | L4 / presentation | §7.6: toggling morphs or correctives leaves every `MuscleState` bit-identical, and nothing in `character/` writes `AnatomyFrame` |
 | `SceneFrameHandoffTest` | presentation | §10.2: `geometry` carries only instances whose `renderable` entry is `true`, one slot per instance, keyed by a `slotId` that is stable across a solve sequence; a slot absent from the next frame (its instance became `INVALID`) is cleared by id while its neighbours keep drawing, and a slot present with `visible = false` is cleared too; each `SkinPalette` is written in its own skin's joint order and `MuscleLayerSkinner` writes only the skin it was built for; and the renderer receives no muscle id, status or reason |
 | `ProceduralTubeBudgetTest` | L5 (M1 subset) | generated triangles match the §10.3 formula for the declared `N` and `R`; no zero-area ring; all coordinates finite |
@@ -3202,8 +3285,8 @@ changes which predicate it calls changes its primary reason, so every row pins b
 | `near_tangent` | **pinned inputs:** sphere `R = 20 mm` at the origin, attachments at `(−100, 20, 0)` and `(100, 20, 0)` mm (a chord exactly tangent), tube radius 0, `N = 30`, `e = 0.01 mm` | `VALID`; the solver routes around it so the **final** polyline clears by `eps_num` (not merely "is not intersecting"); no oscillation; tangent check within `θ_max`. The solver half of the split: the raw tangent chord is rejected as `tangent_on_segment_invalid`, and a detour that clears is a legitimate `VALID` |
 | `after_smoothing_regression` | a configuration whose pre-smoothing polyline clears but whose 0.25-blend smoothed polyline does not | `VALID`, and the accepted polyline is the smoothed-then-projected one. A solver that validates **before** smoothing accepts a curve the predicate never saw; the fixture fails it. The pass loop's own step 4d is what catches this case and forces the retry |
 | `two_obstacle_oscillation` | two obstacles for which the detour side that clears one puts the path inside the other, alternating per pass | `INVALID` — `PASS_CAP`. Deterministic and terminating: the same input produces the same failure at the same pass, not a hang and not a different reason on a second run |
-| `search_exhausted` | an obstacle whose required detour distance exceeds the declared corridor limit | `INVALID` — `SEARCH_EXHAUSTED`, not `NO_ROUTE`: the search gave up, no impossibility was proved |
-| `closed_corridor_exhausted` | **pinned inputs:** attachments at `(0, 0, 0)` and `(290, 0, 0)` mm; one ellipsoid centred at `(145, 0, 0)` mm with semi-axes `(120, 40, 40)` mm, both attachments outside it (`Σ(pᵢ/Rᵢ)² = 1.4601`); tube radius 0; `corridorMetres = 0.030 m` (30 mm); `e = 0.01 mm` | `INVALID` — `SEARCH_EXHAUSTED` with `searchOutcome = SEARCH_EXHAUSTED`, and the frame emits **no** `NO_ROUTE` value (X7). The corridor is refused at pass 1 and that is arithmetic, not a theorem: `h(l̂_d) ≥ min R = 40 mm` for every unit direction (`h² = Σ(Rᵢ l̂ᵢ)² ≥ min R²`), so `d_1 = h + e ≥ 40.01 mm > 30 mm` and no pass can place a waypoint inside the declared corridor. This replaces the former `no_valid_route` row, which asserted `NO_ROUTE` for a geometry its own fixture claimed to prove and §7.4.1c forbids M1 from emitting; the replacement pins the **declared limit** that stopped the search, never an impossibility claim |
+| `search_exhausted` | an obstacle whose required detour distance exceeds the declared corridor limit | `INVALID` — `searchOutcome = SEARCH_EXHAUSTED`, never `NO_ROUTE`: the search gave up and no impossibility was proved. The reason is whichever geometric cause the last per-pair test produced, or `NO_GEOMETRIC_CAUSE` if the corridor bound stopped it before one |
+| `closed_corridor_exhausted` | **pinned inputs:** attachments at `(0, 0, 0)` and `(290, 0, 0)` mm; one ellipsoid centred at `(145, 0, 0)` mm with semi-axes `(120, 40, 40)` mm, both attachments outside it (`Σ(pᵢ/Rᵢ)² = 1.4601`); tube radius 0; `corridorMetres = 0.030 m` (30 mm); `e = 0.01 mm` | `INVALID` — `searchOutcome = SEARCH_EXHAUSTED` with `reason = NO_GEOMETRIC_CAUSE`, because the search stopped before any per-pair test produced a cause, and the frame emits **no** `NO_ROUTE` value (X7). The corridor is refused at pass 1 and that is arithmetic, not a theorem: `h(l̂_d) ≥ min R = 40 mm` for every unit direction (`h² = Σ(Rᵢ l̂ᵢ)² ≥ min R²`), so `d_1 = h + e ≥ 40.01 mm > 30 mm` and no pass can place a waypoint inside the declared corridor. This replaces the former `no_valid_route` row, which asserted `NO_ROUTE` for a geometry its own fixture claimed to prove and §7.4.1c forbids M1 from emitting; the replacement pins the **declared limit** that stopped the search, never an impossibility claim |
 | `pass_cap` | a configuration that exhausts the pass budget `K` without a candidate | `INVALID` — `PASS_CAP`; deterministic and terminating |
 | `two_obstacle_projection_cycle` | two spheres centred at `0` and `2`, radius `1.5`, a sample at `0.5` | `searchOutcome = PASS_CAP`, and the record shows the sample alternating `1.5 → 0.5 → 1.5` under ordered projection; an implementation that treats projection as convergent (iterating to a tolerance, or reporting the first projected position as final) cannot reproduce the sequence |
 | `final_clearance_and_budget_both_fail` | a final polyline that fails the predicate at one named segment **and** exhausts `K` at the same pass | one record: `searchOutcome = PASS_CAP` **and** `reason = CLEARANCE_VIOLATION` with the segment and obstacle index — the two fields are separate (X7), so neither overwrites the other |
@@ -3518,7 +3601,7 @@ The smallest experiment is kept against each row because a confirmed design stil
 | **X2** | **The ten finger bones stay**, as visual-only bones: no engine joint, no A1 row, excluded from `RigLandmarkAlignmentTest` and listed as unmapped, counted in the 30-bone visual budget (10 of 30), and inheriting their hand bone's frame parent-relative so the fingers follow the hand rigidly; the generator lays them along the X1 hand direction | §6.1, §6.2, §15 stage 1 | **reversed by owner: fingers kept** | render the hand at the smallest shipped size and check that the ten rigid finger bones read as a hand; if the silhouette fails, the fix is hand geometry, not finger articulation the engine does not have |
 | **X3** | **Position-driven retarget**: each mapped bone's rotation is the minimal rotation from its bind direction to the published segment direction, **conjugated into asset space (`B⁻¹ · D · B`) and transported by the parent's posed rotation**, same frame rule as X9; `basis = Ry(+90°)`, `s = 235/0.95`, translation 0 at the pelvis | §6.2 (the rule), §11 (classification), §15 stage 1 | **confirmed by owner** | land the change behind the existing `PoseRetargeter` signature and compare A2 residuals before and after on the six named poses, with `PoseRetargeterBasisTest`'s wrong-basis control red |
 | **X4** | **M1's UI shows `relativePathLengthChange` only**; absolute metres are withheld until a named calibration pair and an evidence-backed uncertainty exist, and `modelledPathLength` stays in the data and debug | §9.2, §12.5, §13 question 12, §15 stage 2 and M1 item 4 | **confirmed by owner** | name the pair, measure both spans on the stage-1 rig, and quote the uncertainty; only then is a metre value displayable |
-| **X5** | An attachment-contact **exemption is one reviewed first-egress interval**; any re-entry after leaving is a violation, and the same mask applies to endpoint, sample, construction, projection and final validation | §7.3 (`ContactExemption`), §7.4.1, §12.2.1 (`exempt_re_entry`) | **confirmed by owner** | run the 1-D re-entry fixture: if the implementation accepts stations 0.5625–0.6875, the mask is not an interval |
+| **X5** | An attachment-contact **exemption is one reviewed first-egress interval**, and the mask every consumer applies is the **effective** one — the declared interval bounded by the first egress **computed on the current path**; any re-entry after leaving is a violation, and the same effective mask applies to endpoint, sample, construction, projection and final validation | §7.3 (`ContactExemption`), §7.4.1, §12.2.1 (`exempt_re_entry`) | **confirmed by owner** | run the 1-D re-entry fixture: the path re-enters at stations 0.5625–0.6875, which lie **inside** the declared `[0, 0.7]`, so an implementation that treats the interval as the exemption **accepts** them. Acceptance is the failure; the first-egress check must reject the re-entry, and a fixed interval cannot |
 | **X6** | The **continuity observer is diagnostic only** and never a gate; **route hysteresis is removed from M1** | §7.4.3, §12.2 (`MusclePathContinuityTest`) | **confirmed by owner** | the observer-correctness fixtures: a rigid translation must not alarm, a branch switch must |
 | **X7** | **`NO_ROUTE` is disabled** until a proof procedure exists; the frame exposes a **terminal search outcome** (`SEARCH_EXHAUSTED` / `PASS_CAP`) separately from the **last geometric cause** | §7.4.1c, §7.4.5, §12.2.1 | **confirmed by owner** | `final_clearance_and_budget_both_fail`: one record, two fields, neither overwriting the other |
 | **X8** | **Categorical roles ship in M1**: schema, provenance/review validator and display gate, for exercises with a reviewed source only; the **pilot exercise list is owner-approved and fixed**: `squat`, `standard push-up`, `bird-dog`, `row_standard` | §7.3 (`MuscleRole.UNKNOWN`), §8, §9.2, §12.4 (RV4 poses), §12.5, §15 M1 item 10 | **confirmed by owner** | the validator runs on those four and every other exercise must display no role; the §12.4 pose set is drawn from them so that every M1 muscle is reviewed |
@@ -3840,6 +3923,13 @@ attachment-landmark hints of item 9), a muscle library beyond eight, and any cla
   no cross-section response (§7.6); the measured between-helper deviation is within the declared tolerance and recorded
   in L5; frame cost of the muscle layer **recorded as information, not gated** — the owner's decision is result first,
   optimisation later, so no stage gate depends on a frame-rate number (§12.3).
+- **Gate: per-instance visibility and selection of authored muscle meshes (§7.4).** The property, not the mechanism: one
+  authored instance can be hidden **and** selected while its neighbours keep drawing — per instance, never per layer and
+  never per regional renderable; the carrier that expresses both is renderer-neutral (no muscle id, status or reason
+  crosses into the renderer, §10.2); and the asset partition makes an instance addressable at all, with a documented
+  mapping from the instance identity to the mesh range or renderable that draws it. The mechanism is deliberately not
+  designed in this document — what is fixed is what the stage has to demonstrate, exercised valid → invalid → valid with
+  neighbouring instances visible, because a mask that hides more than the invalid instance passes every weaker check.
 - **Manual acceptance:** visual review of the eight muscles in three poses against anatomical references, and a
   **renewed §12.4 record** for the new `assetVersion` — the M1 record covered tubes, not these meshes.
 - **Risks:** helper bone budget (R3); art time (R2).
