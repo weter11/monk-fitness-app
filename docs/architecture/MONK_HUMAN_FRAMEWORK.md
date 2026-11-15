@@ -2018,7 +2018,8 @@ Rules:
 3. Skeleton overlay.
 
 `SELECTED` exists from the start as state (highlight + panel). In M1 its content is the muscle **name and layer**, plus
-the reported length; it does **not** show a role, because roles come from the activation table and that is stage 4 (§8,
+the reported `modelledPathLength` (§7.4 — an absolute length is approximate until the calibration pair is settled, §13
+question 12); it does **not** show a role, because roles come from the activation table and that is stage 4 (§8,
 §15). Showing a role in M1 would either invent one or ship an unreviewed claim. `MUSCLES_DEEP` follows in v2; organs,
 tendons, labels and attachment markers are explicitly later.
 
@@ -2026,7 +2027,8 @@ tendons, labels and attachment markers are explicitly later.
 
 Projection-based picking (the AA-3D reference does this with a raycaster) is optional for M1: Filament supports picking
 via renderable queries, but the value of picking without labels is low. The M1 acceptance is layer toggling; picking is
-a stage-5 item.
+a **stage-7** item (§15 — stage 5 is morphology v2, stage 7 is labels, picking and explanations). The M1 tap hints of
+§15 item 9 read an attachment landmark that already exists in the data and need no picking system.
 
 
 ---
@@ -2212,7 +2214,7 @@ Seven levels, each with one owner, one report and an explicit automation status.
 | **L1 Motion** | 18 existing rules over joint-space geometry (`ExerciseValidator.kt:47-92`) | yes, unchanged | all | the pose/engine is wrong; block |
 | **L2 Rig** | bone coverage, rest invariant, inverse binds, side/handedness, unit scale, bone budget, landmark alignment (§6.6) | yes | all | the asset or map is wrong; block |
 | **L3 Attachments** | every attachment's joint exists; offset inside a segment envelope; L/R mirror; head count; origin ≠ insertion; span ≥ 2 segments | yes | all | the anatomy data is wrong; block |
-| **L4 Path** | every segment of the final polyline tested analytically against every obstacle (closed-form segment–ellipsoid), plus a sample-outside-inflated-surface check using the `ε_pen` numerical margin; unverifiable geometry reported `INVALID`; deterministic outcome for overlapping, nested and impossible routes; tangent and curvature continuity at entry/exit; temporal continuity; rest-length tolerance vs measured reference | yes, with adversarial fixtures | all | the solver or the data is wrong; block |
+| **L4 Path** | every segment of the final polyline tested against every obstacle in the head's ordered union, in three stages — bounding-sphere accept, quadratic reject/locate, then the finite-segment minimum `min_t (d(t) − r(t)) ≥ eps_num` with the radius taper split at every knot — plus the sample-outside check; unverifiable geometry reported `INVALID` with a reason from the one table; deterministic outcome for overlapping, nested and impossible routes; tangent and curvature continuity at entry/exit; the continuity observer; rest-length tolerance vs measured reference | yes, with adversarial fixtures | all | the solver or the data is wrong; block |
 | **L5 Mesh** | self-intersection, degenerate triangles, weight sums, volume sanity per muscle, helper-bone bind match | partly (tool) | **subset** (§12.5) | the mesh is wrong; block release, not build |
 | **L6 Morphology** | declared ranges respected per target; **mesh** ring/mask vertices relative to joint pivots within `ε_morph`; delta bounds; anatomy still inside the body | yes | **subset** (§12.5) | a preset breaks the surface the muscles sit under; block the preset. A bone-landmark rest invariant is **not** an L6 assertion: a vertex-only morph cannot move a bone, so it is tautological |
 | **L7 Anatomical review** | A1–A6 in §12.4: attachment locations, position vs bone and body surface, visible intersections, shape/path plausibility across poses, preset consistency, provenance | no — human, **required for M1** | all | the model is not accepted; M1 does not ship |
@@ -2221,9 +2223,9 @@ Seven levels, each with one owner, one report and an explicit automation status.
 
 - L1 (already), L2 (fully), L3's mechanical half (existence, envelope, mirror), L4's numeric half, L6 (fully), and L5's
   geometric half. These are the parts a CI job can gate.
-- L4's numeric half is exact for the polyline it is handed — closed-form segment–ellipsoid tests, not a sample census
-  (§7.4.1). What it still cannot certify is the anatomical surface the ellipsoids stand for, the frames it was not run
-  on, or a rendered curve that is not the validated polyline.
+- L4's numeric half is a **measurement with a stated error budget** (`eps_num`, §7.4.1), not an exactness claim and not a
+  sample census. What it still cannot certify is the anatomical surface the ellipsoids stand for, the frames it was not
+  run on, a morphed or sheet muscle, or a rendered curve that is not the validated polyline.
 - **Not automatable:** whether an attachment is the *right* anatomical point; whether a wrap produces a believable
   contour; whether a muscle mesh reads as that muscle; whether a path looks plausible in a pose nobody posed a fixture
   for. Any claim otherwise is false confidence, and this document refuses to design a "score" that hides it. §12.4 is
@@ -2243,7 +2245,7 @@ Seven levels, each with one owner, one report and an explicit automation status.
 | `BoneMapCoverageTest` | L2 | 23 mapped joints resolve; unmapped joints are declared, not accidental |
 | `RigSideTest` | L2 | `Left*` bones on the same side as anatomy side A in the rest pose |
 | `AnatomyDefinitionTest` | L3 | ids unique; attachments resolve; envelope bounds; L/R mirror; heads consistent |
-| `MusclePathGeometryTest` | L4 | arc length ≥ chord; every segment of the smoothed polyline is disjoint from every inflated obstacle, and every sample lies outside the inflated surface by the `ε_pen` numerical margin; deterministic across runs and buffer reuse |
+| `MusclePathGeometryTest` | L4 | arc length ≥ chord; every segment of the final polyline clears every obstacle in the head's union by `eps_num` under the three-stage predicate of §7.4.1; every sample lies outside the surface by the same margin; deterministic across runs and buffer reuse |
 | `MusclePathObstacleFixtureTest` | L4 | the validator fixtures (§12.2.1) return the expected verdict, and the solver fixtures return the expected final path or the expected failure reason — never silently |
 | `MusclePathContinuityTest` | L4 | C0, tangent bound at entry/exit, curvature bound; and, for the observer: station displacement in excess of the pose-driven prediction within `δ_frame` at matched arc-length stations, with no verdict on the first frame, a re-initialisation on pause/resume/seek/reset, a reported gap across an `INVALID` frame, and no rate-limiting of the path |
 | `MuscleLengthDeterminismTest` | L4 | the same pose produces the same length across runs, buffer reuse and definition reload; no discontinuity beyond tolerance across a sampled motion |
@@ -2257,7 +2259,7 @@ Seven levels, each with one owner, one report and an explicit automation status.
 | `MorphPresetRangeTest` | L6 | every declared weight lies inside its target's declared `min`/`max`; every preset declares a value for every target; a name the asset does not carry fails rather than defaulting to zero |
 | `MorphRingPreservationTest` | L6 | the mesh ring masked around each joint pivot keeps its pivot-relative positions within `ε_morph` under every preset — the test that can fail, and the one that says anything about the surface a muscle sits under |
 | `LayerToggleTest` | presentation | toggling a layer changes visibility only; no engine or pose rebuild; an evicted layer reloads and re-shows |
-| `ArchitectureBoundaryTest` | architecture | §4.5: every file in `animation/` and `poses/` imports no `androidx.*` (Compose included), `android.*`, `ui.*`, `render.*` or Filament — `theMotionCoreImportsNoComposeOrFrameworkCode` and `theMotionCoreImportsNoOtherAndroidxCode`; the `anatomy/` and `character/` edges are outside its source set, so they remain review obligations |
+| `ArchitectureBoundaryTest` | architecture | §4.5: every file in `animation/` and `poses/` imports none of the **four** prefixes its forbidden list actually contains — `androidx.compose.`, `android.`, `com.monkfitness.app.ui.`, `com.monkfitness.app.render.` — via `theMotionCoreImportsNoComposeOrFrameworkCode` and `theMotionCoreImportsNoOtherAndroidxCode`. **There is no `com.google.android.filament.` rule**, and the `anatomy/`, `character/` and Filament fences are **review-only**, not enforced by this test |
 | `AssetBudgetTest` | L5 | triangle/texture/bone budgets per tier from the manifest |
 
 All except `LayerToggleTest` are JVM tests (the character session itself requires a device). `LayerToggleTest` splits:
@@ -2442,14 +2444,14 @@ individual reports say.
 | R3 | Per-renderable bone budget too small for the library | medium | high | regional renderable split (§10.3); measure at stage 1 | engineering |
 | R4 | Device evidence is one run on one phone | certain | medium | record each run (§12.3); generalise no number beyond the device it came from; FPS/thermal gating deferred by the owner | engineering |
 | R5 | Anatomy review capacity (physio/anatomist) is the bottleneck | high | high | batch reviews per layer; L3/L7 checklists reduce the time per muscle | product |
-| R6 | Morphs degrade joints silently | medium | medium | L6 rest invariant + joint-ring test | engineering |
+| R6 | Morphs degrade the surface around a joint silently | medium | medium | L6 declared ranges plus **mesh ring preservation** around each joint pivot; the bone-landmark rest invariant is not the check, because a vertex-only morph cannot move a bone | engineering |
 | R7 | Attachment data drifts when `SkeletonDefinition` changes | medium | high | one `unitsPerMetre`, rest-length test, definition version pin | engineering |
 | R8 | PR #385 changes before merge, or is rejected | medium | medium | this RFC depends on its contracts, not its files; rebase plan in stage 1 | engineering |
 | R9 | Deep muscles / organs expand scope beyond appetite | high | low | §16 non-goals and the layer table's v1 column | product |
 | R10 | Left/right handedness mismatch between anatomy and rig | medium | medium | `RigSideTest`; asset fix, never a render-time flip | engineering |
 | R11 | L4 proves the polyline misses the ellipsoids, not that the rendered muscle or the anatomical surface does | medium | low | strategy A consumes the validated points unchanged and re-smoothing is forbidden (§7.4.1); the ellipsoid model is classified as an approximation (§11); L7 review covers what geometry cannot (§12.4) | engineering |
 | R12 | The §7.4.5 detour heuristic fails on a configuration where a valid route exists, producing `INVALID` frames | medium | medium | failure is explicit and blocks L4 rather than shipping a penetrating path; the fixture set states which configurations must succeed; new cases are added as fixtures, not fixed by loosening the check | engineering |
-| R13 | A new rig asset passes bind alignment but drifts in motion because segment lengths differ | medium | medium | §6.6 A2 bounds the residual before rendering; `RigAlignmentResidualTest` measures it at three poses; the fix is the asset, never an anatomy nudge | engineering + art |
+| R13 | A new rig asset passes bind alignment but drifts in motion because segment lengths differ | medium | medium | §6.6 A2 **measures** the residual at three named poses — the length-sum bound is withdrawn as false — and `RigAlignmentResidualTest` is what reports it; the fix is the asset, never an anatomy nudge | engineering + art |
 
 **Unresolved, with the smallest resolving experiment:**
 
@@ -2494,14 +2496,32 @@ individual reports say.
    deterministic; the cost is the stated error bound, which is why §11 classifies it as an approximation. Smallest
    resolving experiment: measure `θ` for the eight M1 segments on the three named poses and decide whether the bound
    holds for the widest attachment offset in the library.
-12. **The A1 baseline and the calibration landmark pair (D2) — default chosen, owner confirmation pending.** The shipped
-   `humanoid_v1` asset does not pass A1: its worst mapped joint is +89.3 mm against a 0.5 mm tolerance (§6.6). The
-   default is to record that as a known baseline and make *a rig that passes A1* a stage-1 deliverable, rather than to
-   weaken A1 — a tolerance chosen to fit the current asset measures nothing. The same question decides the calibration:
-   the pelvis pair gives 247.37 u/m and the crown pair 229.8 u/m, the first 7.7 % above the second (§7.2, §6.4). Default chosen:
-   crown-to-floor as the pair `heightMetres` declares, because it is the pair the asset exposes as `HeadTop_End`, with
-   the pelvis estimate kept as a cross-check that fails the asset beyond 1 %. Smallest resolving experiment: build the
-   stage-1 rig, measure both spans on it, and keep the pair whose landmarks agree on that rig.
+12. **The A1 baseline, the calibration pair, and what an absolute length means (D2) — default chosen, owner confirmation
+   pending.** The shipped `humanoid_v1` asset does not pass A1: its worst mapped joint is +89.3 mm against a 0.5 mm
+   tolerance (§6.6), and the default is to record that as a known baseline and make *a rig that passes A1* a stage-1
+   deliverable rather than to weaken A1 — a tolerance chosen to fit the current asset measures nothing.
+
+   **Recommended default, and it is a decision about what M1 displays, not only about a constant.** For M1 the primary
+   length readout is `relativePathLengthChange`, which is **scale-free**: a ratio of two lengths from the same solver at
+   the same scale, so no calibration constant enters it. An absolute `modelledPathLength` in metres is shown as
+   **approximate**, with its calibration pair named in the panel (§7.2), because today the pair decides the number: the
+   pelvis pair gives 247.37 u/m and the crown pair 227.2 u/m at the declared 1.80 m (229.8 at the asset's actual 1.78 m
+   crown), so the same 156-unit pelvis-to-head span reads 0.631 m or 0.687 m depending on which pair is written down.
+   Honest absolute metres need a rig with human proportions that passes A1 — that rig is the stage-1 deliverable, and
+   until it exists an absolute length is a plausible number, not a measured one.
+
+   **The evidence, measured at `16e0487` with the asset parsed at rest** (engine units at 247.37 u/m against the asset's
+   own metres): the pelvis is 0.950 m on both sides, so the pelvis pair is consistent by construction; pelvis → head
+   centre is 0.6306 m engine against 0.650 m asset (−19.4 mm, −3.0 %); pelvis → ankle 0.8307 m against 0.870 m
+   (−39.3 mm); pelvis → toe joint 0.8307 m against 0.920 m (−89.3 mm); the head centre is 1.581 m above the floor
+   against 1.600 m; the crown (`HEAD_POS.y + headRadius` = 409.0 units) is 1.653 m against 1.780 m. **The mismatch is not
+   in the torso** — the torso span is the smallest of the three at −19.4 mm, the leg span is −39.3 mm to the ankle and
+   −89.3 mm to the toe base, and the largest single difference is the head model: the engine's crown sits 0.073 m above
+   the head centre against the asset's 0.180 m, which is what pulls a crown-based calibration down to 229.8.
+
+   Smallest resolving experiment: build the stage-1 rig, measure both spans on it, and keep the pair whose landmarks
+   agree on that rig — then re-quote the §6.6 baseline, because it is measured at 247.37 and scales linearly with the
+   constant.
 
 **Known traps from the device run (spike #384).** Each cost a debugging cycle on real hardware, and each is a property of
 the current code, not of the model. PR #385 at `bcb3658` contains none of the first three fixes; a preparatory change is
@@ -2760,7 +2780,11 @@ item 9), a muscle library beyond eight, and any claim of surface accuracy.
   `app/src/test/.../character/MorphPresetRangeTest.kt`, `.../MorphRingPreservationTest.kt`.
 - **User-visible deliverable:** a character selector that changes the body and keeps every exercise, muscle and
   animation.
-- **Automated acceptance:** rest invariant per preset; joint rings unmoved; anatomy inside the body within tolerance.
+- **Automated acceptance:** declared `min`/`max` respected per target; **mesh ring preservation** around each joint pivot
+  within `ε_morph`, per preset. **Muscle-versus-body intersection is not automated at stage 5**: it remains an L7 A2/A3
+  human judgement until a mesh-intersection tool exists (§13 question 9), so "anatomy inside the body" is a human gate
+  here, not an automated pass — and the bone-landmark rest invariant is not that check, because a vertex-only morph
+  cannot move a bone.
 - **Manual acceptance:** all four bodies pass the same visual checklist; muscle layers align on each; and a **renewed
   §12.4 record per preset** (A5), because each preset moves the surface the muscles must sit under.
 - **Risks:** morph authoring cost; muscle meshes must be re-authored per family (§6.3); joint degradation.
