@@ -3355,6 +3355,7 @@ Seven levels, each with one owner, one report and an explicit automation status.
 | `BoneMapCoverageTest` | L2 | **23** mapped joints resolve and the **10** undrivable engine joints are declared, not accidental (X2) — derived from the required map of §6.2, not from the shipped asset's 21/12 inventory. The scapula pair is asserted by name, so a `BoneMap` that quietly omits `SCAPULA_A/P`, or a rig that carries no scapula bone, fails here rather than at A1 |
 | `RigSideTest` | L2 | `Left*` bones on the same side as anatomy side A in the rest pose |
 | `AnatomyDefinitionTest` | L3 | ids unique; attachments resolve; envelope bounds; L/R mirror; heads consistent |
+| `ActivationDefinitionTest` | L3 | §8.2/§9.2: every displayed entry carries `source`, `task`, `population` and `reviewStatus`; every phase an entry names exists in the `PhaseTimeline` it cites; a `role` of `UNKNOWN` or a `reviewStatus` of `UNREVIEWED` is refused to the display path rather than rendered; an exercise with no reviewed row yields no role; and — the half that makes the gate real — an entry that is *structurally* valid but names an exercise outside the four X8 pilots is not displayed as reviewed. It asserts the schema and the gate, never a physiological value (§8.1) |
 | `MusclePathGeometryTest` | L4 | arc length ≥ chord; every segment of the final polyline is CLEAR of every obstacle in the head's union under the three-stage state machine of §7.4.1, with the solid-distance predicate and the Lipschitz bracket — reported as conditional while the point-to-ellipsoid error is an estimate (§7.4.1b-1); every **non-exempt** sample lies outside the surface by at least `e`, read through the same `(head, obstacle, arc-length interval)` transition-envelope mask that construction, projection and the endpoint check use (§7.4.1a), so both `exempt_origin_success` and `exempt_insertion_success` pass while a re-entry after the envelope, or after a path mutation, still fails; repeatable across runs and buffer reuse on one device and configuration |
 | `MusclePathObstacleFixtureTest` | L4 | the validator fixtures (§12.2.1) return the expected verdict, and the solver fixtures return the expected final path or the expected failure reason — never silently |
 | `failingObstacleIndexOrderTest` | L4 | §7.4.2: `failingObstacles` is a **definition** index — reordering `wrapSurfaces` and flipping another muscle's `global` flag between runs leaves the reported index naming the same obstacle; `AnatomyFrame.obstacleIndexMap[head]` maps the same union position to it and moves when the order moves; an obstacle absent from the head's union reports `NO_INDEX`, never `0`; and the map is **not** rewritten by `clear()` or by a solve, because it is definition data |
@@ -3605,7 +3606,7 @@ rule and the M1 checklist all cite it, and none of them may require a check the 
 | L5 | body asset checks (degenerate triangles, weight sums, budgets) and **generated tube structure**: finite coordinates, no zero-area ring, triangle count equal to the §10.3 formula | muscle-vs-skin intersection; authored-mesh helper binds | M1 has no authored muscle mesh; no mesh intersection test ships in M1 |
 | L6 | one preset: declared ranges respected, mesh ring preservation around joint pivots, delta bounds | cross-preset coverage; "anatomy still inside the body" as an automated pass; the bone-landmark rest invariant, which a vertex-only morph cannot affect and which therefore proves nothing | one preset exists; body-anatomy intersection needs a tool M1 does not ship, so it is an L7 RV2/RV3 judgement |
 | L7 | RV1–RV6 with a valid record (§12.4) | — | the human gate |
-| §9.2/X4 readout | the muscle panel displays `relativePathLengthChange` only, labelled modelled, with no absolute metres | any absolute length in the UI before a named calibration pair and an evidence-backed uncertainty exist | a dimensionless ratio and a metre value are not the same claim, and only one of them is available today |
+| §9.2/X4 readout | the **selected-muscle readout** stage 2b delivers displays `relativePathLengthChange` only, labelled modelled, with no absolute metres, and nothing for an unrenderable instance | any absolute length in the UI before a named calibration pair and an evidence-backed uncertainty exist | a dimensionless ratio and a metre value are not the same claim, and only one of them is available today |
 | §8 roles | the categorical role entries for the four pilot exercises of X8 only — `squat`, `standard push-up`, `bird-dog`, `row_standard` — each with `source`, `task`, `population`, `reviewStatus`, validated against its reviewed `PhaseTimeline`; unreviewed or `UNKNOWN` rows are not displayed | numeric activation, EMG-derived output, per-muscle contraction mode, medical claims, and roles for any exercise without a reviewed source | roles are cheap to validate and dishonest to guess; a display gate is what makes a partial table acceptable (X8) |
 
 **M1 gate, stated once.** M1 passes when: L1–L4 green; the L5 and L6 subsets above green; **a device run recorded** for
@@ -4127,28 +4128,39 @@ schedule risk, not the engineering one.
 ### Stage 2b — M1 role and interaction package (pre-M1)
 
 - **Objective:** deliver the M1 checklist items that neither stage 1 nor stage 2 produces and that stage 4 assumes already
-  exist — the role schema and its validator, the four sourced phase timelines, the display gate and the
-  attachment-landmark tap hints. It is a work package **of** M1, not a new capability: nothing here adds a muscle, a
-  preset, an exercise or a renderer feature.
+  exist — the role schema and its validator, the four sourced phase timelines, the display gate, the attachment-landmark
+  tap hints, and the **production selected-muscle readout** (§9.2). It is a work package **of** M1, not a new capability:
+  nothing here adds a muscle, a preset, an exercise or a renderer feature.
 - **Components:** `anatomy/ActivationTable.kt` (the §8.2 schema), `ActivationValidator` (required source, task, population,
   review status, and phase membership checked against the named timeline), one reviewed `PhaseTimeline` per pilot exercise
   (`phases_v1.json`, four entries), the display gate of §9.2 (no reviewed source → no role; `UNKNOWN`/`UNREVIEWED`
-  renders as "no reviewed role"), and `ui/components/anatomy/AttachmentHint.kt` — the tap that reads an attachment
-  landmark from `AnatomyFrame.landmarks` and names the muscle and its layer, with no picking system, no marker geometry
-  and no geometry keyed to selection.
+  renders as "no reviewed role"), `ui/components/anatomy/AttachmentHint.kt` — the tap that reads an attachment landmark
+  from `AnatomyFrame.landmarks` and names the muscle and its layer, with no picking system, no marker geometry and no
+  geometry keyed to selection — and `ui/components/anatomy/SelectedMuscleReadout.kt`, the **production** readout: the
+  `SELECTED` selection state (`CharacterLayerController.setSelected`, §5.3) plus the content of §9.2's compact row for the
+  selected `(muscleId, side)` instance — name, layer, the categorical role where a reviewed row exists, and
+  `relativePathLengthChange` with its "modelled" label, read through `MuscleState` and nothing else.
 - **Dependencies:** stage 2 (the frame, its landmark array and the solved paths); the four timelines are an **anatomy
   review** deliverable and sit on the §12.4 reviewer's queue, not the engineering one.
 - **Expected files:** `app/src/main/assets/anatomy/phases_v1.json` (four entries),
   `app/src/main/assets/anatomy/activation_v1.json` (four exercises), `app/src/test/.../activation/ActivationDefinitionTest.kt`,
-  `ui/components/anatomy/AttachmentHint.kt`.
+  `ui/components/anatomy/AttachmentHint.kt`, `ui/components/anatomy/SelectedMuscleReadout.kt`.
 - **User-visible deliverable:** tapping a landmark names the muscle attached there and the layer it belongs to; an exercise
-  with a reviewed role table shows categorical roles, and every other exercise shows none.
-- **Automated acceptance:** the §8 validator is green on the four pilots; every displayed row carries `source`, `task`,
-  `population` and `reviewStatus`; every phase an entry names exists in the `PhaseTimeline` it cites; an `UNREVIEWED` or
-  `UNKNOWN` row cannot be displayed; and a tap returns the muscle whose attachment landmark is nearest within the declared
-  radius, `-1` outside it — never a guessed muscle.
+  with a reviewed role table shows categorical roles, and every other exercise shows none; and **selecting an instance
+  shows its readout row** — name, layer, reviewed role if any, and the modelled relative length change.
+- **Automated acceptance:** the §8 validator is green on the four pilots; `ActivationDefinitionTest` (§12.2) asserts the
+  schema and the display gate — every displayed row carries `source`, `task`, `population` and `reviewStatus`; every phase
+  an entry names exists in the `PhaseTimeline` it cites; and an `UNREVIEWED` or `UNKNOWN` row cannot be displayed. The tap
+  returns the muscle whose attachment landmark is nearest within the declared radius, `-1` outside it — never a guessed
+  muscle. **The readout has its own content acceptance, because it is user-facing copy**: it renders exactly the four
+  fields of §9.2 for the selected instance and nothing else; it shows `relativePathLengthChange` labelled modelled and
+  **never** an absolute metre value (X4); it shows a role only for an exercise with a reviewed source and the
+  "no reviewed role" text otherwise; it shows nothing — no stale row — for an instance whose `renderable` entry is
+  `false`, because a hidden tube with a live readout is a number about geometry that is not on screen; and no string it
+  emits is drawn from `PathReason`, a status or a debug label (§7.4).
 - **Explicitly not in this package:** role colouring, the education panel, phase prose and the "not EMG" legend (stage 4),
-  and any picking, labelling or explanation surface (stage 7). M1 ships the role *text*, not the panel (§9.2).
+  and any picking, labelling or explanation surface (stage 7). M1 ships the role *text* and the readout, not the panel
+  (§9.2): the panel's scope is stage 4's, and stage 4 consumes this readout rather than replacing it.
 - **Risks:** four timelines are four review slots (R5); copy drifting into physiological claims (§11 hard rule 2).
 - **Effort:** 1–2 engineering weeks + 1 review week.
 - **Art/expertise:** anatomy review, not art.
@@ -4222,7 +4234,8 @@ attachment-landmark hints of item 9), a muscle library beyond eight, and any cla
 ### Stage 4 — Roles beyond the pilot, phase timelines and the education panel
 
 - **Objective:** extend the reviewed role table from M1's pilot exercises to the shipped set, and explain participation
-  honestly. The schema, validator and display gate ship in M1 (§9.2, X8); this stage adds coverage and presentation.
+  honestly. The schema, validator, display gate **and the selected-muscle readout** ship in M1 (§9.2, X8; stage 2b); this
+  stage adds coverage and presentation on top of that readout rather than a second one.
 - **Components:** reviewed `PhaseTimeline` per exercise (`ASCENT`/`DESCENT`/`HOLD`), role rows for every exercise the app
   ships, colour mapping, panel copy, the "not EMG" disclaimer, selection state.
 - **Dependencies:** stage 3 (visible muscles to colour); M1's schema and gate.
@@ -4255,9 +4268,12 @@ attachment-landmark hints of item 9), a muscle library beyond eight, and any cla
   here, not an automated pass — and the bone-landmark rest invariant is not that check, because a vertex-only morph
   cannot move a bone.
 - **Manual acceptance:** all four bodies pass the same visual checklist; muscle layers align on each; and a **renewed
-  §12.4 record per preset**, whose scope depends on what the preset is — **RV5** for a new preset inside an already
-  reviewed family, and **RV1 per muscle, per side, plus RV5** for a new body family (D10, §12.4 renewal), because a new
-  family can move the landmarks the attachments were approved against. The record names which scope it covers.
+  §12.4 record per preset**, whose scope depends on what the preset is — **RV5 and RV2/RV3** for a new preset inside an
+  already reviewed family, and **RV1 per muscle, per side, plus RV2, RV3 and RV5** for a new body family (D10, §12.4
+  renewal), because a new family can move the landmarks the attachments were approved against. **RV2/RV3 are in both
+  cases**: a preset moves the surface the muscles must sit under even when the family and its landmarks are unchanged, so
+  a preset reviewed only for consistency (§12.4's renewal row requires RV2/RV3 on each new preset) would accept
+  intersections and compartment errors this stage exists to catch. The record names which scope it covers.
 - **Risks:** morph authoring cost; muscle meshes must be re-authored per family (§6.3); joint degradation.
 - **Effort:** 3 engineering weeks + ~6 art weeks.
 - **Art/expertise:** yes.
