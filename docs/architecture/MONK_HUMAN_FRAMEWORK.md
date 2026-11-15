@@ -2898,6 +2898,17 @@ Two levels of approximation are worth separating, because they are constantly co
 
 "Exact test" is not "correct anatomy", and "approximate model" is not "sloppy test".
 
+**Known limitations of the M1 numeric guarantee, stated rather than derived.** Three things this section computes are not
+proved, and none of them is repaired here. The **stage-1 sphere comparison** (§7.4.1b) is a sufficient inequality in real
+arithmetic, but its binary64 evaluation carries no rounding enclosure, so an early `CLEAR` is a decision this document has
+not certified. Where a **stage-2 witness** survives without a proved enclosure, **stage 3's own result is authoritative** —
+its lower/upper/uncertain bracket decides that pair — and the fixture verdicts whose expected reason belongs to the
+enclosure deliverable are **provisional** until it lands. And the global vertex term `√3 · 2⁻¹⁴` is inferred from the operand
+bound plus an obstacle semi-axis, **not** from the tube radius the renderer actually sweeps, so it does not bound every drawn
+vertex. **No numerical clearance floor is claimed in M1**: anything not covered by a proved bound fails closed
+(`UNCERTIFIED_MINIMUM` → `INVALID`), and the milestone's assurance therefore rests on the human review of §12.4 (RV1 and
+RV4) and on tests run against real code, not on the arithmetic above.
+
 Design notes:
 
 - **Length is arc length along the solved path.** A straight-chord measure reports shortening wherever a muscle wraps a
