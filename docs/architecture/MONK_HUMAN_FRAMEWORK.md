@@ -1779,11 +1779,69 @@ never a geometry input.
 
 | Layer | Contents | v1 | Notes |
 | --- | --- | --- | --- |
-| superficial muscles | 8 muscles for M1, ~35 for v2 | yes — the 8 | quads, hamstrings, glutes, delts, pecs, lats, biceps, triceps, calves, erectors, abs |
+| superficial muscles | 8 muscles for M1, ~35 for v2 | yes — the canonical eight of §7.7.1 | the eight are named once, in §7.7.1; no other section restates them |
 | deep muscles | 8–12 for v2 | no — deferred beyond M1 | psoas, iliacus, rotator cuff, transverse abdominis, multifidus |
 | tendons / ligaments | authored bands from the same attachment data | later | needs its own geometry contract; not a muscle with different colour |
 | organs | meshes rigged to the thorax/abdomen | later | explicitly deprioritised by the task; the reference implementation's organs are a separate asset with its own animation, which this framework would have to justify mechanically |
-| attachment markers | spheres/labels at attachment points | later | useful for authoring and education, cheap once data exists |
+| attachment markers | spheres/labels at attachment points | later | marker *geometry* is deferred; the M1 tap hint of §15 item 9 reads an attachment landmark that already exists in the data and draws no marker, so the two are not in conflict |
+
+#### 7.7.1 The canonical M1 muscle set
+
+One list, in one place. §15's stage 2 and M1's definition of done cite it; no other section restates it, because an
+earlier revision carried three different lists — this table, the roadmap and a family example — and a reviewer had no way
+to tell which one was the deliverable.
+
+| Muscle | M1 instances | Path structure in the source model | Via points and wraps M1 must reproduce | Caveat M1 carries |
+| --- | --- | --- | --- | --- |
+| rectus abdominis | 2 (one per side) | one path per side | one pelvic attachment, one costal attachment | coarse trunk surrogate |
+| external oblique | 2 | one path per side | one iliac attachment, one costal attachment | coarse trunk surrogate |
+| erector spinae | 2 | one path per side | one sacral/pelvic attachment, one costal attachment | coarse trunk surrogate |
+| latissimus dorsi | 2 | one path per side | humeral insertion, thoracolumbar origin | coarse trunk surrogate |
+| gluteus maximus | 2 (source: **3 paths per side**) | three right-side paths, each with pelvic wraps | one pelvic wrap per path; the collapse to one path per side is recorded as an approximation | the two dropped paths are a review item, not a silent simplification |
+| gluteus medius | 2 (source: **3 paths per side**) | three paths per side, **no wrap** in the source model | no wrap — and **the source's absence of a wrap does not guarantee clearance in our rig**: our obstacle set and segment frames differ, so the path must pass §7.4 here | as above |
+| biceps femoris | 4 (two heads × two sides) | long head and short head are separate paths | **long head: one intermediate fixed point, no wrap. Short head: one wrap** | two heads, one visual belly (§7.5) |
+| rectus femoris | 2 | one path per side | **routes over a femoral wrap and over patella-body points**; there is no patella frame (§7.3) | the patella approximation and the supported knee range are stated in the definition and reviewed per side |
+
+**Eight names, eighteen instances.** The M1 set is eight muscles, sixteen sides and two extra biceps-femoris heads:
+**18 tubes** at stage 2, which §10.3 budgets at 13,536 triangles for `N = 48`, `R = 8` (13,824 with caps). A count of
+"eight" that means eight tubes under-budgets by more than half and loses the second head.
+
+**The trunk muscles are coarse visual surrogates, and the label is part of the data.** `rectus abdominis`,
+`external oblique`, `erector spinae` and `latissimus dorsi` attach to a **single `LUMBAR` and a single `CHEST` joint**
+(§7.2), so the engine has one lumbar segment and one thorax segment: no segmental spinal anatomy, no vertebra-specific
+motion, no curvature claim (§13 question 10), no per-rib or per-vertebra attachment. They are labelled *coarse trunk
+surrogates* wherever they appear — definition, review record and any user-facing copy. **No clinical anatomist has
+reviewed this set**: the §12.4 review is the gate, and until it is signed the eight are a proposal with a mechanical
+contract, not accepted anatomy.
+
+**Rectus femoris: the patella is an approximation and the range is stated.** With no patella frame the path runs through
+authored patella-body via points instead of around a sesamoid, and the error grows with knee flexion. The definition
+therefore declares the **supported knee range** over which the approximation was reviewed, and the review record names
+it; a pose outside that range is outside the review, not inside a guarantee.
+
+#### 7.7.2 Source rights, frames, and what is missing
+
+The attachment table is meant to be derived from published musculoskeletal models, so their provenance is part of the
+design rather than an appendix. What was verified for this document, and what was not:
+
+| Source | Access | Rights evidence as found | Status |
+| --- | --- | --- | --- |
+| Rajagopal et al. full-body model (SimTK release) | public download | the release popover shows "Copyright (c) 2015, Stanford University. Permission is hereby granted…" — an MIT-style grant, **truncated in the page source**; `README.txt` and the `.osim` file carry **no licence text at all** | permissive per the popover, unconfirmed by the files |
+| Christophy et al. lumbar-spine model | **login-gated** | not read | **UNVERIFIED** — attachment coordinates, frames and any embedded notice are unread |
+| OpenSim project (SimTK project page) | public | popover shows MIT, "Copyright (c) 2010, University of California at Berkeley" | says something about the *project*, nothing about a specific model file |
+
+**No rights conclusion is drawn here, and none may be drawn from this table.** Public access is not redistribution
+permission; a permissive project licence is not a permissive asset licence; and a truncated popover is not a licence
+file. Two rules follow, and neither is negotiable: **no model data enters this repository** (attachments are authored in
+metres against the engine's rest stance and reviewed, not copied), and a source may be cited only once its licence text
+has been read in full and recorded with the release, the hash, the notices and the citation the authors request.
+
+**Frames are a mapping problem, not an axis permutation.** Every source body and offset frame must be mapped to a Monk
+segment explicitly — origin, handedness, side convention, units, reference stance and scaling, per row. A single axis
+permutation is not a mapping: two models can differ in frame origin, in which end of a bone the origin sits, and in
+whether "right" is +Z or −Z, and a permutation that happens to fit one row is the most expensive kind of wrong.
+Patella points, individual vertebrae, conditional or moving points and non-ellipsoid wraps are **missing degrees of
+freedom**, not missing numbers: each is either approximated with the approximation recorded, or excluded from M1.
 
 ### 7.8 Missing research and art requirements (explicit)
 
@@ -1794,7 +1852,7 @@ never a geometry input.
 | Muscle mesh authoring pipeline | strategy C needs meshes bound to helper bones | one Blender-based pipeline producing a GLB with helper bones + 4 weights; validate with the asset tool |
 | Left/right and origin/insertion conventions per muscle | mirroring errors are silent | the side check (§12 L2) plus a per-muscle review checklist |
 | Pennation / multi-head handling | biceps and triceps need two/three heads sharing one visual belly | model heads as separate paths with a shared mesh region; validate that head lengths differ plausibly |
-| Whether a single skin can hold all helper bones | Filament's per-renderable bone budget is engine- and driver-dependent and **unmeasured on the phone** — the #384 run reports a frame rate, not the bone limit | measure on the target device; if the budget is too small, split the muscle layer into regional renderables (§10.3) |
+| Whether a single skin can hold all helper bones | the limit is **known**: 255 bones per renderable documented, 256 in the implementation, and `gltfio` passes the skin's full joint count, so splitting a mesh does not reduce it (§10.3). v2 needs 313 | the regional split is mandatory for v2, not a contingency; M1 needs none because strategy A has no helper bones in M1 |
 | Per-muscle cross-section behaviour, if it is ever wanted | no validated model exists; the cylinder law is a plausibility argument, not evidence (§7.6) | an imaging-based study of the specific muscles through their working ranges, with a stated tolerance — a research task, not an engineering one |
 
 ---
@@ -1988,17 +2046,28 @@ M1 total           = Σ over EVERY instance (both sides, every head) of that, pl
 
 The previous revision counted eight *heads* where there are sixteen *instances*: eight bilateral, single-head muscles at
 `N = 48`, `R = 8` is `16 × 2 × 47 × 8 = 16 × 752 = ` **12,032** triangles, and **12,288** with a cap at each end of every
-tube — not 6.0 k, which is half the object. A two-head muscle adds a third tube, not a second muscle. A flat sheet uses a
+tube — not 6.0 k, which is half the object. The canonical M1 set (§7.7.1) is **18** instances rather than 16, because
+biceps femoris has two heads, so its uncapped cost is `18 × 752 = ` **13,536** and **13,824** with caps. A two-head muscle
+adds a tube, not a second muscle. A flat sheet uses a
 two-sided strip instead of a ring and is covered by neither this formula nor the clearance guarantee (§7.4.1): its cost
 is `2 × (N_final − 1) × (W − 1)` quads for a `W`-station width, and its own envelope must be declared before it can be
 budgeted or certified. Both `N` and `R` are declared in the quality tier, so the number is bounded before any device run.
 It is arithmetic, not a measurement: stage 1 records frame time and memory as information, not as a gate (§12.3), and a
 measured number replaces the estimate when one exists.
 
-**Bone-budget risk.** A single skin holding every muscle's helper bones may exceed what Filament accepts per renderable
-on a given driver. That number is **unmeasured on the phone**. The design therefore allows the muscle layer to be split into
-regional renderables (trunk, left arm, right arm, left leg, right leg, head), each with its own skin and helper range.
-The split is an asset decision recorded in the manifest, not a runtime guess.
+**Bone budget: the number is known, and it makes the v2 split mandatory.** Filament's documented limit is **255 bones per
+renderable** (`filament/include/filament/RenderableManager.h:419-450`, "up to 255 bones"; the Java builder is
+`@IntRange(from = 0, to = 255)`), while the implementation constant is **256** (`EngineEnums.h:166-168`, enforced by a
+`FILAMENT_CHECK_PRECONDITION` at `components.cpp:1037-1038`). Plan with **255** and record the discrepancy rather than
+relying on 256. `gltfio` passes the skin's **full joint count** to the renderable (`AssetLoader.cpp:926-928`), so
+splitting a mesh into several primitives does **not** reduce a shared skin's joint count: separate skins with their own
+remapped palettes are what reduce it.
+
+The arithmetic then decides the design: 35 muscles × 2 sides × 4 helpers + 33 joints = 280 + 33 = **313** bones, which
+exceeds 255 before a single finger or twist bone is counted — so the regional split (trunk, left arm, right arm, left
+leg, right leg, head) is **mandatory for v2**, not an option or a contingency. M1 needs no split at all: strategy A has
+no helper bones in M1 (§7.5, §7.6), so the muscle layer is one dynamic mesh per layer and the limit is not approached.
+FPS and thermal numbers remain informational (§12.3) and no stage gate depends on them.
 
 ### 10.4 Loading, caching, export and thumbnails
 
@@ -2554,8 +2623,8 @@ schedule risk, not the engineering one.
 - **Components:** `anatomy/` package (pure Kotlin, no Android), `AnatomyDefinition` + loader, `AnatomySolver`,
   `AnatomyFrame`, `AnatomyDefinitionTest`, `MusclePathGeometryTest`, `MusclePathObstacleFixtureTest`,
   `MusclePathContinuityTest`, `MuscleLengthDeterminismTest`, `MuscleLengthReferenceTest`, procedural tube generator.
-- **Muscles (8):** rectus femoris, vastus lateralis, biceps femoris, gluteus maximus, erector spinae, deltoid anterior,
-  pectoralis major, gastrocnemius medial.
+- **Muscles (8, 18 instances):** the canonical set of §7.7.1 — rectus abdominis, external oblique, erector spinae,
+  gluteus maximus, biceps femoris (two heads), rectus femoris, latissimus dorsi, gluteus medius.
 - **Dependencies:** stage 1 (rest stance + definition), anatomy calibration session.
 - **Expected files:** `app/src/main/java/com/monkfitness/app/anatomy/*.kt`,
   `app/src/main/assets/anatomy/anatomy_v1.json`, `app/src/test/.../anatomy/*`.
