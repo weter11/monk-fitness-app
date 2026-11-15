@@ -216,8 +216,9 @@ the PR branch only; none of it is on `main` at `16e0487`:
   asset units because the inverse binds were authored against them (`:70-72`).
 - `GltfRig` (`character/GltfRig.kt:11`, `parse` at `:99`): a minimal GLB reader for the data gltfio does not expose —
   node hierarchy, skin joint order, inverse bind matrices, triangle and morph counts, animation names.
-- `MonkJointResolver` (`character/MonkJointResolver.kt:10`): 21 of the 33 joints map by normalized name/aliases
-  (`:12-34`); unresolved joints stay at rest instead of failing. `restPelvisHeight` = `shin + thigh + 25` (`:59-60`).
+- `MonkJointResolver` (`character/MonkJointResolver.kt:10`): 21 of the 33 engine joints have a bone to map on the shipped
+  asset, by normalized name/aliases (`:12-34`; §6.2 lists the 23 the v2 map requires); unresolved joints stay at rest
+  instead of failing. `restPelvisHeight` = `shin + thigh + 25` (`:59-60`).
 - `CharacterCalibration.unitScale` (`character/CharacterCalibration.kt`): derives engine→asset scale from a standing
   frame (`HEAD_POS.y − min(TOE_F.y, TOE_B.y)`), using a throwaway pipeline so calibration cannot advance the render
   pipeline's history.
@@ -798,10 +799,9 @@ for. It fails silently because the result is still a unit quaternion. A split wh
 axis is a **map error reported at L2**, not something the runtime silently reinterprets.
 
 **Multiplication order, bases and bind transforms, stated once** (all of §6.2). **X3 — the retarget is position-driven.**
-*Default chosen, owner confirmation pending.* The engine publishes positions, and the segment orientation the rig needs is
-the direction between two published positions — the same quantity §7.2 derives for anatomy. So a mapped bone's rotation is
-the **minimal rotation from its own bind direction to the published segment direction**, applied to its rest world
-rotation:
+*Confirmed by owner.* The engine publishes positions, and the segment orientation the rig needs is the direction between
+two published positions — the same quantity §7.2 derives for anatomy. So a mapped bone's rotation is the **minimal
+rotation from its own bind direction to the published segment direction**, applied to its rest world rotation:
 
 ```
 d_bind(u)   = normalize(pivot(child_u) − pivot(u))            // ASSET space, the X1 bind pose (§6.6)
@@ -1044,10 +1044,9 @@ engine space equals the engine joint position within `τ_bind` = **0.5 mm**, and
 engine rest orientation within `τ_rot` = **0.5°** (both unchanged, fixed at stage 1). Checked by
 `RigLandmarkAlignmentTest` (L2).
 
-**X1 — the bind stance is a canonical A-pose, and it is not an engine pose.** *Default chosen, owner confirmation
-pending.* The frame A1 measures against is computed **in character-side code from `SkeletonDefinition` alone** — segment
-lengths and the engine's own pelvic-height convention (`shin + thigh + 25`, `MonkJointResolver.restPelvisHeight`) — with
-every limb straightened. It is **not** a published pose: the calibration stance the asset was measured against
+**X1 — the bind stance is a canonical A-pose, and it is not an engine pose.** *Confirmed by owner.* The frame A1 measures
+against is computed **in character-side code from `SkeletonDefinition` alone** — segment lengths and the engine's own
+pelvic-height convention (`shin + thigh + 25`, `MonkJointResolver.restPelvisHeight`) — with every limb straightened. It is **not** a published pose: the calibration stance the asset was measured against
 (`squat_standard` at progress 0) folds the arms out and forward for counterbalance, so its hand joint sits 565.6 mm from
 the asset's wrist and measuring A1 there measures the pose, not the rig. The canonical A-pose needs no engine change, no
 new joint, no new pose builder and no frame the frozen engine must retain — which is what makes it usable as a contract
@@ -1803,8 +1802,7 @@ before any clearance test is attempted, rather than being certified by a predica
 There is no "probably fine" outcome and no fall-through default. If the check cannot be completed, the path is invalid.
 
 **X7 — `NO_ROUTE` is disabled until a proof procedure exists, and the two kinds of outcome are separate fields.**
-*Default chosen, owner confirmation pending.* A reason is not a search outcome and a search outcome is not a geometric
-cause. So:
+*Confirmed by owner.* A reason is not a search outcome and a search outcome is not a geometric cause. So:
 
 - the **frame** carries it: `AnatomyFrame.searchOutcomes` (§5.3) holds the outcome per head ∈ {`CLEARED`,
   `SEARCH_EXHAUSTED`, `PASS_CAP`} — what the construction did — while `reasonCodes` holds, separately, the **last
@@ -1899,9 +1897,9 @@ no single radius, so this criterion cannot certify one. A sheet muscle is theref
 sheet envelope is specified (a declared half-thickness and a per-station width, with its own distance predicate), and M1
 ships no sheet muscle (§15).
 
-**X5 — an attachment-contact exemption is a single reviewed first-egress interval.** *Default chosen, owner confirmation
-pending.* An origin or insertion may legitimately sit inside an obstacle — a hip-flexor origin on the pelvis is the
-normal case, not a defect — so the exemption is declared, not inferred:
+**X5 — an attachment-contact exemption is a single reviewed first-egress interval.** *Confirmed by owner.* An origin or
+insertion may legitimately sit inside an obstacle — a hip-flexor origin on the pelvis is the normal case, not a defect —
+so the exemption is declared, not inferred:
 `ContactExemption(obstacleId, headIndex, fromStation, toStation, source)`, with fractional arc-length stations. The pair
 `(head, obstacle)` gets **one** interval, the one that covers the exempted endpoint and runs to the **first egress** from
 that obstacle; **any re-entry after leaving is a violation**, not a second exempted interval. A second interval is not a
@@ -1969,7 +1967,7 @@ declaration order, per head, and **the same union is what construction and valid
 - **Floating point.** Everything is evaluated in double precision; a chord inside the fail-closed band is measured rather
   than cleared. The conservative direction is always chosen.
 
-#### 7.4.2 Overlapping, nested and impossible routes
+#### 7.4.2 Overlapping, nested and closed routes
 
 Obstacles overlap and nest in normal anatomy (a bone ellipsoid inside a muscle-group ellipsoid is the common case, not
 an error). The rules make the outcome deterministic and reviewable:
@@ -2032,9 +2030,9 @@ bounds, plus one stateful observer that is not a bound at all:
    with `v_max` = 1.2 m/s — is **withdrawn**, because it is a speed limit on an output that has no physical speed and no
    defensible constant.
 
-   **X6 — the observer is a diagnostic heuristic, and it does not gate anything.** *Default chosen, owner confirmation
-   pending.* It reports; it never blocks a frame, never fails L4, and never rate-limits a path. What L4 tests is the
-   **observer's own correctness**, not the path's smoothness (§12.2): a rigid translation of the whole body must produce
+   **X6 — the observer is a diagnostic heuristic, and it does not gate anything.** *Confirmed by owner.* It reports; it
+   never blocks a frame, never fails L4, and never rate-limits a path. What L4 tests is the **observer's own
+   correctness**, not the path's smoothness (§12.2): a rigid translation of the whole body must produce
    no alarm; a rotating or moving wrap must be attributed; an inserted sample must not shift a station; a deliberate
    branch switch must alarm; and the lifecycle cases below must behave as stated. A diagnostic whose arithmetic is
    untested produces plausible findings, which is worse than none.
@@ -2593,9 +2591,9 @@ Rules:
 `SELECTED` exists from the start as state (highlight + panel). In M1 its content is the muscle **name, layer and
 categorical role** (§8, X8), plus **`relativePathLengthChange` and nothing dimensional**.
 
-**X4 — M1 shows the relative change only; absolute metres are withheld from the UI.** *Default chosen, owner confirmation
-pending.* `relativePathLengthChange` is dimensionless, so it does not need the calibration pair that absolute metres do —
-but it is not calibration-free either (§13 question 12), and the panel therefore labels it for what it is: a **modelled**
+**X4 — M1 shows the relative change only; absolute metres are withheld from the UI.** *Confirmed by owner.*
+`relativePathLengthChange` is dimensionless, so it does not need the calibration pair that absolute metres do — but it is
+not calibration-free either (§13 question 12), and the panel therefore labels it for what it is: a **modelled**
 relative change of a **modelled** path, between two frames of the same solve. `modelledPathLength` stays in the data and in
 the debug overlay, where a developer can see it next to the `unitsPerMetre` it was computed with; it is **not displayed to
 a user** until a calibration pair is named and an evidence-backed uncertainty exists for it. Showing metres now would
@@ -2604,11 +2602,11 @@ display a number whose value depends on an unsettled constant, in a panel that r
 **Roles are in M1, and only behind their own gate.** M1 ships categorical roles — the §7.3 `MuscleRole` enum, the §8.2
 schema (source, task, population, review status), a provenance/review validator, and a display gate. A role is displayed
 only for an exercise that has a **reviewed source**; every other exercise shows **no role** rather than a guess, and an
-`UNKNOWN` or `UNREVIEWED` row renders as "no reviewed role". The pilot exercise list is **to be named by the owner**
-(3–5 exercises); this document does not invent it, and "at least three existing procedural exercises" in M1's definition
-of done is the animation requirement, not the role list. What stays out of M1 is unchanged and absolute: no numeric
-activation value, no EMG-derived output, no per-muscle contraction mode, no medical or therapeutic claim (§8.1, §11 hard
-rule 2).
+`UNKNOWN` or `UNREVIEWED` row renders as "no reviewed role". The pilot exercise list is **owner-approved and fixed for
+M1**: `squat`, `standard push-up`, `bird-dog` and `row_standard` (X8). "At least three existing procedural exercises" in
+M1's definition of done is the animation requirement, not the role list, and the four names above are the roles list.
+What stays out of M1 is unchanged and absolute: no numeric activation value, no EMG-derived output, no per-muscle
+contraction mode, no medical or therapeutic claim (§8.1, §11 hard rule 2).
 
 ### 9.3 Interaction
 
@@ -2856,7 +2854,7 @@ change that quietly promotes an approximation to a claim.
 | --- | --- | --- | --- |
 | Analytic two-bone IK | established technique | no soft-tissue, no joint-surface contact | existing validator (L1) |
 | Contact settlement / posture CCD | established, bounded | iterative, not a physics solve | L1 + RFC R12 |
-| Position-driven retarget (X3) | established technique | rotations derived from two published positions plus a fixed `Ry(+90°)` basis; translation only at the pelvis; the roll about the segment direction is the same approximation §7.2 carries, and continuity at an antiparallel bind direction is not promised | L2 rest invariant + `PoseRetargeterRestInvariantTest` |
+| Position-driven retarget (X3) | established technique | rotations derived from two published positions plus a fixed `Ry(+90°)` basis; translation only at the pelvis, **divided** by `unitsPerMetre` (§6.2); the roll about the segment direction is the same approximation §7.2 carries, and continuity at an antiparallel bind direction is not promised | L2, and **not by the rest invariant alone**: `PoseRetargeterRestInvariantTest` proves rest identity, which `basis = IDENTITY` also satisfies, so it validates nothing about the basis; `RigLandmarkAlignmentTest` (A1, a *converted* asset point against a published joint) catches a wrong or missing basis, `RigSideTest` catches a side flip, `PoseRetargeterPelvisTranslationTest` catches a reversed translation conversion, and A2 is **measured** at three named poses (squat bottom, push-up bottom, overhead reach) — three of 66 builders, a sample and not a statement about the other 63 |
 | Segment frame from published positions + declared roll | approximation | the roll about the segment direction is arbitrary, so an attachment offset of `d` metres carries up to `d · θ` of error (chord `2\|d\| sin(θ/2)`); **four of fourteen** segment rows take their parent's frame in every frame measured (`pelvis` and `clavicle` coincident, `skull` and `toes` terminal), and the `hand` row in one builder of 66 (§7.2) | `SegmentFrameDirectionTest` (L2) |
 | Bone-name resolution with aliases | established technique | alias tables can map the wrong bone | L2 coverage + manual rig review |
 | Anatomical attachment points | **requires expert validation** | a plausible-looking point can still be wrong | L3 mechanical + L7 review (§12.4) |
@@ -2897,7 +2895,7 @@ Seven levels, each with one owner, one report and an explicit automation status.
 | **L1 Motion** | 18 existing rules over joint-space geometry (`ExerciseValidator.kt:47-92`) | yes, unchanged | all | the pose/engine is wrong; block |
 | **L2 Rig** | bone coverage, rest invariant, inverse binds, side/handedness, unit scale, bone budget, landmark alignment (§6.6) | yes | all | the asset or map is wrong; block |
 | **L3 Attachments** | every attachment's joint exists; offset inside a segment envelope; L/R mirror; head count; origin ≠ insertion; span ≥ 2 segments | yes | all | the anatomy data is wrong; block |
-| **L4 Path** | every segment of the final polyline tested against every obstacle in the head's ordered union, in one exhaustive three-stage state machine — bounding-sphere certified clear, quadratic certified intersection, then the finite-segment minimum of `d(t) − r(t)` (**solid** ellipsoid distance) with a Lipschitz certificate, the radius taper split at every knot, and `UNCERTAIN` failing closed — plus the sample-outside check; unverifiable geometry reported `INVALID` with a reason from the one table; deterministic outcome for overlapping, nested and impossible routes; tangent and curvature continuity at entry/exit (gated); rest-length tolerance vs measured reference. The continuity observer is **diagnostic only** and is not part of this gate (X6) | yes, with adversarial fixtures | all | the solver or the data is wrong; block |
+| **L4 Path** | every segment of the final polyline tested against every obstacle in the head's ordered union, in one exhaustive three-stage state machine — bounding-sphere certified clear, quadratic certified intersection, then the finite-segment minimum of `d(t) − r(t)` (**solid** ellipsoid distance) with a Lipschitz certificate, the radius taper split at every knot, and `UNCERTAIN` failing closed — plus the sample-outside check; unverifiable geometry reported `INVALID` with a reason from the one table; deterministic outcome for overlapping, nested and closed routes; tangent and curvature continuity at entry/exit (gated); a **solver-derived rest length that is finite, strictly positive and reproducible** for every head (§7.4.4), and — **only where the definition or the review names one** — a comparison against a sourced external reference recorded with source, task, population and uncertainty, where a missing reference is an evidence gap and neither a pass nor a blocker. The continuity observer is **diagnostic only** and is not part of this gate (X6) | yes, with adversarial fixtures | all | the solver or the data is wrong; block |
 | **L5 Mesh** | self-intersection, degenerate triangles, weight sums, volume sanity per muscle, helper-bone bind match | partly (tool) | **subset** (§12.5) | the mesh is wrong; block release, not build |
 | **L6 Morphology** | declared ranges respected per target; **mesh** ring/mask vertices relative to joint pivots within `ε_morph`; delta bounds | **yes — the morph and ring checks only** | **subset** (§12.5) | a preset breaks the surface the muscles sit under; block the preset. A bone-landmark rest invariant is **not** an L6 assertion: a vertex-only morph cannot move a bone, so it is tautological. **"Anatomy still inside the body" is not automated and is not L6**: it needs a mesh-intersection tool M1 does not ship, so it is an L7 RV2/RV3 judgement (§12.5, §13 question 9) |
 | **L7 Anatomical review** | RV1–RV6 in §12.4: attachment locations, position vs bone and body surface, visible intersections, shape/path plausibility across poses, preset consistency, provenance | no — human, **required for M1** | all | the model is not accepted; M1 does not ship |
@@ -2929,14 +2927,14 @@ Seven levels, each with one owner, one report and an explicit automation status.
 | `BoneMapCoverageTest` | L2 | **23** mapped joints resolve and the **10** undrivable engine joints are declared, not accidental (X2) — derived from the required map of §6.2, not from the shipped asset's 21/12 inventory. The scapula pair is asserted by name, so a `BoneMap` that quietly omits `SCAPULA_A/P`, or a rig that carries no scapula bone, fails here rather than at A1 |
 | `RigSideTest` | L2 | `Left*` bones on the same side as anatomy side A in the rest pose |
 | `AnatomyDefinitionTest` | L3 | ids unique; attachments resolve; envelope bounds; L/R mirror; heads consistent |
-| `MusclePathGeometryTest` | L4 | arc length ≥ chord; every segment of the final polyline is certified clear of every obstacle in the head's union under the three-stage state machine of §7.4.1, with the solid-distance predicate and the Lipschitz certificate; every sample lies outside the surface by the same margin; repeatable across runs and buffer reuse on one device and configuration |
+| `MusclePathGeometryTest` | L4 | arc length ≥ chord; every segment of the final polyline is certified clear of every obstacle in the head's union under the three-stage state machine of §7.4.1, with the solid-distance predicate and the Lipschitz certificate; every **non-exempt** sample lies outside the surface by at least `e`, read through the same `(head, obstacle, arc-length interval)` first-egress mask that construction, projection and the endpoint check use (§7.4.1a), so `exempt_origin_success` passes while a re-entry outside its interval still fails; repeatable across runs and buffer reuse on one device and configuration |
 | `MusclePathObstacleFixtureTest` | L4 | the validator fixtures (§12.2.1) return the expected verdict, and the solver fixtures return the expected final path or the expected failure reason — never silently |
 | `MusclePathContinuityTest` | L4 | C0, tangent bound at entry/exit, curvature bound (gated); and, for the **observer's own correctness** (diagnostic, X6): a rigid translation of the whole body produces no alarm; a rotating or moving wrap is attributed and produces no alarm; an inserted sample does not shift a station; a deliberate branch switch alarms; the first frame produces no verdict; pause, resume, seek, backward time and a non-monotonic timestamp each reset rather than express a negative displacement; an `INVALID` frame resets the comparison and is recorded as a reset; `valid → invalid → valid` restores the path and does not compare across the gap; and no path is ever rate-limited |
-| `MuscleLengthDeterminismTest` | L4 | the same pose produces the same length across runs, buffer reuse and definition reload; no discontinuity beyond tolerance across a sampled motion |
+| `MuscleLengthDeterminismTest` | L4 | the same pose produces the same length **bit-identically** across runs, buffer reuse and definition reload. **No temporal-continuity bound is asserted here**: a length or path change across a sampled motion is a diagnostic row from the continuity observer (§7.4.3), not a verdict, because X6 keeps the observer out of every gate and a route-branch switch can change the path discontinuously with no defensible universal bound |
 | `MuscleLengthReferenceTest` | L4 | length matches expert-reviewed reference data **where such data is named**, within the stated tolerance; where it is not named the row reports an evidence gap, which is **not** a pass and **not** an M1 blocker (§7.4.4) |
 | `MuscleLengthScaleTest` | L4 | §13 question 12: a common similarity transform of the body, the attachments and **every** dimensional solver parameter leaves `relativePathLengthChange` unchanged (`scale_common_control`), while a recalibration at a different `unitsPerMetre` changes it (`recalibration_counterexample`) — the two together are what stop "dimensionless" being read as "calibration-free" |
 | `MuscleDirectionalExpectationTest` | L4 | only exercise- and muscle-specific expectations, each carrying a documented justification and source |
-| `MuscleRestLengthTest` | L4 | solved rest length matches the calibrated reference within tolerance |
+| `MuscleRestLengthTest` | L4 | §7.4.4's **mandatory** half: the solver-derived rest length is finite, strictly positive and **reproducible** for every head — the same value across runs, buffer reuse and definition reload, computed at the X1 bind frame (§6.6). A zero, negative or NaN value reports `REST_LENGTH_INVALID` rather than dividing by it. The **conditional** half — a comparison against a named, sourced reference — is `MuscleLengthReferenceTest`, not this row: requiring a measured reference for every M1 head would contradict the evidence-gap rule of §7.4.4 |
 | `MuscleRenderabilityTest` | L4 / presentation | §7.4: an `INVALID` instance is masked and its geometry cleared in the same frame; **one invalid biceps-femoris head hides the whole instance and both sides keep independent masks**; the mask is the conjunction of the heads' statuses and `NOT_PROCESSED` is not renderable; an early return leaves every instance unrenderable rather than stale; valid → invalid → valid restores the path and the mask across carrier reuse |
 | `AnatomyFrameLayoutTest` | L4 | §5.3: the `3 · headCount · pointCapacity` stride addresses every point of every head; `pointCapacity` is the post-insertion maximum; an over-capacity head reports `BUFFER_CAPACITY` instead of growing or truncating; `clear()` leaves every slot `NOT_PROCESSED` in **status, reason and `searchOutcome`** and every `renderable` entry `false`; a solve that returns early leaves the untouched heads `NOT_PROCESSED` rather than `VALID`, `INVALID` or a stale outcome; a reused buffer that is not cleared cannot show the previous frame's status **or outcome**; an accepted head reads `CLEARED` with `reason = NO_REASON` while an exhausted one reads `PASS_CAP` or `SEARCH_EXHAUSTED` with its own last geometric cause, so the two fields are asserted separately (X7); and a head that is simultaneously degenerate and inside an obstacle reports `DEGENERATE_SEGMENT` |
 | `MuscleGeometryOwnershipTest` | L4 / presentation | §7.6: toggling morphs or correctives leaves every `MuscleState` bit-identical, and nothing in `character/` writes `AnatomyFrame` |
@@ -2959,7 +2957,8 @@ length is a function of two joint angles and can lengthen while the vasti shorte
 length through a phase in which the joint moves. A test that forced the solver to produce a predetermined curve would
 make the anatomy satisfy the test instead of the test describing the anatomy — precisely the inversion §11 exists to
 prevent. The inventory therefore checks what is mechanically defensible: attachment and path correctness, determinism,
-continuity, and agreement with reviewed reference data where such data exists. Directional expectations are allowed only
+**tangent and curvature** continuity at entry/exit — never temporal continuity, which X6 leaves diagnostic — and
+agreement with reviewed reference data where such data exists. Directional expectations are allowed only
 per muscle and per exercise, with the justification and its source recorded next to the test.
 
 #### 12.2.1 Adversarial path fixtures
@@ -3115,7 +3114,7 @@ approving the wrong one:
 | RV1 | Attachment locations | each origin and insertion lands on the landmark named in the definition, within the tolerance stated in the review record |
 | RV2 | Position relative to bones and body surface | the belly sits in the correct compartment: not inside bone, not outside skin, not on the wrong side of a joint |
 | RV3 | Visible intersections | no intersection with skin or with an adjacent muscle in any reviewed pose, at the layer visibility the milestone ships |
-| RV4 | Plausible shape and path across poses | path and silhouette read as that muscle in at least three distinct poses — for M1, squat bottom, squat top and push-up bottom — plus any pose the reviewer asks for |
+| RV4 | Plausible shape and path across poses | path and silhouette read as that muscle in every pose of the M1 review set — five poses from the four pilot exercises of X8 — plus any pose the reviewer asks for. The set is chosen so that **every M1 muscle is posed for review at least once**: `squat` bottom and top (gluteus maximus, gluteus medius, biceps femoris on both heads, rectus femoris, erector spinae, rectus abdominis), `standard push-up` bottom (the abdominal wall in a second configuration: rectus abdominis, external oblique, erector spinae), `bird-dog` (erector spinae, external oblique, gluteus maximus and gluteus medius in a hip-extension configuration) and `row_standard` mid-pull (**latissimus dorsi**, whose humeral insertion no squat, push-up or bird-dog pose carries through a pull). **Latissimus dorsi is the muscle the set exists for**: a review built only from squat and push-up poses would leave one of the eight unreviewed and still look complete. A pose outside the set is outside the review, not inside a guarantee |
 | RV5 | Consistency across presets | every morphology preset shipped in the milestone is reviewed; a preset added later re-opens the review for the muscles it moves. M1 ships one preset, so this criterion is satisfied by reviewing that one and is not evidence about any other |
 | RV6 | Provenance | every judgement in the record points at an identifiable reference, not at "looks right" |
 
@@ -3161,14 +3160,14 @@ rule and the M1 checklist all cite it, and none of them may require a check the 
 | L3 | all mechanical checks, evaluated in the bind stance | — | definition-time data check |
 | L4 | all path checks, validator fixtures and solver fixtures | — | the geometry contract |
 | L5 | body asset checks (degenerate triangles, weight sums, budgets) and **generated tube structure**: finite coordinates, no zero-area ring, triangle count equal to the §10.3 formula | muscle-vs-skin intersection; authored-mesh helper binds | M1 has no authored muscle mesh; no mesh intersection test ships in M1 |
-| L6 | one preset: declared ranges respected, mesh ring preservation around joint pivots, delta bounds | cross-preset coverage; "anatomy still inside the body" as an automated pass; the bone-landmark rest invariant, which a vertex-only morph cannot affect and which therefore proves nothing | one preset exists; body-anatomy intersection needs a tool M1 does not ship, so it is an L7 A2/A3 judgement |
+| L6 | one preset: declared ranges respected, mesh ring preservation around joint pivots, delta bounds | cross-preset coverage; "anatomy still inside the body" as an automated pass; the bone-landmark rest invariant, which a vertex-only morph cannot affect and which therefore proves nothing | one preset exists; body-anatomy intersection needs a tool M1 does not ship, so it is an L7 RV2/RV3 judgement |
 | L7 | RV1–RV6 with a valid record (§12.4) | — | the human gate |
 | §9.2/X4 readout | the muscle panel displays `relativePathLengthChange` only, labelled modelled, with no absolute metres | any absolute length in the UI before a named calibration pair and an evidence-backed uncertainty exist | a dimensionless ratio and a metre value are not the same claim, and only one of them is available today |
-| §8 roles | the categorical role entries for the owner-named pilot exercises only, each with `source`, `task`, `population`, `reviewStatus`, validated against its reviewed `PhaseTimeline`; unreviewed or `UNKNOWN` rows are not displayed | numeric activation, EMG-derived output, per-muscle contraction mode, medical claims, and roles for any exercise without a reviewed source | roles are cheap to validate and dishonest to guess; a display gate is what makes a partial table acceptable (X8) |
+| §8 roles | the categorical role entries for the four pilot exercises of X8 only — `squat`, `standard push-up`, `bird-dog`, `row_standard` — each with `source`, `task`, `population`, `reviewStatus`, validated against its reviewed `PhaseTimeline`; unreviewed or `UNKNOWN` rows are not displayed | numeric activation, EMG-derived output, per-muscle contraction mode, medical claims, and roles for any exercise without a reviewed source | roles are cheap to validate and dishonest to guess; a display gate is what makes a partial table acceptable (X8) |
 
 **M1 gate, stated once.** M1 passes when: L1–L4 green; the L5 and L6 subsets above green; **a device run recorded** for
 the M1 configuration (skin + muscle layer + skeleton overlay) — evidence that it renders, not a frame-rate or thermal
-budget, because those are informational by the owner's decision (§12.3); the §8 role table for the owner-named pilot
+budget, because those are informational by the owner's decision (§12.3); the §8 role table for those four pilot
 exercises validates (every displayed row carries a reviewed source, and every exercise without one shows no role); and
 the §12.4 record exists for the exact `(anatomyVersion, rigVersion, assetVersion, presetId)` shipped. Any other
 combination is not an M1 pass, whatever the individual reports say.
@@ -3295,7 +3294,9 @@ combination is not an M1 pass, whatever the individual reports say.
    directions whichever direction it chose.
 
 **Owner defaults applied in this revision (X1–X8).** Each is written above as the chosen design and repeated here as a
-decision of record, with the owner's status: **X1 and X3–X8 confirmed by owner**, **X2 reversed by owner (fingers kept)**.
+decision of record, with the owner's status: **X1 and X3–X8 confirmed by owner**, **X2 reversed by owner (fingers kept)**,
+and **X9/X10 still pending** — question 11 and question 12 below keep their "default chosen, owner confirmation pending"
+labels, which are the only two that do.
 The smallest experiment is kept against each row because a confirmed design still has to be measured, not assumed.
 
 | # | Default | Where it is applied | Status | Smallest resolving experiment |
@@ -3307,7 +3308,7 @@ The smallest experiment is kept against each row because a confirmed design stil
 | **X5** | An attachment-contact **exemption is one reviewed first-egress interval**; any re-entry after leaving is a violation, and the same mask applies to endpoint, sample, construction, projection and final validation | §7.3 (`ContactExemption`), §7.4.1, §12.2.1 (`exempt_re_entry`) | **confirmed by owner** | run the 1-D re-entry fixture: if the implementation accepts stations 0.5625–0.6875, the mask is not an interval |
 | **X6** | The **continuity observer is diagnostic only** and never a gate; **route hysteresis is removed from M1** | §7.4.3, §12.2 (`MusclePathContinuityTest`) | **confirmed by owner** | the observer-correctness fixtures: a rigid translation must not alarm, a branch switch must |
 | **X7** | **`NO_ROUTE` is disabled** until a proof procedure exists; the frame exposes a **terminal search outcome** (`SEARCH_EXHAUSTED` / `PASS_CAP`) separately from the **last geometric cause** | §7.4.1c, §7.4.5, §12.2.1 | **confirmed by owner** | `final_clearance_and_budget_both_fail`: one record, two fields, neither overwriting the other |
-| **X8** | **Categorical roles ship in M1**: schema, provenance/review validator and display gate, for exercises with a reviewed source only; the **pilot exercise list is to be named by the owner** (3–5 exercises) and is not invented here | §7.3 (`MuscleRole.UNKNOWN`), §8, §9.2, §12.5, §15 M1 item 10 | **confirmed by owner** | the owner names the pilot list; the validator then runs on it and every other exercise must display no role |
+| **X8** | **Categorical roles ship in M1**: schema, provenance/review validator and display gate, for exercises with a reviewed source only; the **pilot exercise list is owner-approved and fixed**: `squat`, `standard push-up`, `bird-dog`, `row_standard` | §7.3 (`MuscleRole.UNKNOWN`), §8, §9.2, §12.4 (RV4 poses), §12.5, §15 M1 item 10 | **confirmed by owner** | the validator runs on those four and every other exercise must display no role; the §12.4 pose set is drawn from them so that every M1 muscle is reviewed |
 
 **Known traps from the device run (spike #384).** Each cost a debugging cycle on real hardware, and each is a property of
 the current code, not of the model. PR #385 at `bcb3658` contained none of the first three fixes; the current head
@@ -3527,7 +3528,7 @@ schedule risk, not the engineering one.
 - **Muscles:** the canonical M1 set, **cited from §7.7.1 and not restated here** — eight names, 18 head-side instances,
   with the per-muscle caveats that table carries. A second list in the roadmap is how the three-list disagreement it
   records happened the first time.
-- **Dependencies:** stage 1 (rest stance + definition), anatomy calibration session.
+- **Dependencies:** stage 1 (the X1 bind frame + definition), anatomy calibration session.
 - **Expected files:** `app/src/main/java/com/monkfitness/app/anatomy/*.kt`,
   `app/src/main/assets/anatomy/anatomy_v1.json`, `app/src/test/.../anatomy/*`.
 - **User-visible deliverable:** a dev-only muscle layer showing red tubes following the squat and push-up, with a
@@ -3535,8 +3536,11 @@ schedule risk, not the engineering one.
   debug-overlay value only (§9.2).
 - **Automated acceptance:** arc length ≥ chord on every frame; **every validator fixture in §12.2.1 returns its expected
   verdict** — including `outside_endpoints_crossing_obstacle`, which must be rejected — and **every solver fixture
-  produces its expected final path or failure**; lengths are deterministic and continuous across a sampled motion; rest
-  lengths within tolerance; no fixture outcome is reported without naming which check produced it.
+  produces its expected final path or failure**; lengths are **deterministic under identical inputs** (bit-identical
+  across runs, buffer reuse and definition reload) and the **continuity observer's own correctness** is asserted per
+  `MusclePathContinuityTest`; a path or length discontinuity across a sampled motion is a diagnostic row that fails
+  nothing (X6, §7.4.3); every rest length is finite, positive and reproducible (§7.4.4); no fixture outcome is reported
+  without naming which check produced it.
 - **Manual acceptance:** anatomist review of the eight attachment sets and of the wrap behaviour on three poses.
 - **Recorded information, not a gate:** the clearance cost of §7.4.1 — the per-frame segment-to-ellipsoid distance
   evaluations on the pairs that fail the two-comparison accept — is measured here and recorded with the frame, the
@@ -3565,18 +3569,21 @@ schedule risk, not the engineering one.
    recorded** for the M1 configuration (skin + muscle layer + skeleton overlay), not for the skin alone — a run, not a
    frame-rate gate (§12.3).
 7. The anatomical review gate (§12.4) is passed and recorded for the exact shipped tuple: named reviewer, reference list,
-   per-muscle findings against A1–A6, and unresolved limitations. A missing record fails M1 exactly as a red L4 does.
+   per-muscle findings against **RV1–RV6**, and unresolved limitations. A missing record fails M1 exactly as a red L4
+   does. The criteria are RV1–RV6 because A1–A3 already name the rig-alignment measurements of §6.6, and A4–A6 name
+   nothing: a checklist that cited `A1–A6` asked for three criteria this document does not define.
 8. Every claim in the demo's copy survives §11: no "simulated", no measured activation, no implied contraction
    magnitude.
 9. Tap hints on the rig: tapping an attachment landmark names the muscle attached there and the layer it belongs to. The
    label is anchored to the landmark and the tap moves nothing — no deformation, no geometry keyed to selection. The full
    picking and explanation system remains stage 7.
-10. Categorical roles for the owner-named pilot exercises (§8, X8): every displayed row carries a reviewed `source`,
-    `task`, `population` and `reviewStatus`, is checked against its reviewed `PhaseTimeline`, and an exercise without a
-    reviewed source shows **no role**. No numeric activation, no EMG output, no per-muscle contraction mode.
+10. Categorical roles for the four pilot exercises — `squat`, `standard push-up`, `bird-dog`, `row_standard` (§8, X8):
+    every displayed row carries a reviewed `source`, `task`, `population` and `reviewStatus`, is checked against its
+    reviewed `PhaseTimeline`, and an exercise without a reviewed source shows **no role**. No numeric activation, no EMG
+    output, no per-muscle contraction mode.
 
 **Explicitly not in M1:** authored muscle meshes (stage 3), **role colouring and the education panel** (stage 4 — M1
-ships the role *text*, not the colour mapping or the panel), roles for exercises outside the owner-named pilot list, deep
+ships the role *text*, not the colour mapping or the panel), roles for exercises outside those four, deep
 muscles, a second morphology preset (stage 5), organs, the stage-7 label and picking system (M1 has only the
 attachment-landmark hints of item 9), a muscle library beyond eight, and any claim of surface accuracy.
 
@@ -3631,12 +3638,12 @@ attachment-landmark hints of item 9), a muscle library beyond eight, and any cla
 - **User-visible deliverable:** a character selector that changes the body and keeps every exercise, muscle and
   animation.
 - **Automated acceptance:** declared `min`/`max` respected per target; **mesh ring preservation** around each joint pivot
-  within `ε_morph`, per preset. **Muscle-versus-body intersection is not automated at stage 5**: it remains an L7 A2/A3
+  within `ε_morph`, per preset. **Muscle-versus-body intersection is not automated at stage 5**: it remains an L7 RV2/RV3
   human judgement until a mesh-intersection tool exists (§13 question 9), so "anatomy inside the body" is a human gate
   here, not an automated pass — and the bone-landmark rest invariant is not that check, because a vertex-only morph
   cannot move a bone.
 - **Manual acceptance:** all four bodies pass the same visual checklist; muscle layers align on each; and a **renewed
-  §12.4 record per preset** (A5), because each preset moves the surface the muscles must sit under.
+  §12.4 record per preset** (RV5), because each preset moves the surface the muscles must sit under.
 - **Risks:** morph authoring cost; muscle meshes must be re-authored per family (§6.3); joint degradation.
 - **Effort:** 3 engineering weeks + ~6 art weeks.
 - **Art/expertise:** yes.
