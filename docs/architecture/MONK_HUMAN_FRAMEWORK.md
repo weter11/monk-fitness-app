@@ -1097,6 +1097,13 @@ bind head by `2 · 100 · sin(0.05°)` = **0.1745 mm** while the claimed sum of 
 error that formula ignores is directional, and a directional error is precisely what a retargeted rotation produces. No
 sum of length differences bounds it.
 
+**Equal bind lengths do not ensure posed alignment, and the correction is not a rig change.** A rig whose segment lengths
+match the engine's to the millimetre still drifts in motion if its bones are rotated by a composition that accumulates
+residual direction error — which is what a rest-delta retarget does and what X3's position-following rule removes. So
+there is **no rig-only fix** for A2: the retarget is part of the alignment contract, and `RigAlignmentResidualTest` is
+the measurement that decides, on posed frames, whether the pair (rig, retarget) holds the joints. A document that
+promised that equal lengths were sufficient would be promising that a rotation error cancels, and it does not.
+
 A2 is therefore a **measurement**: for each mapped joint, the distance between the rig bone head (converted to engine
 space) and the engine joint, evaluated on a **named pose set** — the three poses `RigAlignmentResidualTest` runs, squat
 bottom, push-up bottom and overhead reach — and reported per joint and per pose against `τ_residual` (proposed 5 mm at
@@ -1207,8 +1214,35 @@ review. A role change is an anatomy review. Four reviewers, four diffs — that 
 
 **Segment frame table.** Each row names the node whose rest frame *is* the segment's frame (identity at rest) and the
 **published position pair** the posed direction is taken from — `p_child − p_parent`, in the parent's frame, with the
-roll convention of D1 (§13 question 11). The roll is an approximation: an attachment offset `d` carries up to `|d| · θ`
-of error, where `θ` is that segment's residual roll error (§11).
+roll convention of X9 (§13 question 11). The roll is an approximation, and §7.2 states its exact form below.
+
+**D1 as a total rule — defined for every segment, including the degenerate ones.** `P` is the parent segment's frame
+(published positions, this table's rule applied to the parent), `restDir` the segment's direction in its own rest frame,
+`a = P · restDir`, `b = normalize(child − parent)` in world space, `D = shortestRotation(a, b)`, `R = D · P`. The rule is
+total because each of these is decided, not left to a caller:
+
+| Case | Rule |
+| --- | --- |
+| order | `R = D · P`: the parent's frame is carried first, then the minimal rotation into the published direction. The reverse order rotates about the parent's axes and is wrong for every non-commuting pair |
+| near-zero length | `|child − parent| < τ_len · max(1, |restDir| · s)` → the segment is **treated as degenerate**, not normalised. `τ_len` is scale-aware (`1e-6` of the segment's own rest length in engine units) so a millimetre-scale attachment and a metre-scale segment use the same rule |
+| degenerate | inherit the parent's frame and the authored rest direction (no rotation), as in L.1 |
+| root | `PELVIS` has no parent: `P` is the world frame of the bind stance, and its `restDir` is the authored world direction |
+| near-parallel | `|a × b| < τ_rot` and `a · b > 0` → `D = identity`, no normalisation of a tiny cross product |
+| near-antiparallel | `a · b < 0` and `|a × b| < τ_rot` → the **antipodal tie-break**: rotate by `π` about the world axis least aligned with `a` (x → y → z on ties), the same tie-break the construction uses (§7.4.5). `D` is then `−identity` in rotation terms — a half-turn, chosen deterministically |
+| continuity | **not promised at the antipodal singularity.** The two sides of `a · b = 0` give opposite half-turns about different axes, so a segment that passes through antiparallel flips. That is stated rather than hidden behind a threshold that only moves the flip |
+| invalid input | a non-finite coordinate or a zero `restDir` → the segment is `INVALID` with `NON_FINITE_GEOMETRY` (§7.4.1c), never a silently identity frame |
+
+Tests (`SegmentFrameDirectionTest`): near parallel (within `τ_rot`), near antiparallel approached **from both sides** (the
+two half-turns, and the flip between them as a documented discontinuity), zero length (degenerate → inherited frame), the
+root (`PELVIS`), and a straightening limb whose `b` rotates through `a` (frame continuous, no flip).
+
+**The roll bound, with its units.** The placed direction is exact; the roll about it is not. An attachment offset of `d`
+metres displaced by a roll error of `θ` radians moves by the chord **`2|d| sin(θ/2)`**, of which `|d| · θ` is the upper
+bound — the two agree to within 0.03 % at 5° and diverge only for large `θ`. Units: `|d|` in metres (the authored
+offset), `θ` in radians (per segment), the displacement in metres, all in the parent segment's frame. `θ` is
+**measured per segment** and each attachment's offset is **reviewed against it** (§12.4); the document does not rank the
+eight M1 muscles by roll sensitivity, because their coordinates are placeholders (§7.3) and a ranking computed from
+placeholder numbers would be a ranking of the placeholders.
 
 | Segment | Node | Direction from published positions | Anatomical content | Notes |
 | --- | --- | --- | --- | --- |
@@ -1227,15 +1261,33 @@ of error, where `θ` is that segment's residual roll error (§11).
 | foot | `ANKLE_F/B` | `ANKLE_F → TOE_F` — **zero length** | calcaneus, talus, metatarsals | degenerate, see below |
 | toes | `TOE_F/B` | none — terminal joint, inherits the foot direction | phalanges | |
 
-**Five of these fourteen segments cannot derive a direction from positions, and that is measured, not a corner case.**
-At `16e0487` the node pairs `CLAVICLE_A → SCAPULA_A`, `ANKLE_F → TOE_F` (with `HEEL_F`) and `HAND_A → FINGERTIPS_A`
-(with `PALM_A`, `KNUCKLES_A`) are **coincident** — both joints of each pair sit at exactly the same world position in
-every pose sampled — and `HEAD_POS` and `TOE_F` are terminal, with no child joint to point at. So the `clavicle`, `hand`,
-`foot`, `skull` and `toes` segments have no position-derived direction at all. Their frame is the **parent segment's**
-frame with the authored rest direction, and an attachment authored on one of them is therefore expressed in the parent's
-frame: a foot offset is a shank offset, and a clavicle offset is a thorax offset. That is a property of the engine's
-solve topology (§4.1), not a defect this framework can fix, and it must not be hidden by a normalisation of a zero
-vector.
+**Which segments cannot derive a direction from positions is measured, and the earlier "five coincident" count was
+wrong.** Every registered builder was run and its published positions measured: **66 builders × 9 progress stations
+(0, 0.125 … 0.875, 0.999) = 594 frames** at `16e0487`'s engine sources, distances in engine units.
+
+| Published pair | Segment row | Measured across 594 frames |
+| --- | --- | --- |
+| `PELVIS → LUMBAR` | pelvis | **0.0000 in every frame** — coincident by construction (the `LUMBAR` node is a pass-through child of the pelvis) |
+| `CHEST → CLAVICLE_A/P` | — | **0.0000 in every frame** — the clavicle node sits on the chest |
+| `CLAVICLE_A/P → SCAPULA_A/P` | clavicle | **0.0000 in every frame** — the scapula node sits on the clavicle |
+| `ANKLE_F/B → TOE_F/B` | foot | **24.8500 in every frame** — never degenerate: `SkeletonPoseFinalizer.adjustFootOrientation` derives the toe at `footLength · 0.71` |
+| `ANKLE_F/B → HEEL_F/B` | — | 10.1500 in every frame (derived, `footLength · 0.29`) |
+| `HAND_A/P → FINGERTIPS_A/P` | hand | **22.00 in 65 of 66 builders** (`palmLength + fingerLength`, derived); **0.0000 in `pike_pushup_standard` only**, where the pose declares `MANUAL_OVERRIDE` and authors `PALM = KNUCKLES = FINGERTIPS` at one point 60.6 units from the hand |
+| `HAND_A/P → WRIST_A/P` | — | 0.0000 in 64 of 66; `60.6` in `pike_pushup_standard` and `138.0` in `row_standard`, both manual overrides |
+
+So the rows with **no** position-derived direction are: `pelvis` and `clavicle` (coincident in every frame), and `skull`
+and `toes` (terminal — `HEAD_POS` and `TOE_*` have no child joint). That is **four rows of fourteen in every frame**, plus
+`hand`, which is degenerate in **one** builder out of 66. The `foot` row is *not* degenerate: the toe is 24.85 units ahead
+of the ankle in every frame measured, and an earlier revision's claim that `ANKLE → TOE` is coincident is false — it was
+probably a reading of the factory's identity offsets rather than of published positions.
+
+**The root fallback, stated because the pelvis has no parent frame.** For these rows the frame is the **parent segment's**
+frame with the authored rest direction, and an attachment authored on one of them is expressed in the parent's frame: a
+clavicle offset is a thorax offset. `PELVIS` is the root, so it has no parent segment: its fallback is the **world frame
+of the published pose at the bind stance** (identity at rest, §7.2 first bullet) — a declared, fixed frame, not the
+previous frame and not the pelvis node's published rotation, which §7.2 already shows is not the segment orientation.
+That is a property of the engine's solve topology (§4.1), not a defect this framework can fix, and it must not be hidden
+by a normalising a zero vector.
 
 ### 7.3 Definition schema
 
@@ -2513,7 +2565,7 @@ change that quietly promotes an approximation to a claim.
 | Analytic two-bone IK | established technique | no soft-tissue, no joint-surface contact | existing validator (L1) |
 | Contact settlement / posture CCD | established, bounded | iterative, not a physics solve | L1 + RFC R12 |
 | Position-driven retarget (X3) | established technique | rotations derived from two published positions plus a fixed `Ry(+90°)` basis; translation only at the pelvis; the roll about the segment direction is the same approximation §7.2 carries, and continuity at an antiparallel bind direction is not promised | L2 rest invariant + `PoseRetargeterRestInvariantTest` |
-| Segment frame from published positions + declared roll | approximation | the roll about the segment direction is arbitrary, so an attachment offset of `d` metres carries up to `d · θ` of error; five segments inherit their parent's frame because the engine's nodes are coincident or terminal | `SegmentFrameDirectionTest` (L2) |
+| Segment frame from published positions + declared roll | approximation | the roll about the segment direction is arbitrary, so an attachment offset of `d` metres carries up to `d · θ` of error (chord `2|d| sin(θ/2)`); **four of fourteen** segment rows take their parent's frame in every frame measured (`pelvis` and `clavicle` coincident, `skull` and `toes` terminal), and the `hand` row in one builder of 66 (§7.2 L.1) | `SegmentFrameDirectionTest` (L2) |
 | Bone-name resolution with aliases | established technique | alias tables can map the wrong bone | L2 coverage + manual rig review |
 | Anatomical attachment points | **requires expert validation** | a plausible-looking point can still be wrong | L3 mechanical + L7 review (§12.4) |
 | Path + ellipsoid obstacle wrapping | approximation — geometric, not contact | ellipsoids stand in for bone and fascia; the clearance predicate is measured with a stated error budget (`eps_num`), and the approximation is the obstacle model, not the arithmetic | L4 fixtures + visual review |
@@ -2578,7 +2630,7 @@ Seven levels, each with one owner, one report and an explicit automation status.
 | `PoseRetargeterRestInvariantTest` | L2 | neutral pose → identity on every bone (exists in PR #385; extended to v2 rig) |
 | `RigLandmarkAlignmentTest` | L2 | §6.6 A1: every mapped bone head coincides with its engine joint at bind within `τ_bind`; rest orientations within `τ_rot` — expected **red** on `humanoid_v1` against the recorded baseline (§6.6) |
 | `RigAlignmentResidualTest` | L2 | §6.6 A2: the **measured** residual per joint at the three named poses, within `τ_residual`; the equal-length/different-direction control case must report a non-zero residual, and no length-sum bound is computed |
-| `SegmentFrameDirectionTest` | L2 | §7.2/§7.4 step 1: a derived segment direction equals the published direction `p_child − p_parent` within `τ_dir` (proposed, fixed at stage 1); the roll convention is declared per segment and reproduced; run on real baseline poses over both hierarchies, both sides of every bilateral limb, one deliberately bent IK case, and the five degenerate segments (inherited frame, no zero-vector normalisation) |
+| `SegmentFrameDirectionTest` | L2 | §7.2/§7.4 step 1: a derived segment direction equals the published direction `p_child − p_parent` within `τ_dir` (proposed, fixed at stage 1); the roll convention is declared per segment and reproduced; run on real baseline poses over both hierarchies, both sides of every bilateral limb, one deliberately bent IK case, the measured degenerate rows (`pelvis`, `clavicle`, `skull`, `toes` — inherited frame, no zero-vector normalisation) and the manually overridden hand of `pike_pushup_standard`; plus near-parallel, near-antiparallel from both sides, zero length, root and straightening per X9 |
 | `NonCommutingSplitTest` | L2 | §6.2: a parent and child about different axes compose to the stated world rotation — a reversed `parent⁻¹ · child` order or a one-sided `B` fails |
 | `UnmappedBoneInheritanceTest` | L2 | §6.2: moving a mapped parent carries an unmapped child's world rotation within tolerance while the child's local rotation is unchanged; the twist policy is the declared one |
 | `BoneMapCoverageTest` | L2 | 23 mapped joints resolve; unmapped joints are declared, not accidental |
@@ -2868,7 +2920,7 @@ combination is not an M1 pass, whatever the individual reports say.
    a lumbar curve is authored against a straight spine, and the limitation belongs in the review record (§12.4) rather
    than in a pose. Known limit, not a blocker: an extra lumbar joint would change `SkeletonDefinition`, revalidate every
    pose and recalibrate every rig (§6.1), and no stage in §15 budgets for that.
-11. **Roll convention for a position-derived segment frame (D1) — default chosen, owner confirmation pending.** The
+11. **Roll convention for a position-derived segment frame (X9) — default chosen, owner confirmation pending.** The
    segment frame is the minimal rotation taking `parentFrame · restDirection` to the published direction
    `p_child − p_parent`, applied in the parent's frame (§7.2, §7.4 step 1). The roll about that direction is therefore
    arbitrary, and an attachment offset `d` carries up to `|d| · θ` of error, where `θ` is the residual roll error for
@@ -2877,7 +2929,7 @@ combination is not an M1 pass, whatever the individual reports say.
    deterministic; the cost is the stated error bound, which is why §11 classifies it as an approximation. Smallest
    resolving experiment: measure `θ` for the eight M1 segments on the three named poses and decide whether the bound
    holds for the widest attachment offset in the library.
-12. **The A1 baseline, the calibration pair, and what an absolute length means (D2) — default chosen, owner confirmation
+12. **The A1 baseline, the calibration pair, and what an absolute length means (X10) — default chosen, owner confirmation
    pending.** The shipped `humanoid_v1` asset does not pass A1: its worst mapped joint is the hand at **565.6 mm** 3D
    (550.1 mm vertical) against a 0.5 mm tolerance, 20 of 21 joints outside it (§6.6), and the default is to record that as
    a known, measured baseline and make *a rig that passes A1* a stage-1 deliverable rather than to weaken A1 — a tolerance
