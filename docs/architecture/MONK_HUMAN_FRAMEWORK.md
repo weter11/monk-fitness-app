@@ -1892,39 +1892,57 @@ bounds, plus one stateful observer that is not a bound at all:
    path needs more smoothing.
 3. **Curvature bound.** No interior sample may turn more than `θ_max` relative to its neighbours at the declared
    sampling spacing. This is the discrete stand-in for "the muscle does not fold".
-4. **Temporal continuity — a separate stateful observer, and no `v_max`.** The solver stays **pure**:
+4. **Temporal continuity — a stateful diagnostic observer, and never a gate.** The solver stays **pure**:
    `solve(pose, profile, out)` takes no previous frame and no `dt`. The earlier proposal — a bound `|Δp(s)| ≤ v_max · Δt`
    with `v_max` = 1.2 m/s — is **withdrawn**, because it is a speed limit on an output that has no physical speed and no
-   defensible constant. Continuity becomes an **observer** with its own state:
+   defensible constant.
 
-   - **Inputs.** The frame timestamp; the previous frame **that was `VALID` for this instance**; and the same instance
-     identity (`MuscleHeadId`), definition version and body profile. A frame from a different definition, profile or
-     instance is not comparable: it resets the observer instead of being differenced.
-   - **State and lifecycle.** Last timestamp, the last accepted stations and positions, and the reference frame they were
-     recorded in. Initialisation has no previous frame and produces no verdict; **pause/resume, seek and reset** all
-     re-initialise, because a seek is a discontinuity in the source timeline and reporting it as a path jump would be a
-     false positive. An `INVALID` frame in between breaks the comparison rather than being skipped silently: the next
-     valid frame compares against the last valid one **and** reports the gap.
-   - **Stations.** Matched fractional arc-length stations, not sample indices — resampling and inserted detour points
-     change `pointCount` between frames, so index `i` is not the same anatomical place twice.
-   - **The comparison is against a conservative pose-driven prediction.** The observer computes the displacement the
-     *pose alone* can produce at that station — the moved attachments, every moving wrap centre, the angular velocities of
-     the enclosing segments, and the lever arms of any attachment offset — and compares the measured displacement with
-     that prediction. A station cannot legitimately move faster than its own geometry allows, so the residual is the
-     signal and the raw speed is not.
-   - **Near a route-branch switch, no finite universal bound follows from bounded input speed.** When the solver selects
-     a different branch, the path may move further than any pose-driven prediction, and no constant covers it. That is
-     stated, not papered over.
-   - **An excess is a diagnostic, never a verdict.** It requires investigation — the report names the station, the frame
-     and the branch — and it is not proof of a routing bug. It also never triggers **silent rate-limiting**: a filter
-     that slows a path to satisfy a threshold produces a path that no longer matches the pose or the clearance predicate,
-     which is a worse defect than the jump it hides.
-   - **Hysteresis is explicit and resettable.** If route-branch hysteresis is used, it is declared (a station margin and a
-     dwell), it can be reset, and the observer reports each switch.
+   **X6 — the observer is a diagnostic heuristic, and it does not gate anything.** *Default chosen, owner confirmation
+   pending.* It reports; it never blocks a frame, never fails L4, and never rate-limits a path. What L4 tests is the
+   **observer's own correctness**, not the path's smoothness (§12.2): a rigid translation of the whole body must produce
+   no alarm; a rotating or moving wrap must be attributed; an inserted sample must not shift a station; a deliberate
+   branch switch must alarm; and the lifecycle cases below must behave as stated. A diagnostic whose arithmetic is
+   untested produces plausible findings, which is worse than none.
 
-   The threshold is named **once** — `δ_frame`, the maximum permitted station displacement *in excess of* the pose-driven
-   prediction, in engine units — and the same name is used in §12.2. The earlier text called the same quantity `v_max · Δt`
-   here and `δ_frame` in the test inventory, which is how one threshold ends up applied twice and differently.
+   - **Inputs, snapshotted.** The frame timestamp; the previous frame **that was `VALID` for this instance**; the same
+     instance identity (`MuscleHeadId`), definition version and body profile; and **the obstacle transforms of both
+     frames**, because every wrap is declared on a segment and moves with it. The observer copies what it needs — both
+     poses and both obstacle sets — rather than holding references into a buffer that the next solve overwrites
+     (§3.2 carrier reuse).
+   - **One common comparison frame.** Both frames' points and both obstacle centres are expressed in the **previous
+     frame's instance frame** before differencing, so a rigid translation or rotation of the whole body is not a signal.
+     A comparison in world space would report every step of a walk as a path jump.
+   - **Interpolation.** Linear in time between the two timestamps, and used only to place the observation at a station —
+     never to predict a path. A sample inserted between two stations therefore does not move the correspondence.
+   - **Moving and rotating wrap contributions.** A station's legitimately expected displacement includes the wrap
+     centre's translation, the rotation of the obstacle's segment frame about that centre, and the lever arm of the
+     attachment offset (`2|d| sin(θ/2)`, §7.2). A stationary obstacle that starts moving because its segment rotated is
+     the case that produces false alarms when this term is omitted.
+   - **Station correspondence is a fraction of arc length, and that is not material correspondence.** Two frames' station
+     `0.5` are the same fraction of two possibly different routes: resampling and inserted detour points change
+     `pointCount`, so index `i` is not the same anatomical place twice, and a fraction is a place along a curve rather
+     than a piece of tissue. The observer therefore reports a residual only where both frames are on the **same branch**;
+     across a branch switch it reports the switch, not a displacement (§12.2).
+   - **Timestamp ordering, and what is not an observation.** Timestamps must be strictly increasing. An equal or
+     decreasing timestamp is a **reset**, not a negative `dt`; a frame with no timestamp, no pose or no previous `VALID`
+     frame produces no observation at all. Missing inputs never become a zero residual.
+   - **The gap rule is reset.** A gap — an `INVALID` frame, a seek, a pause, or an interval longer than the declared
+     bound — **re-initialises** the observer and is recorded as a reset. The alternative (a separately labelled cross-gap
+     diagnostic) cannot distinguish a genuine jump from a re-entry into a different part of the motion without the frames
+     in between, so it would report a difference it cannot attribute. Reset is the honest choice of the two.
+   - **An excess is a diagnostic, and no bound is claimed.** Near a route-branch switch no finite universal bound
+     follows from bounded input speed, so the observer is a *heuristic*, not a conservative bound: it names the station,
+     the frame and the branch, and it requires investigation. It never triggers **silent rate-limiting** either — a
+     filter that slows a path to satisfy a threshold produces a path that no longer matches the pose or the clearance
+     predicate, which is a worse defect than the jump it hides.
+   - **Route hysteresis is removed from M1.** The solver re-decides its route every frame from declaration order and the
+     frozen sample grid; a dwell or station margin that makes it *stick* to the previous branch is not part of M1, because
+     it makes the route a function of history rather than of the pose and hides the very switch the observer is meant to
+     report. A branch switch is reported, not damped.
+   - **`δ_frame` keeps its name and changes its authority.** It is the station displacement *in excess of* the pose-driven
+     prediction, in engine units, and it is a **reporting threshold**: exceeding it files a diagnostic row. It is not a
+     gate, it is not in any acceptance criterion, and §12.2 tests the observer against it rather than the path.
+
 
 #### 7.4.4 What this is, and is not
 
@@ -2605,7 +2623,7 @@ Seven levels, each with one owner, one report and an explicit automation status.
 | **L1 Motion** | 18 existing rules over joint-space geometry (`ExerciseValidator.kt:47-92`) | yes, unchanged | all | the pose/engine is wrong; block |
 | **L2 Rig** | bone coverage, rest invariant, inverse binds, side/handedness, unit scale, bone budget, landmark alignment (§6.6) | yes | all | the asset or map is wrong; block |
 | **L3 Attachments** | every attachment's joint exists; offset inside a segment envelope; L/R mirror; head count; origin ≠ insertion; span ≥ 2 segments | yes | all | the anatomy data is wrong; block |
-| **L4 Path** | every segment of the final polyline tested against every obstacle in the head's ordered union, in one exhaustive three-stage state machine — bounding-sphere certified clear, quadratic certified intersection, then the finite-segment minimum of `d(t) − r(t)` (**solid** ellipsoid distance) with a Lipschitz certificate, the radius taper split at every knot, and `UNCERTAIN` failing closed — plus the sample-outside check; unverifiable geometry reported `INVALID` with a reason from the one table; deterministic outcome for overlapping, nested and impossible routes; tangent and curvature continuity at entry/exit; the continuity observer; rest-length tolerance vs measured reference | yes, with adversarial fixtures | all | the solver or the data is wrong; block |
+| **L4 Path** | every segment of the final polyline tested against every obstacle in the head's ordered union, in one exhaustive three-stage state machine — bounding-sphere certified clear, quadratic certified intersection, then the finite-segment minimum of `d(t) − r(t)` (**solid** ellipsoid distance) with a Lipschitz certificate, the radius taper split at every knot, and `UNCERTAIN` failing closed — plus the sample-outside check; unverifiable geometry reported `INVALID` with a reason from the one table; deterministic outcome for overlapping, nested and impossible routes; tangent and curvature continuity at entry/exit (gated); rest-length tolerance vs measured reference. The continuity observer is **diagnostic only** and is not part of this gate (X6) | yes, with adversarial fixtures | all | the solver or the data is wrong; block |
 | **L5 Mesh** | self-intersection, degenerate triangles, weight sums, volume sanity per muscle, helper-bone bind match | partly (tool) | **subset** (§12.5) | the mesh is wrong; block release, not build |
 | **L6 Morphology** | declared ranges respected per target; **mesh** ring/mask vertices relative to joint pivots within `ε_morph`; delta bounds; anatomy still inside the body | yes | **subset** (§12.5) | a preset breaks the surface the muscles sit under; block the preset. A bone-landmark rest invariant is **not** an L6 assertion: a vertex-only morph cannot move a bone, so it is tautological |
 | **L7 Anatomical review** | A1–A6 in §12.4: attachment locations, position vs bone and body surface, visible intersections, shape/path plausibility across poses, preset consistency, provenance | no — human, **required for M1** | all | the model is not accepted; M1 does not ship |
@@ -2638,7 +2656,7 @@ Seven levels, each with one owner, one report and an explicit automation status.
 | `AnatomyDefinitionTest` | L3 | ids unique; attachments resolve; envelope bounds; L/R mirror; heads consistent |
 | `MusclePathGeometryTest` | L4 | arc length ≥ chord; every segment of the final polyline is certified clear of every obstacle in the head's union under the three-stage state machine of §7.4.1, with the solid-distance predicate and the Lipschitz certificate; every sample lies outside the surface by the same margin; repeatable across runs and buffer reuse on one device and configuration |
 | `MusclePathObstacleFixtureTest` | L4 | the validator fixtures (§12.2.1) return the expected verdict, and the solver fixtures return the expected final path or the expected failure reason — never silently |
-| `MusclePathContinuityTest` | L4 | C0, tangent bound at entry/exit, curvature bound; and, for the observer: station displacement in excess of the pose-driven prediction within `δ_frame` at matched arc-length stations, with no verdict on the first frame, a re-initialisation on pause/resume/seek/reset, a reported gap across an `INVALID` frame, and no rate-limiting of the path |
+| `MusclePathContinuityTest` | L4 | C0, tangent bound at entry/exit, curvature bound (gated); and, for the **observer's own correctness** (diagnostic, X6): a rigid translation of the whole body produces no alarm; a rotating or moving wrap is attributed and produces no alarm; an inserted sample does not shift a station; a deliberate branch switch alarms; the first frame produces no verdict; pause, resume, seek, backward time and a non-monotonic timestamp each reset rather than express a negative displacement; an `INVALID` frame resets the comparison and is recorded as a reset; `valid → invalid → valid` restores the path and does not compare across the gap; and no path is ever rate-limited |
 | `MuscleLengthDeterminismTest` | L4 | the same pose produces the same length across runs, buffer reuse and definition reload; no discontinuity beyond tolerance across a sampled motion |
 | `MuscleLengthReferenceTest` | L4 | length matches expert-reviewed reference data where it exists, within the stated tolerance; absent reference data is reported as a gap, not a pass |
 | `MuscleDirectionalExpectationTest` | L4 | only exercise- and muscle-specific expectations, each carrying a documented justification and source |
