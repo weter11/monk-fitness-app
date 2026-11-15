@@ -1292,7 +1292,7 @@ wrong.** Every registered builder was run and its published positions measured: 
 | `ANKLE_F/B → TOE_F/B` | foot | **24.8500 in every frame** — never degenerate: `SkeletonPoseFinalizer.adjustFootOrientation` derives the toe at `footLength · 0.71` |
 | `ANKLE_F/B → HEEL_F/B` | — | 10.1500 in every frame (derived, `footLength · 0.29`) |
 | `HAND_A/P → FINGERTIPS_A/P` | hand | **22.00 in 65 of 66 builders** (`palmLength + fingerLength`, derived); **0.0000 in `pike_pushup_standard` only**, where the pose declares `MANUAL_OVERRIDE` and authors `PALM = KNUCKLES = FINGERTIPS` at one point 60.6 units from the hand |
-| `HAND_A/P → WRIST_A/P` | — | 0.0000 in 64 of 66; `60.6` in `pike_pushup_standard` and `138.0` in `row_standard`, both manual overrides |
+| `HAND_A/P → WRIST_A/P` | — | 0.0000 in 64 of 66; `60.6` in `pike_pushup_standard` and 11.3–138.0 in `row_standard` — the only two builders that declare a manual override |
 
 So the rows with **no** position-derived direction are: `pelvis` and `clavicle` (coincident in every frame), and `skull`
 and `toes` (terminal — `HEAD_POS` and `TOE_*` have no child joint). That is **four rows of fourteen in every frame**, plus
