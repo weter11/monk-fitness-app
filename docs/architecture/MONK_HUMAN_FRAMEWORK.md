@@ -108,6 +108,11 @@ on PR #385) to confirm joint count, triangle count and morph targets rather than
 | Joint identifiers | 33 (`animation/Joint.kt:3`) |
 | CI verifier | `.github/workflows/android.yml` — `:app:assembleDebug` then `:app:testDebugUnitTest` |
 
+**Counting definition** (used in this table and in Appendix A, so the two cannot drift): a line count is every line of
+every `.kt` file under the package and its subdirectories, blank lines and comments included, summed from
+`git show <sha>:<path> | wc -l` over the file list; a file count is the number of `.kt` files in that tree. Both
+figures above are that measurement at `16e0487`.
+
 Two open PRs carry the Filament work. Neither is merged, and neither is assumed to be:
 
 | PR | Branch / head | State | Content |
@@ -2260,8 +2265,8 @@ item 9), a muscle library beyond eight, and any claim of surface accuracy.
 
 ```
 app/src/main/java/com/monkfitness/app/
-├── animation/        Motion Model (unchanged)           8,904 lines
-├── poses/            exercise intent (unchanged)       10,639 lines
+├── animation/        Motion Model (unchanged)           8,144 lines / 47 files
+├── poses/            exercise intent (unchanged)       10,642 lines / 79 files
 ├── anatomy/          Anatomical Model (new)            pure Kotlin, no Android
 │   ├── AnatomyDefinition.kt      schema + loader
 │   ├── AnatomySolver.kt          pose -> paths/lengths
