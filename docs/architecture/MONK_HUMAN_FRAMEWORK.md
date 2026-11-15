@@ -75,9 +75,11 @@ requested in the task.
 character art, a complete muscle library, physics or biomechanical simulation, merging PR #384 or PR #385.
 
 **How the baseline was verified.** The repository was inspected at `main` (`16e0487`), not from earlier reports. The
-Filament work was read from the two open PR heads (`fd549bd` for #384, `bcb3658` for #385) without changing either PR's
-state or merging anything. The humanoid test asset was parsed directly (`app/src/main/assets/characters/humanoid_v1.glb`
-on PR #385) to confirm joint count, triangle count and morph targets rather than trusting the generator's printout.
+Filament work was read from the two open PR heads (`fd549bd` for #384, `23ef1c0` for #385) without changing either PR's
+state or merging anything. The humanoid test asset was parsed directly
+(`app/src/main/assets/characters/humanoid_v1.glb` on PR #385 at `23ef1c0`) to confirm joint count, triangle count and
+morph targets rather than trusting the generator's printout; that parse is also where the vertex count in §3.4 comes
+from.
 
 **Evidence rules used in this document:**
 
@@ -118,10 +120,15 @@ Two open PRs carry the Filament work. Neither is merged, and neither is assumed 
 | PR | Branch / head | State | Content |
 | --- | --- | --- | --- |
 | #384 | `spike/filament-humanoid` @ `fd549bd` | open, not merged | standalone `spike-humanoid` app module: Filament scene, GLB reader, retargeter, generated 32-joint asset, 5 JVM tests |
-| #385 | `feat/filament-character-stage2` @ `bcb3658` | open, not merged | the spike promoted into `:app` as `com.monkfitness.app.character` behind `FILAMENT_CHARACTER_ENABLED`, backend diagnostics, asset + generator, morph presets, device-validation doc |
+| #385 | `feat/filament-character-stage2` @ `23ef1c0` | open, not merged | the spike promoted into `:app` as `com.monkfitness.app.character` behind `FILAMENT_CHARACTER_ENABLED`, backend diagnostics, asset + generator, morph presets, device-validation doc |
 
-`main` contains **none** of that code: `git ls-tree -r origin/main` has no `character/` package and no
-`docs/CHARACTER_*.md`. The framework therefore describes a target that consumes #385's contracts, not a merged baseline.
+`main` contains **none** of that code, and that is verified rather than assumed. At `16e0487`: `gradle/libs.versions.toml`
+has no `filament` or `gltfio` entry and `app/build.gradle.kts` has neither (both greps return nothing), `git ls-tree -r
+16e0487` contains **no** `character/` package (0 files) and **no** `.glb` asset, and `git diff --stat 16e0487..23ef1c0 --
+app/src/main/java/com/monkfitness/app/animation app/src/main/java/com/monkfitness/app/poses` is empty. Filament 1.75.1,
+the character runtime and `PoseRetargeter` therefore exist **only** on PR #385 at `23ef1c0`; they are an **unmerged
+prerequisite**, not a baseline, and every stage that touches them is gated on that PR being merged or rebased onto
+`main` (§15 stage 1). The framework therefore describes a target that consumes #385's contracts, not a merged baseline.
 If #385 is rejected, the Character Appearance Model below still stands — only the current implementation status changes.
 
 ### 3.2 The motion engine as built
@@ -198,7 +205,8 @@ There is no lighting model, no surface, no muscle and no depth-correct volume in
 `humanoid_spike.glb` and five JVM tests. It proved that a skinned glTF can be driven from `SkeletonPose` without
 touching `:app`.
 
-**PR #385 — stage 2 (30 files, +2,983/−11).** The runtime promoted into `:app` as `com.monkfitness.app.character`:
+**PR #385 — stage 2 (30 files, +2,983/−11).** The runtime promoted into `:app` as `com.monkfitness.app.character` — on
+the PR branch only; none of it is on `main` at `16e0487`:
 
 - `PoseRetargeter` (`character/PoseRetargeter.kt:10`, `boneMatrices` at `:42`): rest-delta world retarget,
   `R_target = R_source × R_target_rest`, rotations only, emitted as `inverse(meshWorld) × jointWorld × inverseBind`
@@ -224,9 +232,10 @@ touching `:app`.
 | Property | Value |
 | --- | --- |
 | File size | 2,060,808 bytes |
+| Vertices | **16,675** body vertices (16,679 including the `Ground` quad) |
 | Nodes / joints | 35 nodes, 32 skin joints (`Hips, Spine, Chest, Neck, Head, Left/RightShoulder, Arm, ForeArm, Hand, 5 fingers, UpLeg, Leg, Foot, ToeBase, HeadTop_End`) |
 | Meshes / primitives | 2 meshes, 2 primitives (body + a `Ground` node inside the GLB) |
-| Triangles | 30,722 (30,720 body + 2 `Ground`) |
+| Triangles | 30,722 (30,720 body + 2 `Ground`) — triangles, not vertices; the two counts differ by a factor of ~1.8 and are never interchangeable |
 | Morph targets | 5: `ShoulderWidth`, `ChestVolume`, `WaistWidth`, `LimbThickness`, `HeadScale` |
 | Materials / textures / animations | 2 materials, 0 images, 0 animation clips |
 | Bind pose | arms at the sides, matching the engine rest stance (required by rest-delta retarget — `docs/CHARACTER_FRAMEWORK.md` §3) |
@@ -235,8 +244,9 @@ touching `:app`.
 `ef643438b761de84504d45c87511c7d2ad5109996fa56ab77107fee1cde0e539`. A defect found in one is a defect in the other, and
 the `Ground` node is in both — the two PRs ship one asset under two names.
 
-Filament is pinned to **1.75.1** (`gradle/libs.versions.toml:15`): 1.76+ requires `compileSdk 37` and the app is on 34.
-The documented native payload is 7.4 MB arm64 and a debug APK with the asset is 18.8 MB (`docs/CHARACTER_FRAMEWORK.md` §1).
+Filament is pinned to **1.75.1** *on PR #385* (`gradle/libs.versions.toml:15` — the file at `23ef1c0`; the pin does not
+exist on `main`): 1.76+ requires `compileSdk 37` and the app is on 34. The documented native payload is 7.4 MB arm64 and
+a debug APK with the asset is 18.8 MB (`docs/CHARACTER_FRAMEWORK.md` §1, also PR #385 only).
 
 **One device run, informational.** The #384 spike was run on the owner's phone — Adreno 735, OpenGL ES 3.2, feature
 level 2 — and held ~59 fps on the skinned 30,720-triangle asset. That is one run of one asset on one device; it is
@@ -2041,7 +2051,7 @@ a **stage-7** item (§15 — stage 5 is morphology v2, stage 7 is labels, pickin
 
 | Constraint | Value | Consequence for this framework |
 | --- | --- | --- |
-| Filament version | 1.75.1 (`gradle/libs.versions.toml:15`) | 1.76+ needs `compileSdk 37`; the app is on 34. Upgrade is a separate change, not a prerequisite |
+| Filament version | 1.75.1 (`gradle/libs.versions.toml:15`, **PR #385 only** — not on `main` at `16e0487`) | 1.76+ needs `compileSdk 37`; the app is on 34. Upgrade is a separate change, not a prerequisite |
 | Native payload | 7.4 MB arm64 stripped (`docs/CHARACTER_FRAMEWORK.md` §1) | character is opt-in packaging; a dynamic feature or flavor split is packaging work, not architecture |
 | Backend | `DEFAULT`; Vulkan attempted only on explicit request, GLES fallback (`docs/CHARACTER_RENDERING.md` §5) | never assume Vulkan; the reported backend is `Engine.getBackend()` |
 | Engine lifetime | one engine, one active character, `ActiveCharacter` slot (`CharacterFeature.kt:18-24`) | layers are renderables in that one scene; a second live character is out of scope |
@@ -2527,8 +2537,9 @@ individual reports say.
    constant.
 
 **Known traps from the device run (spike #384).** Each cost a debugging cycle on real hardware, and each is a property of
-the current code, not of the model. PR #385 at `bcb3658` contains none of the first three fixes; a preparatory change is
-bringing them into the stage-2 runtime before the framework builds on it.
+the current code, not of the model. PR #385 at `bcb3658` contained none of the first three fixes; the current head
+`23ef1c0` ("fix(character): load gltfio JNI, attach the surface late, bind the scene") carries all three, so they are
+recorded as traps of the spike and as facts about the code the framework builds on, not as open work items.
 
 - **`Gltfio.init()` must accompany `Filament.init()`.** `libgltfio-jni.so` is packaged but not loaded by `Filament.init()`,
   so the first `UbershaderProvider` call throws `UnsatisfiedLinkError`.
