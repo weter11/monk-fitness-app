@@ -240,7 +240,7 @@ the PR branch only; none of it is on `main` at `16e0487`:
 | Triangles | 30,722 (30,720 body + 2 `Ground`) — triangles, not vertices; the two counts differ by a factor of ~1.8 and are never interchangeable |
 | Morph targets | 5: `ShoulderWidth`, `ChestVolume`, `WaistWidth`, `LimbThickness`, `HeadScale` |
 | Materials / textures / animations | 2 materials, 0 images, 0 animation clips |
-| Bind pose | arms at the sides, matching the engine rest stance (required by rest-delta retarget — `docs/CHARACTER_FRAMEWORK.md` §3) |
+| Bind pose | arms at the sides and limbs straight — a straight-limbed A-pose in the X1 sense (§6.6); it is close to, but not identical with, the engine's standing frame, whose arms are held out for counterbalance |
 
 `humanoid_spike.glb` (PR #384) and `humanoid_v1.glb` (PR #385) are **byte-identical**: 2,060,808 bytes, sha256
 `ef643438b761de84504d45c87511c7d2ad5109996fa56ab77107fee1cde0e539`. A defect found in one is a defect in the other, and
@@ -1074,7 +1074,7 @@ calibration is **re-measured, never rescaled** — the two directions disagree a
 
 **Measured at the X1 bind frame too, and it still fails.** The same registration against the canonical A-pose instead of
 the standing frame puts the worst joint at **`CHEST`, 175.1 mm** (the asset's `Hips → Chest` span is 0.310 m against the
-engine's 0.485 m — 38 % short), then `LUMBAR` at 110.0 mm, `TOE` at 74.4 mm and `HAND` at 60.6 mm; only `PELVIS` lands
+engine's 0.485 m — 36 % short), then `LUMBAR` at 110.0 mm, `TOE` at 74.4 mm and `HAND` at 60.6 mm; only `PELVIS` lands
 inside 0.5 mm. So the failure is not an artifact of the folded-arm stance: the asset's bone heads are in the wrong places
 for this skeleton at any frame, which is why stage 1's deliverable is a **re-authored rig**, not a re-measurement.
 **Stage 1's deliverable is a rig that passes A1** (§15); until that rig exists, `RigLandmarkAlignmentTest` is expected to
@@ -2646,7 +2646,7 @@ assets):
 | Check | Failure mode it prevents |
 | --- | --- |
 | Required bones present and mapped (`BoneMap`) | silent rest pose for a limb |
-| Bind pose == engine rest stance (rest invariant, all bones ≈ identity) | figure in T-pose / sheared at frame 0 |
+| Bind pose == the X1 canonical A-pose (§6.6), rest invariant, all bones ≈ identity | figure in T-pose / sheared at frame 0 |
 | Inverse bind count == joint count, column-major float, no NaN | garbage skinning on some drivers |
 | Node hierarchy acyclic, one skeleton root | gltfio skin failure |
 | Morph targets: same count on every primitive of a mesh; names match the manifest; deltas finite | morph crash / wrong body |
