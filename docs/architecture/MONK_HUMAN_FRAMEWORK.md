@@ -2110,6 +2110,11 @@ interval must meet `[0, 1]`. The tangency rows are what the earlier *near-tangen
 direction: it treated every `abs(Δ) ≤ Δ_tol` as an intersection **without** the interval test that the same section
 stated, so a segment whose tangency lies at `t = −2` was rejected while it was 1.236 radii clear.
 
+**The two `INVALID` rows above are stated for the stage that must decide them.** They are intersections in fact, so the
+verdict `INVALID` is right either way; the *reason* `SEGMENT_INTERSECTS_OBSTACLE` is reachable only with a proved
+enclosure, so while deliverable (2) of §7.4.1c is open the same pairs report `UNCERTIFIED_MINIMUM` through stage 3. The
+table is not wrong; it is conditional, and §12.2.1 states the condition once for the fixture set that pins it.
+
 **(c) `INVALID` — never assumed, and one authoritative reason table.** A path is accepted only when **every
 segment–obstacle pair returns a CLEAR from whichever stage decided it** (stage 1 or stage 3 — a pair stage 1
 accepted never reaches stage 3) **and** every sample test returns "outside". Anything else is `PathStatus.INVALID` with a reason from the
@@ -2127,16 +2132,16 @@ read `NO_INDEX` as index 0.
 | 5 | `ENDPOINT_INSIDE_OBSTACLE` | a resolved attachment is inside a declared obstacle in this pose | 0 or last | index |
 | 6 | `DEGENERATE_SEGMENT` | a zero-length segment whose **point is inside** an obstacle (§7.4.1b: `a = 0` is decided before the quadratic, because the quadratic divides by `a`) | index | index |
 | 7 | `SEGMENT_INTERSECTS_OBSTACLE` | stage 2: the segment enters the ellipsoid — a **witness station** `t_m` with `s(t_m) ≤ 1 − κ_s`, a root interval whose overlap with `[0, 1]` contains it, **and a proved enclosure for `κ_s` on this input** (§7.4.1b). An interval that merely touches `[0, 1]` at an endpoint is not this row, and neither is a station that beats an unproved `κ_c` | index | index |
-| 8 | `CLEARANCE_VIOLATION` | stage 3: the segment misses the surface but `min (d − r) < e` | index | index |
+| 8 | `CLEARANCE_VIOLATION` | **decided at stage 3** and `min (d − r) < e`. The row is defined by *which stage decided* and by `g < e` — **not** by the claim that the segment misses the surface. The witness rule routes an unproved crossing to stage 3, where `d = 0` and `g = −r < e`, so a decided clearance failure may well be a true interior path: for a unit obstacle, centre `(1.0000000036…e−15, 0, 0)` and `Float` endpoints `(1, v, 0) → (1, 2v, 0)` with `v = 9.999999717180685…e−10`, both endpoints are strictly inside the exact solid, the rounded witness `s = 0.9999999999999980` does not beat `κ_s`, and the row that reports the failure is this one. An unproved intersection is this row; a proved near miss is also this row; the only thing that is not this row is a **witnessed** entry (row 7) | index | index |
 | 9 | `TANGENT_DISCONTINUITY` | the entry/exit kink exceeds `θ_max` (§7.4.3) | index | index |
 | 10 | `CURVATURE_VIOLATION` | an interior turn exceeds `θ_max` at the declared spacing (§7.4.3) | index | `NO_INDEX` |
-| 11 | `NO_GEOMETRIC_CAUSE` | the loop stopped before any per-pair test produced a cause — a definition guard rejected the head, the buffer cap was hit, or the corridor was refused before the first candidate. **The sentinel for "no geometric cause exists"**, never a stand-in for a cause that does (§7.4.1c, X7) | `NO_INDEX` | `NO_INDEX` |
+| 11 | `NO_GEOMETRIC_CAUSE` | the **search** stopped before any per-pair test produced a cause — the corridor was refused before the first candidate, or the pass budget ran out with no pair tested. **It excludes every guard and resource reason**: a definition or input refusal is row 1, 2, 3, 15 or 17 under `REJECTED_BEFORE_SEARCH`, and a buffer cap — including one reached before any pair test — is row 4, `BUFFER_CAPACITY`, under `REJECTED_IN_SEARCH`. The table's precedence already ranks `BUFFER_CAPACITY` above this row; the prose used to contradict it by listing "the buffer cap was hit" here. The sentinel says "no geometric cause exists", never "a cause exists but the record has no slot for it" (§7.4.1c, X7) | `NO_INDEX` | `NO_INDEX` |
 | 12 | `UNCERTIFIED_MINIMUM` | stage 3's certificate could not decide either side (`lower < e ≤ upper`) | index | index |
 | 13 | `UNRESOLVED_ROOT` | the point-to-ellipsoid bracket found no root for a finite, positive-axis input | index | index |
 | 14 | `NO_ROUTE` | **proved** impossible: no route exists between the fixed endpoints outside the declared set. **Disabled in M1** — see below | `NO_INDEX` | `NO_INDEX` |
 | 15 | `UNSUPPORTED_GEOMETRY` | the muscle is a **sheet** (`flat = true`): a two-sided strip has no single radius, so no tube envelope exists to certify (§7.4.1 "flat sheet muscles") | `NO_INDEX` | `NO_INDEX` |
 | 16 | `NOT_PROCESSED` | the solve never reached this head — the `clear()` state, never a verdict (§5.3) | `NO_INDEX` | `NO_INDEX` |
-| 17 | `OPERAND_OUT_OF_BOUND` | a published coordinate, or a constructed detour, outside the declared `\|coordinate\| < 1024` bound (§7.4.1c deliverable 1) — a guard on the **inputs**, so `REJECTED_BEFORE_SEARCH` | `NO_INDEX` | `NO_INDEX` |
+| 17 | `OPERAND_OUT_OF_BOUND` | a coordinate outside the declared `\|coordinate\| < 1024` bound (§7.4.1c deliverable 1). **Two phases, two outcomes, and the phase is part of the row**: a **published** coordinate outside the bound is a guard on the inputs and reports `REJECTED_BEFORE_SEARCH` with `NO_INDEX`/`NO_INDEX`; a **constructed** operand — a detour waypoint, or an escalated `d_k`, formed inside a pass — is discovered after the search started and reports `REJECTED_IN_SEARCH` with the index of the segment being constructed and obstacle `NO_INDEX`. A detour cannot be refused "before the search" when it exists only because a pass made it, and corridor escalation is exactly the future guard that produces this case | construction segment / `NO_INDEX` | `NO_INDEX` |
 | — | `NO_REASON` | only where the status is `VALID` | `NO_INDEX` | `NO_INDEX` |
 
 **The table's numbers are precedence, and the enum's order is not.** The row number is the *precedence* rank — the first
@@ -2164,8 +2169,10 @@ nonetheless evaluated in the guard phase with rows 1–3, before any geometry ru
 **Search outcomes are not in this table, and that is the point of the split.** `SEARCH_EXHAUSTED` and `PASS_CAP` are
 `SearchOutcome` values — what the loop did — and never reasons: a corridor refused at pass one has no final-predicate
 cause at all, and listing the refusal as a reason would make "the search stopped" and "this segment is 0.3 mm too close"
-the same column. When no per-pair test ran, the reason is `NO_GEOMETRIC_CAUSE`, which is a statement that none exists
-rather than a cause.
+the same column. **When the loop stopped before any per-pair test produced a cause, and no guard or resource reason
+applies, the reason is `NO_GEOMETRIC_CAUSE`** — a statement that none exists rather than a cause. A guard's refusal
+carries its own reason (rows 1, 2, 3, 15, 17 on a published operand) and a buffer cap reached before any pair test is
+row 4, `BUFFER_CAPACITY`; neither is routed here, which is what the qualification in row 11's condition says.
 
 **Guards run before geometry, and each phase has its own order.** A non-finite operand cannot be classified by any
 geometric test, so rows 1 and 2 are evaluated **before** the state machine runs at all; a zero-length segment is decided
@@ -2182,9 +2189,12 @@ There is no "probably fine" outcome and no fall-through default. If the check ca
 *Confirmed by owner.* A reason is not a search outcome and a search outcome is not a geometric cause. So:
 
 - the **frame** carries it: `AnatomyFrame.searchOutcomes` (§5.3) holds the outcome per head ∈ {`NOT_PROCESSED`, `CLEARED`,
-  `SEARCH_EXHAUSTED`, `PASS_CAP`, `REJECTED_BEFORE_SEARCH`} — what the construction did — while `reasonCodes` holds,
-  separately, the **last geometric cause** it hit. Both are per-head arrays with a `clear()` state, so a reused buffer
-  cannot report the previous frame's outcome, and `NOT_PROCESSED` means the head was never solved (§5.3), which is a bug
+  `SEARCH_EXHAUSTED`, `PASS_CAP`, `REJECTED_BEFORE_SEARCH`, `REJECTED_IN_SEARCH`} — what the construction did — while
+  `reasonCodes` holds, separately, the **last geometric cause** it hit. Both are per-head arrays with a `clear()` state, so a
+  reused buffer cannot report the previous frame's outcome, and `NOT_PROCESSED` means the head was never solved (§5.3).
+  **The set is exhaustive and matches `SearchOutcome` one-for-one.** An earlier revision listed five of the six values here
+  while the enum (§5.3) and the combination matrix below both carried `REJECTED_IN_SEARCH`, so a reader could not tell
+  whether the sixth value was legal at all; it is, it is the one an abort inside a pass gets, and it is in the set.
   **`REJECTED_BEFORE_SEARCH` is the outcome a guard's refusal gets, and `REJECTED_IN_SEARCH` is the one an abort inside
   a pass gets** — the pair an earlier revision collapsed into one. A head refused by `REST_LENGTH_INVALID` before a pass
   existed has not passed and has not exhausted a search; a head whose pass ran out of buffer capacity, or whose
@@ -2200,8 +2210,8 @@ There is no "probably fine" outcome and no fall-through default. If the check ca
   | `VALID` | `CLEARED` | `NO_REASON` — an accepted pass, and the only place `NO_REASON` appears |
   | `INVALID` | `SEARCH_EXHAUSTED` | the last geometric cause, or `NO_GEOMETRIC_CAUSE` when the corridor was refused before any candidate existed |
   | `INVALID` | `PASS_CAP` | the last geometric cause (`CLEARANCE_VIOLATION` typically), or `NO_GEOMETRIC_CAUSE` |
-  | `INVALID` | `REJECTED_BEFORE_SEARCH` | a **guard on the inputs or the definition**, refused before any pass: `NON_FINITE_GEOMETRY` on a published input, `OPERAND_OUT_OF_BOUND`, `DEGENERATE_OBSTACLE`, `REST_LENGTH_INVALID`, `UNSUPPORTED_GEOMETRY` — indices `NO_INDEX`/`NO_INDEX` except a degenerate obstacle's own index |
-  | `INVALID` | `REJECTED_IN_SEARCH` | an **abort inside a pass**, which is not a pre-search refusal: `BUFFER_CAPACITY` (inserted points over `pointCapacity`, reported at the last segment, obstacle `NO_INDEX`), or `NON_FINITE_GEOMETRY` first appearing in an intermediate (`cw`, `R`, `q0`, `qd`), indices `NO_INDEX`/`NO_INDEX` |
+  | `INVALID` | `REJECTED_BEFORE_SEARCH` | a **guard on the inputs or the definition**, refused before any pass: `NON_FINITE_GEOMETRY` on a published input, `OPERAND_OUT_OF_BOUND` on a **published** coordinate, `DEGENERATE_OBSTACLE`, `REST_LENGTH_INVALID`, `UNSUPPORTED_GEOMETRY` — indices `NO_INDEX`/`NO_INDEX` except a degenerate obstacle's own index |
+  | `INVALID` | `REJECTED_IN_SEARCH` | an **abort inside a pass**, which is not a pre-search refusal: `BUFFER_CAPACITY` (inserted points over `pointCapacity`, reported at the last segment, obstacle `NO_INDEX`), `NON_FINITE_GEOMETRY` first appearing in an intermediate (`cw`, `R`, `q0`, `qd`), or `OPERAND_OUT_OF_BOUND` on a **constructed** operand (the segment being constructed, obstacle `NO_INDEX`); otherwise `NO_INDEX`/`NO_INDEX` |
   | `NOT_PROCESSED` | `NOT_PROCESSED` | `NOT_PROCESSED` — never solved |
 
   The two illegal shapes worth naming because they are the ones an implementation drifts into: `VALID` with any outcome
@@ -2220,16 +2230,18 @@ There is no "probably fine" outcome and no fall-through default. If the check ca
 - **Corridor exhaustion is `SEARCH_EXHAUSTED`**, never `NO_ROUTE` — including when the corridor is refused at pass 1,
   which is a limit on the declared `corridorMetres`, not a theorem about the geometry.
 - **Precedence is phase-specific, not one global order, and the phases do not overlap.** Definition- and guard-time
-  reasons (1 on an input, 2, 3, 15 and 17) are decided before a path exists, so the outcome is
-  `REJECTED_BEFORE_SEARCH` and no geometric test is reported because none ran; capacity (4) — and row 1 when the
-  non-finite value first appears in an intermediate rather than in an input — is decided **inside** a pass, so it
-  reports `REJECTED_IN_SEARCH` with its own reason and indices; a corridor refusal or an exhausted budget is decided by
-  the loop and reports `SEARCH_EXHAUSTED` or `PASS_CAP` with `NO_GEOMETRIC_CAUSE` unless a per-pair test had already
-  produced a cause; and per-pair reasons (5–10, 12, 13) are decided by the final predicate in table order, reporting the
-  loop's own outcome. Two implementations that hit a definition error and a geometric one therefore report the
+  reasons (1 on a published input, 2, 3, 15 and 17 on a published operand) are decided before a path exists, so the outcome
+  is `REJECTED_BEFORE_SEARCH` and no geometric test is reported because none ran; capacity (4), row 17 on a constructed
+  operand, and row 1 when the non-finite value first appears in an intermediate rather than in an input — is decided
+  **inside** a pass, so it reports `REJECTED_IN_SEARCH` with its own reason and indices; a corridor refusal or an exhausted
+  budget is decided by the loop and reports `SEARCH_EXHAUSTED` or `PASS_CAP` with `NO_GEOMETRIC_CAUSE` unless a per-pair
+  test had already produced a cause; and per-pair reasons (5–10, 12, 13) are decided by the final predicate in table order,
+  reporting the loop's own outcome. Two implementations that hit a definition error and a geometric one therefore report the
   definition-time row under the same outcome instead of depending on which check ran first — and a fixture that expects
   `PASS_CAP` **with** `CLEARANCE_VIOLATION` is now consistent with the table rather than an exception to it, because the
-  pass cap is an outcome and the clearance is a reason.
+  pass cap is an outcome and the clearance is a reason. **Row 17 is the one reason that appears in both phases**, which is
+  why its row names the outcome rather than leaving it to the reader: the same reason code with a different phase is a
+  different record, and `NO_GEOMETRIC_CAUSE` is never the outcome of either.
 - Fixture `final_clearance_and_budget_both_fail` pins the combination: a final polyline that fails the predicate at a
   named segment **and** exhausts the pass budget reports `searchOutcome = PASS_CAP` with `reason =
   CLEARANCE_VIOLATION` at that segment and obstacle — one record, two fields, neither overwriting the other.
@@ -2369,9 +2381,10 @@ about the swept volume between two frames (§7.4.3).
 Five items, each with the bound it needs, and no attempt at a forward-error proof here:
 
 1. **An operand bound for every accepted pose and detour.** `|coordinate| < 1024` is asserted for the poses this document
-   acknowledges; a pose builder or a corridor escalation that leaves it must be rejected at L3/L4 with
-   `NON_FINITE_GEOMETRY` or a declared `OPERAND_OUT_OF_BOUND`, never silently evaluated. Until that check exists the
-   bound is a claim about the fixtures, not about the system.
+   acknowledges; a pose builder that leaves it must be rejected at L3 with `NON_FINITE_GEOMETRY` or
+   `OPERAND_OUT_OF_BOUND` under `REJECTED_BEFORE_SEARCH`, and a corridor escalation that leaves it must be rejected inside
+   the pass with `OPERAND_OUT_OF_BOUND` under `REJECTED_IN_SEARCH` (§7.4.1c row 17) — never silently evaluated. Until that
+   check exists the bound is a claim about the fixtures, not about the system.
 2. **A per-operation bound for both moving geometries, including the coefficient formation.** The budget covers input
    quantisation and the transform chain, and the obstacle is evaluated in its own frame — but the analysis of the *relative*
    motion of path and obstacle (two independently rounded chains) is not written down anywhere in this document, and
@@ -3565,7 +3578,7 @@ Seven levels, each with one owner, one report and an explicit automation status.
 | `MuscleDirectionalExpectationTest` | L4 | only exercise- and muscle-specific expectations, each carrying a documented justification and source |
 | `MuscleRestLengthTest` | L4 | §7.4.4's **mandatory** half: the solver-derived rest length is finite, strictly positive and **reproducible** for every head — the same value across runs, buffer reuse and definition reload, computed at the X1 bind frame (§6.6). A zero, negative or NaN value reports `REST_LENGTH_INVALID` rather than dividing by it. The **conditional** half — a comparison against a named, sourced reference — is `MuscleLengthReferenceTest`, not this row: requiring a measured reference for every M1 head would contradict the evidence-gap rule of §7.4.4 |
 | `MuscleRenderabilityTest` | L4 / presentation | §7.4: an `INVALID` instance is masked and its geometry cleared in the same frame; **one invalid biceps-femoris head hides the whole instance and both sides keep independent masks**; the mask is the conjunction of the heads' statuses and `NOT_PROCESSED` is not renderable; an early return leaves every instance unrenderable rather than stale; valid → invalid → valid restores the path and the mask across carrier reuse; and a two-head instance with one origin exempted and one head in violation is unrenderable, because the exemption is a per-head fact and the mask is per instance (§7.4) |
-| `AnatomyFrameLayoutTest` | L4 | §5.3: the `3 · headCount · pointCapacity` stride addresses every point of every head; `pointCapacity` is the post-insertion maximum; an over-capacity head reports `BUFFER_CAPACITY` instead of growing or truncating; `clear()` leaves every slot `NOT_PROCESSED` in **status, reason and `searchOutcome`** and every `renderable` entry `false`; a **fresh, never-cleared** buffer reads `NOT_PROCESSED` in all three arrays, because `NOT_PROCESSED` is the declared zero value of all three (`PathStatus`, `PathReason`, `SearchOutcome` — §5.3, §7.4.1c) and not an accident of one enum's ordering; a reason array read through `PathReason.entries` returns the reason the producer stored, **not** the reason's row number in the precedence table; a solve that returns early leaves the untouched heads `NOT_PROCESSED` rather than `VALID`, `INVALID` or a stale outcome; a reused buffer that is not cleared cannot show the previous frame's status **or outcome**; an accepted head reads `CLEARED` with `reason = NO_REASON` while an exhausted one reads `PASS_CAP` or `SEARCH_EXHAUSTED` with its own last geometric cause, so the two fields are asserted separately (X7); **each guard has its own case** — `NON_FINITE_GEOMETRY` on an input, `OPERAND_OUT_OF_BOUND`, `DEGENERATE_OBSTACLE`, `REST_LENGTH_INVALID` and `UNSUPPORTED_GEOMETRY` each yield `INVALID` + `REJECTED_BEFORE_SEARCH` + their own reason, never `CLEARED` and never `NO_GEOMETRIC_CAUSE`; `BUFFER_CAPACITY` and a `NON_FINITE_GEOMETRY` first raised in an intermediate yield `INVALID` + **`REJECTED_IN_SEARCH`** + their own reason, which is the case that separates the two refusal outcomes; a corridor refused before the first candidate yields `INVALID` + `SEARCH_EXHAUSTED` + `NO_GEOMETRIC_CAUSE`; the two illegal combinations (`VALID` with a non-`CLEARED` outcome, `INVALID` with `CLEARED`) are asserted to be absent, and a head refused before a pass is never reported `REJECTED_IN_SEARCH` while one aborted inside a pass is never reported `REJECTED_BEFORE_SEARCH`; and a head that is simultaneously degenerate and inside an obstacle reports `DEGENERATE_SEGMENT` |
+| `AnatomyFrameLayoutTest` | L4 | §5.3: the `3 · headCount · pointCapacity` stride addresses every point of every head; `pointCapacity` is the post-insertion maximum; an over-capacity head reports `BUFFER_CAPACITY` instead of growing or truncating; `clear()` leaves every slot `NOT_PROCESSED` in **status, reason and `searchOutcome`** and every `renderable` entry `false`; a **fresh, never-cleared** buffer reads `NOT_PROCESSED` in all three arrays, because `NOT_PROCESSED` is the declared zero value of all three (`PathStatus`, `PathReason`, `SearchOutcome` — §5.3, §7.4.1c) and not an accident of one enum's ordering; a reason array read through `PathReason.entries` returns the reason the producer stored, **not** the reason's row number in the precedence table; a solve that returns early leaves the untouched heads `NOT_PROCESSED` rather than `VALID`, `INVALID` or a stale outcome; a reused buffer that is not cleared cannot show the previous frame's status **or outcome**; an accepted head reads `CLEARED` with `reason = NO_REASON` while an exhausted one reads `PASS_CAP` or `SEARCH_EXHAUSTED` with its own last geometric cause, so the two fields are asserted separately (X7); **each guard has its own case** — `NON_FINITE_GEOMETRY` on an input, `OPERAND_OUT_OF_BOUND` on a **published** operand, `DEGENERATE_OBSTACLE`, `REST_LENGTH_INVALID` and `UNSUPPORTED_GEOMETRY` each yield `INVALID` + `REJECTED_BEFORE_SEARCH` + their own reason, never `CLEARED` and never `NO_GEOMETRIC_CAUSE`; `BUFFER_CAPACITY`, a `NON_FINITE_GEOMETRY` first raised in an intermediate, and an `OPERAND_OUT_OF_BOUND` on a **constructed** detour each yield `INVALID` + **`REJECTED_IN_SEARCH`** + their own reason (the constructed-operand case carries the segment being constructed and obstacle `NO_INDEX`), which is the case that separates the two refusal outcomes; a corridor refused before the first candidate yields `INVALID` + `SEARCH_EXHAUSTED` + `NO_GEOMETRIC_CAUSE`; the two illegal combinations (`VALID` with a non-`CLEARED` outcome, `INVALID` with `CLEARED`) are asserted to be absent, and a head refused before a pass is never reported `REJECTED_IN_SEARCH` while one aborted inside a pass is never reported `REJECTED_BEFORE_SEARCH`; and a head that is simultaneously degenerate and inside an obstacle reports `DEGENERATE_SEGMENT` |
 | `MuscleGeometryOwnershipTest` | L4 / presentation | §7.6: toggling morphs or correctives leaves every `MuscleState` bit-identical, and nothing in `character/` writes `AnatomyFrame` |
 | `SceneFrameHandoffTest` | presentation | §10.2: `geometry` carries only instances whose `renderable` entry is `true`, one slot per instance, keyed by a `slotId` that is stable across a solve sequence; a slot absent from the next frame (its instance became `INVALID`) is cleared by id while its neighbours keep drawing, and a slot present with `visible = false` is cleared too; each `SkinPalette` is written in its own skin's joint order and `MuscleLayerSkinner` writes only the skin it was built for; and the renderer receives no muscle id, status or reason |
 | `ProceduralTubeBudgetTest` | L5 (M1 subset) | generated triangles match the §10.3 formula for the declared `N` and `R`; no zero-area ring; all coordinates finite |
@@ -3613,6 +3626,16 @@ row tests that the predicate honours `Rw`, the solver row tests the fallback axi
 **segment-only predicate** on the quoted polyline; a row whose expectation is an *endpoint* reason
 (`ENDPOINT_INSIDE_OBSTACLE`) exercises the **full head validator**, because the endpoint check lives there. A fixture that
 changes which predicate it calls changes its primary reason, so every row pins both:
+
+**Every `SEGMENT_INTERSECTS_OBSTACLE` reason below is conditional on the enclosure deliverable, and that condition is
+stated once here rather than repeated in ten rows.** Stage 2 reports that reason only when the witness survives a **proved**
+forward-error enclosure (§7.4.1b). No enclosure is derived in this document, so while deliverable (2) of §7.4.1c is open
+the same geometry reports **`UNCERTIFIED_MINIMUM`** through stage 3 instead: the **verdict is unchanged** (`INVALID`, which
+is what every one of those rows is really distinguishing), the **reason is not**. The rows keep their intended reason
+because it is the verdict the implementation must produce once the enclosure exists, and because a row that named
+`UNCERTIFIED_MINIMUM` today would stop testing which stage decided. The control rows (`VALID`) are unaffected — they do not
+depend on stage 2 at all — so each pair still separates an implementation that accepts everything from one that rejects
+everything.
 
 | Row | Predicate | Primary reason | Expected secondary |
 | --- | --- | --- | --- |
@@ -3903,20 +3926,40 @@ combination is not an M1 pass, whatever the individual reports say.
    a bound on an unmeasured quantity. Closing the question settles the convention, not the evidence, so three things are
    now specified rather than deferred:
 
-   - **A named comparator, so `θ` has a reference at all — with an explicit `UNAVAILABLE` result.** A **pole-vector
-     frame** derived from published joint positions — the segment's bend plane, from `p_parent → p_mid → p_child` — is
-     computed beside the minimal-rotation frame on every measured frame, and the angle between the two rolls is the
-     candidate `θ`. It needs no authored data either. `θ` is **`UNAVAILABLE`**, and never a number, in four cases the
-     comparator cannot serve: (a) the segment is the **root** (`PELVIS` has no `p_parent`), (b) it is **coincident or
-     terminal** — `LUMBAR`, `CLAVICLE`, `SKULL`, `TOES` — so the three joints are not distinct and no bend plane exists,
-     (c) the first measured frame of a run whose bend is below `θ_bend_min`, so there is no previous pole — the fallback
-     has nothing to hold — and (d) every subsequent **held** frame, because the policy below withholds `θ` there.
-     `UNAVAILABLE` is a result, not a zero: it is reported per segment per pose, it **does not pass** an acceptance row
-     that requires `θ` on that segment, and an M1 review that cannot obtain `θ` for a segment records it as an
-     unresolved limitation rather than assuming the segment quiet. A frame whose bend is at least `θ_bend_min` and which
-     has a previous pole is measured normally. The comparator does **not** recover anatomical axial twist: it is a second
-     geometric direction, not a source of truth about rotation, and agreement with it is evidence about determinism and
-     plausibility, never about anatomy.
+   - **A named comparator, so `θ` has a reference at all — with an explicit `UNAVAILABLE` result.** A **pole-vector frame**
+     derived from published joint positions — the segment's bend plane, from `p_parent → p_mid → p_child` — is computed
+     beside the minimal-rotation frame on every measured frame, and the angle between the two rolls is the candidate `θ`.
+     It needs no authored data either. `θ` is **`UNAVAILABLE`**, and never a number, in every case the comparator cannot
+     serve: (a) the segment is the **root** (`PELVIS` has no `p_parent`); (b) it is **coincident or terminal** — `LUMBAR`,
+     `CLAVICLE`, `SKULL`, `TOES` — so the three joints are not distinct and no bend plane exists; (c) the pole is
+     **uninitialized** for this segment (see the policy below); (d) the frame is **held** — its bend is below the threshold
+     and it is not a transition frame; (e) the frame is a **transition** frame, the first one after a hold that clears the
+     threshold, because the reference changed between frames and comparing across that change would measure the change
+     rather than the roll. `UNAVAILABLE` is a result, not a zero: it is reported per segment per pose with its reason
+     (`POLE_UNINITIALIZED`, `POLE_HELD`, `POLE_TRANSITION`, or the structural reason for (a)/(b)), it **does not pass** an
+     acceptance row that requires `θ` on that segment, and an M1 review that cannot obtain `θ` for a segment records it as
+     an unresolved limitation rather than assuming the segment quiet. A frame with an initialized pole, no transition, and
+     `sin θ_bend ≥ sinBendMin` is measured normally (below). The comparator does **not** recover anatomical axial twist: it
+     is a second geometric direction, not a source of truth about rotation, and agreement with it is evidence about
+     determinism and plausibility, never about anatomy.
+   - **The pole's initialization, hold and transition, stated once.** The pole is a unit vector in engine world,
+     `pole(S)`, per segment, and the policy is three rules and a reset — the earlier text referred to "the policy below"
+     and then never stated one, while the summary table called it declared:
+     - **Initialization.** The first frame of a run — or the first frame after a reset — whose
+       `sin θ_bend = |(p_mid − p_parent) × (p_child − p_mid)| / (|p_mid − p_parent| · |p_child − p_mid|)` is at least
+       `sinBendMin` sets `pole = normalize(bend normal)` and reports `θ` for that frame. Every frame before it reports
+       `UNAVAILABLE` with `POLE_UNINITIALIZED`; there is no guess and no bind-plane default.
+     - **Hold.** While `sin θ_bend < sinBendMin` the frame keeps the last valid pole **without updating it**, reports
+       `UNAVAILABLE` with `POLE_HELD`, and does not compute `θ`. The hold is the reason a near-straight limb does not
+       manufacture a roll: the bend normal of a straight limb is noise, and holding the last real one is the only
+       defensible reference.
+     - **Transition.** The first frame after a hold whose `sin θ_bend` is at least `sinBendMin` **re-seeds** the pole from
+       that frame's own bend plane and reports `UNAVAILABLE` with `POLE_TRANSITION` for that frame; the next frame
+       resumes measurement. The transition is marked so that it can never be read as a measurement against the old pole.
+     - **Reset.** A frame that is `INVALID` or `NOT_PROCESSED` for the segment — no published positions to build the
+       plane from — clears `pole(S)` back to uninitialized, so a pause, a seek, a replay or a state restore re-initializes
+       rather than comparing across a gap. The three reasons are reported per frame per segment, so the count of held and
+       transition frames is part of the measurement record rather than invisible.
    - **The experiment covers all four pilots, not three named poses.** `squat` (bottom and top), `standard push-up`
      (bottom), `bird-dog` and `row_standard` (mid-pull) — the four exercises of X8 and the five poses of §12.4 RV4 —
      because two of them are exactly where a bend-plane comparator is least stable (bird-dog's extended limbs, row's
@@ -4073,7 +4116,7 @@ The smallest experiment is kept against each row because a confirmed design stil
 | **X6** | The **continuity observer is diagnostic only** and never a gate; **route hysteresis is removed from M1** | §7.4.3, §12.2 (`MusclePathContinuityTest`) | **confirmed by owner** | the observer-correctness fixtures: a rigid translation must not alarm, a branch switch must |
 | **X7** | **`NO_ROUTE` is disabled** until a proof procedure exists; the frame exposes a **terminal search outcome** (`SEARCH_EXHAUSTED` / `PASS_CAP`) separately from the **last geometric cause** | §7.4.1c, §7.4.5, §12.2.1 | **confirmed by owner** | `final_clearance_and_budget_both_fail`: one record, two fields, neither overwriting the other |
 | **X8** | **Categorical roles ship in M1**: schema, provenance/review validator and display gate, for exercises with a reviewed source only; the **pilot exercise list is owner-approved and fixed**: `squat`, `standard push-up`, `bird-dog`, `row_standard` | §7.3 (`MuscleRole.UNKNOWN`), §8, §9.2, §12.4 (RV4 poses), §12.5, §15 M1 item 10 | **confirmed by owner** | the validator runs on those four and every other exercise must display no role; the §12.4 pose set is drawn from them so that every M1 muscle is reviewed |
-| **X9** | **Minimal rotation stays the default roll convention**, confirmed as a **default** and **not** as evidence of anatomical adequacy; a **pole-vector frame** from published positions is the named comparator, with a declared fallback and continuity policy for near-straight limbs; the `pelvis` root takes a derived frame so an authored tilt is followed | §7.2 (the rule, the root frame, the roll bound), §11, §13 question 11, §15 stage 1 | **closed by owner — adequacy not claimed** | measure `θ` per segment on **all four pilots** (squat, standard push-up, bird-dog, `row_standard`) against the pole-vector comparator, report its coordinate- and conditioning-aware uncertainty estimate, report `UNAVAILABLE` where it cannot be bounded, and **set `τ_roll` on `\|d\| · θ` at stage 1** |
+| **X9** | **Minimal rotation stays the default roll convention**, confirmed as a **default** and **not** as evidence of anatomical adequacy; a **pole-vector frame** from published positions is the named comparator, with the declared initialization/hold/transition policy for near-straight limbs above; the `pelvis` root takes a derived frame so an authored tilt is followed | §7.2 (the rule, the root frame, the roll bound), §11, §13 question 11, §15 stage 1 | **closed by owner — adequacy not claimed** | measure `θ` per segment on **all four pilots** (squat, standard push-up, bird-dog, `row_standard`) against the pole-vector comparator, report the conditioning **heuristic** beside it (labelled as such — it is not a bound), report `UNAVAILABLE` with its reason wherever the single `sinBendMin` threshold withholds `θ`, and **set `τ_roll` on `\|d\| · θ` at stage 1** |
 | **X10** | **A1's baseline is the measured X1 bind-frame result** (`CHEST` 175.1 mm, 350.2×); 565.6 mm stays as a labelled posed comparison. Metres stay out of the UI (X4); `s` and the bind pose are per-body parameters tied to named landmarks, never to height; M1 is one generic reference body at a fixed `s = 247.3684` | §6.6, §9.2, §13 question 12, §15 stage 2 | **closed by owner** | build the stage-1 rig, measure both spans on it, keep the pair whose landmarks agree — and **recompute every residual at that calibration**, never rescale the old table |
 
 **Known traps from the device run (spike #384).** Each cost a debugging cycle on real hardware, and each is a property of
