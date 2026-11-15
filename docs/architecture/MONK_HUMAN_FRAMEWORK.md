@@ -688,14 +688,14 @@ library, one anatomy library and one animation library serve every body.
 | Requirement | Rule | Why |
 | --- | --- | --- |
 | Joint names | `Hips, Spine, Chest, Neck, Head, {Left,Right}Shoulder, {Left,Right}Scapula, {Left,Right}Arm, {Left,Right}ForeArm, {Left,Right}Hand, {Left,Right}UpLeg, {Left,Right}Leg, {Left,Right}Foot, {Left,Right}ToeBase` plus visual-only bones | the resolver matches normalized names (`MonkJointResolver.kt:12-34`, PR #385). Rigs are **first-party and built to `SkeletonDefinition`**: the Mixamo-compatible naming is a convention that keeps the map readable and reviewable, not a promise that a third-party rig can be dropped in — its bone lengths, bind pose and joint placement are calibrated to nothing in this engine (§6.6 A1/A2) |
-| Hierarchy | the 21 mapped bones keep their parent chain; scapula sits between clavicle and arm | the engine's girdle DOF (`CHEST → CLAVICLE → SCAPULA → SHOULDER`, `SkeletonFactory.kt:71-80`) only reaches the body if the rig has a scapula bone |
+| Hierarchy | the **23** mapped bones of §6.2 keep their parent chain (`humanoid_v1` carries 21 of them — it has no scapula); scapula sits between clavicle and arm | the engine's girdle DOF (`CHEST → CLAVICLE → SCAPULA → SHOULDER`, `SkeletonFactory.kt:71-80`) only reaches the body if the rig has a scapula bone |
 | Rest pose | arms at the sides, matching the engine's rest stance; **not** a T-pose | rest-delta retarget multiplies the source delta onto the target rest (`PoseRetargeter.kt:58-68`); a T-pose bind leaves the figure in T-pose at every frame 0 |
 | Bind pose | identical to rest pose **and to the X1 canonical A-pose** | the rig's bind frame is computed from `SkeletonDefinition` (§6.6 X1); `PoseRetargeterRestInvariantTest` proves identity on every bone at neutral (§12.2) |
-| Units | asset metres; engine units converted only for the pelvis translation and the uniform scale | `PoseRetargeter.kt:70-83`; offsets must stay in asset units because inverse binds were authored against them |
+| Units | asset metres; engine units converted only for the pelvis translation (**divided** by `unitsPerMetre`, §6.2) and the uniform scale | `PoseRetargeter.kt:70-83`; offsets must stay in asset units because inverse binds were authored against them |
 | Scale | one uniform scale per character; no per-bone scaling for appearance | non-uniform bone scale distorts joint volume and is not a morphology tool |
 | Fingers | visual-only, 2 segments per finger or a single segment in tier `reduced` | the engine has no finger kinematics beyond `HAND_A`; the rig may add them as static/derived |
 
-`humanoid_v2` target bone counts: **21 mapped bones + up to 30 visual-only bones (fingers, jaw, eyes, twist) + muscle
+`humanoid_v2` target bone counts: **23 mapped bones + up to 30 visual-only bones (fingers, jaw, eyes, twist) + muscle
 helper bones** (§7.5). The 30 is a budget for the parts the rig may add, and the arithmetic is checked against what M1
 actually carries: 20 finger segments (5 fingers × 2 segments × 2 hands) + a jaw + two eyes + up to six twist bones (upper
 arm, forearm and thigh per side) = **29 of 30**, so one bone of headroom. M1's rig keeps **10** of them — 5 single-segment
@@ -709,7 +709,7 @@ is the only rig change that materially affects anatomy quality.
 finger kinematics — it publishes `HAND_A` plus `WRIST`, `PALM`, `KNUCKLES` and `FINGERTIPS` in a straight chain — so a
 finger bone is **visual-only**: it has no engine joint, it contributes **no A1 residual** and is **excluded from
 `RigLandmarkAlignmentTest`** (listed as unmapped, not as a failure), and it is counted against the **visual-bone budget**
-above (10 of the 30), never against the 21 mapped joints. Keeping them is a deliberate owner decision in favour of the
+above (10 of the 30), never against the 23 mapped joints. Keeping them is a deliberate owner decision in favour of the
 silhouette; the mechanics are unchanged, because the hand chain is rigid whatever the rig carries.
 
 **Motion rule for the fingers in M1: rigid inheritance.** Each finger bone inherits its hand bone's frame
@@ -740,11 +740,19 @@ the parsed asset:
 | `HeadTop_End` | a crown node; the engine's last joint is `HEAD_POS` and it has no crown (§7.2) |
 | `LeftHandThumb/Index/Middle/Ring/Pinky`, `RightHand…` (10) | **visual-only, and kept in M1** (X2, reversed by owner): no engine joint, no A1 row, counted in the 30-bone visual budget, riding the hand by §6.2 inheritance |
 
-32 asset skin joints − 11 = 21 mapped, and 33 engine joints − 21 = 12 undrivable. Those two counts are the whole of the
-mismatch: a rig that adds the scapula pair closes two of the twelve, and nothing closes the ten hand joints without
-finger kinematics the engine does not have. **The 11 orphan asset bones are not an error**: they are visual-only bones
-that a v2 rig may legitimately need (a crown, five fingers per hand here, more if a family adds a jaw or eyes), and the
-asset validator reports them as visual-only rather than as unmapped-and-broken (§10.5).
+**Those are the old asset's counts, not the requirement.** On the shipped `humanoid_v1` asset, 32 skin joints − 11 = 21
+mapped and 33 engine joints − 21 = 12 undrivable, which is the whole of *its* mismatch: a rig that adds the scapula pair
+closes two of those twelve, and nothing closes the ten hand joints without finger kinematics the engine does not have.
+**The map of the table above carries 23**, because it is five central joints plus nine bilateral pairs — `CLAVICLE`,
+`SCAPULA`, `SHOULDER`, `ELBOW`, `HAND`, `HIP`, `KNEE`, `ANKLE`, `TOE` — so `5 + 9 × 2 = 23` mapped bones and `33 − 23 =
+10` undrivable engine joints (`WRIST`, `PALM`, `KNUCKLES`, `FINGERTIPS` and `HEEL`, per side). The asset side goes from 32
+skin joints (21 mapped + 11 visual-only) to **34** (23 mapped + the same 11), and the scapula pair is the whole
+difference. A count that says 21/12 describes the asset this document replaces, which is why `BoneMapCoverageTest`
+(§12.2) derives its numbers from the map instead of from that inventory.
+
+**The 11 orphan asset bones are not an error**: they are visual-only bones that a v2 rig may legitimately need (a crown,
+five fingers per hand here, more if a family adds a jaw or eyes), and the asset validator reports them as visual-only
+rather than as unmapped-and-broken (§10.5).
 
 **This is a v1 scope constraint, not an architectural law.** One rig is what makes M1 affordable: one `BoneMap`, one
 rest invariant, one pose library, one anatomy library. It is not a claim that a single rig, surface morphs and uniform
@@ -802,13 +810,17 @@ d_seg(j)    = normalize(p_child − p_parent)                   // ENGINE space,
 D(u)        = shortestRotation(B · d_bind(u), d_seg(joint(u)))  // the SAME rule and tie-break as X9 (§7.2, §7.4 step 1)
 R_target_world(u) = D(u) · R_target_rest_world(u)
 R_local(u)        = R_target_world(parent)⁻¹ · R_target_world(u)
-translation       = asset units, with the pelvis displaced by (p_PELVIS − rest pelvis) · s
+translation       = asset metres, with the pelvis displaced by (p_PELVIS − rest pelvis) / s   // engine units → metres: divide
 ```
 
 `B = Ry(+90°)` is the one basis: **asset `+Z` forward and `+X` left → engine `+X` forward and `−Z` left**, checked on the
 asset's own bind pose (`LeftToeBase` sits at `+Z`, `LeftUpLeg` at `+X`). The uniform scale is `s = 235/0.95 = 247.3684`
-(§7.2) and the translation is **0 at the pelvis** — the asset's `Hips` already sits at the engine's rest pelvis height, so
-the only translation the retarget applies is the joint's own displacement from that rest pelvis. There is no rest-delta
+**engine units per metre** (§7.2), and the translation is **0 at the pelvis** — the asset's `Hips` already sits at the
+engine's rest pelvis height, so the only translation the retarget applies is the joint's own displacement from that rest
+pelvis. **The conversion divides, because the units demand it**: an engine-space displacement is in units and the
+translation is in asset metres, so a 235-unit displacement is `235 / (235/0.95)` = **0.95 m**, while multiplying gives
+`235 × 247.3684 ≈ 58,131.58` — a metre squared per unit, not a length. Every other quantity in the block above is an
+asset-space rotation, which is why the pelvis is the only place the conversion appears at all. There is no rest-delta
 composition and no per-bone accumulation of residual error: each bone's world rotation is a function of its own two
 endpoints and the fixed basis, which is exactly why A1 and A2 are measurements of the *asset* and not of the retarget.
 
@@ -1062,8 +1074,8 @@ engine units with `+Y` up, `+X` forward and `+Z` lateral, side `A` on `−Z`:
 | `HEEL_F/B`, `TOE_F/B` | `(∓10.15, 25, ∓22)`, `(+24.85, 25, ∓22)` | heel `−foot·0.29`, toe `+foot·0.71`, both level with the ankle |
 
 Nothing in that table needs a published frame, a rig, or the engine's solver — it is arithmetic on the definition, which is
-the property X1 is chosen for. The 21 mapped joints of §6.2 are the ones A1 covers; the other 12 engine joints have no
-asset bone to align (§6.2, X2).
+the property X1 is chosen for. The 23 mapped joints of §6.2 are the ones A1 covers — 21 of them on a `humanoid_v1` asset,
+which has no scapula bone — and the other 10 engine joints have no asset bone to align (§6.2, X2).
 
 **Keeping the fingers cannot move the hand's A1 row.** A1 compares each mapped bone's *head* with its engine joint, and the
 generator places `Left/RightHand` at the X1 `HAND_A` position and parents the finger bones **to it, distally** — a child's
@@ -1075,8 +1087,8 @@ was parsed at `23ef1c0`, its bind bone heads converted to engine space by **`p_e
 `s = 235/0.95 = 247.3684` (§7.2) and **translation 0 at the pelvis** (the asset's `Hips` and the engine's `PELVIS` both
 land on `(0, 235, 0)`, so the registration has no offset to hide), and compared joint-by-joint with the engine's published
 positions at the **standing frame** (`squat_standard` at progress 0 — the calibration stance, *not* the X1 bind frame).
-`Ry(+90°)` is the basis of X3: asset `+Z` forward / `+X` left → engine `+X` forward / `−Z` left. All 21 mapped joints, in
-millimetres:
+`Ry(+90°)` is the basis of X3: asset `+Z` forward / `+X` left → engine `+X` forward / `−Z` left. All 21 mapped joints of
+the shipped asset (the v2 map has 23; this asset has no scapula, so there is no row for one), in millimetres:
 
 | Joint (asset bone) | ΔX | ΔY | ΔZ | 3D |
 | --- | --- | --- | --- | --- |
@@ -1620,9 +1632,11 @@ minimisation over it has an interior maximum and a golden-section search over `[
 basin or return an infinite-looking minimum for a segment that is entirely interior. The distance to the **closed solid**
 (`d = 0` inside) is convex, is `0` exactly where the tube is inside the obstacle, and makes `g(t) = d(t) − r(t)` a
 convex function on each radius piece — which is what the minimiser's certificate assumes. An entirely-interior segment
-is therefore a violation with `g = −r(t) < 0`, not a special case: `raw_interior_segment` and `raw_shallow_crossing`
-(inside the fail-closed band, real roots, shallow depth) each ship with a near-miss control that must stay `CLEAR`
-(§12.2.1).
+is therefore `d = 0` and `g = −r(t) < 0`, not a special case. An entirely-interior **segment** never reaches stage 3,
+though: the root interval of a straight segment whose two ends are both inside a closed ellipsoid always meets `[0, 1]`,
+so stage 2 certifies the intersection first, and the direct coverage of the solid distance is the point fixtures
+(`pe_interior`, `pe_centre`). `raw_interior_segment` therefore pins the **stage-2** reason, `raw_shallow_crossing` pins a
+crossing well outside the fail-closed band, and each ships with a near-miss control that must stay `CLEAR` (§12.2.1).
 
 **The radius is piecewise-affine, and it is part of the object being certified.** `r(t)` tapers along the path with
 knots at the declared stations — by default `0`, `originFraction`, `1 − insertionFraction`, `1` — non-negative and
@@ -1712,11 +1726,11 @@ place a root solve enters the predicate, so its contract is stated rather than c
 | --- | --- |
 | domain | `d(p)` is defined for a **positive** semi-axis triple and any finite `p`; the solver is the exterior solver and is only entered when `Σ (p_i/R_i)² > 1` |
 | interior | `Σ (p_i/R_i)² ≤ 1` → `d = 0` exactly, no root solve (the solid distance of §7.4.1b) |
-| scaling | the problem is solved in **scaled coordinates** `u_i = p_i / R_i`, so the ellipsoid becomes the unit sphere and the root is bounded for any axis ratio; `d` is then multiplied back by the axis scale, and the returned distance carries the bound below |
+| scaling | **no scaling of the metric.** Non-uniform axis scaling does not preserve Euclidean distance and no single axis multiplier reverses it: for axes `(2, 1)`, the point `(3, 0)` has `d = 1` while its unit-sphere distance is `0.5` (an implied multiplier of 2), and `(0, 2)` has `d = 1` while its unit-sphere distance is also `1` (multiplier 1). The root and the surface point are therefore solved in the **original** coordinates by the two rows below; scaled coordinates are used only to bound the bracket's growth and to detect zero coordinates |
 | root | bracket the unique non-negative root `λ* ≥ 0` of `Σ ( a_i x_i / (λ + a_i²) )² = 1`, monotone decreasing in `λ`, by bisection on a bracket grown from `λ = 0` until the sum is `< 1`; then bisect to `λ` with relative width `2⁻⁴⁰` |
-| distance | `d = \|p − x(λ*)\|`, `x_i = p_i a_i² / (a_i² + λ*)`; error bound `≤ 2⁻³⁶ · max(R)` reported with the value |
+| distance | `d = \|p − x(λ*)\|` with `x_i = p_i a_i² / (a_i² + λ*)`, in the original coordinates. The bound is **computed from the point that was returned**, not asserted: `η = \|Σ (x_i/a_i)² − 1\|` and `B = max(R) · η / 2`, because moving `x` radially out to the surface is one path to it, so the Euclidean distance to the surface is at most the radial gap `\|x\| · (1 − 1/√(1+η)) ≤ max(R) · η/2`, and the error in `d` is at most that gap. The contract is `B ≤ 2⁻³⁶ · max(R)` — `2.9e-9` mm for a 200 mm axis — and a routine that cannot meet it fails `pe_tiny_axis` rather than reporting a loose bound |
 | zero coordinates | a zero coordinate contributes nothing to the sum and is never divided by; the guard is per component, not on `\|p\|` |
-| equal axes | the sphere case is solved directly (`d = \|p\| − R`) rather than through the root, because `λ` is then a difference of squares of nearly equal numbers |
+| three equal axes | the sphere case is solved directly (`d = \|p\| − R`) rather than through the root, because `λ` is then a difference of squares of nearly equal numbers. **Two** equal axes is not this case: with axes `(2, 1, 1)` and `p = (3, 1, 0)` the general routine returns **1.297184**, while a sphere formula returns `2.162278` at `R = 1` or `1.162278` at `R = 2` — both wrong, and wrong silently |
 | non-positive axis | `a_i ≤ 0` → `DEGENERATE_OBSTACLE`, never a clamp and never a division |
 | non-finite input, or no root found | `NON_FINITE_GEOMETRY` or `UNRESOLVED_ROOT` — a reportable reason, never `CLEAR` and never a silently truncated iteration |
 
@@ -1824,26 +1838,39 @@ cause. So:
 is ≥ `eps_num`". An estimate `g ≥ e` carrying error `B` proves only `g ≥ e − B`; a document that quotes the estimate as
 if it were the guarantee is off by `B` in the optimistic direction, which is the one direction that matters here.
 
-*Rounding model:* IEEE-754 binary32 for every published input and binary64 for the evaluation, round-to-nearest, one
-rounding per operation; operands bounded by `|coordinate| ≤ 500` engine units (the standing frame's fingertips are at
-391 and a posed figure does not exceed ~600), so one ulp of a `Float` is `2⁻¹⁵ = 3.05e-5` units.
+*Rounding model:* IEEE-754 binary32 for every published input and binary64 for the evaluation, round-to-nearest — at most
+**half** an ulp per operation — with operands bounded by `|coordinate| < 1024` engine units. The bound is a
+power-of-two boundary chosen to cover every operand this document acknowledges, including the posed figures near 600 that
+an earlier revision named in prose while bounding the budget at 500. In `[512, 1024)` one ulp is `2⁻¹⁴ = 6.1035e-5`
+units, so one rounding costs at most `2⁻¹⁵ = 3.05e-5` units; at 500 one ulp is `2⁻¹⁵` and half an ulp `1.53e-5`, which is
+why the old table's "3.05e-5 units = half an ulp at 500" was a factor of two off even where the number was right.
 
 | Term | Value | How it was obtained |
 | --- | --- | --- |
-| published-coordinate quantisation | 3.05e-5 units = 1.23e-7 m | half an ulp of a binary32 at 500 units, per published coordinate, for the three coordinates of a point |
-| transform accumulation (attachment resolve) | 33 nodes × 2 operations × 1 ulp | worst case additive along the chain: **66 operations**, `66 × 3.05e-5 = 2.01e-3` units = **8.1e-6 m** |
-| radius knots | 0 | authored constants, not sampled; the affine radius between knots adds `≤ 1 ulp` of `r`, inside the operation count |
-| point-to-ellipsoid root solve | `≤ 2⁻³⁶ · max(R)` | the bisection bound of §7.4.1b-1, scaled with the obstacle |
+| published-coordinate quantisation | 3.0518e-5 units = 1.234e-7 m | half an ulp of a binary32 for `\|x\| < 1024`, per published coordinate of a point |
+| transform accumulation (attachment resolve) | 33 nodes × 2 roundings = **66** × 2⁻¹⁵ units | additive along the chain with no amplification, because every transform in it is orthonormal: **2.014e-3 units = 8.142e-6 m** |
+| radius knots | ≤ half an ulp of `r` = **1.234e-7 m** | authored constants, not sampled; the affine radius between knots is one rounding and is inside the operation count |
+| point-to-ellipsoid root solve | `≤ 2⁻³⁶ · max(R)` | the computed bound of §7.4.1b-1 — `2.9e-12 m` for a 200 mm axis, so never the binding term |
 | minimisation | `L · w_n / 2` | the Lipschitz bracket of the certificate (§7.4.1b) |
 | `Float` rounding of the published path | included above | the polyline is read as published, so its quantisation is an input, not a term the solver can remove |
-| **`eps_num`** | **1e-5 m** = 2.47e-3 units | the budget above with the margin on top |
+| **`B` — the declared budget** | **8.27e-6 m** | the sum of the three non-zero terms: 8.142e-6 + 1.234e-7 + 2.9e-12 |
+| **`eps_num`** | **1e-5 m** = 2.4737e-3 units | **1.21 × `B`**, so the margin covers the budget with 21 % to spare |
 
-**The margin factor, computed rather than asserted.** At one ulp per operation and 66 operations the arithmetic budget is
-`8.1e-6 m`, so `eps_num = 1e-5 m` is **1.2×** the worst case; at half an ulp per operation (the average of
-round-to-nearest) the same budget is `4.1e-6 m` and `eps_num` is **2.4×** it. Both factors are reproducible from
-`66 × 3.05e-5 · 2⁻ᵏ / s` with `s = 235/0.95`: `66 · 3.05e-5 · 4.04e-3 = 8.1e-6` (k = 0) and `4.1e-6` (k = 1). A margin
-that is 1.2× a worst-case budget is thin, which is exactly why the guarantee is stated as `eps_num − B` and why the
-certificate fails closed: the number is a bound with a stated budget, not a comfortable safety factor.
+**The margin factor, computed rather than asserted.** `eps_num / B = 1.21`, and the guarantee therefore certifies
+`eps_num − B ≈ **1.73e-6 m**` of clearance at worst — not `1e-5 m`. Reproducible as
+`66 · 2⁻¹⁵ · (0.95/235) = 8.142e-6`, plus `2⁻¹⁵ · (0.95/235) = 1.234e-7` for the radius and `2⁻³⁶ · 0.2 = 2.9e-12` for the
+root solve. A margin that is 1.21× its own budget is thin, which is exactly why the guarantee is stated as `eps_num − B`
+and why the certificate fails closed: the number is a bound with a stated budget, not a comfortable safety factor. The
+earlier revision reported 1.2× and 2.4× as two alternative factors for the same certificate, which is the arithmetic
+signature of counting one ulp and half an ulp against the same geometry; there is one budget and one factor.
+
+**The final represented tube is inside the certified object.** The drawn surface is the modelled tube swept by the
+*inscribed* ring polygon, so it is never larger than the tube the predicate certified: at `R = 8` ring sides the polygon
+sits inside the circle by `r(1 − cos(π/8)) = 0.076 r` — 1.52 mm at a 20 mm radius. That is a fidelity note, not a
+clearance term. The renderer's own `Float` vertex positions *are* rounded when the buffer is written, by at most half an
+ulp (1.2e-7 m at `|x| < 1024`), but four orders of magnitude below the inscribed-polygon inset they cannot push the drawn
+surface outside the certified tube, so they are not a term in `B` either. The term that *is* outside the budget is
+unchanged: rig registration (§11).
 
 | Term *not in* `eps_num` | Value | Where it comes from |
 | --- | --- | --- |
@@ -1855,9 +1882,11 @@ be reported clear; `non_unit_scale` in §12.2.1 is the fixture that catches exac
 control that must stay CLEAR.
 
 **The guarantee, stated exactly.** *The generated modelled tube — the final validated polyline swept by the declared
-piecewise-affine radius, with its end caps and joins — stays at least `eps_num` from the surface of every declared model
-obstacle that applies to that head, except on the path intervals where the definition declares an attachment-contact
-exemption.* That is the whole of it. It is a statement in engine space about a surrogate shape and a surrogate obstacle
+piecewise-affine radius, with its end caps and joins — stays at least `eps_num − B` from the surface of every declared
+model obstacle that applies to that head, except on the path intervals where the definition declares an
+attachment-contact exemption*, with `B = 8.27e-6 m` the budget above, so the floor is **1.73e-6 m** and it is positive.
+This is the same statement the paragraph before the table makes; an earlier revision said `eps_num − B` there and "at
+least `eps_num`" here, which was a factor-of-1.2 disagreement about one certificate. That is the whole of it. It is a statement in engine space about a surrogate shape and a surrogate obstacle
 set, and it is **not** a statement about real bone, fascia or skin, and **not** a statement about the swept volume between
 two frames (§7.4.3).
 
@@ -2154,36 +2183,53 @@ the declared corridor limit) rather than flipping sides, so the outcome stays de
 limit is `SEARCH_EXHAUSTED` (§7.4.1c, X7) — a limit on the declared corridor, never `NO_ROUTE`, which M1 does not emit.
 
 Escalation is not decoration, and the numbers below are re-computed against the **final** polyline rather than against
-the original chord. Sphere `R = 20 mm` centred on a 290 mm chord sampled every 10 mm, `e = eps_num · s` = 0.01 mm:
+the original chord. Sphere `R = 20 mm` centred on a 290 mm chord sampled every 10 mm, `e = eps_num · s` = 0.01 mm. **The
+grid decides which points are retained, so it is part of the fixture:** `N = 30` endpoint-inclusive over 290 mm is 29
+intervals of exactly 10 mm, the samples are `0, 10, … 290`, the centre at 145 mm is **not** a sample, the samples at
+`130, 140, 150, 160` lie inside (|Δ| = 15, 5, 5, 15 mm < 20), and the nearest **retained** neighbours are therefore at
+`±25 mm` — `120` and `170`. An earlier revision computed this table for ±30 mm neighbours, which this grid cannot
+produce:
 
-| Placement | Retained neighbours (±30 mm, outside) | Entry/exit points (±20 mm, on the surface) |
+| Placement | Retained neighbours (±25 mm, outside) | Entry/exit points (on the surface) |
 | --- | --- | --- |
-| `d_1 = R + e` = 20.01 mm | **rejected**: the connecting segment passes 16.64 mm from the centre | **rejected**: 16.64 mm as well |
-| `d_2 = 1.5·d_1` = 30.015 mm | **clear by 1.22 mm** (≥ e) | **still rejected**: 16.64 mm |
+| `d_1 = R + e` = 20.01 mm | **rejected**: the connecting segment passes 15.62 mm from the centre | **rejected** |
+| `d_2 = 1.5·d_1` = 30.015 mm | **rejected**: 19.21 mm — still inside the 20 mm sphere | **still rejected** |
+| `d_3 = 1.5·d_2` = 45.0225 mm | **clear by 1.86 mm** (21.86 mm centreline, ≥ e) | **still rejected** |
 
-So the first pass is rejected and the first escalation clears — but only because the connecting segments are anchored on
-the **retained samples outside the obstacle**. If the entry/exit construction points stay in the polyline, the closest
-approach is `R·D/√(R² + D²)` for a waypoint at distance `D`, which is **below `R` for every finite `D`** — 16.64 mm at
-`D = 30.015` and still under 20 mm at `D = 200` — so no escalation ever clears it. That is the reason the retained-point
+So the first two passes are rejected and the third clears — but only because the connecting segments are anchored on the
+**retained samples outside the obstacle**. If the entry/exit construction points stay in the polyline, the closest
+approach is `R·D/√(R² + D²)` for a waypoint at distance `D`, which is **below `R` for every finite `D`** — 18.28 mm at
+`D = 45.0225` and still 19.90 mm at `D = 200` — so no escalation ever clears it. That is the reason the retained-point
 rule below is not bookkeeping: an entry point that sits on the surface is a zero-clearance point, the predicate rejects it
 at every pass, and a construction that keeps it turns a clearable configuration into a `PASS_CAP` failure. First-pass
 rejection here, later successful escalation, and a terminal failure for the retained-entry variant are three different
 outcomes of one geometry, and the fixture table states which one each fixture expects: `single_obstacle` is the
-sample-anchored variant (pass 1 rejected, pass 2 clear) and `retained_entry_never_clears` is the same geometry with the
-entry/exit points kept (terminal `PASS_CAP`), so a reader who sees only one of the two rows should not conclude that the
-other is wrong.
+sample-anchored variant (passes 1 and 2 rejected, pass 3 clear) and `retained_entry_never_clears` is the same geometry
+with the entry/exit points kept (terminal `PASS_CAP`), so a reader who sees only one of the two rows should not conclude
+that the other is wrong.
 
 **Worked frame check — `rotated_anisotropic`.** One obstacle with local semi-axes 40 × 10 × 20 mm, `Rw` = +90° about Z
-(local X → world +Y), `eps_num` = 1e-5 m, chord `(−145, 0, 0) → (145, 0, 0)` mm in world X through `cw`. Here
-`d̂ = (1, 0, 0)`, `u = 0` (midpoint at the centre), and `Rwᵀ d̂ = (0, −1, 0)`: the local axes least aligned with it are
-X and Z (both dot 0), so the tie order picks local X, rotated back to world `(0, 1, 0)`. Correctly, `l̂_d = (1, 0, 0)`
-and `h = R_x` = 40 mm → `d_1` = 40.01 mm, at which the connecting segment **from the retained sample at `(145, 0, 0)`**
-clears the surface by **24.21 mm** (measured, not estimated) — a first-pass success, which is why this case needs no
-escalation. The segment from an entry point on the surface clears by 0 by construction and is rejected at every distance,
-as in the sphere case above. Choosing the fallback in world axes instead (world +Y fed straight into
-`h` as if local) gives `h = R_y` = 10 mm, a waypoint 10.01 mm from the centre — still inside the 40 mm boundary — so the
-predicate rejects it. The `rotated_anisotropic` fixtures in §12.2.1 pin both halves: the validator must honour `Rw`, and
-the constructor must transform the fallback and the support direction.
+(local X → world +Y), so its **world** semi-axes are `(10, 40, 20)` mm; `eps_num` = 1e-5 m, chord
+`(−145, 0, 0) → (145, 0, 0)` mm in world X through `cw`. Here `d̂ = (1, 0, 0)`, `u = 0` (midpoint at the centre), and
+`Rwᵀ d̂ = (0, −1, 0)`: the local axes least aligned with it are X and Z (both dot 0), so the tie order picks local X,
+rotated back to world `(0, 1, 0)`. Correctly, `l̂_d = (1, 0, 0)` and `h = R_x` = 40 mm → `d_1` = 40.01 mm, which puts the
+waypoint 0.01 mm outside the *surface tip* on that axis.
+
+**The first pass is rejected, and the "24.21 mm" this paragraph used to quote could not have come from this geometry.**
+One margin outside the support plane is not one margin outside the surface: the retained neighbour on that side is the
+sample at `(15, 0, 0)` mm — the pinned `N = 30` grid is 10 mm spacing, so the crossing samples at `±5 mm` are inside and
+the nearest retained ones are at `±15` — and the straight segment from it to the waypoint `(0, 40.01, 0)` **enters the
+ellipsoid**. In normalized coordinates `q0 = (1.5, 0, 0)`, `qd = (−1.5, 1.00025, 0)`, so `a = 3.2505`, `b = −4.5`,
+`c0 = 1.25` and **`Δ = 3.9975`**, with roots `[0.3847, 0.9997] ⊂ [0, 1]`. Escalation to `d_2 = 1.5·d_1 = 60.015 mm` puts
+the same segment clear: `Δ = −2.2556` (no real roots) and its closest approach to the solid ellipsoid is **0.834 mm**,
+i.e. `min g = +0.824 mm ≥ e`.
+
+The segment from an entry point that stays on the surface clears by 0 by construction and is rejected at every distance,
+as in the sphere case above. Choosing the fallback in world axes instead (world +Y fed straight into `h` as if local)
+gives `h = R_y` = 10 mm, a waypoint 10.01 mm from the centre — still inside the obstacle — so the predicate rejects it,
+and no later pass rescues it, because escalation multiplies that same wrong `h`. The `rotated_anisotropic` fixtures in
+§12.2.1 pin both halves: the validator must honour `Rw`, and the constructor must transform the fallback and the support
+direction.
 
 **The pass loop, pinned — one pass is a pure function of its input polyline.**
 
@@ -2874,12 +2920,13 @@ Seven levels, each with one owner, one report and an explicit automation status.
 | --- | --- | --- |
 | `RigAssetContractTest` | L2 | every required bone present, bind == rest, inverse binds finite, ≤ 4 influences |
 | `PoseRetargeterRestInvariantTest` | L2 | neutral pose → identity on **every** bone — mapped and visual-only alike, so the 10 finger bones are asserted at identity too (they inherit the hand, and at bind the hand is at rest); exists in PR #385, extended to the v2 rig |
+| `PoseRetargeterPelvisTranslationTest` | L2 | §6.2: a pose whose `PELVIS` sits **235 units** above rest translates `Hips` by **0.95 m** (`235 / (235/0.95)`), not by `235 · s ≈ 58,131.58`; the fixture uses a **non-zero** translation, because a test at zero displacement cannot see a reversed conversion |
 | `RigLandmarkAlignmentTest` | L2 | §6.6 A1: every **mapped** bone head coincides with its engine joint at the X1 bind frame within `τ_bind`; rest orientations within `τ_rot`. The 10 finger bones are **excluded from the comparison and listed as unmapped** (X2) — their report entry is inventory, not a residual, and keeping them cannot move the hand's own row; expected **red** on `humanoid_v1` against the recorded baseline (§6.6) |
 | `RigAlignmentResidualTest` | L2 | §6.6 A2: the **measured** residual per joint at the three named poses, within `τ_residual`; the equal-length/different-direction control case must report a non-zero residual, and no length-sum bound is computed |
 | `SegmentFrameDirectionTest` | L2 | §7.2/§7.4 step 1: a derived segment direction equals the published direction `p_child − p_parent` within `τ_dir` (proposed, fixed at stage 1); the roll convention is declared per segment and reproduced; run on real baseline poses over both hierarchies, both sides of every bilateral limb, one deliberately bent IK case, the measured degenerate rows (`pelvis`, `clavicle`, `skull`, `toes` — inherited frame, no zero-vector normalisation) and the manually overridden hand of `pike_pushup_standard`; plus near-parallel, near-antiparallel from both sides, zero length, root and straightening per X9 |
 | `NonCommutingSplitTest` | L2 | §6.2: a parent and child about different axes compose to the stated world rotation — a reversed `parent⁻¹ · child` order or a one-sided `B` fails |
 | `UnmappedBoneInheritanceTest` | L2 | §6.2: moving a mapped parent carries an unmapped child's world rotation within tolerance while the child's local rotation is unchanged; the twist policy is the declared one |
-| `BoneMapCoverageTest` | L2 | **21** mapped joints resolve and the 12 undrivable engine joints are declared, not accidental (X2) |
+| `BoneMapCoverageTest` | L2 | **23** mapped joints resolve and the **10** undrivable engine joints are declared, not accidental (X2) — derived from the required map of §6.2, not from the shipped asset's 21/12 inventory. The scapula pair is asserted by name, so a `BoneMap` that quietly omits `SCAPULA_A/P`, or a rig that carries no scapula bone, fails here rather than at A1 |
 | `RigSideTest` | L2 | `Left*` bones on the same side as anatomy side A in the rest pose |
 | `AnatomyDefinitionTest` | L3 | ids unique; attachments resolve; envelope bounds; L/R mirror; heads consistent |
 | `MusclePathGeometryTest` | L4 | arc length ≥ chord; every segment of the final polyline is certified clear of every obstacle in the head's union under the three-stage state machine of §7.4.1, with the solid-distance predicate and the Lipschitz certificate; every sample lies outside the surface by the same margin; repeatable across runs and buffer reuse on one device and configuration |
@@ -2973,31 +3020,31 @@ changes which predicate it calls changes its primary reason, so every row pins b
 | `rest_length_invalid` | a head whose reference-stance length is zero | `INVALID` — `REST_LENGTH_INVALID`, never a division |
 | `degenerate_segment_inside` | a zero-length segment whose point lies inside an obstacle | `INVALID` — `DEGENERATE_SEGMENT` (segment-only predicate), never `SEGMENT_INTERSECTS_OBSTACLE`: the `a = 0` point test precedes the quadratic |
 | `sheet_muscle` | a definition with `flat = true` | `INVALID` — `UNSUPPORTED_GEOMETRY`, full head validator; no clearance verdict is reported for a strip shape the tube predicate does not describe |
-| `raw_interior_segment` | a segment lying entirely inside an obstacle (unit sphere, `q0 = (0,0,0)`, `qd = (0.4, 0, 0)`), tube radius 0.1 | `INVALID` — `CLEARANCE_VIOLATION` with `min g = −0.1`; a surface-distance implementation reports a positive minimum and clears it, so this row is what separates solid from surface distance |
+| `raw_interior_segment` | unit sphere, a segment lying entirely inside it: `q0 = (0, 0, 0)`, `qd = (0.4, 0, 0)`, tube radius 0.1 | `INVALID` — **`SEGMENT_INTERSECTS_OBSTACLE`**, decided at **stage 2**: `a = 0.16`, `b = 0`, `c0 = −1`, `Δ = 0.64`, roots `[−2.5, 2.5]`, so `[t0, t1] ∩ [0, 1] ≠ ∅`. Stage 3 does not run and no `min g` is reported. The earlier row expected `CLEARANCE_VIOLATION` with `min g = −0.1`, which contradicts the state machine it belongs to: a straight segment with both ends inside a closed ellipsoid always has its root interval meeting `[0, 1]` |
 | `raw_interior_control` | the same geometry with the segment outside: `q0 = (1.3,0,0)`, `qd = (0.4,0,0)` | `VALID` — the near-miss control, so the pair cannot pass by rejecting every interior-ish chord |
-| `raw_shallow_crossing` | a chord that dips 0.002 units inside the surface (inside the `Δ_tol` band, real roots) | `INVALID` — `SEGMENT_INTERSECTS_OBSTACLE`, routed through stage 3 where `min g = −0.002 · r`; a band treated as "no real roots ⇒ clear" clears it |
-| `raw_shallow_crossing_control` | the same chord offset outward so the minimum is `+0.002` units clear | `VALID` — near-miss control for the row above |
+| `raw_shallow_crossing` | unit sphere; `q0 = (−2, 0.998, 0)`, `qd = (4, 0, 0)`, tube radius 0 — a chord whose closest approach is 0.002 units inside the surface | `INVALID` — `SEGMENT_INTERSECTS_OBSTACLE`, decided at **stage 2**: `a = 16`, `b = −16`, `c0 = 3.996004`, `Δ = 0.255744` against `Δ_tol = 5.117e-10`, roots `[0.48420, 0.51580] ⊂ [0, 1]`. Not "inside the `Δ_tol` band" — the band here is nine orders of magnitude narrower than `Δ` — and no `min g` is computed, because a shallow crossing is still a crossing |
+| `raw_shallow_crossing_control` | the same chord offset outward to `q0 = (−2, 1.002, 0)`, closest approach 0.002 units outside; `Δ = −0.256256` | `VALID` — stage 3 at `t = 0.5`, `min d = 0.002` and `min g = +0.002 ≥ e`; the near-miss control, so the pair cannot pass by rejecting every chord that comes close |
 | `minimum_at_endpoint_low` | the closest approach at `t = 0`, just above the margin | `VALID` — the endpoint is always evaluated, so a search that starts inside the bracket cannot miss it |
 | `minimum_at_endpoint_high` | the closest approach at `t = 1`, just below the margin | `INVALID` — `CLEARANCE_VIOLATION` |
-| `minimum_at_a_knot` | the minimum exactly on a radius knot | `VALID` or `INVALID` per the quoted numbers, but the same answer with the pieces split coarsely and finely, because a knot is evaluated by both adjacent pieces |
+| `minimum_at_a_knot` | unit sphere; straight path `p(t) = (−1 + 2t, 1.10, 0)`; radius knots `(0, 0), (0.5, 0.30), (1, 0)`; `e = 1e-5`. Predictor: §7.4.1b **stage 3** | `INVALID` — `CLEARANCE_VIOLATION` at the knot: `min g = −0.20` at `t = 0.5`, where `d = 1.10 − 1 = 0.10` and `r = 0.30`; `g(0.4) = g(0.6) = −0.122`, so the minimum is on the knot and each adjacent piece evaluates it, giving the same answer with the pieces split coarsely and finely. Stage 1 cannot accept (`\|c − cw\| − h = 0.10` is not `> 1 + 0.30 + e`) and stage 2 finds no root (`Δ < 0`), so the row reaches stage 3 — and it is the only row whose minimum is a piece boundary |
 | `minimum_near_equality` | `min g` within one evaluation budget of `e` | `INVALID` — `UNCERTIFIED_MINIMUM`, never a coin flip on the last bit |
 | `exempt_origin_success` | a head whose origin sits inside a declared obstacle, exemption covering origin → first egress | `VALID` — X5's positive case |
 | `exempt_then_penetrate` | the same exemption, a route that leaves and then passes through the same obstacle at a non-exempt station | `INVALID` — `CLEARANCE_VIOLATION`, full head validator |
 | `exempt_re_entry` | 1-D unit sphere, zero radius, path `0.5 → 1.2 → 0.9 → 1.5`, exemption `[0, 0.7]` | `INVALID` — re-entry at fractional stations `0.5625 … 0.6875` is a violation under X5, although every one of those stations is inside the exempted interval |
 | `pe_centre` | point at the obstacle centre | `d = 0`; the interior branch, no root solve |
 | `pe_principal_axis` | a point on each principal axis | the analytic distance per axis, `\|p_i\| − R_i` |
-| `pe_repeated_axis` | two equal semi-axes | the sphere branch, so the root solve is not entered |
-| `pe_tiny_axis` | one 0.5 mm axis against a 200 mm one | the scaled solve, `d` within its reported bound |
+| `pe_repeated_axis` | two equal semi-axes, `(2, 1, 1)`, `p = (3, 1, 0)` | the **general** ellipsoid distance, `d = 1.297184`; the sphere shortcut is reserved for three equal axes, because an oblate or prolate spheroid is not a sphere and the sphere formulas give `2.162278` (`R = 1`) or `1.162278` (`R = 2`) here |
+| `pe_tiny_axis` | axes `(0.5, 200, 200)` mm — a 400:1 ratio | **two independent checks.** (a) The **distance**: `p = (2, 0, 0)` returns `1.5` and `p = (0, 250, 0)` returns `50`, both analytic on an axis (`\|p_i\| − R_i`), and the off-axis point `p = (2, 50, 0)` returns `1.515877` against the reference value. (b) The **bound**: the reported `B` is `≤ 2⁻³⁶ · max(R) = 2.9e-9` mm **and** satisfies `\|d − d_ref\| ≤ B`. A routine that quotes a bound it does not meet fails (b); one that meets it by rounding `d` onto the reference fails (a) |
 | `pe_interior` | a point strictly inside | `d = 0` |
-| `pe_tangent` | a point on the surface | `d = 0`, and the bracket must return the root rather than iterate to a limit |
+| `pe_tangent` | a point on the surface, `Σ(pᵢ/Rᵢ)² = 1` | `d = 0` from the **interior/surface branch**: `≤ 1` includes equality, so no root solve is entered and there is no bracket to return. The row that exercises the bracket near the surface is `pe_near_boundary` |
 | `pe_near_boundary` | a point 1e-6 units outside | `d` within the bound, not 0 and not `2e-6` |
 
 **Solver fixtures — obstacle configuration in, final path or failure out.**
 
 | Fixture | Configuration | Expected result |
 | --- | --- | --- |
-| `single_obstacle` | **pinned inputs:** attachments at `(0, 0, 0)` and `(290, 0, 0)` mm; one sphere `R = 20 mm` centred at `(145, 0, 0)` mm; tube radius 0; `N = 30`; `e = 0.01 mm` | `VALID` at the **second** pass: pass 1 places the waypoint at `d_1 = R + e = 20.01 mm` and the connecting segment still passes 16.64 mm from the centre, so it is rejected; pass 2 escalates to `1.5·d_1 = 30.015 mm` and the final polyline clears by **1.22 mm**. Every segment of the final polyline is tested, not just the waypoint — this is a first-pass rejection followed by a successful escalation, and a fixture that expects `VALID` on pass 1 is wrong |
-| `solve_rotated_anisotropic` | local semi-axes 40 × 10 × 20 mm, `Rw` = +90° about Z, chord `(−145, 0, 0) → (145, 0, 0)` mm through the centre, `N = 30`, tube radius 0. **Not the same geometry as the validator row of the same family** (that one is offset to `y = 15` mm) | `VALID` at the **first** pass; the fallback picks local X (tie X/Z), rotates it to world +Y, and `h(l̂_d) = R_x = 40 mm` gives `d_1 = 40.01 mm`, at which the connecting segment from the retained sample at `(145, 0, 0)` clears the surface by **24.21 mm** (measured). Choosing the fallback among world axes, or using the world direction directly as the support argument, yields `h = R_y = 10 mm` and a waypoint 10.01 mm from the centre, still inside the obstacle → `INVALID`; the fixture fails that implementation |
+| `single_obstacle` | **pinned inputs:** attachments at `(0, 0, 0)` and `(290, 0, 0)` mm; one sphere `R = 20 mm` centred at `(145, 0, 0)` mm; tube radius 0; `N = 30`; `e = 0.01 mm` | `VALID`, **and not before the third pass.** `N = 30` over 290 mm is 29 intervals of exactly 10 mm, so the samples are `0, 10, … 290`, the centre is not a sample, and the nearest retained neighbours are at `±25 mm` (`120`, `170`). `d_1 = 20.01 mm` → the connecting segment passes **15.62 mm** from the centre, rejected; `d_2 = 30.015 mm` → **19.21 mm**, still rejected; `d_3 = 45.0225 mm` → **21.86 mm**, clear by 1.86 mm. Every segment of the accepted polyline is tested, not just the waypoint, and the fixture asserts the accepting pass index. The earlier row's `1.22 mm at pass 2` was computed from ±30 mm neighbours, which this grid cannot contain: with endpoint-inclusive 10 mm spacing over 290 mm no sample sits at 145 mm |
+| `solve_rotated_anisotropic` | local semi-axes 40 × 10 × 20 mm (`Rw` = +90° about Z, so world semi-axes `(10, 40, 20)`), chord `(−145, 0, 0) → (145, 0, 0)` mm through the centre, `N = 30` (10 mm spacing, no sample at the centre), tube radius 0, `e = 0.01 mm`. **Not the same geometry as the validator row of the same family** (that one is offset to `y = 15` mm) | `VALID`, and **not at the first pass**: the fallback picks local X (tie X/Z) and rotates it to world +Y, giving `h = R_x = 40 mm` and `d_1 = 40.01 mm`, but the segment from the retained sample at `(15, 0, 0)` to that waypoint enters the ellipsoid (`Δ = 3.9975`, roots `[0.3847, 0.9997]`), so pass 1 is rejected; at `d_2 = 60.015 mm` the same segment has `Δ = −2.2556` and clears by `0.834 mm` (`min g = +0.824 mm`). The fixture asserts the accepting pass index, the waypoint's world direction, and that the accepted polyline's own certificate holds on every segment — it does **not** quote a post-smoothing clearance, because the smoothed-and-projected polyline is the pass loop's output, not this construction's. Choosing the fallback among world axes yields `h = R_y = 10 mm` and a waypoint 10.01 mm from the centre, still inside the obstacle, so that implementation fails here |
 | `multiple_obstacles` | two obstacles in series along the route | `VALID`; every segment clear of both after smoothing |
 | `overlapping_obstacles` | two ellipsoids that intersect each other | `VALID` outside the union; identical result for the same declaration order |
 | `nested_obstacles` | a small ellipsoid fully inside a large one | `VALID` outside the outer surface |
@@ -3253,7 +3300,7 @@ The smallest experiment is kept against each row because a confirmed design stil
 
 | # | Default | Where it is applied | Status | Smallest resolving experiment |
 | --- | --- | --- | --- | --- |
-| **X1** | A1's bind frame is a **canonical straight-limbed A-pose** computed in character-side code from `SkeletonDefinition` segment lengths, not an engine pose and not the folded-arm standing frame | §6.6 (the pose and its 21 joint positions), §15 stage 1 | **confirmed by owner** | generate the rig from the definition and run `RigLandmarkAlignmentTest` against that frame; if the frame's limb directions disagree with the asset's bind, the generator is wrong, not the frame |
+| **X1** | A1's bind frame is a **canonical straight-limbed A-pose** computed in character-side code from `SkeletonDefinition` segment lengths, not an engine pose and not the folded-arm standing frame | §6.6 (the pose and its 23 joint positions), §15 stage 1 | **confirmed by owner** | generate the rig from the definition and run `RigLandmarkAlignmentTest` against that frame; if the frame's limb directions disagree with the asset's bind, the generator is wrong, not the frame |
 | **X2** | **The ten finger bones stay**, as visual-only bones: no engine joint, no A1 row, excluded from `RigLandmarkAlignmentTest` and listed as unmapped, counted in the 30-bone visual budget (10 of 30), and inheriting their hand bone's frame parent-relative so the fingers follow the hand rigidly; the generator lays them along the X1 hand direction | §6.1, §6.2, §15 stage 1 | **reversed by owner: fingers kept** | render the hand at the smallest shipped size and check that the ten rigid finger bones read as a hand; if the silhouette fails, the fix is hand geometry, not finger articulation the engine does not have |
 | **X3** | **Position-driven retarget**: each mapped bone's rotation is the minimal rotation from its bind direction to the published segment direction, same segment-frame rule as anatomy; `basis = Ry(+90°)`, `s = 235/0.95`, translation 0 at the pelvis | §6.2 (the rule), §11 (classification), §15 stage 1 | **confirmed by owner** | land the change behind the existing `PoseRetargeter` signature and compare A2 residuals before and after on the three named poses |
 | **X4** | **M1's UI shows `relativePathLengthChange` only**; absolute metres are withheld until a named calibration pair and an evidence-backed uncertainty exist, and `modelledPathLength` stays in the data and debug | §9.2, §12.5, §13 question 12, §15 stage 2 and M1 item 4 | **confirmed by owner** | name the pair, measure both spans on the stage-1 rig, and quote the uncertainty; only then is a metre value displayable |
@@ -3400,7 +3447,7 @@ schedule risk, not the engineering one.
 - **Objective:** replace the generated 32-joint test rig with a rig that passes A1 **by construction**, prove the contract
   mechanically, and measure the presentation on at least one real device. The rig is produced by option (c) of §6.6 — a
   generator that writes the X1 canonical A-pose from `SkeletonDefinition` — not by re-pivoting the shipped asset.
-- **Components:** the rig generator and its output asset (21 mapped bones including the scapula pair, plus the **10
+- **Components:** the rig generator and its output asset (23 mapped bones including the scapula pair, plus the **10
   visual-only finger bones**, X2 reversed by owner), `BoneMap` manifest with `basis = Ry(+90°)`, the position-driven
   `PoseRetargeter` (X3), `RigAssetContractTest`,
   `PoseRetargeterRestInvariantTest`, `RigSideTest`, `RigLandmarkAlignmentTest`, `RigAlignmentResidualTest`,
@@ -3408,13 +3455,13 @@ schedule risk, not the engineering one.
 - **Ten steps of the generator, in order.** Each is a checkable artefact, and steps 3–7 are the ones a hand-authored rig
   has historically got wrong:
   1. read `SkeletonDefinition` and compute the X1 A-pose joint positions (the table in §6.6) — no engine frame is read;
-  2. emit one node per **mapped** joint (21) at its A-pose position, in metres (`position / s`), parented per
+  2. emit one node per **mapped** joint (23) at its A-pose position, in metres (`position / s`), parented per
      `SkeletonFactory`'s chain, with `PELVIS` as the skin root;
   3. **skip the zero-length tubes**: `LUMBAR` is coincident with `PELVIS`, and `CLAVICLE`/`SCAPULA` are coincident with
      `CHEST` (§7.2) — emit the **nodes** (so the chain and the retarget stay total) but no bone segment between them, and
      no zero-length inverse bind;
   4. emit the visual-only nodes the asset needs and the engine does not have — a crown, toe tips and the **10 finger
-     bones** (X2) — flagged so the asset validator excludes them from the 21. **Finger layout:** each finger head is
+     bones** (X2) — flagged so the asset validator excludes them from the 23. **Finger layout:** each finger head is
      placed from its hand head along the X1 hand direction (`HAND → FINGERTIPS`, `(0, −1, 0)`, §6.6), parented to
      `Left/RightHand` with the hand's bind local rotation, so the fingers inherit the hand rigidly (§6.2) and the bind
      silhouette is an open hand;
@@ -3449,7 +3496,8 @@ schedule risk, not the engineering one.
   constant (`SkeletonStyle`, §3.3), not a measurement. No wording in this document may imply that the result has been
   checked against human proportions; it has been checked against `SkeletonDefinition`.
 - **Automated acceptance:** rest invariant identity within 1e-4 on **every** bone, the 10 visual-only finger bones
-  included; **21/21 mapped joints** resolve, the **12 undrivable engine joints are declared** (X2) and the **11 orphan
+  included; **23/23 mapped joints** resolve (the scapula pair among them — 21/21 was the shipped asset's count,
+  which had no scapula), the **10 undrivable engine joints are declared** (X2) and the **11 orphan
   asset bones are reported as visual-only**, not as failures; the visual-bone count is inside the 30-bone allowance
   (10 used, §6.1); side check passes; budgets reported; **A1 green on every mapped joint (≤ 0.5 mm, ≤ 0.5°)** with the
   finger bones excluded from the comparison and listed as unmapped; A2 **measured** at the three named poses (5 mm), which is a measurement the
