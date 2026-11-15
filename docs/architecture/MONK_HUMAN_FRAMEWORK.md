@@ -585,6 +585,7 @@ class MuscleState internal constructor(
     val side: Side get() = frame.heads[slot].side
     val headIndex: Int get() = frame.heads[slot].headIndex   // 0 for single-head muscles (§7.5)
     val headCount: Int get() = definition.heads.size
+    val layer: MuscleLayer get() = definition.layer           // static definition data, never per frame
     val pointCount: Int get() = frame.pointCounts[slot]
     val modelledPathLength: Float get() = frame.modelledPathLengths[slot]
     val restLength: Float get() = frame.restLengths[slot]
@@ -670,11 +671,24 @@ data class MuscleHeadId(val muscleId: String, val side: Side, val headIndex: Int
 // ---- Presentation -----------------------------------------------------------
 enum class CharacterLayer { SKIN, MUSCLES_SUPERFICIAL, MUSCLES_DEEP, SKELETON, SELECTED }
 
+/**
+ * Selection identity. `side` is part of it because a bilateral muscle is two instances with independent paths: a bare
+ * `muscleId` cannot say which side the athlete tapped, and one side must stay unselected while the other is shown.
+ * Heads are not part of it — the readout enumerates the selected instance's heads (§9.2).
+ */
+data class MuscleSelection(val muscleId: String, val side: Side)
+
 interface CharacterLayerController {
     fun setVisible(layer: CharacterLayer, visible: Boolean)
-    fun setSelected(muscleId: String?)      // selection is presentation state only
+    fun setSelected(selection: MuscleSelection?)   // selection is presentation state only
 }
 ```
+
+**Selection is `(muscleId, side)`, and the readout renders heads.** An earlier signature took a bare `muscleId`, which
+cannot address a bilateral instance, and `MuscleState` exposed `id`, `name`, `side`, `headIndex`, `headCount` and the
+per-head values but **not** `layer` — so the one component that has to show "name, layer, role, relative change" could not
+read the layer and could not tell a two-head instance from a one-head one. Both are fixed at the interface rather than
+worked around in the UI: `setSelected` takes `MuscleSelection`, and `MuscleState.layer` is a getter over the definition.
 
 `CharacterPoseSource` (`character/CharacterPoseSource.kt:6`, PR #385) already expresses the pose handoff; this RFC
 extends the seam downward, not sideways: the same call that produces the pose also produces the anatomy frame and the
@@ -3222,11 +3236,16 @@ Rules:
 3. Skeleton overlay.
 
 `SELECTED` exists from the start as state. **M1 ships a selected-muscle readout, not the education panel**, and the two
-are named separately so a checklist cannot mean both at once. The **readout** is one compact row for the selected
-instance: muscle name, layer, the categorical role where a reviewed row exists, and `relativePathLengthChange` with its
-"modelled" label. The **education panel** is stage 4: role colour mapping, per-phase prose, the role legend and the
-"not EMG" disclaimer. M1's readout carries no colour mapping and no prose; the panel carries no number the readout does
-not already have.
+are named separately so a checklist cannot mean both at once. The **readout** carries **one compact row per head** of the
+selected instance — muscle name, the head's name where the instance has more than one, the layer, the categorical role
+where a reviewed row exists, and `relativePathLengthChange` with its "modelled" label. Biceps femoris has two heads per
+side, each with its own solved path and its own length; the readout therefore shows two rows for that one selection and
+**no aggregated instance value exists** — not an average, not a maximum, not "the first head". A single number for a
+two-head instance would be a number no source defines and no reviewer approved, which is the failure mode §11 exists to
+prevent, and the heads' lengths are genuinely independent (a long-head and short-head path differ in both attachments and
+wrap). The **education panel** is stage 4: role colour mapping, per-phase prose, the role legend and the "not EMG"
+disclaimer. M1's readout carries no colour mapping and no prose; the panel carries no number the readout does not already
+have.
 
 **X4 — M1 shows the relative change only; absolute metres are withheld from the UI.** *Confirmed by owner.*
 `relativePathLengthChange` is dimensionless, so it does not need the calibration pair that absolute metres do — but it is
@@ -3581,6 +3600,7 @@ Seven levels, each with one owner, one report and an explicit automation status.
 | `AnatomyFrameLayoutTest` | L4 | §5.3: the `3 · headCount · pointCapacity` stride addresses every point of every head; `pointCapacity` is the post-insertion maximum; an over-capacity head reports `BUFFER_CAPACITY` instead of growing or truncating; `clear()` leaves every slot `NOT_PROCESSED` in **status, reason and `searchOutcome`** and every `renderable` entry `false`; a **fresh, never-cleared** buffer reads `NOT_PROCESSED` in all three arrays, because `NOT_PROCESSED` is the declared zero value of all three (`PathStatus`, `PathReason`, `SearchOutcome` — §5.3, §7.4.1c) and not an accident of one enum's ordering; a reason array read through `PathReason.entries` returns the reason the producer stored, **not** the reason's row number in the precedence table; a solve that returns early leaves the untouched heads `NOT_PROCESSED` rather than `VALID`, `INVALID` or a stale outcome; a reused buffer that is not cleared cannot show the previous frame's status **or outcome**; an accepted head reads `CLEARED` with `reason = NO_REASON` while an exhausted one reads `PASS_CAP` or `SEARCH_EXHAUSTED` with its own last geometric cause, so the two fields are asserted separately (X7); **each guard has its own case** — `NON_FINITE_GEOMETRY` on an input, `OPERAND_OUT_OF_BOUND` on a **published** operand, `DEGENERATE_OBSTACLE`, `REST_LENGTH_INVALID` and `UNSUPPORTED_GEOMETRY` each yield `INVALID` + `REJECTED_BEFORE_SEARCH` + their own reason, never `CLEARED` and never `NO_GEOMETRIC_CAUSE`; `BUFFER_CAPACITY`, a `NON_FINITE_GEOMETRY` first raised in an intermediate, and an `OPERAND_OUT_OF_BOUND` on a **constructed** detour each yield `INVALID` + **`REJECTED_IN_SEARCH`** + their own reason (the constructed-operand case carries the segment being constructed and obstacle `NO_INDEX`), which is the case that separates the two refusal outcomes; a corridor refused before the first candidate yields `INVALID` + `SEARCH_EXHAUSTED` + `NO_GEOMETRIC_CAUSE`; the two illegal combinations (`VALID` with a non-`CLEARED` outcome, `INVALID` with `CLEARED`) are asserted to be absent, and a head refused before a pass is never reported `REJECTED_IN_SEARCH` while one aborted inside a pass is never reported `REJECTED_BEFORE_SEARCH`; and a head that is simultaneously degenerate and inside an obstacle reports `DEGENERATE_SEGMENT` |
 | `MuscleGeometryOwnershipTest` | L4 / presentation | §7.6: toggling morphs or correctives leaves every `MuscleState` bit-identical, and nothing in `character/` writes `AnatomyFrame` |
 | `SceneFrameHandoffTest` | presentation | §10.2: `geometry` carries only instances whose `renderable` entry is `true`, one slot per instance, keyed by a `slotId` that is stable across a solve sequence; a slot absent from the next frame (its instance became `INVALID`) is cleared by id while its neighbours keep drawing, and a slot present with `visible = false` is cleared too; each `SkinPalette` is written in its own skin's joint order and `MuscleLayerSkinner` writes only the skin it was built for; and the renderer receives no muscle id, status or reason |
+| `MuscleSelectionReadoutTest` | presentation | §5.3/§9.2/§15 stage 2b: `setSelected` keys the instance by `(muscleId, side)` — selecting `biceps_femoris` side A leaves side P unselected, and selecting side P changes the row — and the readout renders **one row per head** (two for biceps femoris on one side) with **no aggregated instance value**; each row carries the muscle name, the head label where the instance has more than one, `MuscleState.layer`, the reviewed role where one exists and "no reviewed role" otherwise, and `relativePathLengthChange` labelled modelled — and nothing else; no row shows an absolute metre value (X4); an instance whose `renderable` entry is `false` renders no row at all rather than a stale one; and no string is drawn from `PathReason`, a status or a debug label. It is separate from stage 2's dev readout, which it does not replace |
 | `ProceduralTubeBudgetTest` | L5 (M1 subset) | generated triangles match the §10.3 formula for the declared `N` and `R`; no zero-area ring; all coordinates finite |
 | `MorphPresetRangeTest` | L6 | every declared weight lies inside its target's declared `min`/`max`; every preset declares a value for every target; a name the asset does not carry fails rather than defaulting to zero |
 | `MorphRingPreservationTest` | L6 | the mesh ring masked around each joint pivot keeps its pivot-relative positions within `ε_morph` under every preset — the test that can fail, and the one that says anything about the surface a muscle sits under |
@@ -4382,8 +4402,11 @@ schedule risk, not the engineering one.
 - **Expected files:** `app/src/main/java/com/monkfitness/app/anatomy/*.kt`,
   `app/src/main/assets/anatomy/anatomy_v1.json`, `app/src/test/.../anatomy/*`.
 - **User-visible deliverable:** a dev-only muscle layer showing red tubes following the squat and push-up, with a
-  **`relativePathLengthChange`** readout per muscle (dimensionless, labelled modelled, X4); `modelledPathLength` is a
-  debug-overlay value only (§9.2).
+  **`relativePathLengthChange`** debug readout **per head** (dimensionless, labelled modelled, X4); `modelledPathLength` is
+  a debug-overlay value only (§9.2). **This is the dev readout, not the production one**: it is driven by the debug
+  overlay, has no selection state, no role and no copy discipline, and it is not the component stage 2b ships. Keeping the
+  two separate is what stops stage 2's placeholder from being mistaken for the user-facing row — and it is why the dev
+  readout may name a head by index where the production one must show the head's name.
 - **Automated acceptance:** arc length ≥ chord on every frame; **every validator fixture in §12.2.1 returns its expected
   verdict** — including `outside_endpoints_crossing_obstacle`, which must be rejected — and **every solver fixture
   produces its expected final path or failure**; lengths are **deterministic under identical inputs** (bit-identical
@@ -4413,9 +4436,15 @@ schedule risk, not the engineering one.
   renders as "no reviewed role"), `ui/components/anatomy/AttachmentHint.kt` — the tap that reads an attachment landmark
   from `AnatomyFrame.landmarks` and names the muscle and its layer, with no picking system, no marker geometry and no
   geometry keyed to selection — and `ui/components/anatomy/SelectedMuscleReadout.kt`, the **production** readout: the
-  `SELECTED` selection state (`CharacterLayerController.setSelected`, §5.3) plus the content of §9.2's compact row for the
-  selected `(muscleId, side)` instance — name, layer, the categorical role where a reviewed row exists, and
-  `relativePathLengthChange` with its "modelled" label, read through `MuscleState` and nothing else.
+  `SELECTED` selection state (`CharacterLayerController.setSelected(MuscleSelection?)`, §5.3) plus the content of §9.2's
+  compact row **for every head of the selected `(muscleId, side)` instance** — name, head label, `MuscleState.layer`, the
+  categorical role where a reviewed row exists, and `relativePathLengthChange` with its "modelled" label, read through
+  `MuscleState` and nothing else. Three interface facts this package depends on, stated here because the previous text
+  asked for data the interface could not supply: **selection is keyed `(muscleId, side)`**, never a bare `muscleId`,
+  because a bilateral muscle's sides have independent paths; **`MuscleState.layer` is a public getter** — static definition
+  data, no per-frame value, and until this revision the readout had no way to read it; and **`MuscleState` is per head**
+  (`headIndex`, `headCount`), so the readout iterates the selected instance's heads — two rows for biceps femoris per side
+  — and shows **no aggregated instance value at all**.
 - **Dependencies:** stage 2 (the frame, its landmark array and the solved paths); the four timelines are an **anatomy
   review** deliverable and sit on the §12.4 reviewer's queue, not the engineering one.
 - **Expected files:** `app/src/main/assets/anatomy/phases_v1.json` (four entries),
@@ -4423,17 +4452,21 @@ schedule risk, not the engineering one.
   `ui/components/anatomy/AttachmentHint.kt`, `ui/components/anatomy/SelectedMuscleReadout.kt`.
 - **User-visible deliverable:** tapping a landmark names the muscle attached there and the layer it belongs to; an exercise
   with a reviewed role table shows categorical roles, and every other exercise shows none; and **selecting an instance
-  shows its readout row** — name, layer, reviewed role if any, and the modelled relative length change.
+  shows one readout row per head** — name, head label, layer, reviewed role if any, and the modelled relative length
+  change. This is the **production** readout; stage 2's own per-head debug number (§15 stage 2) is a different component
+  with a different lifetime and is not replaced by it.
 - **Automated acceptance:** the §8 validator is green on the four pilots; `ActivationDefinitionTest` (§12.2) asserts the
   schema and the display gate — every displayed row carries `source`, `task`, `population` and `reviewStatus`; every phase
   an entry names exists in the `PhaseTimeline` it cites; and an `UNREVIEWED` or `UNKNOWN` row cannot be displayed. The tap
   returns the muscle whose attachment landmark is nearest within the declared radius, `-1` outside it — never a guessed
-  muscle. **The readout has its own content acceptance, because it is user-facing copy**: it renders exactly the four
-  fields of §9.2 for the selected instance and nothing else; it shows `relativePathLengthChange` labelled modelled and
-  **never** an absolute metre value (X4); it shows a role only for an exercise with a reviewed source and the
-  "no reviewed role" text otherwise; it shows nothing — no stale row — for an instance whose `renderable` entry is
-  `false`, because a hidden tube with a live readout is a number about geometry that is not on screen; and no string it
-  emits is drawn from `PathReason`, a status or a debug label (§7.4).
+  muscle whose attachment landmark is nearest within the declared radius, `-1` outside it — never a guessed
+  muscle. **The readout has its own content acceptance, because it is user-facing copy**: for the selected
+  `(muscleId, side)` it renders **one row per head**, each carrying the §9.2 fields plus that head's label and nothing
+  else; it shows `relativePathLengthChange` labelled modelled and **never** an absolute metre value (X4); it shows a role
+  only for an exercise with a reviewed source and the "no reviewed role" text otherwise; it shows nothing — no stale row
+  — for an instance whose `renderable` entry is `false`, because a hidden tube with a live readout is a number about
+  geometry that is not on screen; it shows **no aggregated instance value**, so a two-head muscle cannot be reduced to one
+  number the definition never defined; and no string it emits is drawn from `PathReason`, a status or a debug label (§7.4).
 - **Explicitly not in this package:** role colouring, the education panel, phase prose and the "not EMG" legend (stage 4),
   and any picking, labelling or explanation surface (stage 7). M1 ships the role *text* and the readout, not the panel
   (§9.2): the panel's scope is stage 4's, and stage 4 consumes this readout rather than replacing it.
