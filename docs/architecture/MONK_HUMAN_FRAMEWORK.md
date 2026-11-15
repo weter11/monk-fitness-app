@@ -3733,6 +3733,7 @@ Seven levels, each with one owner, one report and an explicit automation status.
 | `RigLandmarkAlignmentTest` | L2 | §6.6 A1: every **mapped** bone head coincides with its engine joint at the X1 bind frame within `τ_bind`; rest orientations within `τ_rot`. The 10 finger bones are **excluded from the comparison and listed as unmapped** (X2) — their report entry is inventory, not a residual, and keeping them cannot move the hand's own row; expected **red** on `humanoid_v1` against the recorded baseline (§6.6) |
 | `RigAlignmentResidualTest` | L2 | §6.6 A2: the **measured** residual per joint at the five named **frames from four registered builders** — squat bottom and top (`squat_standard`), push-up bottom (`pushup_standard`), `birddog_hold`, `row_standard` mid-pull — within `τ_residual`; the equal-length/different-direction control case must report a non-zero residual, no length-sum bound is computed, and the report states both counts (five frames, four builders) rather than calling the set five builders |
 | `SegmentFrameDirectionTest` | L2 | §7.2/§7.4 step 1: a derived segment direction equals the published direction `p_child − p_parent` within `τ_dir` (proposed, fixed at stage 1); the roll convention is declared per segment and reproduced; run on real baseline poses over both hierarchies, both sides of every bilateral limb, one deliberately bent IK case, the measured degenerate rows — `clavicle`, `skull` and `toes` **inherit** their parent's frame, and `pelvis` is the **derived root**, not an inherited row — with no zero-vector normalisation, and the manually overridden hand of `pike_pushup_standard`; plus near-parallel, near-antiparallel from both sides **with its `arcsin(τ_rot)` direction residual and the identical half-turn both sides must produce** — the row asserts **no flip inside the branch**, and asserts the branch-boundary crossing `|a × b| = τ_rot` separately as a **roll** flip **with a bounded direction residual**: the placed direction changes by `arcsin(τ_rot)` there (`0.057295789°` at `τ_rot = 0.001`), which the row asserts instead of continuity — the **non-axis-aligned antipode** (`a = (1,1,1)/√3`, `b = −a`), **parent roll**, zero length, the derived root frame (orthogonalised construction) and straightening per X9 |
+| `SegmentFrameRollComparatorTest` | L2 | §13 question 11's comparator policy, not a value of `θ`: the pole is re-seeded from the frame's **own** bend plane on every well-conditioned frame, so a limb rotating rigidly between two valid frames (bend normal `+Z` → `−Y`) is measured against its new plane and a held pole fails the row by reporting a 90° error that does not exist; a **direct seek** or replay to a well-conditioned frame resets the pole, reports `POLE_UNINITIALIZED` for the frame that observes it and measures from the next, never comparing across the jump; a **collapsed leg** reports `POLE_LEG_DEGENERATE`, never a division and never `POLE_HELD`; and where the policy withholds `θ` the report carries `UNAVAILABLE` with its reason and the precedence order of §13 question 11, never `0` |
 | `NonCommutingSplitTest` | L2 | §6.2: a parent and child about different axes compose to the stated world rotation — a reversed `parent⁻¹ · child` order or a one-sided `B` fails |
 | `UnmappedBoneInheritanceTest` | L2 | §6.2: moving a mapped parent carries an unmapped child's world rotation within tolerance while the child's local rotation is unchanged; the twist policy is the declared one |
 | `BoneMapCoverageTest` | L2 | **23** mapped joints resolve and the **10** undrivable engine joints are declared, not accidental (X2) — derived from the required map of §6.2, not from the shipped asset's 21/12 inventory. The scapula pair is asserted by name, so a `BoneMap` that quietly omits `SCAPULA_A/P`, or a rig that carries no scapula bone, fails here rather than at A1 |
@@ -4107,20 +4108,30 @@ combination is not an M1 pass, whatever the individual reports say.
      **uninitialized** for this segment (see the policy below); (d) the frame is **held** — its bend is below the threshold
      and it is not a transition frame; (e) the frame is a **transition** frame, the first one after a hold that clears the
      threshold, because the reference changed between frames and comparing across that change would measure the change
-     rather than the roll. `UNAVAILABLE` is a result, not a zero: it is reported per segment per pose with its reason
-     (`POLE_UNINITIALIZED`, `POLE_HELD`, `POLE_TRANSITION`, or the structural reason for (a)/(b)), it **does not pass** an
+     rather than the roll; (f) either bend-plane **leg has collapsed** in this posed frame — `sin θ_bend` divides by both
+     leg lengths, so a legal pose in which `p_mid` reaches `p_parent`, or `p_child` reaches `p_mid`, has no bend plane at
+     all (below). `UNAVAILABLE` is a result, not a zero: it is reported per segment per pose with its reason
+     (`POLE_UNINITIALIZED`, `POLE_HELD`, `POLE_TRANSITION`, `POLE_LEG_DEGENERATE`, or the structural reason for (a)/(b)),
+     it **does not pass** an
      acceptance row that requires `θ` on that segment, and an M1 review that cannot obtain `θ` for a segment records it as
      an unresolved limitation rather than assuming the segment quiet. A frame with an initialized pole, no transition, and
      `sin θ_bend ≥ sinBendMin` is measured normally (below). The comparator does **not** recover anatomical axial twist: it
      is a second geometric direction, not a source of truth about rotation, and agreement with it is evidence about
      determinism and plausibility, never about anatomy.
-   - **The pole's initialization, hold and transition, stated once.** The pole is a unit vector in engine world,
-     `pole(S)`, per segment, and the policy is three rules and a reset — the earlier text referred to "the policy below"
-     and then never stated one, while the summary table called it declared:
+   - **The pole's initialization, update, hold, transition and reset, stated once.** The pole is a unit vector in engine
+     world, `pole(S)`, per segment, and the policy is four rules and a declared reset list — the earlier text referred to
+     "the policy below" and then never stated one, while the summary table called it declared:
      - **Initialization.** The first frame of a run — or the first frame after a reset — whose
        `sin θ_bend = |(p_mid − p_parent) × (p_child − p_mid)| / (|p_mid − p_parent| · |p_child − p_mid|)` is at least
        `sinBendMin` sets `pole = normalize(bend normal)` and reports `θ` for that frame. Every frame before it reports
        `UNAVAILABLE` with `POLE_UNINITIALIZED`; there is no guess and no bind-plane default.
+     - **Update — every well-conditioned frame re-seeds the pole.** A frame that is well conditioned (initialized, not a
+       transition, `sin θ_bend ≥ sinBendMin`) sets `pole = normalize(bend normal)` from **its own** positions before `θ`
+       is read, because the comparator's reference is the current frame's bend plane — the criterion below builds both
+       frames "from the same published positions" — and not a temporal average. Without this rule a limb that rotates
+       rigidly between two well-conditioned frames — a hip rotating the thigh's bend normal from `+Z` to `−Y` — would be
+       measured against a pole 90° from its own plane, and the reported `θ` would be the limb's rotation misread as a roll
+       error. Hold is therefore the *only* case that keeps the previous pole, and that is what the hold is for.
      - **Hold.** While `sin θ_bend < sinBendMin` the frame keeps the last valid pole **without updating it**, reports
        `UNAVAILABLE` with `POLE_HELD`, and does not compute `θ`. The hold is the reason a near-straight limb does not
        manufacture a roll: the bend normal of a straight limb is noise, and holding the last real one is the only
@@ -4128,10 +4139,31 @@ combination is not an M1 pass, whatever the individual reports say.
      - **Transition.** The first frame after a hold whose `sin θ_bend` is at least `sinBendMin` **re-seeds** the pole from
        that frame's own bend plane and reports `UNAVAILABLE` with `POLE_TRANSITION` for that frame; the next frame
        resumes measurement. The transition is marked so that it can never be read as a measurement against the old pole.
-     - **Reset.** A frame that is `INVALID` or `NOT_PROCESSED` for the segment — no published positions to build the
-       plane from — clears `pole(S)` back to uninitialized, so a pause, a seek, a replay or a state restore re-initializes
-       rather than comparing across a gap. The three reasons are reported per frame per segment, so the count of held and
-       transition frames is part of the measurement record rather than invisible.
+     - **Reset — an explicit event list, not only an invalid frame.** `pole(S)` is cleared back to uninitialized on:
+       (i) the first frame of a run; (ii) a frame that is `INVALID` or `NOT_PROCESSED` for the segment, where there are no
+       published positions to build a plane from; and (iii) every **timeline discontinuity** — a seek, a replay, a
+       pause/resume across a gap, a state restore, and a backward or non-monotonic timestamp — **including a seek or
+       replay whose target frame is perfectly well conditioned**. The third group is the one an earlier revision missed:
+       those events are discontinuities of the timeline, not of the pose, so no per-segment status reports them and the
+       pole would otherwise be carried across the jump and compared against a frame it never followed. The frame that
+       observes the event reports `UNAVAILABLE` with `POLE_UNINITIALIZED`, and the next well-conditioned frame re-seeds
+       under **Initialization**. Reporting a reset costs one frame of `θ`, which is why the count of reset frames is part
+       of the measurement record rather than invisible.
+     - **A collapsed leg is its own reason, and the reasons have an order.** `sin θ_bend` divides by both leg lengths, so
+       a legal posed frame in which either leg is below `τ_len · max(1, |restDir| · s)` (§7.2's own degeneracy rule for
+       this segment) reports `UNAVAILABLE` with **`POLE_LEG_DEGENERATE`** and no bend plane is built; it is not a hold and
+       not a roll error, because the frame carries no direction to compare. When more than one condition applies the
+       **first match in this order** decides, so two implementations report the same reason: the structural reasons of
+       (a)/(b), then `POLE_LEG_DEGENERATE` (f), then `POLE_UNINITIALIZED` (c), then `POLE_TRANSITION` (e), then
+       `POLE_HELD` (d).
+   - **Three sequences the comparator's own test must run.** `SegmentFrameRollComparatorTest` (§12.2) pins the policy
+     where each rule is least obvious, because each of the three was undefined in an earlier revision: a **valid → valid
+     rigid rotation**, where the bend normal moves from `+Z` to `−Y` between two well-conditioned frames and the second
+     must be measured against its own plane (a held pole reports a 90° error that is not there); a **direct seek** to a
+     different well-conditioned frame, which must report `POLE_UNINITIALIZED` for the frame that observes it and then
+     measure, rather than comparing across the jump; and a **collapsed leg**, where `p_mid` reaches `p_parent` (or
+     `p_child` reaches `p_mid`), which must report `POLE_LEG_DEGENERATE` rather than divide by zero. The row asserts the
+     policy; it asserts no value of `θ` and no value of `τ_roll`, both of which stage 1 sets.
    - **The experiment covers all four pilots, not three named poses.** `squat` (bottom and top), `standard push-up`
      (bottom), `bird-dog` and `row_standard` (mid-pull) — the four exercises of X8 and the five poses of §12.4 RV4 —
      because two of them are exactly where a bend-plane comparator is least stable (bird-dog's extended limbs, row's
@@ -4458,7 +4490,8 @@ schedule risk, not the engineering one.
   visual-only finger bones**, X2 reversed by owner), `BoneMap` manifest with `basis = Ry(+90°)`, the position-driven
   `PoseRetargeter` (X3), `RigAssetContractTest`,
   `PoseRetargeterRestInvariantTest`, `RigSideTest`, `RigLandmarkAlignmentTest`, `RigAlignmentResidualTest`,
-  `SegmentFrameDirectionTest`, `UnmappedBoneInheritanceTest`, `PoseRetargeterBasisTest`, budget checks, device measurements,
+  `SegmentFrameDirectionTest`, `SegmentFrameRollComparatorTest`, `UnmappedBoneInheritanceTest`, `PoseRetargeterBasisTest`,
+  budget checks, device measurements,
   and two measurements this stage owns rather than inherits: the **derived pelvis root frame** compared against the
   authored tilt on `squat_standard` and `bird-dog` (§7.2), and **`θ` per segment** from the pole-vector comparator of
   §13 question 11, with `τ_roll` set here and recorded in the review file.
