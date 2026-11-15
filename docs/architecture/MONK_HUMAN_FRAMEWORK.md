@@ -1050,8 +1050,9 @@ review. A role change is an anatomy review. Four reviewers, four diffs — that 
   | trochanter height of the reference adult | 0.95 m | modelled constant (§11 approximation) | the physical landmark the engine's 235 stands for |
   | `unitsPerMetre` | 235 / 0.95 = **247.37** | derived | engine units per metre |
   | `metresPerUnit` | 0.95 / 235 = **0.004043** | derived, the same calibration inverted | metres per engine unit |
-  | `HEAD_POS` | head **centre**, head radius 18 units | `SkeletonStyle` (§3.3) | **not** the crown |
-  | asset crown node | `HeadTop_End` at 1.78 m | asset parse, PR #385 | the asset's top landmark |
+  | `HEAD_POS` | head **centre** joint at 391 units | measured (`AirSquatPose`, progress 0) | the engine skeleton's last joint — **there is no crown joint** |
+  | crown offset | `headRadius` = 18 units above `HEAD_POS` | `SkeletonStyle` (§3.3), a **renderer** constant | not a joint and not a landmark: a crown figure is always computed, never read from the skeleton |
+  | asset crown node | `HeadTop_End` at 1.78 m | asset parse, PR #385 | the asset has a top **joint**; the engine does not |
   | asset `Hips` | 0.9500 m | asset parse, PR #385 | the asset's counterpart of `PELVIS.y` |
 
   **Every length conversion in this document uses this one constant.** `unitsPerMetre` and `metresPerUnit` are one
@@ -1469,7 +1470,8 @@ muscle, so a muscle whose clearance rests mostly on exemptions is visible rather
 **What this costs, stated rather than assumed.** Stage 1 accepts the overwhelming majority of segment–obstacle pairs with
 two distance comparisons and no root solve. Stage 3 runs on the remainder, and each evaluation is an Eberly
 point-to-ellipsoid distance — a sixth-order root solve, not a closed-form dot product — repeated once per radius piece.
-That is the price of a distance predicate instead of an inflation test. It is measured at stage 2; if it proves
+That is the price of a distance predicate instead of an inflation test. The cost is measured and recorded at stage 2
+(§15) as information, not as a gate — the same footing as the FPS and thermal readings (§12.3); if it proves
 unaffordable, the answer is a coarser *certified* surrogate (a conservative bounding shape whose clearance implies the
 tube's) or fewer obstacles — never a weaker criterion.
 
@@ -2471,10 +2473,11 @@ individual reports say.
 6. **Whether any cross-section response is ever justified** — M1 ships none (§7.6). The smallest resolving experiment is
    not an implementation spike but a literature question: does measured cross-section behaviour of the eight M1 muscles
    support a per-muscle model at all?
-7. **Whether a Euclidean clearance guarantee is ever required** — the current test guarantees only "no entry into the
-   declared ellipsoid" (§7.4.1). A distance-based test (segment-to-ellipsoid distance ≥ ε) is a different computation and
-   a different contract. Smallest resolution: state whether any consumer — rendering, review, or a future collision check
-   — actually needs a distance, rather than an intersection verdict.
+7. ~~Whether a Euclidean clearance guarantee is ever required~~ — **resolved by the owner's decision: it is, and §7.4.1
+   is that guarantee.** The question assumed an intersection verdict was sufficient and priced a distance test as a
+   separate contract; the owner required the distance, so §7.4.1 now states the swept-tube clearance in `eps_num` terms
+   over a segment-to-ellipsoid distance predicate. Kept as the record of why the contract is distance-based, not as an
+   open decision.
 8. ~~Whether to move the Compose-dependent files out of `animation/`~~ — **resolved by #390**: the renderer and the
    playback adapter live in `render/`, `animation/` and `poses/` carry no Compose or Android imports, and
    `ArchitectureBoundaryTest` enforces it with no allow-list (§4.5). The question is kept as the record of why the move
@@ -2699,6 +2702,10 @@ schedule risk, not the engineering one.
   produces its expected final path or failure**; lengths are deterministic and continuous across a sampled motion; rest
   lengths within tolerance; no fixture outcome is reported without naming which check produced it.
 - **Manual acceptance:** anatomist review of the eight attachment sets and of the wrap behaviour on three poses.
+- **Recorded information, not a gate:** the clearance cost of §7.4.1 — the per-frame segment-to-ellipsoid distance
+  evaluations on the pairs that fail the two-comparison accept — is measured here and recorded with the frame, the
+  obstacle count and the pose it was measured on. It sits beside the FPS and thermal readings (§12.3): a poor number
+  commissions a coarser certified surrogate or fewer obstacles, never a weaker criterion, and fails nothing.
 - **Risks:** calibration drift (R7); wrap parameters; the tube look invites quality complaints — state clearly that
   stage 2 is a mechanism demo, not final visuals.
 - **Effort:** 4–5 engineering weeks + ~1 anatomist week.
