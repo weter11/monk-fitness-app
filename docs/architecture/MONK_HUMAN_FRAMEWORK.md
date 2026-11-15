@@ -1468,8 +1468,8 @@ an error). The rules make the outcome deterministic and reviewable:
 
 #### 7.4.3 Continuity and tangent transitions
 
-Projection and smoothing both create transitions where the path leaves an obstacle. Four numeric checks, each with a
-declared bound:
+Projection and smoothing both create transitions where the path leaves an obstacle. Three numeric checks with declared
+bounds, plus one stateful observer that is not a bound at all:
 
 1. **C0.** One polyline, no duplicated, reordered or dropped points. Structural, cheap, always on.
 2. **Tangent continuity at entry and exit.** The angle between the segment entering an obstacle's influence region and
@@ -1478,12 +1478,39 @@ declared bound:
    path needs more smoothing.
 3. **Curvature bound.** No interior sample may turn more than `θ_max` relative to its neighbours at the declared
    sampling spacing. This is the discrete stand-in for "the muscle does not fold".
-4. **Temporal continuity.** Path points are compared at **matched fractional arc-length stations**, not by sample index:
-   resampling and inserted detour points change `pointCount` between frames, so index `i` is not the same anatomical
-   place twice. At station `s`, the displacement between consecutive frames must satisfy `|Δp(s)| ≤ v_max · Δt`, with
-   `v_max` a proposed bound (1.2 m/s) fixed at stage 2 and `Δt` the frame interval — the threshold is therefore
-   time-normalised rather than "2 cm at 60 Hz". A violation means the solver jumped between two local routes; a pose that
-   itself moved discontinuously is already failed by L1.
+4. **Temporal continuity — a separate stateful observer, and no `v_max`.** The solver stays **pure**:
+   `solve(pose, profile, out)` takes no previous frame and no `dt`. The earlier proposal — a bound `|Δp(s)| ≤ v_max · Δt`
+   with `v_max` = 1.2 m/s — is **withdrawn**, because it is a speed limit on an output that has no physical speed and no
+   defensible constant. Continuity becomes an **observer** with its own state:
+
+   - **Inputs.** The frame timestamp; the previous frame **that was `VALID` for this instance**; and the same instance
+     identity (`MuscleHeadId`), definition version and body profile. A frame from a different definition, profile or
+     instance is not comparable: it resets the observer instead of being differenced.
+   - **State and lifecycle.** Last timestamp, the last accepted stations and positions, and the reference frame they were
+     recorded in. Initialisation has no previous frame and produces no verdict; **pause/resume, seek and reset** all
+     re-initialise, because a seek is a discontinuity in the source timeline and reporting it as a path jump would be a
+     false positive. An `INVALID` frame in between breaks the comparison rather than being skipped silently: the next
+     valid frame compares against the last valid one **and** reports the gap.
+   - **Stations.** Matched fractional arc-length stations, not sample indices — resampling and inserted detour points
+     change `pointCount` between frames, so index `i` is not the same anatomical place twice.
+   - **The comparison is against a conservative pose-driven prediction.** The observer computes the displacement the
+     *pose alone* can produce at that station — the moved attachments, every moving wrap centre, the angular velocities of
+     the enclosing segments, and the lever arms of any attachment offset — and compares the measured displacement with
+     that prediction. A station cannot legitimately move faster than its own geometry allows, so the residual is the
+     signal and the raw speed is not.
+   - **Near a route-branch switch, no finite universal bound follows from bounded input speed.** When the solver selects
+     a different branch, the path may move further than any pose-driven prediction, and no constant covers it. That is
+     stated, not papered over.
+   - **An excess is a diagnostic, never a verdict.** It requires investigation — the report names the station, the frame
+     and the branch — and it is not proof of a routing bug. It also never triggers **silent rate-limiting**: a filter
+     that slows a path to satisfy a threshold produces a path that no longer matches the pose or the clearance predicate,
+     which is a worse defect than the jump it hides.
+   - **Hysteresis is explicit and resettable.** If route-branch hysteresis is used, it is declared (a station margin and a
+     dwell), it can be reset, and the observer reports each switch.
+
+   The threshold is named **once** — `δ_frame`, the maximum permitted station displacement *in excess of* the pose-driven
+   prediction, in engine units — and the same name is used in §12.2. The earlier text called the same quantity `v_max · Δt`
+   here and `δ_frame` in the test inventory, which is how one threshold ends up applied twice and differently.
 
 #### 7.4.4 What this is, and is not
 
@@ -2069,7 +2096,7 @@ Seven levels, each with one owner, one report and an explicit automation status.
 | `AnatomyDefinitionTest` | L3 | ids unique; attachments resolve; envelope bounds; L/R mirror; heads consistent |
 | `MusclePathGeometryTest` | L4 | arc length ≥ chord; every segment of the smoothed polyline is disjoint from every inflated obstacle, and every sample lies outside the inflated surface by the `ε_pen` numerical margin; deterministic across runs and buffer reuse |
 | `MusclePathObstacleFixtureTest` | L4 | the validator fixtures (§12.2.1) return the expected verdict, and the solver fixtures return the expected final path or the expected failure reason — never silently |
-| `MusclePathContinuityTest` | L4 | C0, tangent bound at entry/exit, curvature bound, and frame-to-frame displacement at matched arc-length stations within `δ_frame` |
+| `MusclePathContinuityTest` | L4 | C0, tangent bound at entry/exit, curvature bound; and, for the observer: station displacement in excess of the pose-driven prediction within `δ_frame` at matched arc-length stations, with no verdict on the first frame, a re-initialisation on pause/resume/seek/reset, a reported gap across an `INVALID` frame, and no rate-limiting of the path |
 | `MuscleLengthDeterminismTest` | L4 | the same pose produces the same length across runs, buffer reuse and definition reload; no discontinuity beyond tolerance across a sampled motion |
 | `MuscleLengthReferenceTest` | L4 | length matches expert-reviewed reference data where it exists, within the stated tolerance; absent reference data is reported as a gap, not a pass |
 | `MuscleDirectionalExpectationTest` | L4 | only exercise- and muscle-specific expectations, each carrying a documented justification and source |
