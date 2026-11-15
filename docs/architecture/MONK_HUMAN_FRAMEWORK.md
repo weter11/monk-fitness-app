@@ -46,9 +46,9 @@ The design rules that follow from that direction:
 2. **Anatomy is derived, never animated.** A muscle's position, path and length are functions of the published joint
    transforms, the anatomical definition, and the wrap surfaces — not of an independent timeline. There is no code path
    in which a muscle moves while the skeleton does not.
-3. **Anatomical data is rig-independent and character-independent.** Attachments are authored in canonical joint-local
-   space in metres, so one muscle library serves every character and every visual rig, exactly as one pose library serves
-   every character.
+3. **Anatomical data is rig-independent and character-independent.** Attachments are authored in the canonical segment
+   frames of §7.2, in metres — the derived segment frame, never the node's axes and never the world bind axes — so one
+   muscle library serves every character and every visual rig, exactly as one pose library serves every character.
 4. **Geometry strategies are interchangeable behind a path contract.** The per-frame output of the anatomical model is a
    polyline path per muscle plus its length. Whether the visible muscle is a procedurally generated tube (phase A) or an
    authored mesh skinned to path-driven helper bones (target) is a renderer-side choice, not an anatomical one.
@@ -371,8 +371,9 @@ Three distinct things share the word "anatomy" and are separated here:
 The model **derives position from the Motion Model** and has no solver of its own: it never calls IK, never moves a
 joint, never resolves a contact. If the anatomy and the skeleton disagree, the anatomy is wrong by definition.
 
-The model is **rig-independent**: it references `Joint` identifiers and joint-local offsets in metres, never glTF bone
-names. A new character rig, a new species of mesh, or a different morph preset changes nothing in the anatomy data.
+The model is **rig-independent**: it references `Joint` identifiers and offsets in those segments' derived frames (§7.2),
+in metres, never glTF bone names. A new character rig, a new species of mesh, or a different morph preset changes nothing
+in the anatomy data.
 
 ### 4.3 Character Appearance Model
 
@@ -1425,10 +1426,8 @@ review. A role change is an anatomy review. Four reviewers, four diffs — that 
   **segment frame** this section authors attachments and obstacles on is derived from positions (root rule below), it is
   not the node's rotation, and at the X1 bind pose it equals `F_root(bind)` for **every** segment — because `D = identity`
   at bind and each segment inherits its parent's frame — which is `diag(−1, 1, −1)`, a 180° rotation about `Y` (§6.2). Two
-  consequences are stated rather than discovered: at bind an offset authored on the pelvis frame's `+X` resolves along
-  world `−X`, so the attachment convention is the **segment frame's** (`+X` sagittal, `+Y` up, `+Z` lateral — the sign of
-  `X` and `Z` is the frame's own, not the engine's world axes), and the two happen to coincide only for a segment whose
-  derived frame is identity, which at X1 is none of them. **In a posed frame the segment frame must be derived from
+  consequences are stated rather than discovered: the attachment convention is the **segment frame's**, and its axes are
+  named below rather than borrowed from the engine's world axes. **In a posed frame the segment frame must be derived from
   published positions**, because the published rotation does not describe the segment. Measured at `16e0487`:
 
   - `IkStage.kt:131-134` writes `middle.localPosition` and `end.localPosition` for a solved limb and no local rotation;
@@ -1441,6 +1440,18 @@ review. A role change is an anatomy review. Four reviewers, four diffs — that 
   Reading the published rotation as the segment's orientation mis-places an attachment by 26.9–56.4 mm at a 30 mm offset
   over the four limb segments and four poses measured. The engine contract is **not** changed by this document; the RFC
   contract is (§7.4 step 1).
+- **Attachment offsets are authored in the derived segment frame — not in node axes, and not in world bind axes.** The
+  three are different objects and the same three numbers mean different points in each. The node's own rest rotation is
+  identity (`SkeletonFactory.kt:60-101`); the derived frame at bind is `diag(−1, 1, −1)`, the half-turn about `Y`, for
+  every segment; the world bind axes are the space the engine publishes positions in. `+Y` is the one axis the half-turn
+  leaves alone, so "up" is unambiguous — `+X` and `+Z` are not, and the names in this document are the frame's, with the
+  sign the frame gives them: **`+Y` superior; `+X` and `+Z` the sagittal and lateral axes as the derived frame fixes
+  them**. At X1 that resolves to an authored `+X` along world `−X`, i.e. toward the heel — the athlete faces world `+X`
+  (`TOE` at `+24.85` against `HEEL` at `−10.15`, both level with the ankle) — and an authored `+Z` along world `−Z`, which
+  is side `A`. Read as node axes the same offset is wrong by the half-turn in `X` and `Z`, and for a muscle with a
+  symmetric offset that error changes no length, no clearance figure and no envelope test. That is why the frame is
+  confirmed at the anatomical review per instance (§12.4 RV1) and why §7.3 records, per instance, that it is still
+  unrecorded.
 - **Units: one calibration, named landmarks.** The engine has no metres: `HumanSkeletonDefinition` uses 120/112/98/80/66
   (units) for torso/thigh/shin/upper arm/forearm (`SkeletonDefinition.kt:38-56`), and the rest pelvis height is
   `shin + thigh + 25 = 98 + 112 + 25 = 235` (`MonkJointResolver.kt:59-60`). Anatomy is authored in **metres** and
@@ -1466,9 +1477,10 @@ review. A role change is an anatomy review. Four reviewers, four diffs — that 
   check (§12 L2) proves that the rig's `Left*` bones sit on the same side as side `A`; if they do not, the asset or the
   bone map is wrong — a rendering-time flip would only hide it.
 
-**Segment frame table.** Each row names the node whose rest frame *is* the segment's frame (identity at rest) and the
-**published position pair** the posed direction is taken from — `p_child − p_parent`, in the parent's frame, with the
-roll convention of X9 (§13 question 11). The roll is an approximation, and §7.2 states its exact form below.
+**Segment frame table.** Each row names the node the segment is carried on — the node's own rest rotation is identity,
+which is a fact about the *node* and not a definition of the segment frame (above) — and the **published position pair**
+the posed direction is taken from — `p_child − p_parent`, in the parent's frame, with the roll convention of X9 (§13
+question 11). The roll is an approximation, and §7.2 states its exact form below.
 
 **X9 as a total rule — defined for every segment, including the degenerate ones.** `P` is the parent segment's frame
 (published positions, this table's rule applied to the parent), `restDir` the segment's direction in its own rest frame,
@@ -1634,7 +1646,12 @@ enum class Segment {
     FEMUR, TIBIA, FOOT, TOES
 }
 
-/** A point pinned to a canonical segment, in metres, segment rest frame (+X sagittal, +Y up, +Z lateral). */
+/**
+ * A point pinned to a canonical segment, in metres, authored in that segment's **derived frame** (§7.2) — the frame that
+ * gives the segment its direction, not the node's axes and not the world bind axes. Axes are `+Y` superior and `+X`/`+Z`
+ * the sagittal and lateral axes with the sign the derived frame fixes, so at bind `+X` resolves along world `−X` and `+Z`
+ * along world `−Z` (side `A`). Side `P` is the mirror: same numbers, `z` negated.
+ */
 data class Attachment(val segment: Segment, val x: Float, val y: Float, val z: Float)
 
 /**
@@ -1731,6 +1748,52 @@ one: a **solver-derived rest length** — the same solver at the X1 bind frame, 
 where the definition or §12.4 names one**, with the source, the reference stance and the uncertainty recorded. A head with
 no named external reference records an **evidence gap**, which is neither a pass nor an M1 blocker. This document makes no
 tape-measure claim: nothing here has been measured on a body.
+
+**Whether each placeholder was authored against the derived segment frame is not recorded, and that is stated per instance
+rather than assumed for the set.** §7.7.1 fixes the M1 set at **18 head-side instances**; this section supplies one worked
+example, in which the side is not stated and no authoring frame is recorded for the numbers. The other sixteen instances
+have no coordinates at all. **The corrected `Attachment` KDoc above is a convention for what is authored from here on; it
+is not provenance for numbers that already exist**, because those numbers were invented to demonstrate the schema. **No
+sign is flipped here and no anatomy is invented**: an offset whose authoring frame is not recorded is **frame unverified**,
+and it is unverified whether or not numbers exist for it, because "there is nothing to get wrong yet" and "nobody wrote
+down which frame" are both answers a reviewer has to act on.
+
+| # | Muscle | Instance | Placeholder coordinates in this document | Frame they were authored against, as recorded | Status |
+| --- | --- | --- | --- | --- | --- |
+| 1 | rectus abdominis | side `A` | none | not recorded — no coordinates exist to record it for | **frame unverified** |
+| 2 | rectus abdominis | side `P` | none | not recorded | **frame unverified** |
+| 3 | external oblique | side `A` | none | not recorded | **frame unverified** |
+| 4 | external oblique | side `P` | none | not recorded | **frame unverified** |
+| 5 | erector spinae | side `A` | none | not recorded | **frame unverified** |
+| 6 | erector spinae | side `P` | none | not recorded | **frame unverified** |
+| 7 | latissimus dorsi | side `A` | none | not recorded | **frame unverified** |
+| 8 | latissimus dorsi | side `P` | none | not recorded | **frame unverified** |
+| 9 | gluteus maximus | side `A` | none | not recorded | **frame unverified** |
+| 10 | gluteus maximus | side `P` | none | not recorded | **frame unverified** |
+| 11 | gluteus medius | side `A` | none | not recorded | **frame unverified** |
+| 12 | gluteus medius | side `P` | none | not recorded | **frame unverified** |
+| 13 | biceps femoris | long head, side `A` | none | not recorded | **frame unverified** |
+| 14 | biceps femoris | long head, side `P` | none | not recorded | **frame unverified** |
+| 15 | biceps femoris | short head, side `A` | none | not recorded | **frame unverified** |
+| 16 | biceps femoris | short head, side `P` | none | not recorded | **frame unverified** |
+| 17 | rectus femoris | side `A` | the worked example above — **side not stated**, so the single set covers one side at most | not recorded: the example declares itself illustrative and names no frame, and the axis list that stood above it before this revision was unqualified, so nothing in the document says which of node axes, derived frame or world bind axes these three numbers were written in | **frame unverified** |
+| 18 | rectus femoris | side `P` | the worked example above, if its `z` is read as side `A`'s | not recorded — a mirror is arithmetic (`z` negated) over an unverified source | **frame unverified** |
+
+**Review gate — the frame and its sign are confirmed at §12.4 before M1 acceptance.** Every row above stays
+**frame unverified** until a reviewer closes it, and M1 does not accept an unverified instance on the strength of a green
+L3: the L3 envelope test is satisfied by a half-turned frame for every muscle whose offsets are symmetric, so it cannot
+see this error at all (§12). The confirmation is per instance, against the reviewed landmark, and it is written so that it
+can fail:
+
+- **left/right** — the instance on side `A` and its mirror on side `P` land on opposite sides of the frame's `+Z`, checked
+  on the landmark pair the review cites (a muscle whose two instances collapse onto one another is a mirror error);
+- **anterior/posterior** — an origin the definition calls anterior lands on the anterior landmark the review cites, and
+  one it calls posterior lands on the posterior one. A 180° error about `Y` inverts exactly this pair while leaving
+  left/right intact, which is why both checks are required and neither substitutes for the other.
+
+An attachment set can be internally mirrored, symmetric, inside every envelope and 180° wrong in `X` or `Z`; that set
+passes L3 and both symmetry checks and fails this gate. The gate is recorded per instance in the review record (§12.4),
+so "sixteen of eighteen confirmed, two deferred" is a state the document can express and a silent assumption is not.
 
 ### 7.4 Path solving
 
@@ -3552,7 +3615,7 @@ Seven levels, each with one owner, one report and an explicit automation status.
 | --- | --- | --- | --- | --- |
 | **L1 Motion** | 18 existing rules over joint-space geometry (`ExerciseValidator.kt:47-92`) | yes, unchanged | all | the pose/engine is wrong; block |
 | **L2 Rig** | bone coverage, rest invariant, inverse binds, side/handedness, unit scale, bone budget, landmark alignment (§6.6) | yes | all | the asset or map is wrong; block |
-| **L3 Attachments** | every attachment's joint exists; offset inside a segment envelope; L/R mirror; head count; origin ≠ insertion; span ≥ 2 segments | yes | all | the anatomy data is wrong; block |
+| **L3 Attachments** | every attachment's joint exists; the offset is **authored in the segment's derived frame (§7.2)** and the data names that frame rather than leaving it to be inferred; offset inside a segment envelope; L/R mirror; head count; origin ≠ insertion; span ≥ 2 segments. The frame's **sign** is a review fact, not an L3 fact: L3 can check that a declared frame is the one the resolver applies, and an instance whose authoring frame is unrecorded is reported **frame unverified** rather than passed (§7.3, §12.4 RV1) | yes | all | the anatomy data is wrong; block |
 | **L4 Path** | every segment of the final polyline tested against every obstacle in the head's ordered union, in one exhaustive three-stage state machine — bounding-sphere clear, a quadratic **intersection test that requires a witness station** (a chord whose entry cannot beat the coefficient error, or cannot carry a proved enclosure for it, routes onward and is never called an intersection), then the finite-segment minimum of `d(t) − r(t)` (**solid** ellipsoid distance) with a Lipschitz bracket, the radius taper split at every knot, and `UNCERTAIN` failing closed — plus the sample-outside check; unverifiable geometry reported `INVALID` with a reason from the one table; deterministic outcome for overlapping, nested and closed routes; tangent and curvature continuity at entry/exit (gated); a **solver-derived rest length that is finite, strictly positive and reproducible** for every head (§7.4.4), and — **only where the definition or the review names one** — a comparison against a sourced external reference recorded with source, task, population and uncertainty, where a missing reference is an evidence gap and neither a pass nor a blocker. The continuity observer is **diagnostic only** and is not part of this gate (X6). The clearance floor itself is **conditional** on the input bounds, the error analysis of §7.4.1 and a bound for the point-to-ellipsoid solve — which §7.4.1b-1 does not yet have, so **no numerical floor is claimed until it does** | yes, with adversarial fixtures | all | the solver or the data is wrong; block |
 | **L5 Mesh** | self-intersection, degenerate triangles, weight sums, volume sanity per muscle, helper-bone bind match | partly (tool) | **subset** (§12.5) | the mesh is wrong; block release, not build |
 | **L6 Morphology** | declared ranges respected per target; **mesh** ring/mask vertices relative to joint pivots within `ε_morph`; delta bounds | **yes — the morph and ring checks only** | **subset** (§12.5) | a preset breaks the surface the muscles sit under; block the preset. A bone-landmark rest invariant is **not** an L6 assertion: a vertex-only morph cannot move a bone, so it is tautological. **"Anatomy still inside the body" is not automated and is not L6**: it needs a mesh-intersection tool M1 does not ship, so it is an L7 RV2/RV3 judgement (§12.5, §13 question 9) |
@@ -3789,7 +3852,7 @@ approving the wrong one:
 
 | # | Criterion | What "pass" means |
 | --- | --- | --- |
-| RV1 | Attachment locations | each origin and insertion lands on the landmark named in the definition, within the tolerance stated in the review record |
+| RV1 | Attachment locations, authoring frame and sign | each origin and insertion lands on the landmark named in the definition, within the tolerance stated in the review record; **and the frame the offsets were authored in is confirmed per instance, not assumed.** The record names, for each of the 18 M1 head-side instances of §7.3, the instance's status, and closes a **frame unverified** row only with a **left/right** check (the instance and its mirror land on opposite sides of the derived frame's `+Z`, on the cited landmark pair) **and** an **anterior/posterior** check (an origin the definition calls anterior lands on the anterior landmark the review cites). A 180° error about `Y` leaves every symmetry check and every L3 envelope test satisfied, so an instance with neither check is unverified and M1 does not accept it |
 | RV2 | Position relative to bones and body surface | the belly sits in the correct compartment: not inside bone, not outside skin, not on the wrong side of a joint |
 | RV3 | Visible intersections | no intersection with skin or with an adjacent muscle in any reviewed pose, at the layer visibility the milestone ships |
 | RV4 | Plausible shape and path across poses | path and silhouette read as that muscle in every pose of the M1 review set — five poses from the four pilot exercises of X8 — plus any pose the reviewer asks for. The set is chosen so that **every M1 muscle is posed for review at least once**: `squat` bottom and top (gluteus maximus, gluteus medius, biceps femoris on both heads, rectus femoris, erector spinae, rectus abdominis), `standard push-up` bottom (the abdominal wall in a second configuration: rectus abdominis, external oblique, erector spinae), `bird-dog` (erector spinae, external oblique, gluteus maximus and gluteus medius in a hip-extension configuration) and `row_standard` mid-pull (**latissimus dorsi**, whose humeral insertion no squat, push-up or bird-dog pose carries through a pull). **Latissimus dorsi is the muscle the set exists for**: a review built only from squat and push-up poses would leave one of the eight unreviewed and still look complete. A pose outside the set is outside the review, not inside a guarantee. **Pose coverage is not builder coverage, and this set is A2's whole set**: squat top and bottom are two frames of one builder, so these five frames come from four registered builders, and A2 measures the same five from the same four (§6.6) — the asymmetry an earlier revision carried, where A2 measured a sixth frame this criterion never reviewed, is closed by dropping that frame. What neither criterion reaches is **arm elevation above shoulder height**, which no M1 pilot exercise needs and which the record below carries as a limitation |
@@ -4665,7 +4728,7 @@ tools/anatomy-export/             offline helper-bind + asset validation (JVM)
 
 | Term | Meaning here |
 | --- | --- |
-| Canonical segment frame | the rest frame of a `Joint` node; +X sagittal, +Y up, +Z lateral, identity at rest |
+| Canonical segment frame | the **derived** frame of §7.2 — built from published positions, not the `Joint` node's rotation (which is identity at rest) and not the world bind axes; `+Y` superior, `+X`/`+Z` sagittal and lateral with the frame's own sign. The authoring frame for attachment offsets |
 | Attachment | a muscle endpoint or waypoint pinned to a canonical segment, in metres |
 | Muscle path | the solved polyline from origin to insertion, including wrap detours |
 | Arc length | length along the solved path; the only length the model trusts |
