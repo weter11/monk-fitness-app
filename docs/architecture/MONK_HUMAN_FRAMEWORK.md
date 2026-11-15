@@ -869,13 +869,20 @@ twice, two answers. The cause is a name, not a rounding error: `HEAD_POS` is the
 both. **A field cannot be both a crown height and a head-centre height.**
 
 The contract is a definition: `heightMetres` names its pair — **crown to floor**, the asset's `HeadTop_End` to the
-lowest `ToeBase` — and `unitsPerMetre` is derived from the *same* pair on the engine side, `HEAD_POS.y + headRadius −
-min(toe).y` = 379.50 units at the rest stance, giving 379.50 / 1.80 = **210.83** u/m. A `CharacterCalibration` that
-cannot reproduce `unitsPerMetre` from the declared pair within a stated tolerance (proposed 1 % on the span) **fails
-the asset at L2** instead of rendering at a scale nobody chose. Two estimates now exist — 247.37 from the pelvis pair and
-210.83 from the crown pair, the first 17.3 % above the second — and the difference is a real disagreement about the
-engine's proportions, not a bug in either arithmetic: at 247.37 u/m the engine's rest stance is 1.461 m from head centre to floor, which is short
-for a 1.75–1.80 m adult. Which pair the project adopts is §13 question 12. Until it is settled, every residual in this
+lowest `ToeBase` — and `unitsPerMetre` is derived from the *same* pair on the engine side. That pair is
+`HEAD_POS.y + headRadius` = 391 + 18 = **409.0 units** above the declared ground, because `AirSquatPose` declares
+`ground.level = 0` and `min(toe).y` = 29.50 units is the toe **joint**, which sits above the floor rather than on it. So
+409.0 / 1.80 = **227.2** u/m at the declared height, and 409.0 / 1.78 = **229.8** against the asset's actual crown. A
+`CharacterCalibration` that cannot reproduce `unitsPerMetre` from the declared pair within a stated tolerance (proposed
+1 % on the span) **fails the asset at L2** instead of rendering at a scale nobody chose.
+
+Two estimates now exist — 247.37 from the pelvis pair and 229.8 from the crown pair, the first **7.7 %** above the second
+— and the difference is a real disagreement about the engine's proportions, not a bug in either arithmetic. The earlier
+revision reported 17 % here and called the stance short; both were wrong, and the cause was one arithmetic slip:
+subtracting the toe *joint* from a crown height. The engine's head centre is **1.581 m** above the floor (391 units),
+which is not short for a 1.75–1.80 m adult; what is short is the head. The engine's crown sits 18 units (**0.073 m**)
+above the head centre against the asset's 0.180 m, and that — not the figure's height — is what pulls a crown-based
+calibration down to 229.8. Which pair the project adopts is §13 question 12. Until it is settled, every residual in this
 document that depends on the constant says which one it used.
 
 `anatomyOverrides` is the escape hatch for a body family whose *shared* attachment is measurably wrong (for example a
@@ -919,17 +926,20 @@ engine rest orientation within `τ_rot` = **0.5°** (both unchanged, fixed at st
 `RigLandmarkAlignmentTest` (L2).
 
 **The shipped asset does not pass A1. That is a measured baseline, not a pass.** At 247.37 u/m the PR #385 asset's
-mapped bone heads sit at these distances from their engine joints at the bind stance:
+mapped bone heads sit at these **height offsets** — engine `Y` minus asset `Y × 247.37`, at the standing frame — from
+their engine joints:
 
-| Joint (asset bone) | Residual | Joint (asset bone) | Residual |
+| Joint (asset bone) | Height offset | Joint (asset bone) | Height offset |
 | --- | --- | --- | --- |
 | `NECK_END` (`Neck`) | +7.9 mm | `KNEE_F` (`Leg`) | +6.7 mm |
 | `HEAD_POS` (`Head`) | −19.4 mm | `ANKLE_F` (`Foot`) | +39.3 mm |
 | `HIP_F` (`UpLeg`) | +30.0 mm | `TOE_F` (`ToeBase`) | +89.3 mm |
 
-Signs are as recorded (A1 itself uses the distance). `τ_bind` is 0.5 mm, so the worst mapped joint is 179× the
-tolerance, and the residual is linear in `unitsPerMetre` (§7.2) — the table is quoted at 247.37 and has to be
-re-measured if the constant changes. **Stage 1's deliverable is a rig that passes A1** (§15); until that rig exists,
+Signs are as recorded. These are the **vertical** components, which is exactly what the six numbers reproduce; a full 3D
+A1 distance also needs `BoneMap.basis` applied to the asset landmark first, and no `BoneMap` exists yet, so the 3D
+residual is a stage-1 measurement rather than something this table can claim. `τ_bind` is 0.5 mm, so the worst mapped
+joint is 179× the tolerance, and the offset is linear in `unitsPerMetre` (§7.2) — the table is quoted at 247.37 and has
+to be re-measured if the constant changes. **Stage 1's deliverable is a rig that passes A1** (§15); until that rig exists,
 `RigLandmarkAlignmentTest` is expected to be red on `humanoid_v1`, and A1 is not weakened to make the current asset
 green.
 
@@ -1666,7 +1676,7 @@ limit is `NO_ROUTE`.
 Escalation is not decoration: a waypoint placed exactly at the support distance leaves the two connecting segments
 grazing the surface, because they approach obliquely. For a 20 mm sphere on a 0.29 m chord, `d_1 = R + e` = 20.01 mm
 gives a closest segment approach of 19.822 mm — inside the surface plus margin — while the first escalated placement at
-`1.5·d_1` = 30.015 mm leaves both connecting segments clear (closest approach 29.393 mm > 20.01 mm). The rule therefore
+`1.5·d_1` = 30.015 mm leaves both connecting segments clear (closest approach 29.392 mm > 20.01 mm). The rule therefore
 treats `d_1` as a starting guess and lets the predicate, not the guess, decide. (The anisotropic case below needs no
 escalation; this sphere example is the one that does.)
 
@@ -2303,7 +2313,7 @@ so neither table can be passed by an implementation that always accepts or alway
 | Fixture | Configuration | Expected result |
 | --- | --- | --- |
 | `single_obstacle` | one ellipsoid between two attachments, chord through its centre | `VALID`; the §7.4.5 lateral rule routes around it; every segment of the **final** polyline passes the stage-3 predicate |
-| `rotated_anisotropic` | the `rotated_anisotropic` validator geometry as a solver run: local semi-axes 40 × 10 × 20 mm, `Rw` = +90° about Z, chord `(−145, 0, 0) → (145, 0, 0)` mm through the centre | `VALID`; the fallback picks local X (tie X/Z), rotates it to world +Y, and `h(l̂_d) = R_x = 40 mm` gives `d_1 = 40.01 mm` with both connecting segments clear by more than `e`. Choosing the fallback among world axes, or using the world direction directly as the support argument, yields `h = 10.1 mm` and a waypoint still inside the obstacle → `INVALID`; the fixture fails that implementation |
+| `rotated_anisotropic` | the `rotated_anisotropic` validator geometry as a solver run: local semi-axes 40 × 10 × 20 mm, `Rw` = +90° about Z, chord `(−145, 0, 0) → (145, 0, 0)` mm through the centre | `VALID`; the fallback picks local X (tie X/Z), rotates it to world +Y, and `h(l̂_d) = R_x = 40 mm` gives `d_1 = 40.01 mm` with both connecting segments clear by more than `e`. Choosing the fallback among world axes, or using the world direction directly as the support argument, yields `h = R_y = 10 mm` and a waypoint 10.01 mm from the centre, still inside the obstacle → `INVALID`; the fixture fails that implementation |
 | `multiple_obstacles` | two obstacles in series along the route | `VALID`; every segment clear of both after smoothing |
 | `overlapping_obstacles` | two ellipsoids that intersect each other | `VALID` outside the union; identical result for the same declaration order |
 | `nested_obstacles` | a small ellipsoid fully inside a large one | `VALID` outside the outer surface |
@@ -2488,7 +2498,7 @@ individual reports say.
    `humanoid_v1` asset does not pass A1: its worst mapped joint is +89.3 mm against a 0.5 mm tolerance (§6.6). The
    default is to record that as a known baseline and make *a rig that passes A1* a stage-1 deliverable, rather than to
    weaken A1 — a tolerance chosen to fit the current asset measures nothing. The same question decides the calibration:
-   the pelvis pair gives 247.37 u/m and the crown pair 210.83 u/m, the first 17.3 % above the second (§7.2, §6.4). Default chosen:
+   the pelvis pair gives 247.37 u/m and the crown pair 229.8 u/m, the first 7.7 % above the second (§7.2, §6.4). Default chosen:
    crown-to-floor as the pair `heightMetres` declares, because it is the pair the asset exposes as `HeadTop_End`, with
    the pelvis estimate kept as a cross-check that fails the asset beyond 1 %. Smallest resolving experiment: build the
    stage-1 rig, measure both spans on it, and keep the pair whose landmarks agree on that rig.
