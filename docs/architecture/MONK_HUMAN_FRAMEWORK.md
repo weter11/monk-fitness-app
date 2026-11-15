@@ -1050,8 +1050,9 @@ and adds what that table omitted: **`CHEST` at 175.1 mm** and **`LUMBAR` at 110.
 component — the elbow 165.0 mm and the hand 128.2 mm out of plane, the knee 82.8 mm forward. **The worst mapped joint is
 the hand at 565.6 mm 3D** (550.1 mm vertical); 20 of the 21 joints are outside the 0.5 mm tolerance (only `PELVIS`
 coincides, which it must, because the registration is defined at the pelvis), and the median 3D residual is 60.2 mm.
-`τ_bind` is 0.5 mm, so the worst joint is **1131× the tolerance**, and every residual is linear in `unitsPerMetre` (§7.2)
-— re-measure, never rescale, if the constant changes.
+`τ_bind` is 0.5 mm, so the worst joint is **1131× the tolerance**. The residual is linear in `unitsPerMetre` when it is
+expressed in engine units and proportional to `1/unitsPerMetre` when it is expressed in metres (§7.2), so a change of
+calibration is **re-measured, never rescaled** — the two directions disagree about which way the number moves.
 
 **Measured at the X1 bind frame too, and it still fails.** The same registration against the canonical A-pose instead of
 the standing frame puts the worst joint at **`CHEST`, 175.1 mm** (the asset's `Hips → Chest` span is 0.310 m against the
@@ -2420,8 +2421,15 @@ Rules:
 3. Skeleton overlay.
 
 `SELECTED` exists from the start as state (highlight + panel). In M1 its content is the muscle **name, layer and
-categorical role** (§8, X8), plus the reported `modelledPathLength` (§7.4 — an absolute length is approximate until the
-calibration pair is settled, §13 question 12).
+categorical role** (§8, X8), plus **`relativePathLengthChange` and nothing dimensional**.
+
+**X4 — M1 shows the relative change only; absolute metres are withheld from the UI.** *Default chosen, owner confirmation
+pending.* `relativePathLengthChange` is dimensionless, so it does not need the calibration pair that absolute metres do —
+but it is not calibration-free either (§13 question 12), and the panel therefore labels it for what it is: a **modelled**
+relative change of a **modelled** path, between two frames of the same solve. `modelledPathLength` stays in the data and in
+the debug overlay, where a developer can see it next to the `unitsPerMetre` it was computed with; it is **not displayed to
+a user** until a calibration pair is named and an evidence-backed uncertainty exists for it. Showing metres now would
+display a number whose value depends on an unsettled constant, in a panel that reads as a measurement.
 
 **Roles are in M1, and only behind their own gate.** M1 ships categorical roles — the §7.3 `MuscleRole` enum, the §8.2
 schema (source, task, population, review status), a provenance/review validator, and a display gate. A role is displayed
@@ -2659,6 +2667,7 @@ Seven levels, each with one owner, one report and an explicit automation status.
 | `MusclePathContinuityTest` | L4 | C0, tangent bound at entry/exit, curvature bound (gated); and, for the **observer's own correctness** (diagnostic, X6): a rigid translation of the whole body produces no alarm; a rotating or moving wrap is attributed and produces no alarm; an inserted sample does not shift a station; a deliberate branch switch alarms; the first frame produces no verdict; pause, resume, seek, backward time and a non-monotonic timestamp each reset rather than express a negative displacement; an `INVALID` frame resets the comparison and is recorded as a reset; `valid → invalid → valid` restores the path and does not compare across the gap; and no path is ever rate-limited |
 | `MuscleLengthDeterminismTest` | L4 | the same pose produces the same length across runs, buffer reuse and definition reload; no discontinuity beyond tolerance across a sampled motion |
 | `MuscleLengthReferenceTest` | L4 | length matches expert-reviewed reference data where it exists, within the stated tolerance; absent reference data is reported as a gap, not a pass |
+| `MuscleLengthScaleTest` | L4 | §13 question 12: a common similarity transform of the body, the attachments and **every** dimensional solver parameter leaves `relativePathLengthChange` unchanged (`scale_common_control`), while a recalibration at a different `unitsPerMetre` changes it (`recalibration_counterexample`) — the two together are what stop "dimensionless" being read as "calibration-free" |
 | `MuscleDirectionalExpectationTest` | L4 | only exercise- and muscle-specific expectations, each carrying a documented justification and source |
 | `MuscleRestLengthTest` | L4 | solved rest length matches the calibrated reference within tolerance |
 | `MuscleRenderabilityTest` | L4 / presentation | §7.4: an `INVALID` instance is masked and its geometry cleared in the same frame; multi-head is all-or-nothing; valid → invalid → valid restores the path across carrier reuse |
@@ -2874,6 +2883,7 @@ rule and the M1 checklist all cite it, and none of them may require a check the 
 | L5 | body asset checks (degenerate triangles, weight sums, budgets) and **generated tube structure**: finite coordinates, no zero-area ring, triangle count equal to the §10.3 formula | muscle-vs-skin intersection; authored-mesh helper binds | M1 has no authored muscle mesh; no mesh intersection test ships in M1 |
 | L6 | one preset: declared ranges respected, mesh ring preservation around joint pivots, delta bounds | cross-preset coverage; "anatomy still inside the body" as an automated pass; the bone-landmark rest invariant, which a vertex-only morph cannot affect and which therefore proves nothing | one preset exists; body-anatomy intersection needs a tool M1 does not ship, so it is an L7 A2/A3 judgement |
 | L7 | A1–A6 with a valid record (§12.4) | — | the human gate |
+| §9.2/X4 readout | the muscle panel displays `relativePathLengthChange` only, labelled modelled, with no absolute metres | any absolute length in the UI before a named calibration pair and an evidence-backed uncertainty exist | a dimensionless ratio and a metre value are not the same claim, and only one of them is available today |
 | §8 roles | the categorical role entries for the owner-named pilot exercises only, each with `source`, `task`, `population`, `reviewStatus`, validated against its reviewed `PhaseTimeline`; unreviewed or `UNKNOWN` rows are not displayed | numeric activation, EMG-derived output, per-muscle contraction mode, medical claims, and roles for any exercise without a reviewed source | roles are cheap to validate and dishonest to guess; a display gate is what makes a partial table acceptable (X8) |
 
 **M1 gate, stated once.** M1 passes when: L1–L4 green; the L5 and L6 subsets above green; **a device run recorded** for
@@ -2953,12 +2963,35 @@ combination is not an M1 pass, whatever the individual reports say.
    a known, measured baseline and make *a rig that passes A1* a stage-1 deliverable rather than to weaken A1 — a tolerance
    chosen to fit the current asset measures nothing.
 
-   **Recommended default, and it is a decision about what M1 displays, not only about a constant.** For M1 the primary
-   length readout is `relativePathLengthChange`, which is **scale-free**: a ratio of two lengths from the same solver at
-   the same scale, so no calibration constant enters it. An absolute `modelledPathLength` in metres is shown as
-   **approximate**, with its calibration pair named in the panel (§7.2), because today the pair decides the number: the
-   pelvis pair gives 247.37 u/m and the crown pair 227.2 u/m at the declared 1.80 m (229.8 at the asset's actual 1.78 m
-   crown), so the same 156-unit pelvis-to-head span reads 0.631 m or 0.687 m depending on which pair is written down.
+   **Recommended default, and it is a decision about what M1 displays, not only about a constant (X4).** For M1 the only
+   length readout in the UI is `relativePathLengthChange`; `modelledPathLength` in metres stays in the data and the debug
+   overlay until a calibration pair is named **and** an evidence-backed uncertainty exists for it. The reason is in §9.2,
+   and it is not that a ratio is free of the calibration — see the next paragraph.
+
+   **"Dimensionless" is not "calibration-free", and the difference is measurable.** An attachment resolves as
+   `jointPosition + R_segment · (offsetMetres · s)` (§6.6), so a head's path length is `chord + s · Σ|offsets|` and its
+   relative change is
+
+   ```
+   (posed_chord + s·Σ|offsets|) / (rest_chord + s·Σ|offsets|) − 1
+   ```
+
+   which depends on `s` whenever the offsets are non-zero and the path is not a pure chord. Worked example, reproduced
+   from the definition: rest length `100 + 0.1 s`, posed length `200 + 0.1 s`, offsets totalling 0.1 m —
+   **0.801688 at `s = 247.3684`** and **0.814848 at `s = 227.2222`**. Same muscle, same pose, two calibrations, and the
+   displayed number moves by 1.3 percentage points. So the field is dimensionless and **model-dependent**, and the panel
+   says "modelled".
+
+   **Scale invariance has exact preconditions.** The relative change is invariant only under a **common similarity
+   transform of every geometric input and every dimensional solver parameter** — the attachment offsets, the obstacle
+   radii, `eps_num`, `corridorMetres` and the 0.01 m resampling spacing — applied with the same route and the same
+   discretisation (`N`). Scale the body and leave `eps_num` or the resampling spacing alone and the route changes, so the
+   length changes: the invariance is a property of the whole solve, not of the ratio. A **fixed additive tendon length in
+   metres** would break it for the same reason (it would not scale with the body); `visualTendonPortionLength` is a
+   *fraction* of the path (0.10 + 0.16 = 0.26), so it does not, and the schema has no absolute tendon length.
+   Two fixtures pin this: `scale_common_control` (a body, its anatomy and **every** solver parameter scaled by `k` — the
+   relative change must be identical) and `recalibration_counterexample` (the same rig recalibrated at a different
+   `unitsPerMetre` — the relative change must differ, and a test that expects it to be invariant fails).
    Honest absolute metres need a rig that passes A1 — and a rig that passes A1 is the *engine's* figure, whose crown is
    1.653 m and whose head radius is 72.8 mm (§6.6, §15 stage 1), not an independently verified human — so even then the
    number is a modelled length, not a measured one. That rig is the stage-1 deliverable, and
@@ -2974,8 +3007,10 @@ combination is not an M1 pass, whatever the individual reports say.
    the head centre against the asset's 0.180 m, which is what pulls a crown-based calibration down to 229.8.
 
    Smallest resolving experiment: build the stage-1 rig, measure both spans on it, and keep the pair whose landmarks
-   agree on that rig — then re-quote the §6.6 baseline, because it is measured at 247.37 and scales linearly with the
-   constant.
+   agree on that rig — then **re-measure** the §6.6 baseline on that rig rather than rescaling it. The ledger residual is
+   `offset = engineY / s − assetY`, which is proportional to `1/s` and not to `s`, while the same residual expressed in
+   engine units is proportional to `s`; a table scaled "linearly with the constant" would be wrong in one of the two
+   directions whichever direction it chose.
 
 **Known traps from the device run (spike #384).** Each cost a debugging cycle on real hardware, and each is a property of
 the current code, not of the model. PR #385 at `bcb3658` contained none of the first three fixes; the current head
@@ -3191,7 +3226,8 @@ schedule risk, not the engineering one.
 - **Expected files:** `app/src/main/java/com/monkfitness/app/anatomy/*.kt`,
   `app/src/main/assets/anatomy/anatomy_v1.json`, `app/src/test/.../anatomy/*`.
 - **User-visible deliverable:** a dev-only muscle layer showing red tubes following the squat and push-up, with a
-  `modelledPathLength` readout per muscle (named for what it measures, §7.4).
+  **`relativePathLengthChange`** readout per muscle (dimensionless, labelled modelled, X4); `modelledPathLength` is a
+  debug-overlay value only (§9.2).
 - **Automated acceptance:** arc length ≥ chord on every frame; **every validator fixture in §12.2.1 returns its expected
   verdict** — including `outside_endpoints_crossing_obstacle`, which must be rejected — and **every solver fixture
   produces its expected final path or failure**; lengths are deterministic and continuous across a sampled motion; rest
@@ -3215,7 +3251,8 @@ schedule risk, not the engineering one.
    character; no exercise builder changed.
 3. Layers: skin, superficial muscles (the 8), skeleton overlay; toggling does not rebuild the engine. `MUSCLES_DEEP`
    exists in the enum as a reserved value but has no asset and no renderable (§7.7, §9.1).
-4. Muscles follow the movement within the path model and report lengths; no independent muscle animation exists and no
+4. Muscles follow the movement within the path model and report **relative** length change (X4: `relativePathLengthChange`
+   in the UI, `modelledPathLength` in the data and debug overlay only); no independent muscle animation exists and no
    cross-section response is applied (§7.6).
 5. One morphology preset (`neutral`). M1 demonstrates that the preset changes nothing in the pose, muscle or animation
    data; it does not demonstrate body-family coverage — four families are stage 5 (§6.3, §15).
