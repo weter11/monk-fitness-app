@@ -1114,9 +1114,9 @@ enum class MuscleLayer { SUPERFICIAL, DEEP }
 /**
  * Categorical roles only — no intensity, no numeric activation (§8.1). `ANTAGONIST` is in the enum because §8.1 needs
  * the word; it is authored only where reviewed, movement-specific evidence supports it and is never inferred from an
- * eccentric phase.
+ * eccentric phase. `UNKNOWN` exists so "no reviewed row" is representable, never guessed.
  */
-enum class MuscleRole { PRIME_MOVER, SYNERGIST, STABILISER, ANTAGONIST }
+enum class MuscleRole { PRIME_MOVER, SYNERGIST, STABILISER, ANTAGONIST, UNKNOWN }
 
 /** The canonical segment frames of §7.2. One enum value per row of that table; no free-form strings. */
 enum class Segment {
@@ -1210,8 +1210,10 @@ A concrete entry, with the schema's intent made explicit:
 ```
 
 *All coordinates above are illustrative placeholders for the schema, not calibrated anatomy.* Calibration against the
-engine's rest stance is a roadmap item (§15, stage 2) with its own acceptance test: a muscle's rest length must match
-the distance a tape measure gives on the reference body within a stated tolerance (§12 L4).
+engine's rest stance is a roadmap item (§15, stage 2) with its own acceptance test: a muscle's **modelled** rest length
+must agree with an independent modelled segment length for the same landmarks, within a stated tolerance, with the
+source, the reference stance and the uncertainty recorded (§7.4.4, §12 L4). This document makes no tape-measure claim:
+nothing here has been measured on a body.
 
 ### 7.4 Path solving
 
@@ -1763,8 +1765,8 @@ M1 has exactly one deformation driver:
 muscle's visible length and position change because its attachments moved; its cross-section does not change. Scale is
 1 on every helper bone and constant on every generated ring.
 
-That is the whole model. A muscle that shortens looks shorter. It does not automatically get thicker, and it does not
-bulge because the exercise says it is working.
+That is the whole model. **The modelled path becomes shorter; the muscle is not said to contract.** Nothing gets thicker,
+and nothing bulges because the exercise says it is working.
 
 **Who may move a muscle vertex, and why.** "No geometry moves except along the path" was too blunt: the character layer is
 allowed surface morphs and corrective shapes, and both move vertices while the path is unchanged. The rule is therefore
@@ -1814,8 +1816,7 @@ shipped:
 - no roadmap stage commits to it. Appendix C item 4 asks whether it should exist at all.
 
 **Forbidden, per §11:** any bulge keyed to activation; any per-muscle animation curve; any cross-section change not
-derived from a measured length (M1 has none); any substitute heuristic ("thicker when the exercise is harder", "pulse on
-the concentric phase"). `relativePathLengthChange` is reported for the length readout and the education panel; it is
+derived from a measured length (M1 has none); any substitute heuristic ("thicker when the exercise is harder", "pulse as the squat rises"). `relativePathLengthChange` is reported for the length readout and the education panel; it is
 never a geometry input.
 
 ### 7.7 Layers, and what is deferred
@@ -1911,16 +1912,19 @@ phase of which exercise". It is not EMG, not a physiological simulation, and not
 Exercise → Muscle → Role → MovementPhase → Emphasis
 ```
 
-- **Role**: `PRIME_MOVER`, `SYNERGIST`, `STABILISER`, `ANTAGONIST` — a **categorical, sourced** statement that a muscle
-  takes that role in that movement, carrying a source, a population and a task (§8.2). It is not a magnitude and not an
-  ordering: **no numeric activation value, no EMG-derived output, and no medical or therapeutic claim in M1.** The
-  vocabulary also carries `UNKNOWN`, so "no reviewed row exists" is representable instead of being guessed at.
-  `ANTAGONIST` is used **only where the reviewed movement-specific evidence supports it** — never as the default name for
-  the eccentric phase, because a phase belongs to the exercise and a role belongs to the muscle.
-- **MovementPhase**: `CONCENTRIC`, `ECCENTRIC`, `ISOMETRIC` — read from the exercise's reviewed `PhaseTimeline`, never
-  inferred per muscle frame and never derived from joint angles. **A phase is a property of the exercise; a role is a
-  property of the muscle in that exercise**, and keeping the two apart is what stops "eccentric" from turning into an
-  implicit contraction assertion about a named muscle.
+- **Role**: `PRIME_MOVER`, `SYNERGIST`, `STABILISER`, `ANTAGONIST`, `UNKNOWN` — a **categorical, sourced** statement
+  that a muscle takes that role in that movement, carrying a source, a task, a population and a review status (§8.2). It
+  is not a magnitude and not an ordering: **no numeric activation value, no EMG-derived output, and no medical or
+  therapeutic claim anywhere in M1.** `UNKNOWN` is the value for "no reviewed row exists", so absence is representable
+  instead of being guessed at. `ANTAGONIST` is used **only where the reviewed movement-specific evidence supports it** —
+  never as the default name for a phase, because a phase belongs to the exercise and a role belongs to the muscle.
+- **MovementPhase**: `ASCENT`, `DESCENT`, `HOLD` — the **exercise's** neutral stage names, read from its reviewed
+  `PhaseTimeline`, never inferred per muscle frame and never derived from joint angles. **A phase is a property of the
+  exercise; a role is a property of the muscle in that exercise**, and keeping the two apart is what stops a stage name
+  from turning into an implicit contraction assertion about a named muscle. Contraction mode is **not** in this
+  vocabulary: `CONCENTRIC`, `ECCENTRIC` and `ISOMETRIC` are muscle-specific claims about a specific muscle under load,
+  they are not recoverable from a stage name, and a claim of that kind is a **separately reviewed, sourced item outside
+  M1** — it is not a schema field, it is not displayed, and no role or phase value implies it.
 - **Emphasis**: an ordinal tier (`PRIMARY`, `SECONDARY`, `SUPPORTING`), not a percentage — and **no numeric 0–1 value is
   derived from it**. The earlier text allowed an internal 0–1 "display intensity derived from the tier and the phase";
   that is withdrawn, because a number computed from a tier and a phase is a number no source supports, and shading a
@@ -1935,30 +1939,42 @@ Exercise → Muscle → Role → MovementPhase → Emphasis
   "exercise": "back_squat",
   "phaseTimeline": "back_squat@v1",
   "source": "anatomy-review-2026-11",
+  "task": "barbell back squat, full depth, controlled tempo",
+  "population": "recreationally trained adults",
+  "reviewStatus": "REVIEWED",
   "muscles": [
-    { "id": "gluteus_maximus",  "role": "PRIME_MOVER", "emphasis": "PRIMARY",   "phases": ["CONCENTRIC", "ECCENTRIC"] },
-    { "id": "vastus_lateralis", "role": "PRIME_MOVER", "emphasis": "PRIMARY",   "phases": ["CONCENTRIC", "ECCENTRIC"] },
-    { "id": "biceps_femoris",   "role": "SYNERGIST",   "emphasis": "SECONDARY", "phases": ["CONCENTRIC"] },
-    { "id": "erector_spinae",   "role": "STABILISER",  "emphasis": "PRIMARY",   "phases": ["ISOMETRIC"] }
+    { "id": "gluteus_maximus",  "role": "PRIME_MOVER", "emphasis": "PRIMARY",   "phases": ["ASCENT", "DESCENT"] },
+    { "id": "vastus_lateralis", "role": "PRIME_MOVER", "emphasis": "PRIMARY",   "phases": ["ASCENT", "DESCENT"] },
+    { "id": "biceps_femoris",   "role": "SYNERGIST",   "emphasis": "SECONDARY", "phases": ["ASCENT"] },
+    { "id": "erector_spinae",   "role": "STABILISER",  "emphasis": "PRIMARY",   "phases": ["ASCENT", "DESCENT"] }
   ]
 }
 ```
 
-`source` is the provenance id of the review that signed the row, and `phaseTimeline` names the reviewed timeline the
-`phases` values are checked against. Both are required keys; the example is schema-shaped, not reviewed content.
+**Every row carries five required keys, and the schema is the whole vocabulary.** `source` is the provenance id of the
+review that signed the row; `task` names the movement variant the row is about (a role is a claim about a task, not about
+a word); `population` names who the evidence covers; `reviewStatus` is `REVIEWED` or `UNREVIEWED` — a **schema field**,
+which is what an entry with no signed review carries, and `UNREVIEWED` rows may not be displayed; `phaseTimeline` names
+the reviewed timeline the `phases` values are checked against. There is no `phaseSource` field and no per-muscle
+contraction mode: an earlier revision used `phaseSource: UNREVIEWED`, which was a value the schema did not carry, and
+`phases` entries of `CONCENTRIC`/`ECCENTRIC`/`ISOMETRIC`, which asserted a contraction mode per muscle. The example above
+is schema-shaped, not reviewed content.
 
 Rules:
 
 - **Every entry carries a source.** No source, no entry — the validator rejects it (§8.3).
 - **Roles are per exercise, not per muscle.** The same muscle may be a prime mover in one exercise and a stabiliser in
   another; that is the educational content.
-- **Phases come from a reviewed timeline, not from joint motion.** The engine publishes no concentric/eccentric/isometric
-  timeline: `PoseMetadata` carries `durationSeconds`, `loopMode`, `motionCurve` and breath fractions, and `LoopMode.HOLD`
-  describes a loop behaviour, not a muscle's role. A stabiliser can be isometric through an exercise whose joints are
-  moving, so phase membership cannot be inferred from motion at all. Each exercise therefore needs an authored,
-  reviewed `PhaseTimeline` (stage 4 deliverable: phase name, start/end fraction of the cycle, source), and the validator
-  checks the table against it. An entry with no timeline behind it is marked `phaseSource: UNREVIEWED` and may not be
-  displayed.
+- **Phases come from a reviewed timeline, not from joint motion.** The engine publishes no stage timeline: `PoseMetadata`
+  carries `durationSeconds`, `loopMode`, `motionCurve` and breath fractions, and `LoopMode.HOLD` describes a loop
+  behaviour, not a muscle's role. A stabiliser does not stop working while the joints move, so phase membership cannot be
+  inferred from motion at all. Each exercise therefore needs an authored, reviewed `PhaseTimeline` (phase name, start/end
+  fraction of the cycle, source), and the validator checks the table against it. An entry with no timeline behind it is
+  marked `reviewStatus: UNREVIEWED` and may not be displayed.
+- **No contraction mode is stored.** A row says which muscle takes which role in which exercise stage; it never says the
+  muscle was contracting concentrically, eccentrically or isometrically, because that is a claim about one muscle under
+  one load and needs its own source (§8.1). A stabiliser listed for a squat's `ASCENT` and `DESCENT` is a statement about
+  the exercise's stages, not a claim that the muscle held a constant length through them.
 - **No intensity numbers without a source.** If a reviewer wants graded emphasis, it is ordinal; measured intensity is
   out of scope until there is a citable measurement protocol.
 
@@ -1974,8 +1990,7 @@ professional judgement, and the architecture should not pretend a unit test can 
 
 ### 8.4 Rendering and limits
 
-- Colour by role and phase (concentric/warm, eccentric/cool, isometric/neutral), driven by the same tier that the panel
-  shows.
+- Colour by role and stage (ascent/warm, descent/cool, hold/neutral), driven by the same tier that the panel shows.
 - A selected muscle gets a distinct tint; selection is presentation state (`CharacterLayerController.setSelected`).
 - Activation never changes geometry (§7.6) and never changes motion.
 
@@ -2029,11 +2044,18 @@ Rules:
 2. Superficial muscles, the eight M1 muscles.
 3. Skeleton overlay.
 
-`SELECTED` exists from the start as state (highlight + panel). In M1 its content is the muscle **name and layer**, plus
-the reported `modelledPathLength` (§7.4 — an absolute length is approximate until the calibration pair is settled, §13
-question 12); it does **not** show a role, because roles come from the activation table and that is stage 4 (§8,
-§15). Showing a role in M1 would either invent one or ship an unreviewed claim. `MUSCLES_DEEP` follows in v2; organs,
-tendons, labels and attachment markers are explicitly later.
+`SELECTED` exists from the start as state (highlight + panel). In M1 its content is the muscle **name, layer and
+categorical role** (§8, X8), plus the reported `modelledPathLength` (§7.4 — an absolute length is approximate until the
+calibration pair is settled, §13 question 12).
+
+**Roles are in M1, and only behind their own gate.** M1 ships categorical roles — the §7.3 `MuscleRole` enum, the §8.2
+schema (source, task, population, review status), a provenance/review validator, and a display gate. A role is displayed
+only for an exercise that has a **reviewed source**; every other exercise shows **no role** rather than a guess, and an
+`UNKNOWN` or `UNREVIEWED` row renders as "no reviewed role". The pilot exercise list is **to be named by the owner**
+(3–5 exercises); this document does not invent it, and "at least three existing procedural exercises" in M1's definition
+of done is the animation requirement, not the role list. What stays out of M1 is unchanged and absolute: no numeric
+activation value, no EMG-derived output, no per-muscle contraction mode, no medical or therapeutic claim (§8.1, §11 hard
+rule 2).
 
 ### 9.3 Interaction
 
@@ -2280,7 +2302,7 @@ a pure state test on the controller in JVM, and a device smoke test in the exist
 None of these tests establishes anatomical correctness, and none of them replaces §12.4.
 
 **No universal monotonicity test.** A tempting requirement is that the quadriceps shorten monotonically through a
-squat's concentric phase. It is not safe as a universal rule. Rectus femoris crosses both the hip and the knee, so its
+squat's ascent. It is not safe as a universal rule. Rectus femoris crosses both the hip and the knee, so its
 length is a function of two joint angles and can lengthen while the vasti shorten; a bi-articular muscle can also hold
 length through a phase in which the joint moves. A test that forced the solver to produce a predetermined curve would
 make the anatomy satisfy the test instead of the test describing the anatomy — precisely the inversion §11 exists to
@@ -2438,12 +2460,14 @@ rule and the M1 checklist all cite it, and none of them may require a check the 
 | L5 | body asset checks (degenerate triangles, weight sums, budgets) and **generated tube structure**: finite coordinates, no zero-area ring, triangle count equal to the §10.3 formula | muscle-vs-skin intersection; authored-mesh helper binds | M1 has no authored muscle mesh; no mesh intersection test ships in M1 |
 | L6 | one preset: declared ranges respected, mesh ring preservation around joint pivots, delta bounds | cross-preset coverage; "anatomy still inside the body" as an automated pass; the bone-landmark rest invariant, which a vertex-only morph cannot affect and which therefore proves nothing | one preset exists; body-anatomy intersection needs a tool M1 does not ship, so it is an L7 A2/A3 judgement |
 | L7 | A1–A6 with a valid record (§12.4) | — | the human gate |
+| §8 roles | the categorical role entries for the owner-named pilot exercises only, each with `source`, `task`, `population`, `reviewStatus`, validated against its reviewed `PhaseTimeline`; unreviewed or `UNKNOWN` rows are not displayed | numeric activation, EMG-derived output, per-muscle contraction mode, medical claims, and roles for any exercise without a reviewed source | roles are cheap to validate and dishonest to guess; a display gate is what makes a partial table acceptable (X8) |
 
 **M1 gate, stated once.** M1 passes when: L1–L4 green; the L5 and L6 subsets above green; **a device run recorded** for
 the M1 configuration (skin + muscle layer + skeleton overlay) — evidence that it renders, not a frame-rate or thermal
-budget, because those are informational by the owner's decision (§12.3); and the §12.4 record exists for the exact
-`(anatomyVersion, rigVersion, assetVersion, presetId)` shipped. Any other combination is not an M1 pass, whatever the
-individual reports say.
+budget, because those are informational by the owner's decision (§12.3); the §8 role table for the owner-named pilot
+exercises validates (every displayed row carries a reviewed source, and every exercise without one shows no role); and
+the §12.4 record exists for the exact `(anatomyVersion, rigVersion, assetVersion, presetId)` shipped. Any other
+combination is not an M1 pass, whatever the individual reports say.
 
 ---
 
@@ -2596,10 +2620,10 @@ pose, attachment and retarget path. Deferred, not forbidden.
 
 **D5. How should muscle geometry react to length changes?**
 *Through the path only. M1 applies no cross-section response.* A muscle's length and position follow from its solved
-path; its cross-section is constant. This is the honest option: a muscle that shortens looks shorter, and nothing in the
-picture implies a contraction magnitude the data cannot support. The isovolumetric cylinder law survives in §7.6 only as
-an optional research hypothesis with validation preconditions attached — not as a v1 mechanism — and activation never
-moves geometry in either case.
+path; its cross-section is constant. This is the honest option: **the modelled path becomes shorter and that is all the
+picture shows** — nothing in it implies a contraction magnitude the data cannot support. The isovolumetric cylinder law
+survives in §7.6 only as an optional research hypothesis with validation preconditions attached — not as a v1 mechanism —
+and activation never moves geometry in either case.
 
 **D6. How should scapula and shoulder-girdle motion influence muscle paths?**
 *Through attachments pinned to `SCAPULA_A/P` and `CLAVICLE_A/P`, plus one or two thorax wrap surfaces.* The engine
@@ -2611,7 +2635,7 @@ engine's scapula rotation, not a positional approximation.
 **D7. Authored activation per exercise, or derived from reusable rules?**
 *Authored per exercise, with reusable phase rules and a required source.* Deriving activation from joint angles or
 muscle length would manufacture physiology from geometry — precisely the fake mechanism §11 forbids. A rule set
-("prime mover in the concentric phase of a knee-extension-dominant exercise") may generate a *draft* table, but a human
+("prime mover in a knee-extension-dominant exercise") may generate a *draft* table, but a human
 signs it and the source field records why.
 
 **D8. How should anatomical layers be stored and loaded?**
@@ -2628,10 +2652,12 @@ mistake.
 
 **D10. How to support future female and male variants without duplicating anatomy or exercise logic?**
 *One rig, one anatomy library, one activation table; variants are meshes + morph sets + materials, with sparse, named
-body-family overrides in anatomy data.* Most muscle attachments are valid across adult body types at this level of
-fidelity; where a shared point is measurably wrong (pelvic width, shoulder breadth), the override is a reviewed data
-line, not a forked file. The acceptance test is mechanical: adding a variant must add zero pose builders, zero
-`MuscleDefinition`s and zero activation rows.
+body-family overrides in anatomy data.* The claim that most muscle attachments hold across adult body types is an
+**unverified hypothesis, not a finding**: no attachment in this document has been measured on any body (§7.3, §7.7.2), so
+a shared point is a default that a **per-body-family review must re-approve before it is reused** for a new family —
+never an assumption that transfers for free. Where a review finds a point measurably wrong (pelvic width, shoulder
+breadth), the override is a reviewed data line, not a forked file. The acceptance test is mechanical: adding a variant
+must add zero pose builders, zero `MuscleDefinition`s and zero activation rows.
 
 ---
 
@@ -2650,7 +2676,7 @@ schedule risk, not the engineering one.
 | 2 | Anatomy kernel + 8 muscles as procedural tubes | 4–5 | 1 anatomist week | L3/L4 green on fixtures |
 | **M1** | **one character, 1 preset, 3+ exercises, 8 muscles, 3 layers** | — | — | **demo + §12.5 gate + §12.4 record** |
 | 3 | Path-rigged authored muscle meshes | 4 | 6–8 muscle art | L5 + visual review |
-| 4 | Activation + education panel (3 exercises) | 2 | 1 review week | §8 validator + sign-off |
+| 4 | Role tables beyond the pilot + phase timelines + education panel | 2 | 1 review week | §8 validator + sign-off |
 | 5 | Morphology v2: four body families (the first stage with more than one preset) | 3 | 6 art | L6 green per preset |
 | 6 | Library expansion: ~35 superficial, ~12 deep | 6–8 | 12–16 art | L3/L4/L5 at scale |
 | 7 | Labels, picking, explanations | 3 | 2 | visual review |
@@ -2745,10 +2771,14 @@ schedule risk, not the engineering one.
 9. Tap hints on the rig: tapping an attachment landmark names the muscle attached there and the layer it belongs to. The
    label is anchored to the landmark and the tap moves nothing — no deformation, no geometry keyed to selection. The full
    picking and explanation system remains stage 7.
+10. Categorical roles for the owner-named pilot exercises (§8, X8): every displayed row carries a reviewed `source`,
+    `task`, `population` and `reviewStatus`, is checked against its reviewed `PhaseTimeline`, and an exercise without a
+    reviewed source shows **no role**. No numeric activation, no EMG output, no per-muscle contraction mode.
 
-**Explicitly not in M1:** authored muscle meshes (stage 3), activation colouring (stage 4), deep muscles, a second
-morphology preset (stage 5), organs, the stage-7 label and picking system (M1 has only the attachment-landmark hints of
-item 9), a muscle library beyond eight, and any claim of surface accuracy.
+**Explicitly not in M1:** authored muscle meshes (stage 3), **role colouring and the education panel** (stage 4 — M1
+ships the role *text*, not the colour mapping or the panel), roles for exercises outside the owner-named pilot list, deep
+muscles, a second morphology preset (stage 5), organs, the stage-7 label and picking system (M1 has only the
+attachment-landmark hints of item 9), a muscle library beyond eight, and any claim of surface accuracy.
 
 ### Stage 3 — Path-rigged authored muscle meshes
 
@@ -2770,19 +2800,21 @@ item 9), a muscle library beyond eight, and any claim of surface accuracy.
 - **Effort:** 4 engineering weeks + 6–8 muscle-art weeks.
 - **Art/expertise:** yes, substantial.
 
-### Stage 4 — Activation and education panel
+### Stage 4 — Roles beyond the pilot, phase timelines and the education panel
 
-- **Objective:** explain participation, honestly.
-- **Components:** activation schema + validator, reviewed `PhaseTimeline` per exercise, table for three exercises, colour
-  mapping, panel copy, the "not EMG" disclaimer, selection state.
-- **Dependencies:** stage 3 (visible muscles to colour).
+- **Objective:** extend the reviewed role table from M1's pilot exercises to the shipped set, and explain participation
+  honestly. The schema, validator and display gate ship in M1 (§9.2, X8); this stage adds coverage and presentation.
+- **Components:** reviewed `PhaseTimeline` per exercise (`ASCENT`/`DESCENT`/`HOLD`), role rows for every exercise the app
+  ships, colour mapping, panel copy, the "not EMG" disclaimer, selection state.
+- **Dependencies:** stage 3 (visible muscles to colour); M1's schema and gate.
 - **Expected files:** `anatomy/ActivationTable.kt`, `app/src/main/assets/anatomy/activation_v1.json`,
   `app/src/main/assets/anatomy/phases_v1.json`, `app/src/test/.../activation/ActivationDefinitionTest.kt`,
   `ui/components/anatomy/MuscleRolePanel.kt`.
-- **User-visible deliverable:** exercise detail shows which muscles work, in which role and phase, with a colour key.
-- **Automated acceptance:** every entry has a source; every phase named by an entry exists in the `PhaseTimeline` it
-  cites; coverage per exercise; an entry with no timeline is flagged `UNREVIEWED` and cannot be displayed.
-- **Manual acceptance:** physiotherapist sign-off on three exercises.
+- **User-visible deliverable:** exercise detail shows which muscles work, in which role and stage, with a colour key.
+- **Automated acceptance:** every entry has a source, task, population and review status; every phase named by an entry
+  exists in the `PhaseTimeline` it cites; coverage per exercise; an entry with `reviewStatus: UNREVIEWED` or role
+  `UNKNOWN` cannot be displayed.
+- **Manual acceptance:** physiotherapist sign-off on the shipped exercises.
 - **Risks:** review bottleneck (R5); copy drifting into physiological claims.
 - **Effort:** 2 engineering weeks + 1 review week.
 - **Art/expertise:** anatomy review.
