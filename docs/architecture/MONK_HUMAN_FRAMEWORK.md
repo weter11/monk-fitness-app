@@ -767,7 +767,7 @@ rotation:
 d_bind(u)   = normalize(pivot(child_u) − pivot(u))            // ASSET space, the X1 bind pose (§6.6)
 B           = Ry(+90°)                                        // asset → engine axes
 d_seg(j)    = normalize(p_child − p_parent)                   // ENGINE space, published positions
-D(u)        = shortestRotation(B · d_bind(u), d_seg(joint(u)))  // the SAME rule and the same tie-break as D1 (§7.2, §7.4 step 1)
+D(u)        = shortestRotation(B · d_bind(u), d_seg(joint(u)))  // the SAME rule and tie-break as X9 (§7.2, §7.4 step 1)
 R_target_world(u) = D(u) · R_target_rest_world(u)
 R_local(u)        = R_target_world(parent)⁻¹ · R_target_world(u)
 translation       = asset units, with the pelvis displaced by (p_PELVIS − rest pelvis) · s
@@ -798,17 +798,17 @@ shared v1 rig actually carries a `Spine1`; until it does, the map is one-to-one 
 | `PELVIS` | `Hips` | translation carried; the only translated joint |
 | `LUMBAR` | `Spine` (+ optional `Spine1` split) | one-to-many allowed, weights sum to 1 |
 | `CHEST` | `Chest` (or `Spine2`) | thorax |
-| `NECK_END` | `Neck` | |
+| `NECK_END` | `Neck | |
 | `HEAD_POS` | `Head` | attachment point, rotation = head orientation |
-| `CLAVICLE_A/P` | `Left/RightShoulder` | |
+| `CLAVICLE_A/P` | `Left/RightShoulder | |
 | `SCAPULA_A/P` | `Left/RightScapula` | **required from v2**; absent in the PR #385 asset |
-| `SHOULDER_A/P` | `Left/RightArm` | |
-| `ELBOW_A/P` | `Left/RightForeArm` | |
+| `SHOULDER_A/P` | `Left/RightArm | |
+| `ELBOW_A/P` | `Left/RightForeArm | |
 | `HAND_A/P` | `Left/RightHand` | `PALM/KNUCKLES/FINGERTIPS` map to visual finger bones or stay unmapped |
 | `HIP_F/B` | `Left/RightUpLeg` | **`HIP_F` is the thigh segment, not the hip point** |
 | `KNEE_F/B` | `Left/RightLeg` | shank |
-| `ANKLE_F/B` | `Left/RightFoot` | |
-| `TOE_F/B` | `Left/RightToeBase` | |
+| `ANKLE_F/B` | `Left/RightFoot | |
+| `TOE_F/B` | `Left/RightToeBase | |
 
 Unmapped joints are legal: a rig without fingers still animates (`docs/CHARACTER_FRAMEWORK.md` §3). The reverse —
 a *required* bone missing — is an asset failure, not a silent fallback, once the asset validator exists.
@@ -1235,7 +1235,7 @@ review. A role change is an anatomy review. Four reviewers, four diffs — that 
 **published position pair** the posed direction is taken from — `p_child − p_parent`, in the parent's frame, with the
 roll convention of X9 (§13 question 11). The roll is an approximation, and §7.2 states its exact form below.
 
-**D1 as a total rule — defined for every segment, including the degenerate ones.** `P` is the parent segment's frame
+**X9 as a total rule — defined for every segment, including the degenerate ones.** `P` is the parent segment's frame
 (published positions, this table's rule applied to the parent), `restDir` the segment's direction in its own rest frame,
 `a = P · restDir`, `b = normalize(child − parent)` in world space, `D = shortestRotation(a, b)`, `R = D · P`. The rule is
 total because each of these is decided, not left to a caller:
@@ -1243,11 +1243,11 @@ total because each of these is decided, not left to a caller:
 | Case | Rule |
 | --- | --- |
 | order | `R = D · P`: the parent's frame is carried first, then the minimal rotation into the published direction. The reverse order rotates about the parent's axes and is wrong for every non-commuting pair |
-| near-zero length | `|child − parent| < τ_len · max(1, |restDir| · s)` → the segment is **treated as degenerate**, not normalised. `τ_len` is scale-aware (`1e-6` of the segment's own rest length in engine units) so a millimetre-scale attachment and a metre-scale segment use the same rule |
-| degenerate | inherit the parent's frame and the authored rest direction (no rotation), as in L.1 |
+| near-zero length | `\|child − parent\| < τ_len · max(1, \|restDir\| · s)` → the segment is **treated as degenerate**, not normalised. `τ_len` is scale-aware (`1e-6` of the segment's own rest length in engine units) so a millimetre-scale attachment and a metre-scale segment use the same rule |
+| degenerate | inherit the parent's frame and the authored rest direction (no rotation), as the measured rows of this table require |
 | root | `PELVIS` has no parent: `P` is the world frame of the bind stance, and its `restDir` is the authored world direction |
-| near-parallel | `|a × b| < τ_rot` and `a · b > 0` → `D = identity`, no normalisation of a tiny cross product |
-| near-antiparallel | `a · b < 0` and `|a × b| < τ_rot` → the **antipodal tie-break**: rotate by `π` about the world axis least aligned with `a` (x → y → z on ties), the same tie-break the construction uses (§7.4.5). `D` is then `−identity` in rotation terms — a half-turn, chosen deterministically |
+| near-parallel | `\|a × b\| < τ_rot` and `a · b > 0` → `D = identity`, no normalisation of a tiny cross product |
+| near-antiparallel | `a · b < 0` and `\|a × b\| < τ_rot` → the **antipodal tie-break**: rotate by `π` about the world axis least aligned with `a` (x → y → z on ties), the same tie-break the construction uses (§7.4.5). `D` is then `−identity` in rotation terms — a half-turn, chosen deterministically |
 | continuity | **not promised at the antipodal singularity.** The two sides of `a · b = 0` give opposite half-turns about different axes, so a segment that passes through antiparallel flips. That is stated rather than hidden behind a threshold that only moves the flip |
 | invalid input | a non-finite coordinate or a zero `restDir` → the segment is `INVALID` with `NON_FINITE_GEOMETRY` (§7.4.1c), never a silently identity frame |
 
@@ -1272,13 +1272,13 @@ placeholder numbers would be a ranking of the placeholders.
 | skull | `HEAD_POS` | none — terminal joint, inherits the neck direction | cranium, mandible reference | attachment point, orientation = head |
 | clavicle | `CLAVICLE_A/P` | `CLAVICLE_A → SCAPULA_A` — **zero length** | clavicle | degenerate, see below |
 | scapula | `SCAPULA_A/P` | `SCAPULA_A → SHOULDER_A` (46 units lateral) | scapular blade, acromion, coracoid | carries the girdle DOF the engine animates |
-| humerus | `SHOULDER_A/P` | `SHOULDER_A → ELBOW_A` | humerus | |
+| humerus | `SHOULDER_A/P` | `SHOULDER_A → ELBOW_A` | humeru | |
 | forearm | `ELBOW_A/P` | `ELBOW_A → HAND_A` | radius + ulna as one frame | pronation is not a separate segment; a pronation-aware wrap is future work |
 | hand | `HAND_A/P` | `HAND_A → FINGERTIPS_A` — **zero length** | metacarpals, palm | fingers are visual-only; degenerate, see below |
 | femur | `HIP_F/B` | `HIP_F → KNEE_F` | femur, greater trochanter, linea aspera | **not the hip joint point** |
-| tibia | `KNEE_F/B` | `KNEE_F → ANKLE_F` | tibia, fibula, tibial tuberosity | |
+| tibia | `KNEE_F/B` | `KNEE_F → ANKLE_F` | tibia, fibula, tibial tuberosit | |
 | foot | `ANKLE_F/B` | `ANKLE_F → TOE_F` — **zero length** | calcaneus, talus, metatarsals | degenerate, see below |
-| toes | `TOE_F/B` | none — terminal joint, inherits the foot direction | phalanges | |
+| toes | `TOE_F/B` | none — terminal joint, inherits the foot direction | phalange | |
 
 **Which segments cannot derive a direction from positions is measured, and the earlier "five coincident" count was
 wrong.** Every registered builder was run and its published positions measured: **66 builders × 9 progress stations
@@ -1426,7 +1426,7 @@ renderer or a validator needs is an output of it, and nothing downstream re-rout
 for each head:
   1  resolve attachments:  world = segmentOrigin + R_segment * (offsetMetres * unitsPerMetre)
        segmentOrigin = the segment node's published world position
-       R_segment     = D1: the minimal rotation taking (parentFrame * restDirection) to the published
+       R_segment     = X9: the minimal rotation taking (parentFrame * restDirection) to the published
                        direction p_child - p_parent, applied in the parent's frame (§7.2)
        - the direction comes from POSITIONS only; the published joint rotation is NOT the segment
          orientation (measured: §7.2 — IK writes local positions, the hierarchy publishes rotation)
@@ -1522,7 +1522,7 @@ e  = eps_num · s              // the numeric margin, engine units
 
 `Rw` is the **same `R_segment` the attachments use** (§7.4 step 1), not the published joint rotation: an obstacle and an
 attachment declared in the same segment frame have to move together, and taking the node's published rotation for one and
-the derived frame for the other would rotate the obstacle relative to the muscle it constrains. The D1 roll
+the derived frame for the other would rotate the obstacle relative to the muscle it constrains. The X9 roll
 approximation therefore applies to obstacles too, and the `|d| · θ` bound covers both.
 
 **One exhaustive state machine, three stages, three outcomes per stage.** Every stage returns exactly one of
@@ -1662,12 +1662,12 @@ place a root solve enters the predicate, so its contract is stated rather than c
 | Step | Rule |
 | --- | --- |
 | domain | `d(p)` is defined for a **positive** semi-axis triple and any finite `p`; the solver is the exterior solver and is only entered when `Σ (p_i/R_i)² > 1` |
-| interior | `Σ (p_i/R_i)² ≤ 1` → `d = 0` exactly, no root solve (the solid distance of K.1) |
+| interior | `Σ (p_i/R_i)² ≤ 1` → `d = 0` exactly, no root solve (the solid distance of §7.4.1b) |
 | scaling | the problem is solved in **scaled coordinates** `u_i = p_i / R_i`, so the ellipsoid becomes the unit sphere and the root is bounded for any axis ratio; `d` is then multiplied back by the axis scale, and the returned distance carries the bound below |
 | root | bracket the unique non-negative root `λ* ≥ 0` of `Σ ( a_i x_i / (λ + a_i²) )² = 1`, monotone decreasing in `λ`, by bisection on a bracket grown from `λ = 0` until the sum is `< 1`; then bisect to `λ` with relative width `2⁻⁴⁰` |
-| distance | `d = |p − x(λ*)|`, `x_i = p_i a_i² / (a_i² + λ*)`; error bound `≤ 2⁻³⁶ · max(R)` reported with the value |
-| zero coordinates | a zero coordinate contributes nothing to the sum and is never divided by; the guard is per component, not on `|p|` |
-| equal axes | the sphere case is solved directly (`d = |p| − R`) rather than through the root, because `λ` is then a difference of squares of nearly equal numbers |
+| distance | `d = \|p − x(λ*)\|`, `x_i = p_i a_i² / (a_i² + λ*)`; error bound `≤ 2⁻³⁶ · max(R)` reported with the value |
+| zero coordinates | a zero coordinate contributes nothing to the sum and is never divided by; the guard is per component, not on `\|p\|` |
+| equal axes | the sphere case is solved directly (`d = \|p\| − R`) rather than through the root, because `λ` is then a difference of squares of nearly equal numbers |
 | non-positive axis | `a_i ≤ 0` → `DEGENERATE_OBSTACLE`, never a clamp and never a division |
 | non-finite input, or no root found | `NON_FINITE_GEOMETRY` or `UNRESOLVED_ROOT` — a reportable reason, never `CLEAR` and never a silently truncated iteration |
 
@@ -1685,7 +1685,7 @@ computed in double precision):
 
 | Case | `q0` | `qd` | `(a, b, c0)` | `Δ` | Verdict under this policy |
 | --- | --- | --- | --- | --- | --- |
-| Clear — line misses the ellipsoid | `(2, 0, 0)` | `(0, 1, 0)` | `(1, 0, 3)` | `−12` | CLEAR: minimum over `[0, 1]` is at `t = 0`, where `|q0| = 2`, so the surface distance is **1**, not 2 — the earlier value conflated `|q0|` with `|q0| + 1` |
+| Clear — line misses the ellipsoid | `(2, 0, 0)` | `(0, 1, 0)` | `(1, 0, 3)` | `−12` | CLEAR: minimum over `[0, 1]` is at `t = 0`, where `\|q0\| = 2`, so the surface distance is **1**, not 2 — the earlier value conflated `\|q0\|` with `\|q0\| + 1` |
 | Clear — infinite line crosses, segment does not | `(2, 0, 0)` | `(1, 0, 0)` | `(1, 4, 3)` | `4` | CLEAR: roots `[−3, −1]` miss `[0, 1]`; minimum at `t = 0`, surface distance `√4 − 1 = 1` |
 | Intersecting | `(−2, 0, 0)` | `(4, 0, 0)` | `(16, −16, 3)` | `64` | `INVALID` — `SEGMENT_INTERSECTS_OBSTACLE`, `[0.25, 0.75] ∩ [0, 1] ≠ ∅` |
 | Tangency on the segment | `(−2, 1, 0)` | `(4, 0, 0)` | `(16, −16, 4)` | `0` | `INVALID` — the tangency is at `t = 0.5`, so `min d = 0 < r`; the band sends it to stage 3 and stage 3 agrees |
@@ -1778,7 +1778,7 @@ rounding per operation; operands bounded by `|coordinate| ≤ 500` engine units 
 | transform accumulation (attachment resolve) | 33 nodes × 2 operations × 1 ulp | worst case additive along the chain: **66 operations**, `66 × 3.05e-5 = 2.01e-3` units = **8.1e-6 m** |
 | radius knots | 0 | authored constants, not sampled; the affine radius between knots adds `≤ 1 ulp` of `r`, inside the operation count |
 | point-to-ellipsoid root solve | `≤ 2⁻³⁶ · max(R)` | the bisection bound of §7.4.1b-1, scaled with the obstacle |
-| minimisation | `L · w_n / 2` | the Lipschitz bracket of K.2, in the certificate itself |
+| minimisation | `L · w_n / 2` | the Lipschitz bracket of the certificate (§7.4.1b) |
 | `Float` rounding of the published path | included above | the polyline is read as published, so its quantisation is an input, not a term the solver can remove |
 | **`eps_num`** | **1e-5 m** = 2.47e-3 units | the budget above with the margin on top |
 
@@ -1789,7 +1789,7 @@ round-to-nearest) the same budget is `4.1e-6 m` and `eps_num` is **2.4×** it. B
 that is 1.2× a worst-case budget is thin, which is exactly why the guarantee is stated as `eps_num − B` and why the
 certificate fails closed: the number is a bound with a stated budget, not a comfortable safety factor.
 
-| *not in `eps_num`* | | |
+| Term *not in* `eps_num` | Value | Where it comes from |
 | --- | --- | --- |
 | rig registration | up to **8.73 mm** at a 1 m lever | 0.5° of `τ_rot` (§6.6 A1) — a different error, outside this guarantee |
 
@@ -2129,7 +2129,7 @@ the constructor must transform the fallback and the support direction.
 | Catmull-Rom parameterisation | uniform, one span per input segment, `P(0) = P1`, `P(1) = P2`, tangents `(P2 − P0)/2` at `P1` and `(P3 − P1)/2` at `P2`, blend `0.25` toward the smoothed point; no centripetal or chordal variant |
 | sampling | uniform in the Catmull-Rom parameter, count recomputed from arc length at the start of each pass, clamped to `8 … pointCapacity`; never uniform in arc length |
 | endpoint policy | the two attachments are never moved, never resampled and never replaced; they are the same objects in every pass |
-| survivors | a pass's output polyline replaces its input entirely. A waypoint survives until a later pass replaces its subsegment; a temporary entry/exit point survives **only** if the final predicate accepted a polyline containing it — and since such a point sits on the surface, it never does (K.9) |
+| survivors | a pass's output polyline replaces its input entirely. A waypoint survives until a later pass replaces its subsegment; a temporary entry/exit point survives **only** if the final predicate accepted a polyline containing it — and since such a point sits on the surface, it never does (§7.4.5 escalation table) |
 | worklist | the `(segment, obstacle)` pairs to act on are frozen at the start of a pass and do not grow as construction inserts points; segments created inside a pass are first tested in the **next** pass, so a pass cannot chase its own output |
 | escalation | **any** failed final predicate escalates: a centreline-clear but tube-invalid candidate (`min g < e`, no intersection, stage 3) escalates exactly like an intersecting one, with the same `1.5×` and the same corridor bound. The earlier rule escalated only on centreline crossings and left a tube-invalid candidate looping without the one operation that could rescue it |
 | bounds | `K ≥ 1`, `corridorMetres > 0` and `pointCapacity ≥ 2` are validated at L3 as finite and positive — a NaN corridor makes every comparison false and a zero cap makes every insertion fail — and `K` is an integer, never a float compared with a rounded pass counter |
@@ -2683,7 +2683,7 @@ change that quietly promotes an approximation to a claim.
 | Analytic two-bone IK | established technique | no soft-tissue, no joint-surface contact | existing validator (L1) |
 | Contact settlement / posture CCD | established, bounded | iterative, not a physics solve | L1 + RFC R12 |
 | Position-driven retarget (X3) | established technique | rotations derived from two published positions plus a fixed `Ry(+90°)` basis; translation only at the pelvis; the roll about the segment direction is the same approximation §7.2 carries, and continuity at an antiparallel bind direction is not promised | L2 rest invariant + `PoseRetargeterRestInvariantTest` |
-| Segment frame from published positions + declared roll | approximation | the roll about the segment direction is arbitrary, so an attachment offset of `d` metres carries up to `d · θ` of error (chord `2|d| sin(θ/2)`); **four of fourteen** segment rows take their parent's frame in every frame measured (`pelvis` and `clavicle` coincident, `skull` and `toes` terminal), and the `hand` row in one builder of 66 (§7.2 L.1) | `SegmentFrameDirectionTest` (L2) |
+| Segment frame from published positions + declared roll | approximation | the roll about the segment direction is arbitrary, so an attachment offset of `d` metres carries up to `d · θ` of error (chord `2\|d\| sin(θ/2)`); **four of fourteen** segment rows take their parent's frame in every frame measured (`pelvis` and `clavicle` coincident, `skull` and `toes` terminal), and the `hand` row in one builder of 66 (§7.2) | `SegmentFrameDirectionTest` (L2) |
 | Bone-name resolution with aliases | established technique | alias tables can map the wrong bone | L2 coverage + manual rig review |
 | Anatomical attachment points | **requires expert validation** | a plausible-looking point can still be wrong | L3 mechanical + L7 review (§12.4) |
 | Path + ellipsoid obstacle wrapping | approximation — geometric, not contact | ellipsoids stand in for bone and fascia; the clearance predicate is measured with a stated error budget (`eps_num`), and the approximation is the obstacle model, not the arithmetic | L4 fixtures + visual review |
@@ -2751,7 +2751,7 @@ Seven levels, each with one owner, one report and an explicit automation status.
 | `SegmentFrameDirectionTest` | L2 | §7.2/§7.4 step 1: a derived segment direction equals the published direction `p_child − p_parent` within `τ_dir` (proposed, fixed at stage 1); the roll convention is declared per segment and reproduced; run on real baseline poses over both hierarchies, both sides of every bilateral limb, one deliberately bent IK case, the measured degenerate rows (`pelvis`, `clavicle`, `skull`, `toes` — inherited frame, no zero-vector normalisation) and the manually overridden hand of `pike_pushup_standard`; plus near-parallel, near-antiparallel from both sides, zero length, root and straightening per X9 |
 | `NonCommutingSplitTest` | L2 | §6.2: a parent and child about different axes compose to the stated world rotation — a reversed `parent⁻¹ · child` order or a one-sided `B` fails |
 | `UnmappedBoneInheritanceTest` | L2 | §6.2: moving a mapped parent carries an unmapped child's world rotation within tolerance while the child's local rotation is unchanged; the twist policy is the declared one |
-| `BoneMapCoverageTest` | L2 | 23 mapped joints resolve; unmapped joints are declared, not accidental |
+| `BoneMapCoverageTest` | L2 | **21** mapped joints resolve and the 12 undrivable engine joints are declared, not accidental (X2) |
 | `RigSideTest` | L2 | `Left*` bones on the same side as anatomy side A in the rest pose |
 | `AnatomyDefinitionTest` | L3 | ids unique; attachments resolve; envelope bounds; L/R mirror; heads consistent |
 | `MusclePathGeometryTest` | L4 | arc length ≥ chord; every segment of the final polyline is certified clear of every obstacle in the head's union under the three-stage state machine of §7.4.1, with the solid-distance predicate and the Lipschitz certificate; every sample lies outside the surface by the same margin; repeatable across runs and buffer reuse on one device and configuration |
@@ -2823,7 +2823,7 @@ changes which predicate it calls changes its primary reason, so every row pins b
 | Fixture | Configuration | Expected verdict |
 | --- | --- | --- |
 | `raw_clear` | a polyline that clears every obstacle | `VALID` |
-| `raw_clear_negative_discriminant` | unit-sphere case `(q0, qd) = ((2,0,0), (0,1,0))`: `Δ = −12 ≪ −Δ_tol` | `VALID` — minimum over `[0, 1]` at `t = 0`, where `|q0| = 2` and the surface distance is **1** (two occurrences of the wrong value "2" were in this document); a test that maps a large negative `Δ` into the fail-closed band fails here |
+| `raw_clear_negative_discriminant` | unit-sphere case `(q0, qd) = ((2,0,0), (0,1,0))`: `Δ = −12 ≪ −Δ_tol` | `VALID` — minimum over `[0, 1]` at `t = 0`, where `\|q0\| = 2` and the surface distance is **1** (two occurrences of the wrong value "2" were in this document); a test that maps a large negative `Δ` into the fail-closed band fails here |
 | `raw_clear_roots_outside_segment` | unit-sphere case `((2,0,0), (1,0,0))`: `Δ = 4 > Δ_tol`, roots `[−3, −1] ∩ [0, 1] = ∅` | `VALID` — the infinite line crosses the ellipsoid, the finite segment does not; a `Δ ≥ 0`-only verdict fails here |
 | `raw_intersecting` | unit-sphere case `((−2,0,0), (4,0,0))`: `Δ = 64`, roots `[0.25, 0.75]` | `INVALID` — `SEGMENT_INTERSECTS_OBSTACLE` |
 | `tangent_on_segment_invalid` | unit-sphere case `((−2,1,0), (4,0,0))`: `Δ = 0`, tangency at `t = 0.5` | `INVALID` — `min d = 0 < r`; the band routes it to stage 3 and stage 3 agrees |
@@ -2856,7 +2856,7 @@ changes which predicate it calls changes its primary reason, so every row pins b
 | `exempt_then_penetrate` | the same exemption, a route that leaves and then passes through the same obstacle at a non-exempt station | `INVALID` — `CLEARANCE_VIOLATION`, full head validator |
 | `exempt_re_entry` | 1-D unit sphere, zero radius, path `0.5 → 1.2 → 0.9 → 1.5`, exemption `[0, 0.7]` | `INVALID` — re-entry at fractional stations `0.5625 … 0.6875` is a violation under X5, although every one of those stations is inside the exempted interval |
 | `pe_centre` | point at the obstacle centre | `d = 0`; the interior branch, no root solve |
-| `pe_principal_axis` | a point on each principal axis | the analytic distance per axis, `|p_i| − R_i` |
+| `pe_principal_axis` | a point on each principal axis | the analytic distance per axis, `\|p_i\| − R_i` |
 | `pe_repeated_axis` | two equal semi-axes | the sphere branch, so the root solve is not entered |
 | `pe_tiny_axis` | one 0.5 mm axis against a 200 mm one | the scaled solve, `d` within its reported bound |
 | `pe_interior` | a point strictly inside | `d = 0` |
@@ -2880,7 +2880,7 @@ changes which predicate it calls changes its primary reason, so every row pins b
 | `pass_cap` | a configuration that exhausts the pass budget `K` without a candidate | `INVALID` — `PASS_CAP`; deterministic and terminating |
 | `two_obstacle_projection_cycle` | two spheres centred at `0` and `2`, radius `1.5`, a sample at `0.5` | `searchOutcome = PASS_CAP`, and the record shows the sample alternating `1.5 → 0.5 → 1.5` under ordered projection; an implementation that treats projection as convergent (iterating to a tolerance, or reporting the first projected position as final) cannot reproduce the sequence |
 | `final_clearance_and_budget_both_fail` | a final polyline that fails the predicate at one named segment **and** exhausts `K` at the same pass | one record: `searchOutcome = PASS_CAP` **and** `reason = CLEARANCE_VIOLATION` with the segment and obstacle index — the two fields are separate (X7), so neither overwrites the other |
-| `retained_entry_never_clears` | the `single_obstacle` geometry with the entry/exit construction points retained | `INVALID` — `PASS_CAP`: the closest approach from a surface point to any waypoint is `R·D/√(R²+D²) < R`, so no escalation clears it (K.9) |
+| `retained_entry_never_clears` | the `single_obstacle` geometry with the entry/exit construction points retained | `INVALID` — `PASS_CAP`: the closest approach from a surface point to any waypoint is `R·D/√(R²+D²) < R`, so no escalation clears it (§7.4.5) |
 
 **`outside_endpoints_crossing_obstacle`, constructed so it cannot pass by accident.** One ellipsoid with semi-axes
 4 mm × 2 mm × 2 mm centred on the straight chord between two attachments 0.29 m apart, with the polyline running along
@@ -3117,6 +3117,21 @@ combination is not an M1 pass, whatever the individual reports say.
    `offset = engineY / s − assetY`, which is proportional to `1/s` and not to `s`, while the same residual expressed in
    engine units is proportional to `s`; a table scaled "linearly with the constant" would be wrong in one of the two
    directions whichever direction it chose.
+
+**Owner defaults applied in this revision (X1–X8).** Each is written above as the chosen design and repeated here as a
+decision of record: **default chosen, owner confirmation pending** in every case, and each names the smallest experiment
+that would settle it.
+
+| # | Default | Where it is applied | Status | Smallest resolving experiment |
+| --- | --- | --- | --- | --- |
+| **X1** | A1's bind frame is a **canonical straight-limbed A-pose** computed in character-side code from `SkeletonDefinition` segment lengths, not an engine pose and not the folded-arm standing frame | §6.6 (the pose and its 21 joint positions), §15 stage 1 | default chosen, owner confirmation pending | generate the rig from the definition and run `RigLandmarkAlignmentTest` against that frame; if the frame's limb directions disagree with the asset's bind, the generator is wrong, not the frame |
+| **X2** | **M1 drops the ten finger bones**; the hand is a simple shape, and the two join sets (12 engine joints without an asset bone, 11 asset bones without an engine joint) are tabulated | §6.1, §6.2, §15 stage 1 | default chosen, owner confirmation pending | render a hand at the smallest shipped size; if the silhouette fails review with no finger bone, re-open the row rather than adding bones the engine cannot drive |
+| **X3** | **Position-driven retarget**: each mapped bone's rotation is the minimal rotation from its bind direction to the published segment direction, same segment-frame rule as anatomy; `basis = Ry(+90°)`, `s = 235/0.95`, translation 0 at the pelvis | §6.2 (the rule), §11 (classification), §15 stage 1 | default chosen, owner confirmation pending | land the change behind the existing `PoseRetargeter` signature and compare A2 residuals before and after on the three named poses |
+| **X4** | **M1's UI shows `relativePathLengthChange` only**; absolute metres are withheld until a named calibration pair and an evidence-backed uncertainty exist, and `modelledPathLength` stays in the data and debug | §9.2, §12.5, §13 question 12, §15 stage 2 and M1 item 4 | default chosen, owner confirmation pending | name the pair, measure both spans on the stage-1 rig, and quote the uncertainty; only then is a metre value displayable |
+| **X5** | An attachment-contact **exemption is one reviewed first-egress interval**; any re-entry after leaving is a violation, and the same mask applies to endpoint, sample, construction, projection and final validation | §7.3 (`ContactExemption`), §7.4.1, §12.2.1 (`exempt_re_entry`) | default chosen, owner confirmation pending | run the 1-D re-entry fixture: if the implementation accepts stations 0.5625–0.6875, the mask is not an interval |
+| **X6** | The **continuity observer is diagnostic only** and never a gate; **route hysteresis is removed from M1** | §7.4.3, §12.2 (`MusclePathContinuityTest`) | default chosen, owner confirmation pending | the observer-correctness fixtures: a rigid translation must not alarm, a branch switch must |
+| **X7** | **`NO_ROUTE` is disabled** until a proof procedure exists; the frame exposes a **terminal search outcome** (`SEARCH_EXHAUSTED` / `PASS_CAP`) separately from the **last geometric cause** | §7.4.1c, §7.4.5, §12.2.1 | default chosen, owner confirmation pending | `final_clearance_and_budget_both_fail`: one record, two fields, neither overwriting the other |
+| **X8** | **Categorical roles ship in M1**: schema, provenance/review validator and display gate, for exercises with a reviewed source only; the **pilot exercise list is to be named by the owner** (3–5 exercises) and is not invented here | §7.3 (`MuscleRole.UNKNOWN`), §8, §9.2, §12.5, §15 M1 item 10 | default chosen, owner confirmation pending | the owner names the pilot list; the validator then runs on it and every other exercise must display no role |
 
 **Known traps from the device run (spike #384).** Each cost a debugging cycle on real hardware, and each is a property of
 the current code, not of the model. PR #385 at `bcb3658` contained none of the first three fixes; the current head
