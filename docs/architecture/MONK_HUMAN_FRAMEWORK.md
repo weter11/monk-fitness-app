@@ -684,17 +684,35 @@ library, one anatomy library and one animation library serve every body.
 | Fingers | visual-only, 2 segments per finger or a single segment in tier `reduced` | the engine has no finger kinematics beyond `HAND_A`; the rig may add them as static/derived |
 
 `humanoid_v2` target bone counts: **21 mapped bones + up to 30 visual-only bones (fingers, jaw, eyes, twist) + muscle
-helper bones** (§7.5). The 30 is a budget for the parts the rig may add: 20 finger segments (5 fingers × 2 segments ×
-2 hands), a jaw, two eyes and up to six twist bones (upper arm, forearm and thigh per side) reach 29 — visual only, in
-the sense that the engine has no joint for any of them. The current
-PR #385 asset has 32 joints, 5 single-segment fingers per hand, no scapula, no twist bones. The scapula addition is the
-only rig change that materially affects anatomy quality.
+helper bones** (§7.5). The 30 is a budget for the parts the rig may add, and the arithmetic is checked against what M1
+actually carries: 20 finger segments (5 fingers × 2 segments × 2 hands) + a jaw + two eyes + up to six twist bones (upper
+arm, forearm and thigh per side) = **29 of 30**, so one bone of headroom. M1's rig keeps **10** of them — 5 single-segment
+fingers per hand, which is what the PR #385 asset authors — and the remaining 19 (a jaw, two eyes, six twists and the ten
+spare finger segments a two-segment-per-finger v2 rig would add) stay inside the same allowance: `10 + 9 + 10 = 29 ≤ 30`.
+Visual-only means the engine has no joint for any of them; it does **not** mean unmapped-and-forgotten (§6.2, X2). The
+current PR #385 asset has 32 joints, 5 single-segment fingers per hand, no scapula, no twist bones. The scapula addition
+is the only rig change that materially affects anatomy quality.
 
-**X2 — M1 drops the ten finger bones, and the two join sets are tabulated.** *Default chosen, owner confirmation
-pending.* The hand is a **simple shape**: the engine publishes `HAND_A` plus `WRIST`, `PALM`, `KNUCKLES` and `FINGERTIPS`
-in a straight chain with no articulation, so a rig bone per finger would have nothing to follow and the §7.2 hand frame is
-already the last position the limb solve produces. M1 therefore carries no finger bone, and the ten finger bones of the
-PR #385 asset are dropped rather than left unmapped and holding still (§6.2).
+**X2 — the ten finger bones stay, as visual-only bones.** *Reversed by owner: fingers kept.* The engine still has no
+finger kinematics — it publishes `HAND_A` plus `WRIST`, `PALM`, `KNUCKLES` and `FINGERTIPS` in a straight chain — so a
+finger bone is **visual-only**: it has no engine joint, it contributes **no A1 residual** and is **excluded from
+`RigLandmarkAlignmentTest`** (listed as unmapped, not as a failure), and it is counted against the **visual-bone budget**
+above (10 of the 30), never against the 21 mapped joints. Keeping them is a deliberate owner decision in favour of the
+silhouette; the mechanics are unchanged, because the hand chain is rigid whatever the rig carries.
+
+**Motion rule for the fingers in M1: rigid inheritance.** Each finger bone inherits its hand bone's frame
+**parent-relative** — the rule already specified for visual-only bones (§6.2, "an unmapped bone is not a bone that holds
+still"): the finger keeps its bind **local** rotation relative to `Left/RightHand` and rides it, so the fingers follow the
+hand rigidly with no rotation of their own and no invented articulation. The generator lays them along the hand segment in
+the X1 A-pose (§6.6) — continuing the `HAND → FINGERTIPS` direction from the hand head — so the bind silhouette reads as
+an open, relaxed hand.
+
+**Later option, not M1 scope: drive the fingers from the published hand direction.** The engine does publish a hand
+direction — `HAND → FINGERTIPS`, 22 units in 65 of 66 builders and 0 in `pike_pushup_standard`, where the pose declares a
+manual override and the inheritance rule above applies instead. Driving each finger's frame from that direction would let
+the hand's authored articulation reach the fingers. It is deferred because the direction is **one vector for five
+fingers**: it carries no per-finger information, so it can only re-orient the whole hand — which rigid inheritance already
+does — and it would put a second consumer on a quantity whose one degenerate builder is a manual override.
 
 Because the join is not one-to-one, both directions are stated once, measured from `MonkJointResolver.kt:12-34` against
 the parsed asset:
@@ -702,17 +720,19 @@ the parsed asset:
 | Engine joints with **no** asset bone (12) | Why |
 | --- | --- |
 | `SCAPULA_A`, `SCAPULA_P` | the asset has no scapula; the resolver maps `CLAVICLE_*` to `Left/RightShoulder` and stops there |
-| `WRIST_A/P`, `PALM_A/P`, `KNUCKLES_A/P`, `FINGERTIPS_A/P` | the resolver maps none of the hand chain, and X2 drops fingers |
+| `WRIST_A/P`, `PALM_A/P`, `KNUCKLES_A/P`, `FINGERTIPS_A/P` | the resolver maps none of the hand chain; the fingers stay visual-only and inherit the hand rigidly (X2) |
 | `HEEL_F`, `HEEL_B` | the asset has `Foot` and `ToeBase` only |
 
 | Asset skin joints with **no** engine joint (11) | Why |
 | --- | --- |
 | `HeadTop_End` | a crown node; the engine's last joint is `HEAD_POS` and it has no crown (§7.2) |
-| `LeftHandThumb/Index/Middle/Ring/Pinky`, `RightHand…` (10) | fingers are visual-only and dropped in M1 (X2) |
+| `LeftHandThumb/Index/Middle/Ring/Pinky`, `RightHand…` (10) | **visual-only, and kept in M1** (X2, reversed by owner): no engine joint, no A1 row, counted in the 30-bone visual budget, riding the hand by §6.2 inheritance |
 
 32 asset skin joints − 11 = 21 mapped, and 33 engine joints − 21 = 12 undrivable. Those two counts are the whole of the
 mismatch: a rig that adds the scapula pair closes two of the twelve, and nothing closes the ten hand joints without
-finger kinematics the engine does not have.
+finger kinematics the engine does not have. **The 11 orphan asset bones are not an error**: they are visual-only bones
+that a v2 rig may legitimately need (a crown, five fingers per hand here, more if a family adds a jaw or eyes), and the
+asset validator reports them as visual-only rather than as unmapped-and-broken (§10.5).
 
 **This is a v1 scope constraint, not an architectural law.** One rig is what makes M1 affordable: one `BoneMap`, one
 rest invariant, one pose library, one anatomy library. It is not a claim that a single rig, surface morphs and uniform
@@ -798,17 +818,17 @@ shared v1 rig actually carries a `Spine1`; until it does, the map is one-to-one 
 | `PELVIS` | `Hips` | translation carried; the only translated joint |
 | `LUMBAR` | `Spine` (+ optional `Spine1` split) | one-to-many allowed, weights sum to 1 |
 | `CHEST` | `Chest` (or `Spine2`) | thorax |
-| `NECK_END` | `Neck | |
+| `NECK_END` | `Neck` | |
 | `HEAD_POS` | `Head` | attachment point, rotation = head orientation |
-| `CLAVICLE_A/P` | `Left/RightShoulder | |
+| `CLAVICLE_A/P` | `Left/RightShoulder` | |
 | `SCAPULA_A/P` | `Left/RightScapula` | **required from v2**; absent in the PR #385 asset |
-| `SHOULDER_A/P` | `Left/RightArm | |
-| `ELBOW_A/P` | `Left/RightForeArm | |
-| `HAND_A/P` | `Left/RightHand` | `PALM/KNUCKLES/FINGERTIPS` map to visual finger bones or stay unmapped |
+| `SHOULDER_A/P` | `Left/RightArm` | |
+| `ELBOW_A/P` | `Left/RightForeArm` | |
+| `HAND_A/P` | `Left/RightHand` | `PALM/KNUCKLES/FINGERTIPS` stay unmapped; the ten finger bones are visual-only children of the hand (X2) |
 | `HIP_F/B` | `Left/RightUpLeg` | **`HIP_F` is the thigh segment, not the hip point** |
 | `KNEE_F/B` | `Left/RightLeg` | shank |
-| `ANKLE_F/B` | `Left/RightFoot | |
-| `TOE_F/B` | `Left/RightToeBase | |
+| `ANKLE_F/B` | `Left/RightFoot` | |
+| `TOE_F/B` | `Left/RightToeBase` | |
 
 Unmapped joints are legal: a rig without fingers still animates (`docs/CHARACTER_FRAMEWORK.md` §3). The reverse —
 a *required* bone missing — is an asset failure, not a silent fallback, once the asset validator exists.
@@ -818,7 +838,9 @@ rotation**, and `:94` propagates that rotation to its children, so an unmapped c
 all. In the PR #385 asset **11 of 32 skin joints** are unmapped — `HeadTop_End` and the ten finger bones — so a wrist
 rotation leaves the fingers at their bind orientation while the hand turns under them. The contract required here is
 **parent-relative bind-rest inheritance**: an unmapped bone keeps its bind *local* rotation relative to its nearest
-mapped ancestor, so it rides its parent and no rotation of its own is invented. Twist bones get a **named twist policy**
+mapped ancestor, so it rides its parent and no rotation of its own is invented. **This is the rule M1's fingers use**
+(X2): the ten finger bones are visual-only and inherit `Left/RightHand` rigidly, which is exactly the behaviour this
+paragraph specifies — an unmapped chain that follows its parent instead of holding its bind world rotation. Twist bones get a **named twist policy**
 instead of inheriting by accident — `TWIST_NONE`, `TWIST_FRACTIONAL` (a declared fraction of the parent's twist) or
 `TWIST_ANIMATED` (a pose drives it) — declared per bone in `BoneMap` and reported at L2.
 
@@ -1030,6 +1052,11 @@ engine units with `+Y` up, `+X` forward and `+Z` lateral, side `A` on `−Z`:
 Nothing in that table needs a published frame, a rig, or the engine's solver — it is arithmetic on the definition, which is
 the property X1 is chosen for. The 21 mapped joints of §6.2 are the ones A1 covers; the other 12 engine joints have no
 asset bone to align (§6.2, X2).
+
+**Keeping the fingers cannot move the hand's A1 row.** A1 compares each mapped bone's *head* with its engine joint, and the
+generator places `Left/RightHand` at the X1 `HAND_A` position and parents the finger bones **to it, distally** — a child's
+head does not locate its parent's, so the 10 finger bones add no A1 row and cannot shift the one the hand has. They are
+listed as unmapped in `RigLandmarkAlignmentTest`'s report, which is an inventory, not a residual (§12.2).
 
 **The shipped asset does not pass A1. That is a measured baseline, not a pass.** Re-measured for this revision: the asset
 was parsed at `23ef1c0`, its bind bone heads converted to engine space by **`p_engine = s · Ry(+90°) · p_asset`** with
@@ -1272,13 +1299,13 @@ placeholder numbers would be a ranking of the placeholders.
 | skull | `HEAD_POS` | none — terminal joint, inherits the neck direction | cranium, mandible reference | attachment point, orientation = head |
 | clavicle | `CLAVICLE_A/P` | `CLAVICLE_A → SCAPULA_A` — **zero length** | clavicle | degenerate, see below |
 | scapula | `SCAPULA_A/P` | `SCAPULA_A → SHOULDER_A` (46 units lateral) | scapular blade, acromion, coracoid | carries the girdle DOF the engine animates |
-| humerus | `SHOULDER_A/P` | `SHOULDER_A → ELBOW_A` | humeru | |
+| humerus | `SHOULDER_A/P` | `SHOULDER_A → ELBOW_A` | humerus | |
 | forearm | `ELBOW_A/P` | `ELBOW_A → HAND_A` | radius + ulna as one frame | pronation is not a separate segment; a pronation-aware wrap is future work |
 | hand | `HAND_A/P` | `HAND_A → FINGERTIPS_A` — **zero length** | metacarpals, palm | fingers are visual-only; degenerate, see below |
 | femur | `HIP_F/B` | `HIP_F → KNEE_F` | femur, greater trochanter, linea aspera | **not the hip joint point** |
-| tibia | `KNEE_F/B` | `KNEE_F → ANKLE_F` | tibia, fibula, tibial tuberosit | |
+| tibia | `KNEE_F/B` | `KNEE_F → ANKLE_F` | tibia, fibula, tibial tuberosity | |
 | foot | `ANKLE_F/B` | `ANKLE_F → TOE_F` — **zero length** | calcaneus, talus, metatarsals | degenerate, see below |
-| toes | `TOE_F/B` | none — terminal joint, inherits the foot direction | phalange | |
+| toes | `TOE_F/B` | none — terminal joint, inherits the foot direction | phalanges | |
 
 **Which segments cannot derive a direction from positions is measured, and the earlier "five coincident" count was
 wrong.** Every registered builder was run and its published positions measured: **66 builders × 9 progress stations
@@ -2745,8 +2772,8 @@ Seven levels, each with one owner, one report and an explicit automation status.
 | Test | Level | Asserts |
 | --- | --- | --- |
 | `RigAssetContractTest` | L2 | every required bone present, bind == rest, inverse binds finite, ≤ 4 influences |
-| `PoseRetargeterRestInvariantTest` | L2 | neutral pose → identity on every bone (exists in PR #385; extended to v2 rig) |
-| `RigLandmarkAlignmentTest` | L2 | §6.6 A1: every mapped bone head coincides with its engine joint at bind within `τ_bind`; rest orientations within `τ_rot` — expected **red** on `humanoid_v1` against the recorded baseline (§6.6) |
+| `PoseRetargeterRestInvariantTest` | L2 | neutral pose → identity on **every** bone — mapped and visual-only alike, so the 10 finger bones are asserted at identity too (they inherit the hand, and at bind the hand is at rest); exists in PR #385, extended to the v2 rig |
+| `RigLandmarkAlignmentTest` | L2 | §6.6 A1: every **mapped** bone head coincides with its engine joint at the X1 bind frame within `τ_bind`; rest orientations within `τ_rot`. The 10 finger bones are **excluded from the comparison and listed as unmapped** (X2) — their report entry is inventory, not a residual, and keeping them cannot move the hand's own row; expected **red** on `humanoid_v1` against the recorded baseline (§6.6) |
 | `RigAlignmentResidualTest` | L2 | §6.6 A2: the **measured** residual per joint at the three named poses, within `τ_residual`; the equal-length/different-direction control case must report a non-zero residual, and no length-sum bound is computed |
 | `SegmentFrameDirectionTest` | L2 | §7.2/§7.4 step 1: a derived segment direction equals the published direction `p_child − p_parent` within `τ_dir` (proposed, fixed at stage 1); the roll convention is declared per segment and reproduced; run on real baseline poses over both hierarchies, both sides of every bilateral limb, one deliberately bent IK case, the measured degenerate rows (`pelvis`, `clavicle`, `skull`, `toes` — inherited frame, no zero-vector normalisation) and the manually overridden hand of `pike_pushup_standard`; plus near-parallel, near-antiparallel from both sides, zero length, root and straightening per X9 |
 | `NonCommutingSplitTest` | L2 | §6.2: a parent and child about different axes compose to the stated world rotation — a reversed `parent⁻¹ · child` order or a one-sided `B` fails |
@@ -3119,19 +3146,19 @@ combination is not an M1 pass, whatever the individual reports say.
    directions whichever direction it chose.
 
 **Owner defaults applied in this revision (X1–X8).** Each is written above as the chosen design and repeated here as a
-decision of record: **default chosen, owner confirmation pending** in every case, and each names the smallest experiment
-that would settle it.
+decision of record, with the owner's status: **X1 and X3–X8 confirmed by owner**, **X2 reversed by owner (fingers kept)**.
+The smallest experiment is kept against each row because a confirmed design still has to be measured, not assumed.
 
 | # | Default | Where it is applied | Status | Smallest resolving experiment |
 | --- | --- | --- | --- | --- |
-| **X1** | A1's bind frame is a **canonical straight-limbed A-pose** computed in character-side code from `SkeletonDefinition` segment lengths, not an engine pose and not the folded-arm standing frame | §6.6 (the pose and its 21 joint positions), §15 stage 1 | default chosen, owner confirmation pending | generate the rig from the definition and run `RigLandmarkAlignmentTest` against that frame; if the frame's limb directions disagree with the asset's bind, the generator is wrong, not the frame |
-| **X2** | **M1 drops the ten finger bones**; the hand is a simple shape, and the two join sets (12 engine joints without an asset bone, 11 asset bones without an engine joint) are tabulated | §6.1, §6.2, §15 stage 1 | default chosen, owner confirmation pending | render a hand at the smallest shipped size; if the silhouette fails review with no finger bone, re-open the row rather than adding bones the engine cannot drive |
-| **X3** | **Position-driven retarget**: each mapped bone's rotation is the minimal rotation from its bind direction to the published segment direction, same segment-frame rule as anatomy; `basis = Ry(+90°)`, `s = 235/0.95`, translation 0 at the pelvis | §6.2 (the rule), §11 (classification), §15 stage 1 | default chosen, owner confirmation pending | land the change behind the existing `PoseRetargeter` signature and compare A2 residuals before and after on the three named poses |
-| **X4** | **M1's UI shows `relativePathLengthChange` only**; absolute metres are withheld until a named calibration pair and an evidence-backed uncertainty exist, and `modelledPathLength` stays in the data and debug | §9.2, §12.5, §13 question 12, §15 stage 2 and M1 item 4 | default chosen, owner confirmation pending | name the pair, measure both spans on the stage-1 rig, and quote the uncertainty; only then is a metre value displayable |
-| **X5** | An attachment-contact **exemption is one reviewed first-egress interval**; any re-entry after leaving is a violation, and the same mask applies to endpoint, sample, construction, projection and final validation | §7.3 (`ContactExemption`), §7.4.1, §12.2.1 (`exempt_re_entry`) | default chosen, owner confirmation pending | run the 1-D re-entry fixture: if the implementation accepts stations 0.5625–0.6875, the mask is not an interval |
-| **X6** | The **continuity observer is diagnostic only** and never a gate; **route hysteresis is removed from M1** | §7.4.3, §12.2 (`MusclePathContinuityTest`) | default chosen, owner confirmation pending | the observer-correctness fixtures: a rigid translation must not alarm, a branch switch must |
-| **X7** | **`NO_ROUTE` is disabled** until a proof procedure exists; the frame exposes a **terminal search outcome** (`SEARCH_EXHAUSTED` / `PASS_CAP`) separately from the **last geometric cause** | §7.4.1c, §7.4.5, §12.2.1 | default chosen, owner confirmation pending | `final_clearance_and_budget_both_fail`: one record, two fields, neither overwriting the other |
-| **X8** | **Categorical roles ship in M1**: schema, provenance/review validator and display gate, for exercises with a reviewed source only; the **pilot exercise list is to be named by the owner** (3–5 exercises) and is not invented here | §7.3 (`MuscleRole.UNKNOWN`), §8, §9.2, §12.5, §15 M1 item 10 | default chosen, owner confirmation pending | the owner names the pilot list; the validator then runs on it and every other exercise must display no role |
+| **X1** | A1's bind frame is a **canonical straight-limbed A-pose** computed in character-side code from `SkeletonDefinition` segment lengths, not an engine pose and not the folded-arm standing frame | §6.6 (the pose and its 21 joint positions), §15 stage 1 | **confirmed by owner** | generate the rig from the definition and run `RigLandmarkAlignmentTest` against that frame; if the frame's limb directions disagree with the asset's bind, the generator is wrong, not the frame |
+| **X2** | **The ten finger bones stay**, as visual-only bones: no engine joint, no A1 row, excluded from `RigLandmarkAlignmentTest` and listed as unmapped, counted in the 30-bone visual budget (10 of 30), and inheriting their hand bone's frame parent-relative so the fingers follow the hand rigidly; the generator lays them along the X1 hand direction | §6.1, §6.2, §15 stage 1 | **reversed by owner: fingers kept** | render a hand at the smallest shipped size; if the silhouette fails review with no finger bone, re-open the row rather than adding bones the engine cannot drive |
+| **X3** | **Position-driven retarget**: each mapped bone's rotation is the minimal rotation from its bind direction to the published segment direction, same segment-frame rule as anatomy; `basis = Ry(+90°)`, `s = 235/0.95`, translation 0 at the pelvis | §6.2 (the rule), §11 (classification), §15 stage 1 | **confirmed by owner** | land the change behind the existing `PoseRetargeter` signature and compare A2 residuals before and after on the three named poses |
+| **X4** | **M1's UI shows `relativePathLengthChange` only**; absolute metres are withheld until a named calibration pair and an evidence-backed uncertainty exist, and `modelledPathLength` stays in the data and debug | §9.2, §12.5, §13 question 12, §15 stage 2 and M1 item 4 | **confirmed by owner** | name the pair, measure both spans on the stage-1 rig, and quote the uncertainty; only then is a metre value displayable |
+| **X5** | An attachment-contact **exemption is one reviewed first-egress interval**; any re-entry after leaving is a violation, and the same mask applies to endpoint, sample, construction, projection and final validation | §7.3 (`ContactExemption`), §7.4.1, §12.2.1 (`exempt_re_entry`) | **confirmed by owner** | run the 1-D re-entry fixture: if the implementation accepts stations 0.5625–0.6875, the mask is not an interval |
+| **X6** | The **continuity observer is diagnostic only** and never a gate; **route hysteresis is removed from M1** | §7.4.3, §12.2 (`MusclePathContinuityTest`) | **confirmed by owner** | the observer-correctness fixtures: a rigid translation must not alarm, a branch switch must |
+| **X7** | **`NO_ROUTE` is disabled** until a proof procedure exists; the frame exposes a **terminal search outcome** (`SEARCH_EXHAUSTED` / `PASS_CAP`) separately from the **last geometric cause** | §7.4.1c, §7.4.5, §12.2.1 | **confirmed by owner** | `final_clearance_and_budget_both_fail`: one record, two fields, neither overwriting the other |
+| **X8** | **Categorical roles ship in M1**: schema, provenance/review validator and display gate, for exercises with a reviewed source only; the **pilot exercise list is to be named by the owner** (3–5 exercises) and is not invented here | §7.3 (`MuscleRole.UNKNOWN`), §8, §9.2, §12.5, §15 M1 item 10 | **confirmed by owner** | the owner names the pilot list; the validator then runs on it and every other exercise must display no role |
 
 **Known traps from the device run (spike #384).** Each cost a debugging cycle on real hardware, and each is a property of
 the current code, not of the model. PR #385 at `bcb3658` contained none of the first three fixes; the current head
@@ -3271,8 +3298,9 @@ schedule risk, not the engineering one.
 - **Objective:** replace the generated 32-joint test rig with a rig that passes A1 **by construction**, prove the contract
   mechanically, and measure the presentation on at least one real device. The rig is produced by option (c) of §6.6 — a
   generator that writes the X1 canonical A-pose from `SkeletonDefinition` — not by re-pivoting the shipped asset.
-- **Components:** the rig generator and its output asset (21 mapped bones including the scapula pair, **no finger bones**,
-  X2), `BoneMap` manifest with `basis = Ry(+90°)`, the position-driven `PoseRetargeter` (X3), `RigAssetContractTest`,
+- **Components:** the rig generator and its output asset (21 mapped bones including the scapula pair, plus the **10
+  visual-only finger bones**, X2 reversed by owner), `BoneMap` manifest with `basis = Ry(+90°)`, the position-driven
+  `PoseRetargeter` (X3), `RigAssetContractTest`,
   `PoseRetargeterRestInvariantTest`, `RigSideTest`, `RigLandmarkAlignmentTest`, `RigAlignmentResidualTest`,
   `SegmentFrameDirectionTest`, `UnmappedBoneInheritanceTest`, budget checks, device measurements.
 - **Ten steps of the generator, in order.** Each is a checkable artefact, and steps 3–7 are the ones a hand-authored rig
@@ -3283,8 +3311,11 @@ schedule risk, not the engineering one.
   3. **skip the zero-length tubes**: `LUMBAR` is coincident with `PELVIS`, and `CLAVICLE`/`SCAPULA` are coincident with
      `CHEST` (§7.2) — emit the **nodes** (so the chain and the retarget stay total) but no bone segment between them, and
      no zero-length inverse bind;
-  4. emit the visual-only nodes the asset needs and the engine does not have — crowns, toe tips, optional fingers —
-     flagged so the asset validator excludes them from the 21;
+  4. emit the visual-only nodes the asset needs and the engine does not have — a crown, toe tips and the **10 finger
+     bones** (X2) — flagged so the asset validator excludes them from the 21. **Finger layout:** each finger head is
+     placed from its hand head along the X1 hand direction (`HAND → FINGERTIPS`, `(0, −1, 0)`, §6.6), parented to
+     `Left/RightHand` with the hand's bind local rotation, so the fingers inherit the hand rigidly (§6.2) and the bind
+     silhouette is an open hand;
   5. author or re-weight the body mesh against those pivots;
   6. compute every inverse bind from the same positions, in the same pass, so a bind cannot drift from a pivot;
   7. **re-band the morph targets** to the new segments: the five existing targets (`ShoulderWidth`, `ChestVolume`,
@@ -3315,9 +3346,11 @@ schedule risk, not the engineering one.
   `409.0` units = **1.653 m** and whose head radius is `18` units = **72.8 mm** — and `headRadius = 18` is a *renderer*
   constant (`SkeletonStyle`, §3.3), not a measurement. No wording in this document may imply that the result has been
   checked against human proportions; it has been checked against `SkeletonDefinition`.
-- **Automated acceptance:** rest invariant identity within 1e-4 on every bone; **21/21 mapped joints** resolve and the
-  **12 undrivable engine joints are declared**, not accidental (X2); side check passes; budgets reported; **A1 green on
-  every mapped joint (≤ 0.5 mm, ≤ 0.5°)**; A2 **measured** at the three named poses (5 mm), which is a measurement the
+- **Automated acceptance:** rest invariant identity within 1e-4 on **every** bone, the 10 visual-only finger bones
+  included; **21/21 mapped joints** resolve, the **12 undrivable engine joints are declared** (X2) and the **11 orphan
+  asset bones are reported as visual-only**, not as failures; the visual-bone count is inside the 30-bone allowance
+  (10 used, §6.1); side check passes; budgets reported; **A1 green on every mapped joint (≤ 0.5 mm, ≤ 0.5°)** with the
+  finger bones excluded from the comparison and listed as unmapped; A2 **measured** at the three named poses (5 mm), which is a measurement the
   shipped asset has not had. The `humanoid_v1` baseline fails A1 at 1131× the tolerance (§6.6) and **has no A2
   measurement at all**, so neither number is a formality: A1 is a construction property of the new rig, and A2 is the
   first measurement anything in this programme has made on posed frames.
