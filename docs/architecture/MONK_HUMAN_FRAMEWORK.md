@@ -837,6 +837,28 @@ R_local(u)         = R_target_world(parent)⁻¹ · R_target_world(u)
 translation        = B⁻¹ · (p_PELVIS − rest pelvis) / s                 // ASSET metres: basis first, then ÷ unitsPerMetre
 ```
 
+**Three quantities are kept apart throughout this section, because a claim about one of them is not a claim about
+another:**
+
+- **frame coordinates** — a vector written on a segment's own axes, e.g. `d_bind(u) = [d]_rest(parent)`, the child's rest
+  direction *in its parent segment's rest frame*. It is not a world vector and must never be transported as one;
+- **absolute world rotations** — `R_world(S)`, the rotation taking frame coordinates of segment `S` to engine world (or, in
+  the asset basis, to asset world);
+- **bind-relative deltas** — `ΔR(S) = R_world(S; posed) · R_world(S; bind)⁻¹`, the only quantity the rest invariant is
+  about.
+
+`d_bind_engine(u) = B · d_bind_asset(u)` above is a *frame-coordinate* statement: the asset bind direction is read in the
+parent's rest frame and carried through the basis. Read instead as an engine **world** vector and transported by the posed
+parent, it is rotated twice at rest — which is the defect the next paragraph removes.
+
+**The rest invariant is about deltas, and the anchor is the asset's rest, not the derived frame.** At the X1 bind pose
+`ΔR(S) = identity` for every segment and `R_target_world(bone) = R_rest_world(bone)` for every bone;
+`PoseRetargeterRestInvariantTest` asserts exactly that. It does **not** assert (and nothing may assume) that a world
+rotation is identity at bind: the derived pelvis root frame of §7.2 is `diag(−1, 1, −1)` at X1 — a 180° rotation about `Y`
+— and every segment inherits it, because `D = identity` at bind and each segment's frame is its parent's. A1's rest row is
+the *node* rest orientation, which is identity (`SkeletonFactory`), so the two quantities must not be conflated: see the
+root rule below and §15 stage 1 step 8.
+
 **The correction is taken from the parent-transported bind direction, and that is the whole of X3.** The previous
 revision computed `D` from the **untransported** `d_bind_engine` and then composed it *after* the parent, which applies
 the parent's swing twice. With `B = Ry(+90°)` the asset bind direction `+Z` maps to engine `+X`; let the parent's posed
@@ -844,7 +866,10 @@ delta be `Rz(+90°)` and the published child direction be `+Y`. The untransporte
 `D = shortestRotation(+X, +Y) = Rz(+90°)`, applies it after the parent, and lands on engine **`−X`** — twice the
 rotation. X9 first transports the bind direction by the parent (`a = Rz(+90°) · (+X) = +Y`), finds `a = b`, and takes
 `D = identity`, landing on **`+Y`**. Both values are reproduced in the review script; this is not a tie-break
-difference, it is a different rotation.
+difference, it is a different rotation. **It is a transport-only control**: because the transported direction already
+equals the published one, the child's correction is `identity` and the case cannot see the basis at all, which is why
+`PoseRetargeterBasisTest` also carries a both-nonidentity case (§12.2) — parent `Rz(+45°)`, `D` a 64.76° rotation,
+noncommuting basis — where the two wrong orders miss the published direction by 45.0° and 42.8°.
 
 Three properties follow, and each one corrects a construction that looked right. (i) *One declared space, one
 conjugation.* `a` is the bind direction as the **posed** parent carries it, so `D` is only the rotation the segment still
@@ -854,10 +879,10 @@ applied once, to the whole composition, so no factor is ever multiplied by a del
 enters through `a` **and** through the composition, so a parent rolled 90° about a child direction that did not change
 hands the child that 90° of roll — a bare `D · R_rest` drops it, leaving two frames that agree on direction and disagree
 by 90° on every attachment offset. (iii) *The rest invariant holds when the rig's bind agrees with the engine's bind, and
-that is a named dependency rather than an identity.* At bind `R_target_world(parent) = R_rest_world(parent)`, so `a` is
-the engine's own bind direction and `D = identity` **iff** the rig's bind head positions put that segment on the engine's
-published bind direction — i.e. iff A1's `τ_rot` holds (§6.6). The generated stage-1 rig has that by construction; on
-`humanoid_v1`, which fails A1 by 350.2×, **neither this rule nor the one it replaces** yields identity, so
+it is a statement about deltas.* At bind `R_target_world(parent) = R_rest_world(parent)`, so `a` is the bind direction the
+parent's **rest** rotation carries, and `D = identity` **iff** the rig's bind head positions put that segment on the
+engine's published bind direction — i.e. iff A1's `τ_rot` holds (§6.6). The generated stage-1 rig has that by construction;
+on `humanoid_v1`, which fails A1 by 350.2×, **neither this rule nor the one it replaces** yields identity, so
 `PoseRetargeterRestInvariantTest` is expected red there and nothing is weakened to make it green. All three are asserted
 through the real retarget construction, not against a matrix identity: a frame where **the parent swings and the child's
 own direction changes at the same time** (the case that separates this rule from the previous one), a parent-roll case, a
@@ -887,11 +912,13 @@ a bind-stance result is not evidence about them (§6.6).
 Two degeneracies are inherited from §7.2 rather than decided here: a segment whose bind direction and published direction
 agree gets `D = identity` and therefore the transported rest rotation (the rest invariant, `PoseRetargeterRestInvariantTest`),
 and one whose published direction is antiparallel to its bind direction has no minimal rotation — the antipodal tie-break
-of §7.2 decides, and continuity at that singularity is **not** promised there or here.
+of §7.2 decides, and continuity across the **branch boundary** `|a × b| = τ_rot` is **not** promised there or here (the
+placed direction stays continuous; the roll flips).
 
-`R_target_rest_world` still anchors the chain: the root bone's rest world rotation is the **bind root frame** of §7.2 in
-the asset basis, `B⁻¹ · F_root(bind) · B`, written by the stage-1 generator (`R_target_rest_world(Hips)` in the block
-above is that value), and every other bone's rest world rotation comes from the asset's bind pose. `NonCommutingSplitTest`
+`R_target_rest_world` anchors the chain, and for every bone it is the asset's **bind rest world rotation**, compared by A1
+against the engine rest orientation within `τ_rot` (§6.6) — which at X1 is the identity, because `SkeletonFactory` creates
+every node with identity rotation. The root is the one bone whose rest rotation the stage-1 generator writes rather than
+reads, and §15 step 8 states what it writes (`B⁻¹ · I · B = I`). `NonCommutingSplitTest`
 (L2) drives a parent and a child about different axes and asserts the composed world rotation, so a reversed order or a
 dropped basis fails it; `PoseRetargeterBasisTest` drives a **posed** frame through the real construction with a
 non-identity basis and asserts the resulting world direction **and** roll, which neither the identity case nor the
@@ -902,16 +929,41 @@ segment, so `F_posed_engine(PELVIS)` is the **derived root frame** of §7.2 — 
 through `B` like any other parent frame, and the root's correction is that frame's own change since bind:
 
 ```
-F_root(posed)          = the derived frame on this frame's published positions               // ENGINE
-F_root(bind)           = the derived frame at the X1 bind pose                               // ENGINE
-R_rest_world(PELVIS)   = B⁻¹ · F_root(bind) · B                                              // ASSET, written by the generator
-R_target_world(PELVIS) = B⁻¹ · (F_root(posed) · F_root(bind)⁻¹) · B · R_rest_world(PELVIS)   // ASSET, this frame
+F_root(posed)          = the derived frame on this frame's published positions        // ENGINE
+F_root(bind)           = the derived frame at the X1 bind pose                        // ENGINE
+ΔF_root                = F_root(posed) · F_root(bind)⁻¹                               // ENGINE, bind-relative
+R_rest_world(PELVIS)   = B⁻¹ · I · B = I      // ASSET: the asset's bind rest, which A1 requires to equal the engine rest
+R_target_world(PELVIS) = B⁻¹ · ΔF_root · B · R_rest_world(PELVIS)                      // ASSET, this frame
 ```
 
-which telescopes to `B⁻¹ · F_root(posed) · B` and is identity at bind, so the root is a swing-only correction with no
-roll claim beyond the derived frame's. A zero reference (`hipWidth = 0`, or a parallel hip line and torso) is an L3
-definition error and a zero torso falls back to the bind world frame with the pelvis marked degenerate (§7.2) — never a
-normalised zero vector. **The two mapped joints whose bind segment is zero-length are not a special case**: `LUMBAR`
+**`F_root(bind)` is not the identity, it is not the anchor, and the earlier block was wrong in both places.** At X1,
+`Y = (0,1,0)`, `Z = (0,0,−1)` and `X = Y × Z = (−1,0,0)` (§7.2), so `F_root(bind) = diag(−1, 1, −1)` — determinant `+1`, a
+**180° rotation about `Y`**, reproduced in the review script — and every segment inherits it at bind because `D = identity`
+and a segment's frame is its parent's. The previous revision anchored the root on `R_rest_world(PELVIS) = B⁻¹·F_root(bind)·B`
+and concluded the resulting world rotation "is identity at bind". Three things follow, and only the third is true:
+
+- **Conjugation cannot turn that rotation into the identity.** For `B = Ry(+90°)`, `B⁻¹·F_root(bind)·B = F_root(bind)`,
+  because `Y` is `B`'s own axis: the conjugated value is still 180°, so the sentence was false however it was read.
+- **As an anchor it also breaks the rest invariant on a correct rig.** It makes `F_posed(bind) = B·R_rest·B⁻¹ =
+  F_root(bind)`, so at bind `a = F_root(bind)·d_bind` while the rig publishes `b = d_bind`; `D ≠ identity` for every bone
+  whose bind direction has a nonzero `X` or `Z` component. Measured by the review script on the X1 directions: the humerus
+  is off by **141.4°**, the foot and the scapula by **180°** (the thigh and shin, both along `−Y`, are the only ones that
+  survive, because `Y` is the rotation axis). So the invariant failed at bind, and A1's rest-orientation row — rig rest
+  within `τ_rot` of the engine rest — failed by 180° at the root.
+- **Anchoring on the delta removes the whole problem.** `ΔF_root` is identity at bind *whatever* `F_root(bind)` is, so
+  `R_target_world(PELVIS) = R_rest_world(PELVIS)` at bind: the invariant holds, A1's rest row holds, and the absolute value
+  of `F_root(bind)` never reaches the asset. The root is then a swing-only correction with no roll claim beyond the derived
+  frame's, which is what the block was trying to say.
+
+**Two different failures at the root are named separately, because one sentence used to cover both.** Invalid **bind or
+reference data** — a rig with `hipWidth = 0`, a zero `PELVIS → CHEST` at bind, a non-finite bind position — is an **L3
+definition error** and is refused before any frame exists: no pose can repair it. A **posed** frame whose derived reference
+degenerates this frame — a zero `PELVIS → CHEST` length, or a non-zero hip line and torso that are parallel (`|Y × Z| <
+τ_len`) — is **not** a definition error: the pose is legal, the frame falls back to the bind world frame and the segment is
+marked `degenerate` (§7.2). A parallel pair leaves the frame's roll undetermined, and a normalised noise vector would hide
+that, which is why it is a marked fallback and not a repair. Never a normalised zero vector, in any of these cases.
+
+**The two mapped joints whose bind segment is zero-length are not a special case**: `LUMBAR`
 (`PELVIS → LUMBAR` measured `0.0000` in all 594 frames) and `CLAVICLE` (`CLAVICLE → SCAPULA` likewise) have no bind
 direction to normalise, and the stage-1 generator emits the **node** but no bone segment and no inverse bind for them
 (§15 step 3), so the map still resolves. Their rule is §7.2's `degenerate` row applied here: `D = identity`, so
@@ -1353,11 +1405,17 @@ review. A role change is an anatomy review. Four reviewers, four diffs — that 
 - **Naming trap:** `SkeletonDefinition.anatomicalForward` is `(0,0,1)` — but it is used as the *rotation axis* for
   sagittal spine bend (`BasePose.kt:208-214`), not as the direction the athlete faces. Anatomy authors must read it as
   "the lateral bend axis", not "forward".
-- **Rest frames are identity; a posed frame is derived from positions.** The factory creates every node with identity
-  rotation (`SkeletonFactory.kt:60-101`), so at the rest stance each segment's local frame equals the world frame and an
-  attachment offset can be authored in one frame per segment: `+X` sagittal, `+Y` up, `+Z` lateral. In a posed frame the
-  segment frame must be **derived from published positions**, because the published rotation does not describe the
-  segment. Measured at `16e0487`:
+- **Node rest rotations are identity; the derived segment frame is a different object and is not.** The factory creates
+  every node with identity rotation (`SkeletonFactory.kt:60-101`), so each node's published **local** rotation at rest is
+  identity, and that identity is what A1's rest-orientation row compares a rig against within `τ_rot` (§6.6). The
+  **segment frame** this section authors attachments and obstacles on is derived from positions (root rule below), it is
+  not the node's rotation, and at the X1 bind pose it equals `F_root(bind)` for **every** segment — because `D = identity`
+  at bind and each segment inherits its parent's frame — which is `diag(−1, 1, −1)`, a 180° rotation about `Y` (§6.2). Two
+  consequences are stated rather than discovered: at bind an offset authored on the pelvis frame's `+X` resolves along
+  world `−X`, so the attachment convention is the **segment frame's** (`+X` sagittal, `+Y` up, `+Z` lateral — the sign of
+  `X` and `Z` is the frame's own, not the engine's world axes), and the two happen to coincide only for a segment whose
+  derived frame is identity, which at X1 is none of them. **In a posed frame the segment frame must be derived from
+  published positions**, because the published rotation does not describe the segment. Measured at `16e0487`:
 
   - `IkStage.kt:131-134` writes `middle.localPosition` and `end.localPosition` for a solved limb and no local rotation;
   - `SkeletonNode.kt:63-67` builds each joint's world rotation by concatenating local rotations, and `:75-77` publishes
@@ -1410,20 +1468,35 @@ The rule is total because each of these is decided, not left to a caller:
 | order | `R = D · P`: the parent's frame is carried first, then the minimal rotation into the published direction. The reverse order rotates about the parent's axes and is wrong for every non-commuting pair |
 | near-zero length | `\|child − parent\| < τ_len · max(1, \|restDir\| · s)` → the segment is **treated as degenerate**, not normalised. `τ_len` is scale-aware (`1e-6` of the segment's own rest length in engine units) so a millimetre-scale attachment and a metre-scale segment use the same rule |
 | degenerate | inherit the parent's frame and the authored rest direction (no rotation), as the measured rows of this table require |
-| root | `PELVIS` has no parent: `P` is the **derived root frame**, `X = Y × Z` with `Y = normalize(CHEST − PELVIS)` and `Z = normalize(HIP_F − HIP_B)` — the order stated below and used everywhere, not its mirror — carrying the authored pelvis rest direction, so an authored pelvis tilt is followed instead of discarded. A zero reference, or a non-zero hip line and torso that are **parallel** (so `Y × Z` cannot be normalised), falls back to the bind world frame and marks the segment degenerate |
+| root | `PELVIS` has no parent: `P` is the **derived root frame**, built by one construction in one order — `Z = normalize(HIP_F − HIP_B)`, then `Y = normalize((CHEST − PELVIS) − ((CHEST − PELVIS)·Z)·Z)` **orthogonalised against `Z`**, then `X = Y × Z` — the order stated below and used everywhere, not its mirror — carrying the authored pelvis rest direction, so an authored pelvis tilt is followed instead of discarded. The orthogonalisation is not optional: on the raw pair `X = Y × Z` has length `\|Y\| sin∠(Y,Z) < 1` and the result is not a rotation at all (for `Y = normalize(0.4, 1, 0)` and `Z = normalize(0, 0.6, 0.8)` it is `0.8305`, with the frame's `Y` **33.85°** off the torso — the summary line used the raw pair and the detailed rule orthogonalises, and they are not the same frame). Degeneracy splits in two and only one of them is a definition error: a **zero hip line in a posed frame** (the two hip joints coincide this frame) or a **non-zero hip line and torso that are parallel this frame** (`\|Y × Z\| < τ_len`) is a **degenerate frame** — fall back to the bind world frame and mark the segment `degenerate` — while a **rig whose `hipWidth` is zero**, or whose bind torso is zero, is **invalid bind data** and an **L3 definition error**, refused before any frame exists |
 | near-parallel | `\|a × b\| < τ_rot` and `a · b > 0` → `D = identity`, no normalisation of a tiny cross product |
 | near-antiparallel | `a · b < 0` and `\|a × b\| < τ_rot` → the **antipodal construction**: let `e` be the world axis least aligned with `a` (x → y → z on ties) and take `axis = normalize(a × e)`, which is perpendicular to `a` **by construction**; `D` is the half-turn by `π` about that axis. Rotating about an axis that is merely *least aligned* with `a` does not place `a` at `−a`: for `a = (1,1,1)/√3` and `b = −a` the tie-break picks `x`, and a half-turn about `x` lands at `acos(1/3) = 70.53°` from `b`. The axis is therefore projected out of `a` rather than chosen from the coordinate axes, and the two agree only when `a` happens to be a coordinate axis. **The construction places `a` at `−a` exactly, which is `b` only at the exact antipode**: throughout the branch the placed direction is off the published `b` by `π − arccos(a · b) < arcsin(τ_rot)`, so the branch is a bounded approximation and not an exact placement — for the representative `τ_rot = 0.001`, `a = (1,0,0)` and `b = (−cos 1e-4, sin 1e-4, 0)` it is `1e-4 rad = 0.0057296°`. `D` is a rotation by `π` — the quaternion `(0, axis)`, **not** `−identity`: the quaternion `−identity` is the identity rotation, whatever the sign convention |
-| continuity | **not promised at the antipodal singularity `a · b = −1`.** The two sides of `a · b = −1` give opposite half-turns about different axes, so a segment that passes through antiparallel flips. That is stated rather than hidden behind a threshold that only moves the flip |
+| continuity | **not promised at the branch boundary `\|a × b\| = τ_rot`, and it is a roll flip, not a direction flip.** Inside the branch `D` is the half-turn about `a × e`, which is the same for both signs of the perpendicular component — `R(u, π) = 2uuᵀ − I` depends on `u` only through the line it spans, so `+Z` and `−Z` are the same rotation and the branch is *continuous in the placed direction* across the antipode. What is not continuous is the crossing out of the branch: for `a = (1,0,0)` and `b = normalize(−1, 0, ±δ)`, `δ = 5e−4` takes the branch (half-turn about `+Z`, frame `Y` at `−Y`) while `δ = 1.5e−3` takes the minimal rotation about `−Y` (frame `Y` at `+Y`), so the placed direction agrees within `2δ` and the **roll flips by 180°**. That is stated rather than hidden behind a threshold that only moves the crossing |
 | invalid input | a non-finite coordinate or a zero `restDir` → the segment is `INVALID` with `NON_FINITE_GEOMETRY` (§7.4.1c), never a silently identity frame |
 
-Tests (`SegmentFrameDirectionTest`): near parallel (within `τ_rot`), near antiparallel approached **from both sides** —
-the two half-turns, the flip between them as a documented discontinuity, and the **near-antipodal residual**: at
-`τ_rot = 0.001` the placed direction is `1e-4 rad` from `b`, inside `arcsin(τ_rot)`, which is what the fixture asserts
-rather than equality — a **non-axis-aligned antipode** — `a = (1,1,1)/√3` with `b = −a`, where the placed direction must
-equal `b` within `τ_rot` and a coordinate-axis half-turn misses it by 70.53° — zero length (degenerate → inherited
-frame), the root (`PELVIS`), a **parent-roll** case (a parent rotated about a child direction that did not change: the
-frame's roll follows the parent, so direction agreement alone does not pass), and a straightening limb whose `b` rotates
-through `a` (frame continuous, no flip).
+Tests (`SegmentFrameDirectionTest`). **The antipodal branch has two different things to assert, and the fixture asserted
+the wrong one.** Inside the branch there is no flip: for `a = (1,0,0)`, binary64 `τ_rot = 0.001` and binary64
+`b = (−0.99999999500000003…, ±0.0000999999998333333…, 0)` — both signs of the perpendicular component — `a·b < 0` and
+`|a × b| = 9.9999999833e−5 < τ_rot` hold on **both** sides, the tie-break picks `e = +Y` (x → y → z, on the tie between
+`y` and `z`), `axis = normalize(a × e) = +Z`, and both sides produce the **same** `+Z` half-turn and the **same** placed
+direction `−X`, each `1.000000e−4 rad` from its published `b`. A fixture that demands "the two half-turns, the flip
+between them" across the antipode cannot be satisfied by this construction, and demanding it is how the row came to test
+nothing. What the row asserts instead:
+
+- **both sides inside the branch** → the identical half-turn, the identical placed direction `−X`, and the `1e−4 rad`
+  residual **on each side** (inside `arcsin(τ_rot)`, which is the branch's own bound);
+- **the branch boundary `|a × b| = τ_rot`** → the one crossing where continuity is not promised, exercised as a **roll**
+  flip with the placed direction continuous: for `a = (1,0,0)` and `b = normalize(−1, 0, ±δ)`, `δ = 5e−4` takes the branch
+  (half-turn about `+Z`, frame `Y` at `−Y`), `δ = 1.5e−3` takes the minimal rotation about `−Y` (frame `Y` at `+Y`), and
+  the two placed directions agree within `2δ` while the frames differ by 180° of roll;
+- **the exact antipode `b = −a`** → direction only (`a` is placed at `−a` exactly), with no continuity claim across it;
+- `a = (1,1,1)/√3` with `b = −a` — a **non-axis-aligned antipode**, where the placed direction must equal `b` within
+  `τ_rot` and a coordinate-axis half-turn misses it by 70.53°;
+
+and the rest of the row is unchanged: near parallel (within `τ_rot`), zero length (degenerate → inherited frame), the root
+(`PELVIS`, derived and orthogonalised), a **parent-roll** case (a parent rotated about a child direction that did not
+change: the frame's roll follows the parent, so direction agreement alone does not pass), and a straightening limb whose
+`b` rotates through `a` (frame continuous, no flip).
 
 **The roll bound, with its units.** The placed direction is exact at the exact antipode, where the antipodal construction
 places `a` at `−a`, and it is within `arcsin(τ_rot)` of the published direction throughout the near-antipodal branch that
@@ -1491,10 +1564,18 @@ tilt. The frame the pinned decision asked for — *hip line plus `PELVIS → LUM
 available, non-degenerate substitute is measured the same way and is used instead:
 
 ```
-+Z_engine = normalize(HIP_F − HIP_B)          // the hip line: 2 × hipWidth = 44 units = 177.9 mm, never coincident
-+Y_engine = normalize(CHEST − PELVIS)          // the torso: 120 units = 485.1 mm, orthogonalised against +Z
-+X_engine = Y × Z                              // right-handed completion; the segment frame of §7.2
++Z_engine = normalize(HIP_F − HIP_B)                       // the hip line: 2 × hipWidth = 44 units = 177.9 mm
++t_engine = CHEST − PELVIS                                  // the torso: 120 units = 485.1 mm
++Y_engine = normalize(t_engine − (t_engine·Z_engine)·Z_engine)   // orthogonalised against +Z, not used raw
++X_engine = Y × Z                                           // right-handed completion; unit because Y ⟂ Z
 ```
+
+**The orthogonalisation is part of the construction, not a remark about it.** A summary line elsewhere in this document
+wrote `Y = normalize(CHEST − PELVIS)` and `X = Y × Z` without the projection; on the raw pair `X` has length
+`|Y| sin∠(Y,Z) < 1`, so the object returned is not a rotation and cannot be composed with `D`. The difference is not
+cosmetic even when the two `X` directions coincide: with `Y = normalize(0.4, 1, 0)` and `Z = normalize(0, 0.6, 0.8)` the
+raw construction's `X` has length **0.8305** and its `Y` sits **33.85°** off the torso. One construction, one order, one
+place.
 
 Both vectors are published positions, both are well conditioned (44 and 120 units against a 1e-6-unit degeneracy
 threshold), and the frame follows a pelvis tilt of any size — which is the point. **The honest limit is that `+Y` is the
@@ -1504,16 +1585,21 @@ identity), and it is bounded elsewhere by `2|d| sin(θ/2)` for the `LUMBAR` angl
 uses. The fixed bind-world frame this replaces is not bounded by a bend at all: it is wrong by the whole authored tilt,
 **22.92° in a squat bottom and 90° in bird-dog**, which displaces a 30 mm attachment by **11.92 mm** and **42.43 mm**
 respectively. That is a missing swing, not an unknown axial roll, and no roll measurement can recover it.
-Degeneracies are decided, not left to a normalise: a zero hip line (a rig with `hipWidth = 0`) is an L3 definition error;
-a zero `PELVIS → CHEST` falls back to the bind world frame with the segment marked degenerate, per the `degenerate` row
-above; and a **non-zero hip line and torso that are parallel** — `|Y × Z| < τ_len`, so the right-handed completion cannot
-be normalised — takes the same fallback and the same degenerate mark, because a parallel pair leaves the frame's roll
-undetermined and a normalised noise vector would hide that. Never a normalised zero vector, in any of the three cases.
+Degeneracies are decided, not left to a normalise, and **the two kinds are different facts about different objects.** A
+**rig** whose `hipWidth` is zero, or whose bind torso is zero, is **invalid bind data**: an L3 definition error, refused
+before any frame exists, because no pose can supply a hip line the skeleton does not have. A **posed** frame whose
+`PELVIS → CHEST` length is zero this frame, or whose non-zero hip line and torso are **parallel** this frame
+(`|Y × Z| < τ_len`, so the right-handed completion cannot be normalised), is a **degenerate frame**: the pose is legal,
+the frame falls back to the bind world frame and the segment is marked `degenerate`, per the `degenerate` row above,
+because a parallel pair leaves the frame's roll undetermined and a normalised noise vector would hide that. Never a
+normalised zero vector, in any of these cases.
 Two poses and this one construction agree on the axis only if the order is stated once: measured on the X1 bind
 positions, `HIP_F − HIP_B = (0, 0, −44)` and `CHEST − PELVIS = (0, 120, 0)`, so `Z = (0, 0, −1)`, `Y = (0, 1, 0)` and
-`Y × Z = (−1, 0, 0)` — while the summary's `Z × Y` is `(+1, 0, 0)`, the opposite axis. Earlier revisions of the two
-paragraphs disagreed; the derivation above is the one that is implemented. Stage 1 measures both frames, squat and
-bird-dog (§15), and `θ` for the pelvis segment is reported beside the other segments' rather than assumed to be zero.
+`Y × Z = (−1, 0, 0)` — and no line of this document states `Z × Y` any more: the mirrored order gives `(+1, 0, 0)`, the
+opposite axis, which is what two earlier revisions printed. The derivation above is the one that is implemented, and it
+is now stated in exactly two places, both with the same orthogonalisation: the rule table above and this block. Stage 1
+measures both frames, squat and bird-dog (§15), and `θ` for the pelvis segment is reported beside the other segments'
+rather than assumed to be zero.
 
 ### 7.3 Definition schema
 
@@ -3342,11 +3428,11 @@ Seven levels, each with one owner, one report and an explicit automation status.
 | --- | --- | --- |
 | `RigAssetContractTest` | L2 | every required bone present, bind == rest, inverse binds finite, ≤ 4 influences |
 | `PoseRetargeterRestInvariantTest` | L2 | neutral pose → identity on **every** bone — mapped and visual-only alike, so the 10 finger bones are asserted at identity too (they inherit the hand, and at bind the hand is at rest); exists in PR #385, extended to the v2 rig. **It cannot see the basis**: identity composed with identity is identity for any basis, which is why the next two rows exist |
-| `PoseRetargeterBasisTest` | L2 | §6.2 X3 through the **real** construction and upload path (`PoseRetargeter.boneMatrices` plus the scene-frame handoff): a **nonzero, asymmetric** posed frame with `basis = Ry(+90°)` yields the published segment direction **and** the parent's posed roll; a **parent swing simultaneous with a child direction change** (`B = Ry(+90°)`, parent `Rz(+90°)`, published child `+Y`) yields `+Y` and not the `−X` the untransported composition produces, which is this row's negative control beside the wrong-basis one; a parent rolled about an unchanged child direction moves the child's frame; the **pelvis root** reaches the derived root frame transported through `B` on the actual pelvis path (squat bottom, bird-dog); and the **zero-length mapped joints** (`LUMBAR`, `CLAVICLE`) carry their parent's frame without a normalisation. Identity and bind-rest cases cannot pass this row |
+| `PoseRetargeterBasisTest` | L2 | §6.2 X3 through the **real** construction and upload path (`PoseRetargeter.boneMatrices` plus the scene-frame handoff): a **nonzero, asymmetric** posed frame with `basis = Ry(+90°)` yields the published segment direction **and** the parent's posed roll; a **transport-only** control (`B = Ry(+90°)`, parent `Rz(+90°)`, bind `+X`, published child `+Y`: the transported bind direction is already `+Y`, so the correction is **identity** and the frame lands on `+Y`, whereas the untransported composition lands on `−X`) — this control isolates the parent **transport** and cannot see the basis, which is exactly why the next control exists; a **both-nonidentity** control in a basis that does not commute with the parent swing (`B = Ry(+90°)`, parent posed `Rz(+45°)` in asset space, asset bind direction `+X` so `d_bind_engine = −Z`, published child `normalize(0.3, 0.9, 0.3)`): `a = (0, 0.70710678, −0.70710678)`, `D` is a **64.7606°** rotation about `normalize(0.94280904, −0.23570226, −0.23570226)`, the composed rotation places the bind direction on the published one exactly, and the two wrong orders miss it by **45.000°** (`D` from the untransported bind direction) and **42.800°** (`D` applied before the parent), with the untransported control also displacing the frame's roll by **13.276°** — every figure in the review script; a parent rolled about an unchanged child direction moves the child's frame; the **pelvis root** reaches the derived root frame transported through `B` on the actual pelvis path (squat bottom, bird-dog), and `R_target_world(PELVIS)` equals `R_rest_world(PELVIS)` at bind; and the **zero-length mapped joints** (`LUMBAR`, `CLAVICLE`) carry their parent's frame without a normalisation. Identity and bind-rest cases cannot pass this row |
 | `PoseRetargeterPelvisTranslationTest` | L2 | §6.2: a pose whose `PELVIS` sits **235 units** above rest translates `Hips` by **0.95 m** (`235 / (235/0.95)`), not by `235 · s ≈ 58,131.58`; the fixture uses a **non-zero** translation, because a test at zero displacement cannot see a reversed conversion. **A vertical displacement alone cannot see a missing basis**, because `(0, 235, 0)` lies on `B`'s axis, so the fixture carries a **non-vertical control**: an engine displacement of `(235, 0, 0)` must move `Hips` along **engine `+X`**, which the raw `/ s` value does not (it lands on engine `−Z`), so dividing without `B⁻¹` fails the control while a reversed multiply still fails the vertical case |
 | `RigLandmarkAlignmentTest` | L2 | §6.6 A1: every **mapped** bone head coincides with its engine joint at the X1 bind frame within `τ_bind`; rest orientations within `τ_rot`. The 10 finger bones are **excluded from the comparison and listed as unmapped** (X2) — their report entry is inventory, not a residual, and keeping them cannot move the hand's own row; expected **red** on `humanoid_v1` against the recorded baseline (§6.6) |
 | `RigAlignmentResidualTest` | L2 | §6.6 A2: the **measured** residual per joint at the five named **frames from four registered builders** — squat bottom and top (`squat_standard`), push-up bottom (`pushup_standard`), `birddog_hold`, `row_standard` mid-pull — within `τ_residual`; the equal-length/different-direction control case must report a non-zero residual, no length-sum bound is computed, and the report states both counts (five frames, four builders) rather than calling the set five builders |
-| `SegmentFrameDirectionTest` | L2 | §7.2/§7.4 step 1: a derived segment direction equals the published direction `p_child − p_parent` within `τ_dir` (proposed, fixed at stage 1); the roll convention is declared per segment and reproduced; run on real baseline poses over both hierarchies, both sides of every bilateral limb, one deliberately bent IK case, the measured degenerate rows — `clavicle`, `skull` and `toes` **inherit** their parent's frame, and `pelvis` is the **derived root**, not an inherited row — with no zero-vector normalisation, and the manually overridden hand of `pike_pushup_standard`; plus near-parallel, near-antiparallel from both sides **with its `arcsin(τ_rot)` direction residual**, the **non-axis-aligned antipode** (`a = (1,1,1)/√3`, `b = −a`), **parent roll**, zero length, the derived root frame and straightening per X9 |
+| `SegmentFrameDirectionTest` | L2 | §7.2/§7.4 step 1: a derived segment direction equals the published direction `p_child − p_parent` within `τ_dir` (proposed, fixed at stage 1); the roll convention is declared per segment and reproduced; run on real baseline poses over both hierarchies, both sides of every bilateral limb, one deliberately bent IK case, the measured degenerate rows — `clavicle`, `skull` and `toes` **inherit** their parent's frame, and `pelvis` is the **derived root**, not an inherited row — with no zero-vector normalisation, and the manually overridden hand of `pike_pushup_standard`; plus near-parallel, near-antiparallel from both sides **with its `arcsin(τ_rot)` direction residual and the identical half-turn both sides must produce** — the row asserts **no flip inside the branch**, and asserts the branch-boundary crossing `|a × b| = τ_rot` separately as a **roll** flip with the placed direction continuous — the **non-axis-aligned antipode** (`a = (1,1,1)/√3`, `b = −a`), **parent roll**, zero length, the derived root frame (orthogonalised construction) and straightening per X9 |
 | `NonCommutingSplitTest` | L2 | §6.2: a parent and child about different axes compose to the stated world rotation — a reversed `parent⁻¹ · child` order or a one-sided `B` fails |
 | `UnmappedBoneInheritanceTest` | L2 | §6.2: moving a mapped parent carries an unmapped child's world rotation within tolerance while the child's local rotation is unchanged; the twist policy is the declared one |
 | `BoneMapCoverageTest` | L2 | **23** mapped joints resolve and the **10** undrivable engine joints are declared, not accidental (X2) — derived from the required map of §6.2, not from the shipped asset's 21/12 inventory. The scapula pair is asserted by name, so a `BoneMap` that quietly omits `SCAPULA_A/P`, or a rig that carries no scapula bone, fails here rather than at A1 |
@@ -4048,9 +4134,12 @@ schedule risk, not the engineering one.
      the old proportions, so each target's region mask and its declared `min`/`max` are re-authored against the new
      segment lengths rather than inherited;
   8. write `BoneMap` with `basis = Ry(+90°)`, uniform scale `s = 235/0.95`, translation `B⁻¹ · Δp / s` (0 at the
-     pelvis), and author the **root's rest world rotation** as `B⁻¹ · F_root(bind) · B` — the derived pelvis frame of
-     §7.2 evaluated at this generator's own A-pose, in the asset basis. The root is the one bone whose rest rotation is
-     **computed** rather than taken from an asset, and §6.2's root rule is what consumes it;
+     pelvis), and author the **root's rest world rotation** as the engine rest orientation carried through the basis,
+     `B⁻¹ · I · B = I` — the same identity every other bone's rest is compared against in A1. **It is not
+     `B⁻¹ · F_root(bind) · B`**: at the X1 A-pose that value is a 180° rotation about `B`'s own axis (§6.2), so writing it
+     as the rig's rest would put the asset 180° from the engine at the root and fail A1's rest-orientation row by exactly
+     that amount. The derived pelvis frame reaches the asset **only through `ΔF_root`**, which is identity at bind, so the
+     generator never needs `F_root(bind)`'s absolute value;
   9. validate: `RigLandmarkAlignmentTest` against the **X1 bind frame** (§6.6), `RigAssetContractTest`,
      `PoseRetargeterRestInvariantTest`, `RigSideTest`;
   10. record the residual table and the device run.
