@@ -514,12 +514,18 @@ class AnatomyFrame(headCount: Int, pointCapacity: Int, landmarkCount: Int) {
     val visualTendonPortionLengths = FloatArray(headCount)    // authored visual partition, not a measured tendon
     val relativePathLengthChanges = FloatArray(headCount)     // modelledPathLength / restLength - 1
 
-    /** PathStatus ordinal. `clear()` writes INVALID to every slot; a status is never left over from the last frame. */
+    /**
+     * PathStatus ordinal — VALID, INVALID or NOT_PROCESSED. `clear()` writes NOT_PROCESSED to every slot (not INVALID
+     * with no reason: "the solver never reached this head" and "the solver rejected this head" are different facts).
+     */
     val statuses = IntArray(headCount)
     val reasonCodes = IntArray(headCount)        // PathReason ordinal; NO_REASON only where status is VALID
     val failingSegments = IntArray(headCount)    // segment index, or NO_INDEX
     val failingObstacles = IntArray(headCount)   // index into the definition's obstacle list, or NO_INDEX
     val pointCounts = IntArray(headCount)
+
+    /** One entry per instance, keyed (muscleId, side): the conjunction of that instance's head statuses (§7.4). */
+    val renderable = BooleanArray(instanceCount)
 
     /** Path points, engine world units. Stride: `head * 3 * pointCapacity + point * 3 + {x, y, z}`. */
     val paths = FloatArray(headCount * 3 * pointCapacity)
@@ -528,7 +534,10 @@ class AnatomyFrame(headCount: Int, pointCapacity: Int, landmarkCount: Int) {
     /** One view per head, built once at construction; reading it allocates nothing. */
     val muscleStates: List<MuscleState>
 
-    /** Start of every solve: statuses INVALID, reasons NO_REASON, counts 0, indices NO_INDEX, lengths cleared. */
+    /**
+     * Start of every solve: statuses NOT_PROCESSED, reasons NOT_PROCESSED, counts 0, indices NO_INDEX, lengths cleared.
+     * A head the solver never reaches keeps NOT_PROCESSED, which no consumer may read as VALID or as INVALID.
+     */
     fun clear()
 }
 
@@ -589,9 +598,18 @@ write goes through the frame, which raises `BUFFER_CAPACITY` for that head (§7.
 truncating a path. `pointCapacity` is the post-insertion maximum: a capacity sized for the resampling `N` alone
 under-counts by exactly the points construction inserts, which is the defect this layout removes.
 
-**A status is never inherited.** `clear()` sets every slot `INVALID`, `NO_REASON`, `NO_INDEX`, `pointCount = 0` before
-the solve touches anything, so a head the solver never reaches — a definition error, an early return, a reused buffer —
-reads `INVALID` rather than the last frame's `VALID`. Reason precedence is fixed and deterministic, and it is stated once
+**A status is never inherited, and "never reached" is its own state.** `clear()` sets every slot `NOT_PROCESSED`,
+`NOT_PROCESSED`, `NO_INDEX`, `pointCount = 0` before the solve touches anything, so a head the solver never reaches — a
+definition error, an early return, a reused buffer — reads `NOT_PROCESSED` rather than the last frame's `VALID`.
+`NO_REASON` is reserved for `VALID` and is therefore never a value `clear()` writes: an earlier revision wrote
+`INVALID + NO_REASON`, which the reason table itself forbids (NO_REASON is "only where the status is VALID"), so a
+consumer could not tell a clean start from a failure with a missing reason. Three states, three meanings:
+
+| Status | Meaning | Consumer |
+| --- | --- | --- |
+| `VALID` | the solver certified this head this frame | draw it; `reason = NO_REASON` |
+| `INVALID` | the solver rejected it, with a reason from §7.4.1c | do not draw it (§7.4 mask) |
+| `NOT_PROCESSED` | the solve never reached it — an early return, a definition error, a fresh buffer | do not draw it, and report it: it is a **bug**, not a clean frame | Reason precedence is fixed and deterministic, and it is stated once
 in the authoritative reason table (§7.4.1c): the first matching row in table order wins, so two implementations that hit
 two conditions report the same reason.
 
@@ -1449,9 +1467,21 @@ remove: smoothing is step 4b, the projection is step 4c, and the check is last.
 obstacle indices. A consumer may not read a missing status as `VALID`, and no layer draws an `INVALID` path as if it
 were anatomy.
 
-**Renderability is per instance, and it is a mask rather than a hint.** The frame publishes a per-instance renderability
-bit; the character layer consumes either that bit or a prefiltered dynamic-geometry list built from it, and the rules are
-these:
+**Renderability is per instance, and the carrier is declared rather than implied.** The frame publishes it as
+`AnatomyFrame.renderable: BooleanArray`, **one entry per `(muscleId, side)` instance** in the frame's fixed instance
+order (the same order as `heads`, grouped by muscle, ×`Side`), computed by `AnatomySolver.solve` as the **conjunction of
+the statuses of every head required by that instance** — a two-head muscle's instance is renderable only if both heads
+are `VALID`. `NOT_PROCESSED` is not renderable, for the same reason it is not `VALID`.
+
+| Property | Rule |
+| --- | --- |
+| producer | `AnatomySolver.solve`, written in the same pass as the head statuses, so a mask cannot be a frame behind |
+| lifetime | one frame, exactly like the rest of the frame; `clear()` sets every entry `false` |
+| transport | a field of `AnatomyFrame`; `CharacterSceneFrame` (§10.2) receives the **prefiltered geometry list** built from it, which is the mandatory path — the renderer never re-derives the mask from statuses |
+| key | `(muscleId, side)`, never a head index: a head index is not an instance and a two-head muscle has one silhouette |
+| partial-head policy | **off by default.** A multi-head muscle is all-or-nothing; a per-head behaviour requires the definition to declare it explicitly and §12.4 to review the half-drawn silhouette as a separate criterion |
+
+The renderer consumes the mask or the prefiltered list, and the rules are these:
 
 - `INVALID` hides that instance **in the same frame** — no fade, no retry, no "last good path" — and its previously
   uploaded geometry is cleared, so a stale tube cannot be drawn along the last valid route while the solver reports a
@@ -1684,9 +1714,9 @@ read `NO_INDEX` as index 0.
 | 3 | `REST_LENGTH_INVALID` | the reference-stance length is not finite and `> 0` (§7.4.4) | `NO_INDEX` | `NO_INDEX` |
 | 4 | `BUFFER_CAPACITY` | inserted points exceed `pointCapacity` (§5.3) | last segment | `NO_INDEX` |
 | 5 | `ENDPOINT_INSIDE_OBSTACLE` | a resolved attachment is inside a declared obstacle in this pose | 0 or last | index |
-| 6 | `SEGMENT_INTERSECTS_OBSTACLE` | stage 2: the segment enters the ellipsoid (`[t0, t1] ∩ [0, 1] ≠ ∅`) | index | index |
-| 7 | `CLEARANCE_VIOLATION` | stage 3: the segment misses the surface but `min (d − r) < e` | index | index |
-| 8 | `DEGENERATE_SEGMENT` | a zero-length segment whose point is inside an obstacle | index | index |
+| 6 | `DEGENERATE_SEGMENT` | a zero-length segment whose **point is inside** an obstacle (§7.4.1b: `a = 0` is decided before the quadratic, because the quadratic divides by `a`) | index | index |
+| 7 | `SEGMENT_INTERSECTS_OBSTACLE` | stage 2: the segment enters the ellipsoid (`[t0, t1] ∩ [0, 1] ≠ ∅`) | index | index |
+| 8 | `CLEARANCE_VIOLATION` | stage 3: the segment misses the surface but `min (d − r) < e` | index | index |
 | 9 | `TANGENT_DISCONTINUITY` | the entry/exit kink exceeds `θ_max` (§7.4.3) | index | index |
 | 10 | `CURVATURE_VIOLATION` | an interior turn exceeds `θ_max` at the declared spacing (§7.4.3) | index | `NO_INDEX` |
 | 11 | `SEARCH_EXHAUSTED` | the corridor limit was reached without a candidate (§7.4.5) | `NO_INDEX` | index |
@@ -1694,7 +1724,18 @@ read `NO_INDEX` as index 0.
 | 13 | `UNCERTIFIED_MINIMUM` | stage 3's certificate could not decide either side (`lower < e ≤ upper`) | index | index |
 | 14 | `UNRESOLVED_ROOT` | the point-to-ellipsoid bracket found no root for a finite, positive-axis input | index | index |
 | 15 | `NO_ROUTE` | **proved** impossible: no route exists between the fixed endpoints outside the declared set. **Disabled in M1** — see below | `NO_INDEX` | `NO_INDEX` |
+| 16 | `UNSUPPORTED_GEOMETRY` | the muscle is a **sheet** (`flat = true`): a two-sided strip has no single radius, so no tube envelope exists to certify (§7.4.1 "flat sheet muscles") | `NO_INDEX` | `NO_INDEX` |
+| 17 | `NOT_PROCESSED` | the solve never reached this head — the `clear()` state, never a verdict (§5.3) | `NO_INDEX` | `NO_INDEX` |
 | — | `NO_REASON` | only where the status is `VALID` | `NO_INDEX` | `NO_INDEX` |
+
+**Guards run before geometry, and each phase has its own order.** A non-finite operand cannot be classified by any
+geometric test, so rows 1 and 2 are evaluated **before** the state machine runs at all; a zero-length segment is decided
+by a point test **before** the quadratic, because `a = 0` makes its roots a division by zero; and an intersecting segment
+is reported as an intersection **before** any clearance reason, because a crossing is a stronger fact than a near miss.
+A segment that is both degenerate and inside an obstacle reports `DEGENERATE_SEGMENT`, not
+`SEGMENT_INTERSECTS_OBSTACLE` — the earlier table ordered them the other way, which made a zero-length path through an
+obstacle report the stage-2 reason its own guard had already ruled out. A sheet muscle reports `UNSUPPORTED_GEOMETRY`
+before any clearance test is attempted, rather than being certified by a predicate that does not describe it.
 
 There is no "probably fine" outcome and no fall-through default. If the check cannot be completed, the path is invalid.
 
@@ -1855,7 +1896,15 @@ an error). The rules make the outcome deterministic and reviewable:
   set (§7.3) — resolved to ids, **deduplicated** (an id declared twice is one obstacle), and ordered by declaration with
   globals first. Construction and validation both consume **that one ordered list**; a solver that projects against one
   set and validates against another is the defect this rule removes, because the two sets can differ exactly when a
-  global obstacle is added to a definition. Validation tests every segment against every obstacle individually, so
+  global obstacle is added to a definition.
+- **`failingObstacles` indexes the definition's obstacle list, not the union.** The reported index is into
+  `AnatomyDefinition.wrapSurfaces` — the immutable, versioned list, in file order — because that is the list a reviewer
+  can open and the list that does not change when another muscle's `global` flag changes. A consumer that needs the
+  per-head union position (a projection-order diagnostic, for instance) reads a **published mapping**
+  `head → IntArray(unionSize) { definitionIndex }` from the same frame; it never assumes the two orders coincide, and it
+  never treats `NO_INDEX` as index `0`. Test `failingObstacleIndexOrderTest` reorders the declared obstacles and flips a
+  `global` flag between runs and asserts the reported index still names the same obstacle, and that an absent obstacle
+  reports `NO_INDEX` rather than the first entry. Validation tests every segment against every obstacle individually, so
   overlap and nesting need no special case — the union falls out of the per-obstacle tests. Only projection order is
   affected.
 - **Nested obstacles.** A sample inside a nested pair is pushed out of each in declaration order until it leaves both or
@@ -2670,8 +2719,8 @@ Seven levels, each with one owner, one report and an explicit automation status.
 | `MuscleLengthScaleTest` | L4 | §13 question 12: a common similarity transform of the body, the attachments and **every** dimensional solver parameter leaves `relativePathLengthChange` unchanged (`scale_common_control`), while a recalibration at a different `unitsPerMetre` changes it (`recalibration_counterexample`) — the two together are what stop "dimensionless" being read as "calibration-free" |
 | `MuscleDirectionalExpectationTest` | L4 | only exercise- and muscle-specific expectations, each carrying a documented justification and source |
 | `MuscleRestLengthTest` | L4 | solved rest length matches the calibrated reference within tolerance |
-| `MuscleRenderabilityTest` | L4 / presentation | §7.4: an `INVALID` instance is masked and its geometry cleared in the same frame; multi-head is all-or-nothing; valid → invalid → valid restores the path across carrier reuse |
-| `AnatomyFrameLayoutTest` | L4 | §5.3: the `3 · headCount · pointCapacity` stride addresses every point of every head; `pointCapacity` is the post-insertion maximum; an over-capacity head reports `BUFFER_CAPACITY` instead of growing or truncating; `clear()` leaves every slot `INVALID` |
+| `MuscleRenderabilityTest` | L4 / presentation | §7.4: an `INVALID` instance is masked and its geometry cleared in the same frame; **one invalid biceps-femoris head hides the whole instance and both sides keep independent masks**; the mask is the conjunction of the heads' statuses and `NOT_PROCESSED` is not renderable; an early return leaves every instance unrenderable rather than stale; valid → invalid → valid restores the path and the mask across carrier reuse |
+| `AnatomyFrameLayoutTest` | L4 | §5.3: the `3 · headCount · pointCapacity` stride addresses every point of every head; `pointCapacity` is the post-insertion maximum; an over-capacity head reports `BUFFER_CAPACITY` instead of growing or truncating; `clear()` leaves every slot `NOT_PROCESSED` with `reason = NOT_PROCESSED` and every `renderable` entry `false`; a solve that returns early leaves the untouched heads `NOT_PROCESSED` rather than `VALID` or `INVALID`; a reused buffer that is not cleared cannot show the previous frame's status; and a head that is simultaneously degenerate and inside an obstacle reports `DEGENERATE_SEGMENT` |
 | `MuscleGeometryOwnershipTest` | L4 / presentation | §7.6: toggling morphs or correctives leaves every `MuscleState` bit-identical, and nothing in `character/` writes `AnatomyFrame` |
 | `ProceduralTubeBudgetTest` | L5 (M1 subset) | generated triangles match the §10.3 formula for the declared `N` and `R`; no zero-area ring; all coordinates finite |
 | `MorphPresetRangeTest` | L6 | every declared weight lies inside its target's declared `min`/`max`; every preset declares a value for every target; a name the asset does not carry fails rather than defaulting to zero |
@@ -2713,11 +2762,18 @@ not a category — `rotated_anisotropic` appears in both tables as **two differe
 row tests that the predicate honours `Rw`, the solver row tests the fallback axis and the support function.
 
 **Which predicate a validator fixture calls, stated per row.** A row whose expectation is an *intersection* reason
-(`SEGMENT_INTERSECTS_OBSTACLE`, `DEGENERATE_OBSTACLE`, `NON_FINITE_GEOMETRY`) exercises the **segment-only predicate** on
-the quoted polyline; a row whose expectation is an *endpoint* reason (`ENDPOINT_INSIDE_OBSTACLE`) exercises the **full
-head validator**, because the endpoint check lives there. A fixture that changes which predicate it calls changes its
-primary reason, and the table pins both the primary and the expected secondary reason so an implementation cannot pass by
-reporting a different one.
+(`SEGMENT_INTERSECTS_OBSTACLE`, `DEGENERATE_SEGMENT`, `DEGENERATE_OBSTACLE`, `NON_FINITE_GEOMETRY`) exercises the
+**segment-only predicate** on the quoted polyline; a row whose expectation is an *endpoint* reason
+(`ENDPOINT_INSIDE_OBSTACLE`) exercises the **full head validator**, because the endpoint check lives there. A fixture that
+changes which predicate it calls changes its primary reason, so every row pins both:
+
+| Row | Predicate | Primary reason | Expected secondary |
+| --- | --- | --- | --- |
+| `raw_intersecting`, `raw_crossing_thick`, `outside_endpoints_crossing_obstacle`, `rotated_obstacle`, `rotated_anisotropic`, `raw_shallow_crossing` | segment-only | `SEGMENT_INTERSECTS_OBSTACLE` | stage 2 decided it (no stage-3 evaluation) |
+| `endpoint_inside` | full head validator | `ENDPOINT_INSIDE_OBSTACLE` | the segment check is not reported, because the endpoint test runs first |
+| `degenerate_segment_inside` | segment-only | `DEGENERATE_SEGMENT` | not `SEGMENT_INTERSECTS_OBSTACLE` — the `a = 0` guard precedes the quadratic |
+| `non_finite`, `degenerate_obstacle`, `rest_length_invalid` | segment-only (guard phase) | the guard reason | no geometric test is reported, because none ran |
+| `sheet_muscle` | full head validator | `UNSUPPORTED_GEOMETRY` | no clearance verdict is reported for a shape the predicate does not describe |
 
 **Validator (`raw_*`) fixtures — a finished polyline in, a verdict out.**
 
@@ -2743,6 +2799,8 @@ reporting a different one.
 | `non_finite` | a NaN coordinate or radius | `INVALID` — `NON_FINITE_GEOMETRY` |
 | `degenerate_obstacle` | a zero or negative semi-axis | `INVALID` — `DEGENERATE_OBSTACLE` |
 | `rest_length_invalid` | a head whose reference-stance length is zero | `INVALID` — `REST_LENGTH_INVALID`, never a division |
+| `degenerate_segment_inside` | a zero-length segment whose point lies inside an obstacle | `INVALID` — `DEGENERATE_SEGMENT` (segment-only predicate), never `SEGMENT_INTERSECTS_OBSTACLE`: the `a = 0` point test precedes the quadratic |
+| `sheet_muscle` | a definition with `flat = true` | `INVALID` — `UNSUPPORTED_GEOMETRY`, full head validator; no clearance verdict is reported for a strip shape the tube predicate does not describe |
 | `raw_interior_segment` | a segment lying entirely inside an obstacle (unit sphere, `q0 = (0,0,0)`, `qd = (0.4, 0, 0)`), tube radius 0.1 | `INVALID` — `CLEARANCE_VIOLATION` with `min g = −0.1`; a surface-distance implementation reports a positive minimum and clears it, so this row is what separates solid from surface distance |
 | `raw_interior_control` | the same geometry with the segment outside: `q0 = (1.3,0,0)`, `qd = (0.4,0,0)` | `VALID` — the near-miss control, so the pair cannot pass by rejecting every interior-ish chord |
 | `raw_shallow_crossing` | a chord that dips 0.002 units inside the surface (inside the `Δ_tol` band, real roots) | `INVALID` — `SEGMENT_INTERSECTS_OBSTACLE`, routed through stage 3 where `min g = −0.002 · r`; a band treated as "no real roots ⇒ clear" clears it |
