@@ -349,7 +349,7 @@ Three distinct things share the word "anatomy" and are separated here:
 | Concept | What it is | Lifetime | Where it lives |
 | --- | --- | --- | --- |
 | **Anatomical definition** | static knowledge: which muscles exist, where they attach, how thick they are, which obstacles they wrap, which roles they may take | versioned asset, shared by all characters | `anatomy/anatomy_v1.json` (text, diffable) |
-| **Anatomical frame** | per-frame derived state: solved path points, arc length, tendon lengths, strain, landmark positions | one frame, reused buffers | runtime `AnatomyFrame` |
+| **Anatomical frame** | per-frame derived state: solved path points, `modelledPathLength`, `restLength`, `relativePathLengthChange`, `visualTendonPortionLength`, landmark positions | one frame, reused buffers | runtime `AnatomyFrame` |
 | **Anatomical geometry** | the visible mesh of a muscle | renderable, cached | character asset (GLB) or generated |
 
 The model **derives position from the Motion Model** and has no solver of its own: it never calls IK, never moves a
@@ -775,9 +775,11 @@ Without a mask, a shoulder-width morph drags the deltoid ring through the acromi
 **Morph targets deform soft tissue only.** A surface morph moves skin and muscle vertices. It never changes a bone's
 dimensions, a joint position or a segment length: a `ShoulderWidth` morph widens the deltoid surface and **must not widen
 a bone**, lengthen a clavicle or move the `SHOULDER_A` joint point, because that would change IK reach while the motion
-model believes nothing moved. The check is L6: **joint landmark positions are unchanged under every morph, within
-`ε_morph` (proposed, fixed at stage 1)**, measured on the same landmarks `RigLandmarkAlignmentTest` uses, so a morph that
-shifts a joint fails the preset instead of surfacing as a visual surprise.
+model believes nothing moved. The check is L6, and it is a **mesh** check: the ring of vertices masked around each joint
+pivot keeps its pivot-relative positions within `ε_morph` (proposed, fixed at stage 1). Testing that the *bone* landmarks
+are unmoved is not that check — a vertex-only morph cannot move a bone, so asserting it is tautological and passes for
+every asset, including a broken one. The two are not substitutes: the ring test can fail, the bone test cannot, and only
+the ring test says anything about the surface a muscle has to sit under.
 
 **A consequence that must be budgeted, not discovered:** a body morph target moves surface vertices, and muscle meshes
 are separate renderables. A muscle layer therefore does **not** inherit the body's morphs; either the muscle asset
@@ -804,7 +806,17 @@ They are classified as an approximation (§11), not as anatomy.
   "skeletonOverlay": "shared/skeleton_v1.glb",
   "morphology": {
     "preset": "muscular",
-    "weights": { "shoulderWidth": 1.0, "chestVolume": 0.7, "waistWidth": -0.35, "limbThickness": 0.9, "headScale": 0.05 }
+    "rangesVersion": 1,
+    "weights": {
+      "ShoulderWidth": 1.0, "ChestVolume": 0.7, "WaistWidth": -0.35, "LimbThickness": 0.9, "HeadScale": 0.05
+    },
+    "ranges": {
+      "ShoulderWidth": { "min": -0.55, "max": 1.0 },
+      "ChestVolume":   { "min": -0.55, "max": 1.0 },
+      "WaistWidth":    { "min": -0.55, "max": 1.0 },
+      "LimbThickness": { "min": -0.55, "max": 1.0 },
+      "HeadScale":     { "min": -0.55, "max": 1.0 }
+    }
   },
   "materials": { "skin": "skin_03", "roughness": 0.55 },
   "heightMetres": 1.80,
@@ -812,6 +824,13 @@ They are classified as an approximation (§11), not as anatomy.
   "anatomyOverrides": []
 }
 ```
+
+**Morph names are the asset's names, exactly.** The keys are the GLB's `extras.targetNames` — `ShoulderWidth`,
+`ChestVolume`, `WaistWidth`, `LimbThickness`, `HeadScale`, case included. A camelCase key is **not** a synonym: the rule
+below is that a name the asset does not carry is a profile error, so `shoulderWidth` is rejected rather than silently
+ignored — and the earlier example in this section used exactly that spelling, which is how a documented example ends up
+unable to load. If a profile ever needs a friendlier spelling, it needs an explicit, unique mapping table with its own
+validation; an implicit case-insensitive match is not that table.
 
 **Morph weights are named, not positional.** `weights` maps a morph target name to a weight. The preset supplies a
 default for every target it declares; an explicit entry overrides that one name and leaves the rest at the preset's
@@ -824,10 +843,12 @@ weights are unbounded floats. The asset's only statement about magnitude is the 
 50 mm, 55 mm and 22 mm of displacement, and 10 % of head radius for `HeadScale` (`morph_deltas` in
 `spike-humanoid/tools/generate_humanoid_glb.py`, PR #384) — and the shipped presets span `−0.55 … 1.00`
 (`MorphologyPreset.kt:8-11`), which is the only evidence that negative weights are intended and that 1.0 is the authored
-extreme. The profile therefore **declares `min`/`max` per named morph**, checked by `MorphPresetTest` at L6; the numbers
-above are the asset's authored envelope, not a guess. Nothing in the asset stops a weight of 3.0 from rendering — this
-document refuses to ship a weight the asset was not authored for, and a name with no declared range is a profile error
-because it cannot be validated.
+extreme. The profile therefore **declares `min`/`max` per named morph in a versioned `ranges` block**
+(`rangesVersion`), checked by `MorphPresetRangeTest` at L6; the numbers above are the asset's authored envelope, not a
+guess, and a per-target range may narrow or widen independently as the asset is re-authored — which is why the block is
+versioned rather than a constant. Nothing in the asset stops a weight of 3.0 from rendering: this document refuses to
+ship a weight the asset was not authored for, and a name with no declared range is a profile error because it cannot be
+validated.
 
 **`heightMetres` is a declared landmark pair, not a free scale factor.** It is the `rigHeight` argument of
 `CharacterCalibration.unitScale` (`character/CharacterCalibration.kt:14-26`, PR #385), whose scale is
@@ -1868,12 +1889,22 @@ phase of which exercise". It is not EMG, not a physiological simulation, and not
 Exercise → Muscle → Role → MovementPhase → Emphasis
 ```
 
-- **Role**: `PRIME_MOVER`, `SYNERGIST`, `STABILISER`, `ANTAGONIST` (the last for the eccentric/control case).
+- **Role**: `PRIME_MOVER`, `SYNERGIST`, `STABILISER`, `ANTAGONIST` — a **categorical, sourced** statement that a muscle
+  takes that role in that movement, carrying a source, a population and a task (§8.2). It is not a magnitude and not an
+  ordering: **no numeric activation value, no EMG-derived output, and no medical or therapeutic claim in M1.** The
+  vocabulary also carries `UNKNOWN`, so "no reviewed row exists" is representable instead of being guessed at.
+  `ANTAGONIST` is used **only where the reviewed movement-specific evidence supports it** — never as the default name for
+  the eccentric phase, because a phase belongs to the exercise and a role belongs to the muscle.
 - **MovementPhase**: `CONCENTRIC`, `ECCENTRIC`, `ISOMETRIC` — read from the exercise's reviewed `PhaseTimeline`, never
-  inferred per muscle frame and never derived from joint angles.
-- **Emphasis**: an ordinal tier (`PRIMARY`, `SECONDARY`, `SUPPORTING`), not a percentage. A numeric 0–1 value may exist
-  internally for shading, but it is a *display* intensity derived from the tier and the phase, and the UI must not label
-  it as activation percentage.
+  inferred per muscle frame and never derived from joint angles. **A phase is a property of the exercise; a role is a
+  property of the muscle in that exercise**, and keeping the two apart is what stops "eccentric" from turning into an
+  implicit contraction assertion about a named muscle.
+- **Emphasis**: an ordinal tier (`PRIMARY`, `SECONDARY`, `SUPPORTING`), not a percentage — and **no numeric 0–1 value is
+  derived from it**. The earlier text allowed an internal 0–1 "display intensity derived from the tier and the phase";
+  that is withdrawn, because a number computed from a tier and a phase is a number no source supports, and shading a
+  figure with it makes it look measured. Role colour is a **reviewed educational emphasis**: it encodes the reviewed
+  tier, it carries its source and its limits in the legend and the panel, and it is never labelled, ordered or
+  interpolated as an activation percentage.
 
 ### 8.2 Data
 
@@ -2138,7 +2169,7 @@ change that quietly promotes an approximation to a claim.
 | Euclidean segment-to-ellipsoid clearance | established technique (distance), surrogate object | the guarantee is the **generated modelled tube** against the **declared model obstacles**, with declared attachment-contact exemptions: no claim about real bone, fascia or skin, no claim about the swept volume between frames, and no claim about a morphed or sheet muscle (§7.4.1) | L4 fixtures + `CLEARANCE_VIOLATION` rows |
 | Arc-length measurement along the path | established technique | depends on path sampling density | L4 |
 | Muscle cross-section response | **not implemented — research hypothesis only** (§7.6) | no validated per-muscle deformation model; the cylinder law is a plausibility argument. Linear-blend skinning still stretches the mesh between separating helpers — a skinning artifact, not a modelled response | none — not a validation target |
-| Morph-target morphology | visual approximation | surface only; joints can degrade without a joint rule | L6 |
+| Morph-target morphology | visual approximation | surface only; the vertex ring around a joint pivot can degrade and no joint-space rule sees it, which is what the L6 ring test measures | L6 |
 | Corrective shapes | visual approximation | authored per rig; not anatomy | L6 + visual |
 | Activation colouring | **educational model, not physiology** | no EMG, no measured intensity, no per-frame claim | §8 schema + expert review |
 | Organ motion (future) | research required | no defensible mechanical driver at this stage | not planned |
@@ -2150,7 +2181,8 @@ change that quietly promotes an approximation to a claim.
 1. No muscle geometry moves for a reason that is not in the ownership table of §7.6. Path following is the only
    anatomy-derived motion; morphs and correctives are character-owned, must not touch `AnatomyFrame`, and are not anatomy;
    an `INVALID` path is reported, never drawn as if it were valid.
-2. No numeric activation value is displayed without a cited source; tiers are ordinal.
+2. No numeric activation value exists in M1, cited or not — roles are categorical and tiers are ordinal, and each entry
+   carries its source (§8.1). A number that looks measured is a claim, and this framework makes none.
 3. No balance, contact or ground model is introduced in the presentation path. The character consumes the published
    pose; it does not re-solve it.
 4. No claim of anatomical correctness is derived from joint-space validation. L1 passing says nothing about a surface.
@@ -2172,7 +2204,7 @@ Seven levels, each with one owner, one report and an explicit automation status.
 | **L3 Attachments** | every attachment's joint exists; offset inside a segment envelope; L/R mirror; head count; origin ≠ insertion; span ≥ 2 segments | yes | all | the anatomy data is wrong; block |
 | **L4 Path** | every segment of the final polyline tested analytically against every obstacle (closed-form segment–ellipsoid), plus a sample-outside-inflated-surface check using the `ε_pen` numerical margin; unverifiable geometry reported `INVALID`; deterministic outcome for overlapping, nested and impossible routes; tangent and curvature continuity at entry/exit; temporal continuity; rest-length tolerance vs measured reference | yes, with adversarial fixtures | all | the solver or the data is wrong; block |
 | **L5 Mesh** | self-intersection, degenerate triangles, weight sums, volume sanity per muscle, helper-bone bind match | partly (tool) | **subset** (§12.5) | the mesh is wrong; block release, not build |
-| **L6 Morphology** | per-preset rest invariant, joint-ring preservation under morphs, delta bounds, anatomy still inside the body | yes | **subset** (§12.5) | a preset breaks the rig; block the preset |
+| **L6 Morphology** | declared ranges respected per target; **mesh** ring/mask vertices relative to joint pivots within `ε_morph`; delta bounds; anatomy still inside the body | yes | **subset** (§12.5) | a preset breaks the surface the muscles sit under; block the preset. A bone-landmark rest invariant is **not** an L6 assertion: a vertex-only morph cannot move a bone, so it is tautological |
 | **L7 Anatomical review** | A1–A6 in §12.4: attachment locations, position vs bone and body surface, visible intersections, shape/path plausibility across poses, preset consistency, provenance | no — human, **required for M1** | all | the model is not accepted; M1 does not ship |
 
 ### 12.1 What is genuinely automatable
@@ -2212,7 +2244,8 @@ Seven levels, each with one owner, one report and an explicit automation status.
 | `AnatomyFrameLayoutTest` | L4 | §5.3: the `3 · headCount · pointCapacity` stride addresses every point of every head; `pointCapacity` is the post-insertion maximum; an over-capacity head reports `BUFFER_CAPACITY` instead of growing or truncating; `clear()` leaves every slot `INVALID` |
 | `MuscleGeometryOwnershipTest` | L4 / presentation | §7.6: toggling morphs or correctives leaves every `MuscleState` bit-identical, and nothing in `character/` writes `AnatomyFrame` |
 | `ProceduralTubeBudgetTest` | L5 (M1 subset) | generated triangles match the §10.3 formula for the declared `N` and `R`; no zero-area ring; all coordinates finite |
-| `MorphPresetTest` | L6 | rest invariant per preset; joint rings unmoved beyond tolerance |
+| `MorphPresetRangeTest` | L6 | every declared weight lies inside its target's declared `min`/`max`; every preset declares a value for every target; a name the asset does not carry fails rather than defaulting to zero |
+| `MorphRingPreservationTest` | L6 | the mesh ring masked around each joint pivot keeps its pivot-relative positions within `ε_morph` under every preset — the test that can fail, and the one that says anything about the surface a muscle sits under |
 | `LayerToggleTest` | presentation | toggling a layer changes visibility only; no engine or pose rebuild; an evicted layer reloads and re-shows |
 | `ArchitectureBoundaryTest` | architecture | §4.5: every file in `animation/` and `poses/` imports no `androidx.*` (Compose included), `android.*`, `ui.*`, `render.*` or Filament — `theMotionCoreImportsNoComposeOrFrameworkCode` and `theMotionCoreImportsNoOtherAndroidxCode`; the `anatomy/` and `character/` edges are outside its source set, so they remain review obligations |
 | `AssetBudgetTest` | L5 | triangle/texture/bone budgets per tier from the manifest |
@@ -2379,11 +2412,12 @@ rule and the M1 checklist all cite it, and none of them may require a check the 
 | L3 | all mechanical checks, evaluated in the bind stance | — | definition-time data check |
 | L4 | all path checks, validator fixtures and solver fixtures | — | the geometry contract |
 | L5 | body asset checks (degenerate triangles, weight sums, budgets) and **generated tube structure**: finite coordinates, no zero-area ring, triangle count equal to the §10.3 formula | muscle-vs-skin intersection; authored-mesh helper binds | M1 has no authored muscle mesh; no mesh intersection test ships in M1 |
-| L6 | one preset: rest invariant, joint-ring preservation, delta bounds | cross-preset coverage; "anatomy still inside the body" as an automated pass | one preset exists; body-anatomy intersection needs a tool M1 does not ship, so it is an L7 A2/A3 judgement |
+| L6 | one preset: declared ranges respected, mesh ring preservation around joint pivots, delta bounds | cross-preset coverage; "anatomy still inside the body" as an automated pass; the bone-landmark rest invariant, which a vertex-only morph cannot affect and which therefore proves nothing | one preset exists; body-anatomy intersection needs a tool M1 does not ship, so it is an L7 A2/A3 judgement |
 | L7 | A1–A6 with a valid record (§12.4) | — | the human gate |
 
-**M1 gate, stated once.** M1 passes when: L1–L4 green; the L5 and L6 subsets above green; device numbers recorded for the
-M1 configuration (skin + muscle layer + skeleton overlay); and the §12.4 record exists for the exact
+**M1 gate, stated once.** M1 passes when: L1–L4 green; the L5 and L6 subsets above green; **a device run recorded** for
+the M1 configuration (skin + muscle layer + skeleton overlay) — evidence that it renders, not a frame-rate or thermal
+budget, because those are informational by the owner's decision (§12.3); and the §12.4 record exists for the exact
 `(anatomyVersion, rigVersion, assetVersion, presetId)` shipped. Any other combination is not an M1 pass, whatever the
 individual reports say.
 
@@ -2568,7 +2602,7 @@ schedule risk, not the engineering one.
 | Stage | Outcome | Eng. | Art / expertise | Gate |
 | --- | --- | --- | --- | --- |
 | 0 | This RFC reviewed and accepted | 0 | — | reviewer sign-off |
-| 1 | Rig v2 + asset validation + device evidence | 3–4 | 2–3 rig-art | L2 green, device numbers recorded |
+| 1 | Rig v2 + asset validation + device evidence | 3–4 | 2–3 rig-art | L2 green including A1/A2, and a device run recorded |
 | 2 | Anatomy kernel + 8 muscles as procedural tubes | 4–5 | 1 anatomist week | L3/L4 green on fixtures |
 | **M1** | **one character, 1 preset, 3+ exercises, 8 muscles, 3 layers** | — | — | **demo + §12.5 gate + §12.4 record** |
 | 3 | Path-rigged authored muscle meshes | 4 | 6–8 muscle art | L5 + visual review |
@@ -2628,8 +2662,8 @@ schedule risk, not the engineering one.
 - **Dependencies:** stage 1 (rest stance + definition), anatomy calibration session.
 - **Expected files:** `app/src/main/java/com/monkfitness/app/anatomy/*.kt`,
   `app/src/main/assets/anatomy/anatomy_v1.json`, `app/src/test/.../anatomy/*`.
-- **User-visible deliverable:** a dev-only muscle layer showing red tubes following the squat and push-up, with a length
-  readout per muscle.
+- **User-visible deliverable:** a dev-only muscle layer showing red tubes following the squat and push-up, with a
+  `modelledPathLength` readout per muscle (named for what it measures, §7.4).
 - **Automated acceptance:** arc length ≥ chord on every frame; **every validator fixture in §12.2.1 returns its expected
   verdict** — including `outside_endpoints_crossing_obstacle`, which must be rejected — and **every solver fixture
   produces its expected final path or failure**; lengths are deterministic and continuous across a sampled motion; rest
@@ -2653,8 +2687,9 @@ schedule risk, not the engineering one.
    cross-section response is applied (§7.6).
 5. One morphology preset (`neutral`). M1 demonstrates that the preset changes nothing in the pose, muscle or animation
    data; it does not demonstrate body-family coverage — four families are stage 5 (§6.3, §15).
-6. The §12.5 gate is green: L1–L4, the L5/L6 M1 subsets (tube structure, one-preset invariants), and device numbers
-   recorded for the M1 configuration (skin + muscle layer + skeleton overlay), not for the skin alone.
+6. The §12.5 gate is green: L1–L4, the L5/L6 M1 subsets (tube structure, one-preset invariants), and **a device run
+   recorded** for the M1 configuration (skin + muscle layer + skeleton overlay), not for the skin alone — a run, not a
+   frame-rate gate (§12.3).
 7. The anatomical review gate (§12.4) is passed and recorded for the exact shipped tuple: named reviewer, reference list,
    per-muscle findings against A1–A6, and unresolved limitations. A missing record fails M1 exactly as a red L4 does.
 8. Every claim in the demo's copy survives §11: no "simulated", no measured activation, no implied contraction
@@ -2679,7 +2714,8 @@ item 9), a muscle library beyond eight, and any claim of surface accuracy.
   and a measured deviation bound rather than an "exactly follows" claim.
 - **Automated acceptance:** helper bind positions equal the solver's rest path within 1e-3; helper scale is uniform, with
   no cross-section response (§7.6); the measured between-helper deviation is within the declared tolerance and recorded
-  in L5; frame cost of the muscle layer below the measured budget.
+  in L5; frame cost of the muscle layer **recorded as information, not gated** — the owner's decision is result first,
+  optimisation later, so no stage gate depends on a frame-rate number (§12.3).
 - **Manual acceptance:** visual review of the eight muscles in three poses against anatomical references, and a
   **renewed §12.4 record** for the new `assetVersion` — the M1 record covered tubes, not these meshes.
 - **Risks:** helper bone budget (R3); art time (R2).
@@ -2707,10 +2743,11 @@ item 9), a muscle library beyond eight, and any claim of surface accuracy.
 
 - **Objective:** prove one anatomy library serves slim, heavy, muscular and female bodies. This is the first stage that
   ships more than one morphology preset; M1 ships one (§15, M1 item 5).
-- **Components:** morph targets with region masks, four presets, `MorphPresetTest`, per-preset device screenshots.
+- **Components:** morph targets with region masks, four presets, `MorphPresetRangeTest` and `MorphRingPreservationTest`,
+  per-preset device screenshots.
 - **Dependencies:** stage 3 meshes (morphs are authored per body).
 - **Expected files:** `app/src/main/assets/characters/*/skin.glb` (morph targets), `character/CharacterProfile.kt`,
-  `app/src/test/.../character/MorphPresetTest.kt`.
+  `app/src/test/.../character/MorphPresetRangeTest.kt`, `.../MorphRingPreservationTest.kt`.
 - **User-visible deliverable:** a character selector that changes the body and keeps every exercise, muscle and
   animation.
 - **Automated acceptance:** rest invariant per preset; joint rings unmoved; anatomy inside the body within tolerance.
