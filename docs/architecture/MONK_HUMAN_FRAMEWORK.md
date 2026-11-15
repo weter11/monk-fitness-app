@@ -895,10 +895,33 @@ enters through `a` **and** through the composition, so a parent rolled 90° abou
 hands the child that 90° of roll — a bare `D · R_rest` drops it, leaving two frames that agree on direction and disagree
 by 90° on every attachment offset. (iii) *The rest invariant holds when the rig's bind agrees with the engine's bind, and
 it is a statement about deltas.* At bind `R_target_world(parent) = R_rest_world(parent)`, so `a` is the bind direction the
-parent's **rest** rotation carries, and `D = identity` **iff** the rig's bind head positions put that segment on the
-engine's published bind direction — i.e. iff A1's `τ_rot` holds (§6.6). The generated stage-1 rig has that by construction;
-on `humanoid_v1`, which fails A1 by 350.2×, **neither this rule nor the one it replaces** yields identity, so
-`PoseRetargeterRestInvariantTest` is expected red there and nothing is weakened to make it green. All three are asserted
+parent's **rest** rotation carries, and `D = identity` exactly when the rig's bind head positions put that segment on the
+engine's published bind direction. On `humanoid_v1`, which fails A1 by 350.2×, **neither this rule nor the one it
+replaces** yields identity, so `PoseRetargeterRestInvariantTest` is expected red there and nothing is weakened to make it
+green.
+
+**Direction agreement is weaker than the frame agreement the invariant needs, and A1's `τ_rot` supplies neither — the two
+conditions are stated apart because an earlier revision ran them together.** At bind the composition hands the child its
+**parent's** rest rotation, so the invariant is `R_target_world(u) = R_rest_world(u)`, not `D = identity` on its own:
+
+- **What the generated identity-rest rig guarantees.** `SkeletonFactory` creates every node with identity rotation
+  (`SkeletonFactory.kt:60-101`, §7.2) and the stage-1 generator writes the root's rest rotation as `B⁻¹ · I · B = I`
+  (§15 step 8), so `R_rest_world(u) = I` for every bone. At bind `D = identity` and the composition returns `I` for every
+  bone: `R_target_world(u) = R_rest_world(u)` **exactly**, not within a tolerance, which is what
+  `PoseRetargeterRestInvariantTest` asserts on that rig.
+- **What A1's `τ_rot` alone permits.** A1 bounds each bone's rest orientation against the engine's identity rest
+  **independently**, within 0.5° (§6.6), and says nothing about a child's rest rotation relative to its parent's. Take
+  parent rest `I`, a child whose rest rotation is `Rx(0.25°)`, and matching bind and published directions `+X`: the
+  direction agreement is exact, so `D = identity`, and the prescribed target is the parent's `I` rather than the child's
+  `Rx(0.25°)`. The angular error is 0.25° — inside A1 — and the largest matrix-entry error is **0.0043633**, which is
+  **43.6× the 1e-4** the stage-1 acceptance allows for the rest invariant (§15). A1 therefore does not imply the
+  invariant, and a rig that passes A1 is not thereby a rig this composition can be asserted on.
+
+**The condition the composition actually needs is a common rest rotation** — `R_rest_world(u) = R_rest_world(parent(u))`
+for every mapped bone, so that "the parent's rest rotation" and "the child's rest rotation" are the same rotation. The
+generated identity-rest rig satisfies it exactly. Any other rig must either satisfy it or preserve each child's
+rest-relative rotation, which this document does not specify; a per-bone tolerance such as A1's is not a substitute for
+either, and no tolerance on the rest-invariant test can stand in for it. All three properties above are asserted
 through the real retarget construction, not against a matrix identity: a frame where **the parent swings and the child's
 own direction changes at the same time** (the case that separates this rule from the previous one), a parent-roll case, a
 non-axis-aligned direction change under a non-identity basis, and a wrong-basis control (`PoseRetargeterBasisTest`,
