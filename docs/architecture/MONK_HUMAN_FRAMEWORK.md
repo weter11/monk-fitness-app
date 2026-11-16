@@ -2289,8 +2289,10 @@ stated, so a segment whose tangency lies at `t = −2` was rejected while it was
 
 **The two `INVALID` rows above are stated for the stage that must decide them.** They are intersections in fact, so the
 verdict `INVALID` is right either way; the *reason* `SEGMENT_INTERSECTS_OBSTACLE` is reachable only with a proved
-enclosure, so while deliverable (2) of §7.4.1c is open the same pairs report `UNCERTIFIED_MINIMUM` through stage 3. The
-table is not wrong; it is conditional, and §12.2.1 states the condition once for the fixture set that pins it.
+enclosure, so while deliverable (2) of §7.4.1c is open both pairs are **routed to stage 3, whose own result is
+authoritative for that pair**: `CLEARANCE_VIOLATION` where its bracket decides (`d = 0` inside the solid, so
+`g = −r < e`, reason row 8), `UNCERTIFIED_MINIMUM` where it cannot. The table is not wrong; it is conditional, and
+§12.2.1 states the condition once for the fixture set that pins it.
 
 **(c) `INVALID` — never assumed, and one authoritative reason table.** A path is accepted only when **every
 segment–obstacle pair returns a CLEAR from whichever stage decided it** (stage 1 or stage 3 — a pair stage 1
@@ -3834,12 +3836,13 @@ changes which predicate it calls changes its primary reason, so every row pins b
 **Every `SEGMENT_INTERSECTS_OBSTACLE` reason below is conditional on the enclosure deliverable, and that condition is
 stated once here rather than repeated in ten rows.** Stage 2 reports that reason only when the witness survives a **proved**
 forward-error enclosure (§7.4.1b). No enclosure is derived in this document, so while deliverable (2) of §7.4.1c is open
-the same geometry reports **`UNCERTIFIED_MINIMUM`** through stage 3 instead: the **verdict is unchanged** (`INVALID`, which
-is what every one of those rows is really distinguishing), the **reason is not**. The rows keep their intended reason
-because it is the verdict the implementation must produce once the enclosure exists, and because a row that named
-`UNCERTIFIED_MINIMUM` today would stop testing which stage decided. The control rows (`VALID`) are unaffected — they do not
-depend on stage 2 at all — so each pair still separates an implementation that accepts everything from one that rejects
-everything.
+the same geometry is **routed to stage 3, whose own result is authoritative for that pair** — `CLEARANCE_VIOLATION`
+where its bracket decides the clearance failure, `UNCERTIFIED_MINIMUM` where it cannot: the **verdict is unchanged**
+(`INVALID`, which is what every one of those rows is really distinguishing), the **reason is not**. The rows keep
+their intended reason because it is what the implementation must produce once the enclosure exists, and because a
+row pinned to one of stage 3's two outcomes would stop testing which stage decided. The control rows (`VALID`) are
+unaffected — they do not depend on stage 2 at all — so each pair still separates an implementation that accepts
+everything from one that rejects everything.
 
 | Row | Predicate | Primary reason | Expected secondary |
 | --- | --- | --- | --- |
@@ -4774,7 +4777,9 @@ attachment-landmark hints of item 9), a muscle library beyond eight, and any cla
   honestly. The schema, validator, display gate **and the selected-muscle readout** ship in M1 (§9.2, X8; stage 2b); this
   stage adds coverage and presentation on top of that readout rather than a second one.
 - **Components:** reviewed `PhaseTimeline` per exercise (`ASCENT`/`DESCENT`/`HOLD`), role rows for every exercise the app
-  ships, colour mapping, panel copy, the "not EMG" disclaimer, selection state.
+  ships, colour mapping, panel copy, the "not EMG" disclaimer. Selection state is **consumed, not shipped here**:
+  stage 2b's selected-muscle readout (§9.2) owns it, and this stage extends that readout rather than defining a
+  second one.
 - **Dependencies:** stage 3 (visible muscles to colour); M1's schema and gate.
 - **Expected files:** `anatomy/ActivationTable.kt`, `app/src/main/assets/anatomy/activation_v1.json`,
   `app/src/main/assets/anatomy/phases_v1.json`, `app/src/test/.../activation/ActivationDefinitionTest.kt`,
@@ -4883,7 +4888,7 @@ app/src/main/java/com/monkfitness/app/
 app/src/main/assets/
 ├── anatomy/anatomy_v1.json       shared definitions
 ├── anatomy/activation_v1.json    shared semantics
-├── anatomy/phases_v1.json        reviewed phase timelines (stage 4)
+├── anatomy/phases_v1.json        reviewed phase timelines (four pilots at stage 2b; wider coverage at stage 4)
 ├── characters/<id>/              per character: skin, muscles, materials
 └── shared/skeleton_v1.glb        skeleton overlay
 tools/anatomy-export/             offline helper-bind + asset validation (JVM)
@@ -4909,7 +4914,9 @@ tools/anatomy-export/             offline helper-bind + asset validation (JVM)
 1. Is "anatomy never enters the engine" the right line, or should `SkeletonPose` carry a minimal muscle anchor set to
    avoid recomputing attachments? (This RFC says no; the cost is one attachment transform per waypoint plus a
    short path solve per muscle per frame, which the stage-2 measurements will quantify.)
-2. Is eight muscles the right M1 subset for the first three exercises, or should M1 be four muscles done well?
+2. Is eight muscles the right M1 subset for the four pilot exercises of X8 — `squat`, `standard push-up`, `bird-dog`,
+   `row_standard` — or would a smaller set done well be the better outcome of the stage-3 authoring experiment (§13,
+   question 2)?
 3. Should the skeleton overlay be a shared asset across characters (this RFC's assumption) or per character, given
    uniform scale differences?
 4. Is any cross-section response ever justified? This RFC ships none in M1 (§7.6). If a reviewer believes a visibly
