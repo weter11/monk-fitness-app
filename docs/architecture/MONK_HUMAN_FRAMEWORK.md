@@ -4070,7 +4070,7 @@ combination is not an M1 pass, whatever the individual reports say.
 | R2 | Muscle authoring cost is much larger than estimated | high | high | M1 uses 8 muscles; strategy A proves the pipeline before art is commissioned | product + art |
 | R3 | Per-renderable bone budget too small for the library | medium | high | regional renderable split (§10.3); measure at stage 1 | engineering |
 | R4 | Device evidence is one run on one phone | certain | medium | record each run (§12.3); generalise no number beyond the device it came from; FPS/thermal gating deferred by the owner | engineering |
-| R5 | Anatomy review capacity (physio/anatomist) is the bottleneck | high | high | batch reviews per layer; L3/L7 checklists reduce the time per muscle | product |
+| R5 | Anatomy review capacity (physio/anatomist) is the bottleneck | high | high | batch reviews per layer; L3/L7 checklists reduce the time per muscle. **No review capacity is budgeted for stages 5 and 6**: those effort lines carry art and engineering only, and stage 6's ~47 muscles (~35 superficial, ~12 deep) are unreviewed at this mitigation's rate until a reviewer is named — the owner convention of §15 is what signs those gates meanwhile | product |
 | R6 | Morphs degrade the surface around a joint silently | medium | medium | L6 declared ranges plus **mesh ring preservation** around each joint pivot; the bone-landmark rest invariant is not the check, because a vertex-only morph cannot move a bone | engineering |
 | R7 | Attachment data drifts when `SkeletonDefinition` changes | medium | high | one `unitsPerMetre`, rest-length test, definition version pin | engineering |
 | R8 | PR #385 changes before merge, or is rejected | medium | medium | this RFC depends on its contracts, not its files; rebase plan in stage 1 | engineering |
@@ -4488,6 +4488,11 @@ Stages are outcomes, not PR-sized steps. Each stage ends with something demonstr
 is engineering-weeks for one experienced engineer, ±50%, excluding art; art is listed separately because it is the
 schedule risk, not the engineering one.
 
+**Who signs a gate until a reviewer is named.** Every review gate in this roadmap — RV1–RV6 of §12.4, the stage-0
+walkthrough and the stage-2b timelines — is signed by the **project owner** until a qualified reviewer is named in
+the record. Naming one later amends the record; no gate in this section waits on an expert this document has not
+named.
+
 **Summary**
 
 | Stage | Outcome | Eng. | Art / expertise | Gate |
@@ -4510,8 +4515,10 @@ schedule risk, not the engineering one.
 - **Dependencies:** PR #385 state (merged, rebased or rejected) recorded as a decision input.
 - **Expected files:** `docs/architecture/MONK_HUMAN_FRAMEWORK.md` only.
 - **User-visible deliverable:** none.
-- **Automated acceptance:** document builds no code; CI unaffected.
-- **Manual acceptance:** a reviewer can state the ownership of any object in §5.1 without reading the code.
+- **Automated acceptance:** document builds no code; CI unaffected. That criterion is the whole of the automated one —
+  it proves the file parses and nothing else.
+- **Manual acceptance, and this is the real gate:** a reviewer can state the ownership of any object in §5.1 without
+  reading the code; the walkthrough is signed by the project owner until a reviewer is named (§15).
 - **Risks:** scope creep into "design the art".
 - **Art/expertise:** none.
 
@@ -4639,7 +4646,9 @@ schedule risk, not the engineering one.
   `MusclePathContinuityTest`; a path or length discontinuity across a sampled motion is a diagnostic row that fails
   nothing (X6, §7.4.3); every rest length is finite, positive and reproducible (§7.4.4); no fixture outcome is reported
   without naming which check produced it.
-- **Manual acceptance:** anatomist review of the eight attachment sets and of the wrap behaviour on three poses.
+- **Manual acceptance:** anatomist review of the eight attachment sets and of the wrap behaviour on three poses. **This
+  review does not close RV1.** RV1 closes per instance **and per attachment** — origin, insertion and every waypoint —
+  in the M1 record of §12.4, so stage 2's session is an input to that record, not a substitute for it.
 - **Recorded information, not a gate:** the clearance cost of §7.4.1 — the per-frame segment-to-ellipsoid distance
   evaluations on the pairs that fail the two-comparison accept — is measured here and recorded with the frame, the
   obstacle count and the pose it was measured on. It sits beside the FPS and thermal readings (§12.3): a poor number
