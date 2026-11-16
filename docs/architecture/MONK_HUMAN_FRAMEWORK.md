@@ -2033,7 +2033,8 @@ d(t) = Euclidean distance from p(t) to the closed SOLID ellipsoid, in engine uni
    Without (ii) a station that beats κ_s routes to stage 3 as UNCERTAIN — not INTERSECT.
    The enclosure condition is recorded per pair beside the verdict.
    INVALID, SEGMENT_INTERSECTS_OBSTACLE, d = 0 < r is reported only for a witnessed entry
-   whose enclosure holds; an unproved witness reports UNCERTIFIED_MINIMUM after stage 3.
+   whose enclosure holds; an unproved witness is not an intersection verdict — it routes to
+   stage 3, whose own result is authoritative for that pair.
    No witness → UNCERTAIN → stage 3, which decides on distance. A chord whose c0 is lost to
    the subtraction, or whose only contact with [0, 1] is an endpoint, has no witness.
    The root interval is still necessary: an empty overlap has no candidate station at all, and
