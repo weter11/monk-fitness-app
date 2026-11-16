@@ -23,6 +23,8 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.monkfitness.app.R
+import com.monkfitness.app.character.CharacterFeature
+import com.monkfitness.app.character.CharacterStage
 import com.monkfitness.app.data.model.Exercise
 import com.monkfitness.app.data.model.skeletonAnimation
 
@@ -64,17 +66,28 @@ private fun ExerciseVisualContent(
     exercise: Exercise,
     modifier: Modifier = Modifier,
     contentScale: ContentScale = ContentScale.Fit,
-    imagePadding: Dp = 16.dp
+    imagePadding: Dp = 16.dp,
+    liveCharacter: Boolean = false
 ) {
     val skeletonAnimation = exercise.skeletonAnimation
 
     if (skeletonAnimation != null) {
-        ExerciseAnimatedVisual(
-            exerciseId = exercise.id,
-            animationId = exercise.animationId,
-            animation = skeletonAnimation,
-            modifier = modifier.padding(imagePadding)
-        )
+        // Only the active exercise view may own the live character; lists keep the 2D renderer.
+        var characterUnavailable by remember(exercise.id) { mutableStateOf(false) }
+        if (liveCharacter && CharacterFeature.isEnabled && !characterUnavailable) {
+            CharacterStage(
+                animationId = exercise.animationId,
+                modifier = modifier.padding(imagePadding),
+                onUnavailable = { characterUnavailable = true }
+            )
+        } else {
+            ExerciseAnimatedVisual(
+                exerciseId = exercise.id,
+                animationId = exercise.animationId,
+                animation = skeletonAnimation,
+                modifier = modifier.padding(imagePadding)
+            )
+        }
     } else {
         androidx.compose.foundation.Image(
             painter = painterResource(exercise.imageRes ?: R.drawable.ic_exercise_placeholder),
@@ -110,7 +123,8 @@ fun ExerciseThumbnail(
 fun ExerciseHeroMedia(
     exercise: Exercise,
     modifier: Modifier = Modifier,
-    height: Dp = 180.dp
+    height: Dp = 180.dp,
+    liveCharacter: Boolean = false
 ) {
     Box(
         modifier = modifier
@@ -123,7 +137,8 @@ fun ExerciseHeroMedia(
         ExerciseVisualContent(
             exercise = exercise,
             modifier = Modifier.fillMaxSize(),
-            imagePadding = 16.dp
+            imagePadding = 16.dp,
+            liveCharacter = liveCharacter
         )
     }
 }
