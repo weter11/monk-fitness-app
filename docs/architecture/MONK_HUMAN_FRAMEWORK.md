@@ -4864,6 +4864,41 @@ attachment-landmark hints of item 9), a muscle library beyond eight, and any cla
 - No custom Vulkan or GLES renderer.
 - No unattended `git` operations beyond the documentation branch and its PR.
 
+### Known M1 limitations
+
+Each line is a bound on what M1's evidence establishes, and names the section that states it. None is repaired in this
+document; the milestone's assurance rests on the human gate of §12.4 and on tests run against real code.
+
+- **Arm elevation above shoulder height** is exercised by neither A2 nor RV4, so neither makes a claim about it (§12.4).
+- **No numerical clearance floor is claimed**; anything not covered by a proved bound fails closed (§7.4.4).
+- **Sex-related pelvis-width and femoral-angle differences** are not covered — the attachment set is reviewed against one
+  body, with no sex-specific adjustment made or implied (§12.4).
+- **No numeric activation value exists** — categorical roles and ordinal tiers only, never a measured percentage (§8.1,
+  Appendix B).
+- **Stage 2's `SEGMENT_INTERSECTS_OBSTACLE` is unreachable until the enclosure deliverable lands**; an unproved witness
+  routes to stage 3, whose own result decides the pair (§7.4.1c, §12.2.1).
+- **All 18 attachment instances are "frame unverified"** until RV1 closes each origin, insertion and waypoint
+  individually (§12.4).
+- **Lumbar curvature is not representable** — one `LUMBAR` and one `CHEST` joint, so the spine is two rigid segments
+  (§13, question 10).
+- **Muscle-versus-skin and self-intersection are not automated** in M1; they are L7 / RV2–RV3 judgements (§12.5).
+- **Device evidence is one device, one asset, one run** (§12.3).
+- **A2 and RV4 cover 4 of 66 registered builders**; a five-frame set is not a statement about the builders it does not
+  visit (§12.4).
+- **M1 ships one morphology preset** — RV5 is evidence about one body, not about any preset added later (§12.4).
+
+**Decisions these non-goals imply, stated so they are not read as omissions.** Each is closed in the X-table of §13; the
+section named is where it is applied.
+
+- **X4 — metres stay out of the M1 UI**: `relativePathLengthChange` only, labelled modelled (§9.2).
+- **X7 — `NO_ROUTE` is disabled** until a proof procedure exists, and the search outcome is reported separately from the
+  last geometric cause (§7.4.1c).
+- **X9 — the roll convention is minimal rotation, as a default only**, with no anatomical-adequacy claim (§7.2, §13
+  question 11).
+- **X10 — one generic reference body**, with `s` and the bind pose tied to named landmarks rather than to a height (§6.6).
+- **Fingers are rigid, visual-only bones** — no engine joint, no A1 row, inheriting the hand (§6.1, §6.2).
+- **Frame rate is not a gate** — FPS and thermal readings are informational (§12.3).
+
 ---
 
 ## Appendix A — module map
