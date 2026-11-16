@@ -16,3 +16,4 @@ dependencyResolutionManagement {
 
 rootProject.name = "Monk Fitness App"
 include(":app")
+include(":spike-humanoid")
