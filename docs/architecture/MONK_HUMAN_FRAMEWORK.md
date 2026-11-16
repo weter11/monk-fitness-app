@@ -4688,7 +4688,6 @@ schedule risk, not the engineering one.
   schema and the display gate — every displayed row carries `source`, `task`, `population` and `reviewStatus`; every phase
   an entry names exists in the `PhaseTimeline` it cites; and an `UNREVIEWED` or `UNKNOWN` row cannot be displayed. The tap
   returns the muscle whose attachment landmark is nearest within the declared radius, `-1` outside it — never a guessed
-  muscle whose attachment landmark is nearest within the declared radius, `-1` outside it — never a guessed
   muscle. **The readout has its own content acceptance, because it is user-facing copy**: for the selected
   `(muscleId, side)` it renders **one row per head**, each carrying the §9.2 fields plus that head's label and nothing
   else; it shows `relativePathLengthChange` labelled modelled and **never** an absolute metre value (X4); it shows a role
