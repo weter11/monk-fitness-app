@@ -7,12 +7,12 @@ import kotlin.math.PI
 enum class TwistPolicy { TWIST_NONE, TWIST_FRACTIONAL, TWIST_ANIMATED }
 
 /**
- * The one declared engine-joint → rig-bone map. The 23 driven joints, the 10 undrivable engine
- * joints and the visual-only bones are all listed here, so coverage is assertable from the map.
+ * The one declared joint → bone map: driven, undrivable and visual-only bones are all named here, so
+ * coverage is assertable against the map instead of against one asset's inventory.
  */
 object BoneMap {
 
-    /** The 23 driven joints: five central plus nine bilateral pairs, scapula included. */
+    /** Every joint the engine can drive; scapula is listed although no shipped asset carries the bone. */
     val byJoint: Map<Joint, String> = mapOf(
         Joint.PELVIS to "Hips",
         Joint.LUMBAR to "Spine",
@@ -51,7 +51,10 @@ object BoneMap {
      */
     val basis: Quat = Quat.fromAxisAngle(0f, 1f, 0f, (PI / 2).toFloat())
 
-    /** Engine joints with no rig bone: the hand chain beyond the wrist and the heel, per side. */
+    /**
+     * Joints no bone can drive, declared so the driven and undrivable sets partition the engine's
+     * joints and a coverage test can tell "no bone" from "the map forgot it".
+     */
     val UNMAPPED: List<Joint> = listOf(
         Joint.WRIST_A, Joint.WRIST_P,
         Joint.PALM_A, Joint.PALM_P,
