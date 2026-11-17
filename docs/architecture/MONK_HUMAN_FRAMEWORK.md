@@ -1,10 +1,12 @@
 # Monk Human Framework — human character and anatomical presentation
 
 **Status:** architecture RFC, proposed for review. Nothing in this document is implemented by this change.
-**Base for this document:** `main` @ `16e0487` (`16e04874096989300a96f5c18416661337ed1eb4`).
+**Base for this document:** `main` @ `abc2483` (`abc248330d1a300111907343038035d177db4e3f`); the engine measurements
+below were taken at `16e0487`, the base this document was written against, and `animation/` and `poses/` are byte-identical
+between the two (§3.1).
 **Companion documents:** `docs/RFC_RUNTIME_SKELETON_ARCHITECTURE.md` (runtime ownership), `docs/ARCHITECTURE_V2.md`
-(carrier contract), `docs/CHARACTER_FRAMEWORK.md` and `docs/CHARACTER_RENDERING.md` (Filament work, both currently
-only on open PR #385), `docs/ENGINE_ARCHITECTURE.md` (engine map), `docs/VALIDATION.md` (validation subsystem).
+(carrier contract), `docs/CHARACTER_FRAMEWORK.md` and `docs/CHARACTER_RENDERING.md` (Filament work; PR #385 is merged at
+`abc2483`, PR #384 is still open), `docs/ENGINE_ARCHITECTURE.md` (engine map), `docs/VALIDATION.md` (validation subsystem).
 
 This document is written to be reviewed: every claim about current code carries a `file:line` reference, and every
 proposed mechanism carries an accuracy classification (§11). Where the repository does not settle a question, the
@@ -75,12 +77,13 @@ requested in the task.
 **Out of scope:** implementation, production rendering changes, exercise-builder rewrites, workout/session logic, final
 character art, a complete muscle library, physics or biomechanical simulation, merging PR #384 or PR #385.
 
-**How the baseline was verified.** The repository was inspected at `main` (`16e0487`), not from earlier reports. The
-Filament work was read from the two open PR heads (`fd549bd` for #384, `23ef1c0` for #385) without changing either PR's
-state or merging anything. The humanoid test asset was parsed directly
-(`app/src/main/assets/characters/humanoid_v1.glb` on PR #385 at `23ef1c0`) to confirm joint count, triangle count and
-morph targets rather than trusting the generator's printout; that parse is also where the vertex count in §3.4 comes
-from.
+**How the baseline was verified.** The repository was inspected at `main` (`16e0487`, the base this document's numbers
+were measured against), not from earlier reports. The Filament work was read from the two PR heads (`fd549bd` for #384,
+`23ef1c0` for #385) without changing either PR's state or merging anything. The humanoid test asset was parsed directly
+(`app/src/main/assets/characters/humanoid_v1.glb` at `23ef1c0`, byte-identical on `main` at `abc2483`) to confirm joint
+count, triangle count and morph targets rather than trusting the generator's printout; that parse is also where the
+vertex count in §3.4 comes from. **#385 has since merged into `main` at `abc2483`**, whose `animation/` and `poses/` trees
+are identical to `16e0487`'s, so every engine measurement below still stands and only the implementation status changed.
 
 **Evidence rules used in this document:**
 
@@ -102,7 +105,7 @@ from.
 | Item | Value |
 | --- | --- |
 | Default branch | `main` |
-| Base SHA | `16e04874096989300a96f5c18416661337ed1eb4` ("Merge pull request #390 from weter11/refactor/motion-core-ui-free") |
+| Base SHA | `abc248330d1a300111907343038035d177db4e3f` ("Merge pull request #385 …"), the current `main`; this document was written against `16e04874096989300a96f5c18416661337ed1eb4`, whose `animation/` and `poses/` trees are identical to `abc2483`'s (empty `git diff --stat` over both packages) |
 | Working tree at branch creation | clean (`git status --porcelain` empty); this document is the only change on the branch |
 | Documentation branch | `docs/human-framework`, created from `origin/main` |
 | Engine sources on `main` | `app/src/main/java/com/monkfitness/app/animation` (8,144 lines in 47 files), `.../poses` (10,642 lines in 79 files) |
@@ -115,29 +118,32 @@ from.
 **The rest invariant's test does not exist under the name the rest of this document uses.** The behaviour lives in
 `PoseRetargeterTest.theNeutralPoseReproducesTheIdentityOnEveryBone`
 (`app/src/test/java/com/monkfitness/app/character/PoseRetargeterTest.kt:72`); §6.1, §6.2, §12.2 and §15 name
-`PoseRetargeterRestInvariantTest` as the stage-1 extraction, and stage-1 PR P4 moves the existing case into that class and
-re-points it at `humanoid_v2` rather than writing a second test for the same claim.
+`PoseRetargeterRestInvariantTest` as the stage-1 extraction, and stage-1 PR P4 (§15 stage 1) moves the existing case
+into that class and re-points it at `humanoid_v2` rather than writing a second test for the same claim.
 
 **Counting definition** (used in this table and in Appendix A, so the two cannot drift): a line count is every line of
 every `.kt` file under the package and its subdirectories, blank lines and comments included, summed from
 `git show <sha>:<path> | wc -l` over the file list; a file count is the number of `.kt` files in that tree. Both
-figures above are that measurement at `16e0487`.
+figures above are that measurement at `16e0487`, and identical at `abc2483` because those two trees are unchanged
+between the two commits.
 
-Two open PRs carry the Filament work. Neither is merged, and neither is assumed to be:
+**One PR carries the Filament work, and it is merged.** #385 landed in `main` at `abc2483`; #384 is still open and is
+**not** assumed either way:
 
 | PR | Branch / head | State | Content |
 | --- | --- | --- | --- |
 | #384 | `spike/filament-humanoid` @ `fd549bd` | open, not merged | standalone `spike-humanoid` app module: Filament scene, GLB reader, retargeter, generated 32-joint asset, 5 JVM tests |
-| #385 | `feat/filament-character-stage2` @ `23ef1c0` | open, not merged | the spike promoted into `:app` as `com.monkfitness.app.character` behind `FILAMENT_CHARACTER_ENABLED`, backend diagnostics, asset + generator, morph presets, device-validation doc |
+| #385 | `feat/filament-character-stage2` @ `23ef1c0` | **merged** in `main` at `abc2483` | the spike promoted into `:app` as `com.monkfitness.app.character` behind `FILAMENT_CHARACTER_ENABLED`, backend diagnostics, asset + generator, morph presets, device-validation doc |
 
-`main` contains **none** of that code, and that is verified rather than assumed. At `16e0487`: `gradle/libs.versions.toml`
-has no `filament` or `gltfio` entry and `app/build.gradle.kts` has neither (both greps return nothing), `git ls-tree -r
-16e0487` contains **no** `character/` package (0 files) and **no** `.glb` asset, and `git diff --stat 16e0487..23ef1c0 --
-app/src/main/java/com/monkfitness/app/animation app/src/main/java/com/monkfitness/app/poses` is empty. Filament 1.75.1,
-the character runtime and `PoseRetargeter` therefore exist **only** on PR #385 at `23ef1c0`; they are an **unmerged
-prerequisite**, not a baseline, and every stage that touches them is gated on that PR being merged or rebased onto
-`main` (§15 stage 1). The framework therefore describes a target that consumes #385's contracts, not a merged baseline.
-If #385 is rejected, the Character Appearance Model below still stands — only the current implementation status changes.
+**The merge is what changed, not the code.** At the baseline `16e0487` the runtime was absent from `main`: no `filament`
+or `gltfio` entry in `gradle/libs.versions.toml` or `app/build.gradle.kts`, no `character/` package (0 files), no `.glb`
+asset, and an empty `git diff --stat 16e0487..23ef1c0` over `animation/` and `poses/`. At `abc2483` all three are present
+on `main` — 12 files under `character/`, `app/src/main/assets/characters/humanoid_v1.glb` (sha256 `ef643438…e539`, the
+same bytes as `23ef1c0`'s), `scripts/character/generate_humanoid_v1.py`, `docs/CHARACTER_DEVICE_VALIDATION.md`, and the
+`filament = "1.75.1"` pin — while `animation/` and `poses/` are still byte-identical to `16e0487`'s. Filament 1.75.1, the
+character runtime and `PoseRetargeter` are therefore a **baseline** now, not a prerequisite, and the stages that touch
+them are no longer gated on a merge (§15 stage 1). Every remaining statement in this document about what `main`
+contained refers to `16e0487` and is labelled with that commit.
 
 ### 3.2 The motion engine as built
 
@@ -213,8 +219,8 @@ There is no lighting model, no surface, no muscle and no depth-correct volume in
 `humanoid_spike.glb` and five JVM tests. It proved that a skinned glTF can be driven from `SkeletonPose` without
 touching `:app`.
 
-**PR #385 — stage 2 (30 files, +2,983/−11).** The runtime promoted into `:app` as `com.monkfitness.app.character` — on
-the PR branch only; none of it is on `main` at `16e0487`:
+**PR #385 — stage 2 (30 files, +2,983/−11).** The runtime promoted into `:app` as `com.monkfitness.app.character`,
+merged into `main` at `abc2483` (absent from `main` at the `16e0487` baseline):
 
 - `PoseRetargeter` (`character/PoseRetargeter.kt:10`, `boneMatrices` at `:42`): rest-delta world retarget,
   `R_target = R_source × R_target_rest`, rotations only, emitted as `inverse(meshWorld) × jointWorld × inverseBind`
@@ -255,9 +261,9 @@ the PR branch only; none of it is on `main` at `16e0487`:
 `ef643438b761de84504d45c87511c7d2ad5109996fa56ab77107fee1cde0e539`. A defect found in one is a defect in the other, and
 the `Ground` node is in both — the two PRs ship one asset under two names.
 
-Filament is pinned to **1.75.1** *on PR #385* (`gradle/libs.versions.toml:15` — the file at `23ef1c0`; the pin does not
-exist on `main`): 1.76+ requires `compileSdk 37` and the app is on 34. The documented native payload is 7.4 MB arm64 and
-a debug APK with the asset is 18.8 MB (`docs/CHARACTER_FRAMEWORK.md` §1, also PR #385 only).
+Filament is pinned to **1.75.1** (`gradle/libs.versions.toml:15`, on `main` since `abc2483`): 1.76+ requires
+`compileSdk 37` and the app is on 34. The documented native payload is 7.4 MB arm64 and
+a debug APK with the asset is 18.8 MB (`docs/CHARACTER_FRAMEWORK.md` §1, merged with #385).
 
 **One device run, informational.** The #384 spike was run on the owner's phone — Adreno 735, OpenGL ES 3.2, feature
 level 2 — and held ~59 fps on the skinned 30,720-triangle asset. That is one run of one asset on one device; it is
@@ -3514,7 +3520,7 @@ a **stage-7** item (§15 — stage 5 is morphology v2, stage 7 is labels, pickin
 
 | Constraint | Value | Consequence for this framework |
 | --- | --- | --- |
-| Filament version | 1.75.1 (`gradle/libs.versions.toml:15`, **PR #385 only** — not on `main` at `16e0487`) | 1.76+ needs `compileSdk 37`; the app is on 34. Upgrade is a separate change, not a prerequisite |
+| Filament version | 1.75.1 (`gradle/libs.versions.toml:15`, on `main` since `abc2483`) | 1.76+ needs `compileSdk 37`; the app is on 34. Upgrade is a separate change, not a prerequisite |
 | Native payload | 7.4 MB arm64 stripped (`docs/CHARACTER_FRAMEWORK.md` §1) | character is opt-in packaging; a dynamic feature or flavor split is packaging work, not architecture |
 | Backend | `DEFAULT`; Vulkan attempted only on explicit request, GLES fallback (`docs/CHARACTER_RENDERING.md` §5) | never assume Vulkan; the reported backend is `Engine.getBackend()` |
 | Engine lifetime | one engine, one active character, `ActiveCharacter` slot (`CharacterFeature.kt:18-24`) | layers are renderables in that one scene; a second live character is out of scope |
@@ -3807,7 +3813,7 @@ Seven levels, each with one owner, one report and an explicit automation status.
 | Test | Level | Asserts |
 | --- | --- | --- |
 | `RigAssetContractTest` | L2 | every required bone present, bind == rest, inverse binds finite, ≤ 4 influences |
-| `PoseRetargeterRestInvariantTest` | L2 | neutral pose → identity on **every** bone — mapped and visual-only alike, so the 10 finger bones are asserted at identity too (they inherit the hand, and at bind the hand is at rest); **the class does not exist yet** — the behaviour is the existing `PoseRetargeterTest.theNeutralPoseReproducesTheIdentityOnEveryBone`, and stage-1 PR P4 extracts it under this name and re-points it at `humanoid_v2` (§3.1). **It cannot see the basis**: identity composed with identity is identity for any basis, which is why the next two rows exist |
+| `PoseRetargeterRestInvariantTest` | L2 | neutral pose → identity on **every** bone — mapped and visual-only alike, so the 10 finger bones are asserted at identity too (they inherit the hand, and at bind the hand is at rest); **the class does not exist yet** — the behaviour is the existing `PoseRetargeterTest.theNeutralPoseReproducesTheIdentityOnEveryBone`, and stage-1 PR P4 (§15 stage 1) extracts it under this name and re-points it at `humanoid_v2` (§3.1). **It cannot see the basis**: identity composed with identity is identity for any basis, which is why the next two rows exist |
 | `PoseRetargeterBasisTest` | L2 | §6.2 X3 through the **real** construction and upload path (`PoseRetargeter.boneMatrices`, then the upload that actually follows it — `boneBuffer.put(boneMatrices)` and `renderableManager.setBonesAsMatrices(renderable, boneBuffer, jointCount, 0)`, `CharacterSession.kt:317-325`; the scene-frame handoff of `SceneFrameHandoffTest` is a **stage-2** test of the geometry layer and this row does not wait on it): a **nonzero, asymmetric** posed frame with `basis = Ry(+90°)` yields the published segment direction **and** the parent's posed roll; a **transport-only** control (`B = Ry(+90°)`, parent `Rz(+90°)`, bind `+X`, published child `+Y`: the transported bind direction is already `+Y`, so the correction is **identity** and the frame lands on `+Y`, whereas the untransported composition lands on `−X`) — this control isolates the parent **transport** and cannot see the basis, which is exactly why the next control exists; a **both-nonidentity** control in a basis that does not commute with the parent swing (`B = Ry(+90°)`, parent posed `Rz(+45°)` in asset space, asset bind direction `+X` so `d_bind_engine = −Z`, published child `normalize(0.3, 0.9, 0.3)`): `a = (0, 0.70710678, −0.70710678)`, `D` is a **64.7606°** rotation about `normalize(0.94280904, −0.23570226, −0.23570226)`, the composed rotation places the bind direction on the published one exactly, and each wrong composition is pinned by its own operands and multiplication order, with `P` the transported asset parent `Rz(+45°)`, `D₁` the correction computed from `P · d_bind`, and `D₀` the wrong correction computed from the untransported `d_bind` alone: the **reversed order** `P · D₁` misses by **3.421085408°**; **`P · D₀`** — untransported correction *and* wrong order — by **42.799698458°**; **`D₀ · P`** — both wrong — by **45.000000000°**; and **dropping the asset-space conjugation**, i.e. using `D₁ · P` as the asset rotation, by **86.318091591°**, whose engine image is `B · D₁ · B⁻¹` and **not** `D₁`, so an engine-space assertion through the handoff distinguishes it as an asset-space one does; the untransported control also displaces the frame's roll by **13.276°** — every figure reproduced in the review script; a parent rolled about an unchanged child direction moves the child's frame; the **pelvis root** publishes the **bind-relative delta** on the actual pelvis path (squat bottom, bird-dog): `R_target_world(PELVIS) = B⁻¹ · ΔF_root · B · R_rest_world(PELVIS)` with `ΔF_root = F_root(posed) · F_root(bind)⁻¹`, so a posed root `F_posed = Rz(90°) · F_bind` must place the root's own axes at `B⁻¹ · Rz(90°) · B` and **not** at `B⁻¹ · F_posed · B` — the two differ by **180°**, because `ΔF_root = I` at bind while `F_root(bind) = diag(−1, 1, −1)` — and `R_target_world(PELVIS)` equals `R_rest_world(PELVIS)` at bind, which an assertion on the absolute derived frame cannot also satisfy; and the **zero-length mapped joint** (`CLAVICLE`) carries its parent's frame without a normalisation, while `LUMBAR`'s `D` is asserted **identity by construction** — its segment is `LUMBAR → CHEST` and a rigid child direction the root frame already carries (§6.2, §7.2). Identity and bind-rest cases cannot pass this row |
 | `PoseRetargeterPelvisTranslationTest` | L2 | §6.2: a pose whose `PELVIS` sits **235 units** above rest translates `Hips` by **0.95 m** (`235 / (235/0.95)`), not by `235 · s ≈ 58,131.58`; the fixture uses a **non-zero** translation, because a test at zero displacement cannot see a reversed conversion. **A vertical displacement alone cannot see a missing basis**, because `(0, 235, 0)` lies on `B`'s axis, so the fixture carries a **non-vertical control**: an engine displacement of `(235, 0, 0)` must move `Hips` along **engine `+X`**, which the raw `/ s` value does not (it lands on engine `−Z`), so dividing without `B⁻¹` fails the control while a reversed multiply still fails the vertical case |
 | `RigLandmarkAlignmentTest` | L2 | §6.6 A1: every **mapped** bone head coincides with its engine joint at the X1 bind frame within `τ_bind`; rest orientations within `τ_rot`. The 10 finger bones are **excluded from the comparison and listed as unmapped** (X2) — their report entry is inventory, not a residual, and keeping them cannot move the hand's own row; expected **red** on `humanoid_v1` against the recorded baseline (§6.6) |
@@ -4120,7 +4126,7 @@ combination is not an M1 pass, whatever the individual reports say.
 | R5 | Anatomy review capacity (physio/anatomist) is the bottleneck | high | high | batch reviews per layer; L3/L7 checklists reduce the time per muscle. **No review capacity is budgeted for stages 5 and 6**: those effort lines carry art and engineering only, and stage 6's ~47 muscles (~35 superficial, ~12 deep) are unreviewed at this mitigation's rate until a reviewer is named — the owner convention of §15 is what signs those gates meanwhile | product |
 | R6 | Morphs degrade the surface around a joint silently | medium | medium | L6 declared ranges plus **mesh ring preservation** around each joint pivot; the bone-landmark rest invariant is not the check, because a vertex-only morph cannot move a bone | engineering |
 | R7 | Attachment data drifts when `SkeletonDefinition` changes | medium | high | one `unitsPerMetre`, rest-length test, definition version pin | engineering |
-| R8 | PR #385 changes before merge, or is rejected | medium | medium | this RFC depends on its contracts, not its files; rebase plan in stage 1 | engineering |
+| R8 | **Closed:** PR #385 merged into `main` at `abc2483` without changing a contract this document cites. What remains is a later rewrite of those contracts | low | medium | this RFC depends on its contracts, not its files; the stage-1 rebase plan (§15) is unchanged by the merge | engineering |
 | R9 | Deep muscles / organs expand scope beyond appetite | high | low | §16 non-goals and the layer table's v1 column | product |
 | R10 | Left/right handedness mismatch between anatomy and rig | medium | medium | `RigSideTest`; asset fix, never a render-time flip | engineering |
 | R11 | L4 proves the polyline misses the ellipsoids, not that the rendered muscle or the anatomical surface does | medium | low | strategy A consumes the validated points unchanged and re-smoothing is forbidden (§7.4.1); the ellipsoid model is classified as an approximation (§11); L7 review covers what geometry cannot (§12.4) | engineering |
@@ -4405,9 +4411,9 @@ The smallest experiment is kept against each row because a confirmed design stil
 | **X10** | **A1's baseline is the measured X1 bind-frame result** (`CHEST` 175.1 mm, 350.2×); 565.6 mm stays as a labelled posed comparison. Metres stay out of the UI (X4); `s` and the bind pose are per-body parameters tied to named landmarks, never to height; M1 is one generic reference body at a fixed `s = 247.3684` | §6.6, §9.2, §13 question 12, §15 stage 2 | **closed by owner** | build the stage-1 rig, measure both spans on it, keep the pair whose landmarks agree — and **recompute every residual at that calibration**, never rescale the old table |
 
 **Known traps from the device run (spike #384).** Each cost a debugging cycle on real hardware, and each is a property of
-the current code, not of the model. PR #385 at `bcb3658` contained none of the first three fixes; the current head
-`23ef1c0` ("fix(character): load gltfio JNI, attach the surface late, bind the scene") carries all three, so they are
-recorded as traps of the spike and as facts about the code the framework builds on, not as open work items.
+the current code, not of the model. PR #385 at `bcb3658` contained none of the first three fixes; its last head before
+merge, `23ef1c0` ("fix(character): load gltfio JNI, attach the surface late, bind the scene"), carries all three, so they
+are recorded as traps of the spike and as facts about the code `main` now builds on, not as open work items.
 
 - **`Gltfio.init()` must accompany `Filament.init()`.** `libgltfio-jni.so` is packaged but not loaded by `Filament.init()`,
   so the first `UbershaderProvider` call throws `UnsatisfiedLinkError`.
@@ -4559,7 +4565,7 @@ named.
 
 - **Objective:** agree the model boundaries, the non-goals and the accuracy policy before code exists.
 - **Components:** this document; review notes.
-- **Dependencies:** PR #385 state (merged, rebased or rejected) recorded as a decision input.
+- **Dependencies:** PR #385 **merged** into `main` at `abc2483`, recorded as a decision input (§3.1).
 - **Expected files:** `docs/architecture/MONK_HUMAN_FRAMEWORK.md` only.
 - **User-visible deliverable:** none.
 - **Automated acceptance:** document builds no code; CI unaffected. That criterion is the whole of the automated one —
@@ -4583,6 +4589,22 @@ named.
   and two measurements this stage owns rather than inherits: the **derived pelvis root frame** compared against the
   authored tilt on `squat_standard` and `bird-dog` (§7.2), and **`θ` per segment** from the pole-vector comparator of
   §13 question 11, with `τ_roll` set here and recorded in the review file.
+
+**The stage-1 PR sequence.** The stage is one outcome, not one change: seven PRs, each independently green, and each owes
+the §12.2 rows named in its row. P4 must **not** be split from P3 — switching the composition before the A1-passing rig
+exists makes the currently-green neutral-pose test fail on `humanoid_v1`, which is correct behaviour and a forbidden
+regression at the same time, so the rest-invariant extraction ships in the same PR that changes the composition.
+
+| PR | Purpose | Tests (§12.2) | Depends on |
+| --- | --- | --- | --- |
+| **P1** `feat(animation): derive segment frames from published positions` | §7.2's frame derivation — the derived root frame, the X9 rule, the degenerate rows — plus the pole-vector comparator, and the two engine-side measurements this stage owns (`θ` per segment, the derived pelvis frame against the authored tilt) | `SegmentFrameDirectionTest`, `SegmentFrameRollComparatorTest` | nothing: no character code, and it runs on `main` |
+| **P2** `feat(character): BoneMap as data with a coverage test` | the §6.2 map as the one declared source for the 23, including the scapula aliases the resolver lacks; a behaviour-preserving refactor of the existing alias table | `BoneMapCoverageTest` | nothing for the file itself (`character/` is on `main` since `abc2483`) |
+| **P3** `feat(character): generate humanoid_v2 from SkeletonDefinition` | the rig that passes A1 **by construction** (§6.6 option c): generator, asset, validator | `RigAssetContractTest`, `RigLandmarkAlignmentTest`, `RigSideTest` | P2 — the 23 are the map's |
+| **P4** `fix(character): position-driven retarget with a real basis` | X3 replaces the rest-delta composition, `basis = Ry(+90°)` is supplied at the construction site, the pelvis translation becomes `B⁻¹ · Δp / s`, and the rest invariant is **extracted** from `PoseRetargeterTest` and re-pointed at `humanoid_v2` | `PoseRetargeterBasisTest`, `PoseRetargeterPelvisTranslationTest`, `PoseRetargeterRestInvariantTest`, `NonCommutingSplitTest` | P2 (`basis`), P3 — **not splittable from P3** |
+| **P5** `fix(character): unmapped bones inherit their mapped parent` | §6.2's parent-relative bind-rest inheritance, so a visual-only bone rides its mapped parent instead of freezing at bind | `UnmappedBoneInheritanceTest` | P3, P4 |
+| **P6** `test(character): measure the A2 residual at the five named frames` | A2 as a **measurement**: per mapped joint, per frame, at the five frames drawn from four builders | `RigAlignmentResidualTest` | P3, P4 |
+| **P7** `docs(character): record the stage-1 rig evidence` | the device run, the manual acceptance, and the residual, `θ` and `τ_roll` tables in the review file | none new — P1–P6 are the automated part | P3–P6 |
+
 - **Ten steps of the generator, in order.** Each is a checkable artefact, and steps 3–7 are the ones a hand-authored rig
   has historically got wrong:
   1. read `SkeletonDefinition` and compute the X1 A-pose joint positions (the table in §6.6) — no engine frame is read.
@@ -4631,9 +4653,9 @@ named.
   **0°** for the correct composition, so an engine-space assertion through the real handoff separates it exactly as an
   asset-space one does. The test therefore drives `PoseRetargeter.boneMatrices` and the scene-frame handoff and asserts
   **both** spaces, which is stronger than the asset-space assertion alone and does not weaken the runtime test (§12.2).
-- **Dependencies:** the character runtime from PR #385 **merged or rebased onto `main` at `23ef1c0` or later** — the
-  runtime, `PoseRetargeter` and Filament 1.75.1 exist nowhere else (§3.1), so this stage cannot start before that; art
-  for the base body.
+- **Dependencies:** the character runtime from PR #385, **merged into `main` at `abc2483`** — the runtime,
+  `PoseRetargeter` and Filament 1.75.1 are on `main` (§3.1), so no stage-1 PR waits on a merge; art for the base body,
+  which only P3 and P7 need.
 - **Expected files:** `app/src/main/assets/characters/*/skin.glb`, the generator (`tools/` — the shape of
   `spike-humanoid/tools/generate_humanoid_glb.py`, PR #384, with its joint table taken from the definition rather than
   hand-authored), `character/BoneMap.kt`, `character/RigAssetValidator.kt`, `app/src/test/.../RigAssetContractTest.kt`,
@@ -4960,6 +4982,26 @@ section named is where it is applied.
 - **X10 — one generic reference body**, with `s` and the bind pose tied to named landmarks rather than to a height (§6.6).
 - **Fingers are rigid, visual-only bones** — no engine joint, no A1 row, inheriting the hand (§6.1, §6.2).
 - **Frame rate is not a gate** — FPS and thermal readings are informational (§12.3).
+
+### Engine debt (not M1 scope)
+
+Properties of the engine as built, established elsewhere in this document and **not repaired here**. The engine is **not
+changed in stage 1**: no joint, no builder, no `SkeletonDefinition` and no calibration path moves in P1–P7, so each item
+below is a limit the rig inherits, not a defect the rig introduces. The list is **revisited after P6's A2 residual table**
+(§15 stage 1), the first posed-frame measurement that could say whether any of them matters for M1's eight muscles.
+
+- **`PELVIS → LUMBAR` coincidence is a builder convention, not an invariant** — the factory's zero default plus the five
+  builders that re-assert `lumbar.localPosition = 0`; nothing in `SkeletonFactory` forbids a non-zero offset (§6.2, §7.2).
+- **The engine has no finger joints** — the hand chain ends at `HAND_A/P`, so the 10 finger bones exist only in the rig
+  (§6.1, X2).
+- **The scapula is coincident with the clavicle in every frame** (§7.2), so raising the arms above the shoulders is not
+  covered by anything this document measures.
+- **10 engine joints have no rig bone** — `WRIST`, `PALM`, `KNUCKLES`, `FINGERTIPS` and `HEEL`, per side (§6.1).
+- **The shipped scale path is replaced, not kept**: `CharacterCalibration.unitScale` (203.09 u/m implied) is what
+  `CharacterSession.kt:175` applies today, and the retarget PR replaces it with `unitsPerMetre = 247.37` (§6.2, §6.4).
+
+No engine fix is proposed in this document: M1 is evaluated on the engine as built, and an engine change would be its own
+proposal with its own evidence.
 
 ---
 
