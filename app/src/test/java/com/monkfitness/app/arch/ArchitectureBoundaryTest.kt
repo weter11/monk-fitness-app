@@ -5,10 +5,10 @@ import org.junit.Test
 import java.io.File
 
 /**
- * The motion core is pure Kotlin: `animation/` and `poses/` own the geometry, the poses and the
- * playback clock, so neither may reach for Compose, the Android framework or the UI package. The
- * dependency arrow points from `ui` into the core, and a reverse import is what silently turns a
- * testable core back into a view.
+ * The motion core is pure Kotlin: `animation/`, `poses/` and `anatomy/` own the geometry, the poses,
+ * the playback clock and the segment frames, so none may reach for Compose, the Android framework or
+ * the UI package. The dependency arrow points from `ui` into the core, and a reverse import is what
+ * silently turns a testable core back into a view.
  */
 class ArchitectureBoundaryTest {
 
@@ -30,7 +30,7 @@ class ArchitectureBoundaryTest {
             }
 
         assertTrue(
-            "animation/ and poses/ must stay free of the UI and the framework — these imports make " +
+            "animation/, poses/ and anatomy/ must stay free of the UI and the framework — these imports make " +
                 "the motion core untestable on the JVM: $offenders",
             offenders.isEmpty()
         )
@@ -47,7 +47,7 @@ class ArchitectureBoundaryTest {
             .map { (path, line, symbol) -> "$path:$line imports $symbol" }
 
         assertTrue(
-            "animation/ and poses/ must not depend on androidx at all — list and remove: $offenders",
+            "animation/, poses/ and anatomy/ must not depend on androidx at all — list and remove: $offenders",
             offenders.isEmpty()
         )
     }
@@ -75,7 +75,7 @@ class ArchitectureBoundaryTest {
         }
         val base = File(moduleRoot ?: error("Could not locate the app module root from user.dir"), "src/main/java")
 
-        return listOf("animation", "poses")
+        return listOf("animation", "poses", "anatomy")
             .flatMap { packageDir -> File(base, "com/monkfitness/app/$packageDir").walkTopDown().toList() }
             .filter { it.isFile && it.name.endsWith(".kt") }
             .associate { it.relativeTo(base).path to it.readLines() }
