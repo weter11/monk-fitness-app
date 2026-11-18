@@ -8,6 +8,7 @@ import com.monkfitness.app.animation.SkeletonDefinition
 import com.monkfitness.app.animation.SkeletonPipeline
 import com.monkfitness.app.animation.SkeletonPose
 import com.monkfitness.app.animation.Vector3
+import com.monkfitness.app.character.X1Bind
 import com.monkfitness.app.poses.PoseRegistry
 import kotlin.math.sqrt
 
@@ -15,9 +16,8 @@ import kotlin.math.sqrt
  * The X1 bind pose and the published-frame samples the anatomy tests measure, both computed from
  * [SkeletonDefinition] rather than transcribed.
  *
- * X1 lives here because it is stage-1 character-side table that has not landed yet; a test-local
- * copy keeps the anatomy tests measuring a frame derived from the definition instead of a
- * hard-coded joint list that could drift from it.
+ * The bind frame itself is [X1Bind]: one Kotlin source for the canonical A-pose, shared with the rig
+ * generator's contract, so an anatomy test cannot measure a frame the character does not ship.
  */
 object AnatomyPoseFixture {
 
@@ -39,55 +39,11 @@ object AnatomyPoseFixture {
     const val TAU_DIR = 1e-5f
 
     /**
-     * The canonical straight-limbed A-pose of §6.6, computed from the definition: `+Y` up, `+X`
+     * The canonical straight-limbed A-pose, computed from the definition by [X1Bind]: `+Y` up, `+X`
      * forward, `+Z` lateral, side `A` on `−Z`.
      */
-    fun bindJoints(definition: SkeletonDefinition = DEFINITION): Map<Joint, Vector3> {
-        val pelvisY = definition.shinLength + definition.thighLength + 25f
-        val chestY = pelvisY + definition.torsoLength
-        val neckY = chestY + definition.neckLength
-        val headY = neckY + definition.neckLength
-        val out = LinkedHashMap<Joint, Vector3>()
-
-        fun put(joint: Joint, x: Float, y: Float, z: Float) {
-            out[joint] = Vector3(x, y, z)
-        }
-
-        put(Joint.PELVIS, 0f, pelvisY, 0f)
-        put(Joint.LUMBAR, 0f, pelvisY, 0f)
-        put(Joint.CHEST, 0f, chestY, 0f)
-        put(Joint.NECK_END, 0f, neckY, 0f)
-        put(Joint.HEAD_POS, 0f, headY, 0f)
-
-        for (arm in ARM_JOINTS) {
-            val lateral = if (arm.aSide) -1f else 1f
-            val shoulderY = chestY
-            val elbowY = shoulderY - definition.upperArmLength
-            val handY = elbowY - definition.forearmLength
-            put(arm.clavicle, 0f, chestY, 0f)
-            put(arm.scapula, 0f, chestY, 0f)
-            put(arm.shoulder, 0f, shoulderY, lateral * definition.shoulderWidth)
-            put(arm.elbow, 0f, elbowY, lateral * definition.shoulderWidth)
-            put(arm.hand, 0f, handY, lateral * definition.shoulderWidth)
-            put(arm.wrist, 0f, handY, lateral * definition.shoulderWidth)
-            put(arm.palm, 0f, handY - definition.hand.palmLength * 0.5f, lateral * definition.shoulderWidth)
-            put(arm.knuckles, 0f, handY - definition.hand.palmLength, lateral * definition.shoulderWidth)
-            put(arm.fingertips, 0f, handY - definition.hand.palmLength - definition.hand.fingerLength, lateral * definition.shoulderWidth)
-        }
-
-        for (leg in LEG_JOINTS) {
-            val lateral = if (leg.frontSide) -1f else 1f
-            val offset = lateral * definition.hipWidth
-            val kneeY = pelvisY - definition.thighLength
-            val ankleY = kneeY - definition.shinLength
-            put(leg.hip, 0f, pelvisY, offset)
-            put(leg.knee, 0f, kneeY, offset)
-            put(leg.ankle, 0f, ankleY, offset)
-            put(leg.heel, -definition.foot.footLength * definition.foot.heelRatio, ankleY, offset)
-            put(leg.toe, definition.foot.footLength * definition.foot.toeRatio, ankleY, offset)
-        }
-        return out
-    }
+    fun bindJoints(definition: SkeletonDefinition = DEFINITION): Map<Joint, Vector3> =
+        X1Bind.bindJoints(definition)
 
     fun bindPose(definition: SkeletonDefinition = DEFINITION): SkeletonPose = poseOf(bindJoints(definition))
 
@@ -208,36 +164,4 @@ object AnatomyPoseFixture {
         }
         return worst
     }
-
-    private class ArmJoints(
-        val aSide: Boolean,
-        val clavicle: Joint,
-        val scapula: Joint,
-        val shoulder: Joint,
-        val elbow: Joint,
-        val hand: Joint,
-        val wrist: Joint,
-        val palm: Joint,
-        val knuckles: Joint,
-        val fingertips: Joint
-    )
-
-    private class LegJoints(
-        val frontSide: Boolean,
-        val hip: Joint,
-        val knee: Joint,
-        val ankle: Joint,
-        val heel: Joint,
-        val toe: Joint
-    )
-
-    private val ARM_JOINTS = listOf(
-        ArmJoints(true, Joint.CLAVICLE_A, Joint.SCAPULA_A, Joint.SHOULDER_A, Joint.ELBOW_A, Joint.HAND_A, Joint.WRIST_A, Joint.PALM_A, Joint.KNUCKLES_A, Joint.FINGERTIPS_A),
-        ArmJoints(false, Joint.CLAVICLE_P, Joint.SCAPULA_P, Joint.SHOULDER_P, Joint.ELBOW_P, Joint.HAND_P, Joint.WRIST_P, Joint.PALM_P, Joint.KNUCKLES_P, Joint.FINGERTIPS_P)
-    )
-
-    private val LEG_JOINTS = listOf(
-        LegJoints(true, Joint.HIP_F, Joint.KNEE_F, Joint.ANKLE_F, Joint.HEEL_F, Joint.TOE_F),
-        LegJoints(false, Joint.HIP_B, Joint.KNEE_B, Joint.ANKLE_B, Joint.HEEL_B, Joint.TOE_B)
-    )
 }
