@@ -170,14 +170,16 @@ skin influences, one skinned renderable, the 30k–40k triangle budget — and r
 joints without failing on them. CI regenerates the asset in memory and requires a byte-identical
 `sha256` (`generate_humanoid_v2.py --check`), so a hand-edited GLB fails the build.
 
-`humanoid_v1.glb` is untouched and is still the shipped asset: `CharacterFeature.ASSET_PATH`,
-`CHARACTER_ID` and `CharacterThumbnails.ASSET_VERSION` all point at it. The v2 rig is aligned for the
-position-driven retarget, so re-pointing the runtime belongs to that change, not to the rig.
+`humanoid_v2.glb` is the shipped asset: `CharacterFeature.ASSET_PATH`, `CHARACTER_ID` and
+`CharacterThumbnails.ASSET_VERSION` all name it, and `humanoid_v1.glb` has been removed. The runtime
+retargets it position-driven: a bone's world rotation is the correction that turns its parent-carried
+bind direction onto the published segment, with `B = Ry(+90°)` supplied once at construction from
+`BoneMap.basis`. The crown and the ten finger bones are unmapped and inherit their parent's world
+rotation with an identity local rotation; no twist policy is applied to them.
 
-One measured number to carry forward: `CharacterCalibration.unitScale` on this rig yields
-**0.004294 m/u**, because it divides the rig's `restHeight()` by the head-centre-to-toe span. That is
-the height path the framework retires in favour of `1/s` = **0.004043 m/u**; until it is replaced, the
-runtime's scale is 6.2 % above the registration the rig was built at.
+The root translation is `B⁻¹ · Δp / s`, never a multiply by a measured height ratio. `s` is
+`X1Bind.unitsPerMetre(definition)` = **247.3684 u/m**; `CharacterCalibration` and its 0.004294 m/u
+reading were removed with this cutover because they were 6.2 % above the scale the rig was generated at.
 
 ## 9. Performance policy
 
@@ -188,20 +190,21 @@ no device in the build environment.
 
 ## 10. Known costs and risks
 
-1. **APK size.** Filament JNI adds ~6.0 MB of arm64 native code and the test GLB 2.0 MB. Disabled by
-   default but still packaged. A dynamic feature module or flavor split is the next packaging step.
+1. **APK size.** Filament JNI adds ~6.0 MB of arm64 native code and the generated GLB 2.04 MB.
+   Disabled by default but still packaged. A dynamic feature module or flavor split is the next
+   packaging step.
 2. **Two heroes, one slot.** The expanded session demo and the session preview are never live at
    the same time by construction (only the dialog passes `liveCharacter = true`), but a future screen
    that mounts two heroes would leave the second on 2D. That is the intended degradation.
-3. **Per-frame allocation.** `PoseRetargeter` allocates its world arrays per frame (~32 quaternions
-   and vectors). Acceptable at this stage; the `out` buffer for matrices is already reused.
+3. **Per-frame allocation.** `PoseRetargeter` keeps its world rotation and position buffers on the
+   instance; the matrix `out` buffer is caller-supplied and reused.
 4. **Vulkan driver variance.** Unverified. The probe reports, the attempt decides, GLES is the
    fallback, and `AUTO` never forces Vulkan.
 5. **Volume plausibility.** Interpenetration and contact with benches/bars/walls are not modelled.
    Morph targets use region masks in the test asset; real art needs corrective targets.
-6. **Asset calibration.** The engine→asset scale is derived from a standing frame (not the displayed
-   exercise). A production rig must keep the bind pose equal to the engine's rest stance, or the
-   first frame of every exercise will be visibly wrong.
+6. **Asset calibration.** `unitsPerMetre` is derived from `SkeletonDefinition`
+   (`restPelvisHeight / 0.95`), the same registration the rig was generated at. A production rig must
+   keep its bind pose equal to the engine's X1 bind; the all-bone rest invariant is the guard.
 7. **Toolchain.** Filament 1.76+ requires `compileSdk 37`; the app is on 34 / AGP 8.5, so the
    dependency is pinned to 1.75.1. Upgrading is a separate change.
 

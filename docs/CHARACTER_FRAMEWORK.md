@@ -78,8 +78,8 @@ One canonical rig, versioned: **`humanoid_v2`**, 34 skin joints with Mixamo-comp
 mapped bones plus 11 visual-only ones (a crown node and five single-segment fingers per hand). It is
 **generated from `SkeletonDefinition`** by `scripts/character/generate_humanoid_v2.py`, so every mapped
 bone head sits on the X1 bind frame (§6.6 of the human-framework RFC) by construction rather than by a
-correction. `humanoid_v1` (32 joints, no scapula) remains the shipped asset until the position-driven
-retarget lands; both files coexist and v1's bytes are untouched.
+correction. `humanoid_v1` (32 joints, no scapula) has been removed; `humanoid_v2` is the shipped asset
+and the runtime retargets it position-driven, with `B = Ry(+90°)` supplied at construction.
 
 | Layer | Bones | Driven by |
 | --- | --- | --- |
@@ -154,7 +154,7 @@ The test asset demonstrates three presets (`slim`, `heavy`, `muscular`) from fiv
 ```json
 {
   "id": "male_heavy_v1",
-  "rig": "humanoid_v1",
+  "rig": "humanoid_v2",
   "mesh": "characters/male_heavy/standard.glb",
   "morphology": { "shoulderWidth": 0.15, "chestVolume": 0.85, "waist": 1.0, "limbThickness": 0.8 },
   "face": { "mesh": "faces/male_02.glb", "blendshapes": "arkit_52" },

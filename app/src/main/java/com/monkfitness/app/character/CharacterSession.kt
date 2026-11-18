@@ -58,8 +58,7 @@ class CharacterSession(
     private var boneBuffer: FloatBuffer = ByteBuffer.allocateDirect(16)
         .order(ByteOrder.nativeOrder()).asFloatBuffer()
     private var jointCount = 0
-    private var restPelvisY = 0f
-    private var unitScale = 1f
+    private var unitsPerMetre = 1f
 
     private var retargeter: PoseRetargeter? = null
     private var morphology = MorphologyPreset.NEUTRAL
@@ -149,7 +148,7 @@ class CharacterSession(
 
             val rig = GltfRig.parse(bytes)
             val boneByJoint = MonkJointResolver.resolve(rig)
-            val mapper = PoseRetargeter(rig, boneByJoint)
+            val mapper = PoseRetargeter(rig, boneByJoint, BoneMap.basis, definition)
             retargeter = mapper
 
             val instance = loaded.instance
@@ -171,8 +170,7 @@ class CharacterSession(
             boneMatrices = FloatArray(jointCount * 16)
             boneBuffer = ByteBuffer.allocateDirect(jointCount * 16 * 4)
                 .order(ByteOrder.nativeOrder()).asFloatBuffer()
-            restPelvisY = MonkJointResolver.restPelvisHeight(definition)
-            unitScale = CharacterCalibration.unitScale(definition, mapper.restHeight())
+            unitsPerMetre = X1Bind.unitsPerMetre(definition)
 
             applyMorphology(morphology)
             null
@@ -314,7 +312,7 @@ class CharacterSession(
         val mapper = retargeter ?: return
 
         val pose = pipeline.produceFrame(poseSource.pose()).pose
-        mapper.boneMatrices(pose, restPelvisY, unitScale, out = boneMatrices)
+        mapper.boneMatrices(pose, unitsPerMetre, out = boneMatrices)
         boneBuffer.clear()
         boneBuffer.put(boneMatrices)
         boneBuffer.rewind()
