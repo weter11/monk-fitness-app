@@ -19,7 +19,11 @@ class GltfRig(
     val inverseBinds: List<FloatArray>,
     val triangleCount: Int,
     val morphTargetCount: Int,
-    val animationNames: List<String>
+    val animationNames: List<String>,
+    /** Largest number of non-zero weights any one vertex carries (0 when the asset has no skin). */
+    val maxInfluencesPerVertex: Int = 0,
+    /** Morph target names in declared order; a character's shape presets index this list. */
+    val morphTargetNames: List<String> = emptyList()
 ) {
     private val indexByName: Map<String, Int> = buildMap {
         nodes.forEach { n -> if (n.name.isNotEmpty()) putIfAbsent(n.name, n.index) }
@@ -69,6 +73,19 @@ class GltfRig(
             node.children.forEach { walk(it, out[index], parentRotation * node.rotation) }
         }
         sceneRoots.forEach { walk(it, FloatArray(3), Quat.IDENTITY) }
+        return out
+    }
+
+    /** Full rest world transform per node (translation × rotation × scale, column-major). */
+    fun restWorldTransforms(): Array<FloatArray> {
+        val out = Array(nodes.size) { Mat4.identity() }
+        fun walk(index: Int, parent: FloatArray) {
+            val node = nodes[index]
+            val local = Mat4.compose(node.translation, node.rotation, node.scale)
+            out[index] = Mat4.multiply(parent, local)
+            node.children.forEach { walk(it, out[index]) }
+        }
+        sceneRoots.forEach { walk(it, Mat4.identity()) }
         return out
     }
 
@@ -133,7 +150,8 @@ class GltfRig(
                     translation = readVec3(n.optJSONArray("translation")),
                     rotation = readQuat(n.optJSONArray("rotation")),
                     scale = readVec3(n.optJSONArray("scale"), 1f),
-                    children = childIndices
+                    children = childIndices,
+                    usesMatrix = n.has("matrix")
                 )
             }
             val parentOf = IntArray(nodes.size) { -1 }
@@ -159,6 +177,8 @@ class GltfRig(
 
             var triangles = 0
             var morphs = 0
+            var influences = 0
+            var morphNames: List<String> = emptyList()
             val meshes = g.optJSONArray("meshes")
             if (meshes != null) {
                 for (m in 0 until meshes.length()) {
@@ -174,6 +194,12 @@ class GltfRig(
                             accessors.getJSONObject(pos).getInt("count") / 3
                         }
                         morphs += prim.optJSONArray("targets")?.length() ?: 0
+                        influences = maxOf(influences, maxInfluences(g, bin, prim))
+                        val declared = meshes.getJSONObject(m).optJSONObject("extras")
+                            ?.optJSONArray("targetNames")
+                        if (declared != null) {
+                            morphNames = (0 until declared.length()).map { declared.getString(it) }
+                        }
                     }
                 }
             }
@@ -182,7 +208,44 @@ class GltfRig(
             val animationNames = if (animations == null) emptyList() else
                 (0 until animations.length()).map { animations.getJSONObject(it).optString("name", "clip$it") }
 
-            return GltfRig(nodes, roots, joints, skinned.toIntArray(), inverseBinds, triangles, morphs, animationNames)
+            return GltfRig(nodes, roots, joints, skinned.toIntArray(), inverseBinds, triangles, morphs, animationNames, influences, morphNames)
+        }
+
+        /** Largest non-zero weight count in one vertex; a second join set means eight. */
+        private fun maxInfluences(g: JSONObject, bin: ByteBuffer?, prim: JSONObject): Int {
+            val attrs = prim.optJSONObject("attributes") ?: return 0
+            if (!attrs.has("JOINTS_0")) return 0
+            if (attrs.has("JOINTS_1")) return 8
+            if (bin == null || !attrs.has("WEIGHTS_0")) return 4
+            val accessor = g.getJSONArray("accessors").getJSONObject(attrs.getInt("WEIGHTS_0"))
+            val view = g.getJSONArray("bufferViews").getJSONObject(accessor.getInt("bufferView"))
+            val count = accessor.getInt("count")
+            val type = accessor.getString("type")
+            require(type == "VEC4") { "WEIGHTS_0 must be VEC4" }
+            val component = accessor.getInt("componentType")
+            val size = when (component) {
+                5126 -> 4
+                5123 -> 2
+                5121 -> 1
+                else -> return 4
+            }
+            val base = view.optInt("byteOffset", 0) + accessor.optInt("byteOffset", 0)
+            val stride = view.optInt("byteStride", size * 4)
+            var worst = 0
+            for (i in 0 until count) {
+                var nonZero = 0
+                for (c in 0 until 4) {
+                    val at = base + i * stride + c * size
+                    val weight = when (component) {
+                        5126 -> bin.getFloat(at)
+                        5123 -> (bin.getShort(at).toInt() and 0xFFFF) / 65535f
+                        else -> (bin.get(at).toInt() and 0xFF) / 255f
+                    }
+                    if (weight > 0f) nonZero++
+                }
+                worst = maxOf(worst, nonZero)
+            }
+            return worst
         }
 
         private fun readVec3(array: org.json.JSONArray?, default: Float = 0f): FloatArray =
@@ -228,7 +291,9 @@ data class GltfNode(
     val translation: FloatArray,
     val rotation: Quat,
     val scale: FloatArray,
-    val children: IntArray
+    val children: IntArray,
+    /** A node authored as a raw 4x4 `matrix`: legal glTF, but not the TRS form the rig contract needs. */
+    val usesMatrix: Boolean = false
 ) {
     // Arrays make data-class equality reference-based; the rig is a read-once structure.
     override fun equals(other: Any?): Boolean = this === other

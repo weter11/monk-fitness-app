@@ -27,6 +27,9 @@ jobs:
     - name: Run unit tests
       run: ./gradlew :app:testDebugUnitTest
 
+    - name: Verify the generated character rig is reproducible
+      run: python3 scripts/character/generate_humanoid_v2.py --check
+
     - name: Upload APK
       uses: actions/upload-artifact@v7
       with:

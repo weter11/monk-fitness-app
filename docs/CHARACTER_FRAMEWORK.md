@@ -74,12 +74,17 @@ the same call that produced the frame — which is what the presenter does.
 
 ## 3. Shared skeleton and the mapping contract
 
-One canonical rig, `humanoid_v1`: ~32–40 deform bones, Mixamo-compatible naming.
+One canonical rig, versioned: **`humanoid_v2`**, 34 skin joints with Mixamo-compatible naming — 23
+mapped bones plus 11 visual-only ones (a crown node and five single-segment fingers per hand). It is
+**generated from `SkeletonDefinition`** by `scripts/character/generate_humanoid_v2.py`, so every mapped
+bone head sits on the X1 bind frame (§6.6 of the human-framework RFC) by construction rather than by a
+correction. `humanoid_v1` (32 joints, no scapula) remains the shipped asset until the position-driven
+retarget lands; both files coexist and v1's bytes are untouched.
 
 | Layer | Bones | Driven by |
 | --- | --- | --- |
-| Core (33 engine joints) | hips, spine, chest, neck, head, clavicles, arms, forearms, hands, thighs, shins, feet, toes | `SkeletonPose` rotations |
-| Visual-only | 5 fingers × 2–3 segments per hand, toe fan, twist bones (upper arm, forearm, thigh), jaw, eyes | parent motion + optional authored offsets |
+| Core (23 mapped bones over 33 engine joints) | hips, spine, chest, neck, head, clavicles, scapulae, arms, forearms, hands, thighs, shins, feet, toes | `SkeletonPose` rotations |
+| Visual-only | crown node, 5 single-segment fingers per hand; a future rig may add a toe fan, twist bones, jaw and eyes | parent motion + optional authored offsets |
 
 Mapping is data, not code:
 
@@ -169,8 +174,11 @@ catalogue exercises stay procedural and drive every character through the same `
 
 - **Format:** GLB (glTF 2.0 binary), one file per character tier, morph targets included, textures
   ASTC-compressed inside the GLB.
-- **Authoring:** one master rig (`humanoid_v1`), exported from the DCC tool; every character is
-  skinned to that rig. Morph targets authored once per body family, not per exercise.
+- **Authoring:** one master rig (`humanoid_v2`), generated from `SkeletonDefinition` by
+  `scripts/character/generate_humanoid_v2.py`; every character is skinned to that rig. Morph targets
+  authored once per body family, not per exercise. The generator writes identity rest rotations on all
+  34 joints and derives the inverse binds from the same positions, and CI re-runs it with `--check` so
+  the committed GLB cannot be hand-edited away from its source.
 - **Offline step:** validate against the `BoneMap` (every required joint present, bind pose == rest
   pose, weight count ≤ 4, triangle and texture budgets per tier), bake LODs, write a manifest with
   provenance/licence.
