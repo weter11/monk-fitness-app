@@ -143,14 +143,50 @@ Proposed for the next stage (`CharacterThumbnails` carries the key and budget):
 - Any failure falls back to the 2D thumbnail. No per-row engine, no animated thumbnails, no
   multi-character scheduler.
 
-## 8. Performance policy
+## 8. Rig assets: `humanoid_v2`
+
+`app/src/main/assets/characters/humanoid_v2.glb` is the first rig **generated from
+`SkeletonDefinition`** rather than authored by hand. `scripts/character/generate_humanoid_v2.py`
+derives the X1 canonical A-pose from one `DEFINITION` block, writes every joint in metres at
+`position / s`, and computes each inverse bind from the same positions in the same pass, so a bind
+cannot drift from a pivot.
+
+| Property | Value |
+| --- | --- |
+| Skin joints | 34 = 23 mapped + 11 visual-only (crown, ten single-segment fingers) |
+| Rest rotations | identity on all 34, so `B⁻¹ · I · B = I`; TRS nodes only, no raw `matrix` |
+| Bind frame | X1 A-pose: arms down, limbs straightened — not a T-pose, not an engine pose |
+| Scale | `s = restPelvisHeight / 0.95 m` = 247.3684 u/m (one unit is 4.043 mm) |
+| Triangles / morphs | 31,872 character triangles; five targets in v1's names and order |
+| Girdle | `Shoulder`/`Scapula` are coincident with `Chest`; both are skin joints with inverse binds and **no** zero-length segment |
+| Torso clearance | 17.96 mm between the chest surface and each upper arm at bind |
+
+`X1Bind` (`character/X1Bind.kt`) is the single Kotlin source of that frame: the generator's
+`DEFINITION`, the anatomy tests' fixture and `RigLandmarkAlignmentTest` all read it, and
+`GeneratorDefinitionAgreementTest` fails if the Python constants drift from `HumanSkeletonDefinition`.
+`RigAssetValidator.audit(rig)` is a pure-JVM audit of the parsed GLB — required mapped bones, duplicate
+names, TRS-only nodes, `IBM · rest_world ≈ I` over all 34 joints, finite inverse binds, at most four
+skin influences, one skinned renderable, the 30k–40k triangle budget — and reports the 11 visual-only
+joints without failing on them. CI regenerates the asset in memory and requires a byte-identical
+`sha256` (`generate_humanoid_v2.py --check`), so a hand-edited GLB fails the build.
+
+`humanoid_v1.glb` is untouched and is still the shipped asset: `CharacterFeature.ASSET_PATH`,
+`CHARACTER_ID` and `CharacterThumbnails.ASSET_VERSION` all point at it. The v2 rig is aligned for the
+position-driven retarget, so re-pointing the runtime belongs to that change, not to the rig.
+
+One measured number to carry forward: `CharacterCalibration.unitScale` on this rig yields
+**0.004294 m/u**, because it divides the rig's `restHeight()` by the head-centre-to-toe span. That is
+the height path the framework retires in favour of `1/s` = **0.004043 m/u**; until it is replaced, the
+runtime's scale is 6.2 % above the registration the rig was built at.
+
+## 9. Performance policy
 
 Measured on device, through the diagnostics overlay: successful frames, frame count, smoothed FPS,
 p95 CPU frame time (last 120 frames), and whether a surface is attached. No milliwatt or battery
 criteria. 30 FPS is the floor and 60 FPS the preference, but this document claims neither: there is
 no device in the build environment.
 
-## 9. Known costs and risks
+## 10. Known costs and risks
 
 1. **APK size.** Filament JNI adds ~6.0 MB of arm64 native code and the test GLB 2.0 MB. Disabled by
    default but still packaged. A dynamic feature module or flavor split is the next packaging step.
@@ -169,7 +205,7 @@ no device in the build environment.
 7. **Toolchain.** Filament 1.76+ requires `compileSdk 37`; the app is on 34 / AGP 8.5, so the
    dependency is pinned to 1.75.1. Upgrading is a separate change.
 
-## 10. Next stage (proposed)
+## 11. Next stage (proposed)
 
 1. Device matrix: record backend, FPS, p95 frame time, memory and defects on at least one GLES and
    one Vulkan device; then decide whether `AUTO` stays GLES-first.
