@@ -6,9 +6,10 @@ import java.io.File
 
 /**
  * The motion core is pure Kotlin: `animation/`, `poses/` and `anatomy/` own the geometry, the poses,
- * the playback clock and the segment frames, so none may reach for Compose, the Android framework or
- * the UI package. The dependency arrow points from `ui` into the core, and a reverse import is what
- * silently turns a testable core back into a view.
+ * the playback clock and the segment frames, so none may reach for Compose, the Android framework,
+ * the UI package, the character side or the renderer. The dependency arrow points from `ui` and
+ * `character` into the core, and a reverse import is what silently turns a testable core back into a
+ * view or a GPU client.
  */
 class ArchitectureBoundaryTest {
 
@@ -17,7 +18,10 @@ class ArchitectureBoundaryTest {
         "androidx.compose." to "Compose",
         "android." to "the Android framework",
         "com.monkfitness.app.ui." to "the UI package",
-        "com.monkfitness.app.render." to "the render side"
+        "com.monkfitness.app.render." to "the render side",
+        "com.monkfitness.app.character." to "the character side, which consumes the core",
+        "filament." to "the renderer",
+        "com.google.android.filament." to "the renderer"
     )
 
     @Test

@@ -152,8 +152,10 @@ class SegmentRestPoseTest {
     @Test
     fun theThresholdsArePositiveAndOrdered() {
         assertTrue(SegmentRest.TAU_LEN > 0f)
-        assertTrue(SegmentRest.TAU_ROT > SegmentRest.TAU_DIR)
-        assertTrue("a direction tolerance below the float noise of a unit vector is not a tolerance", SegmentRest.TAU_DIR >= 1e-6f)
+        // The test's own direction tolerance has to sit below the production branch threshold, or an
+        // asserted direction could not tell a NEAR_PARALLEL frame from the general branch.
+        assertTrue(SegmentRest.TAU_ROT > AnatomyPoseFixture.TAU_DIR)
+        assertTrue("a direction tolerance below the float noise of a unit vector is not a tolerance", AnatomyPoseFixture.TAU_DIR >= 1e-6f)
         assertTrue("TAU_ROT is an angular threshold, so it must be far below a right angle", SegmentRest.TAU_ROT < 0.1f)
         assertTrue(abs(SegmentRest.TAU_LEN - 1e-6f) < 1e-12f)
     }

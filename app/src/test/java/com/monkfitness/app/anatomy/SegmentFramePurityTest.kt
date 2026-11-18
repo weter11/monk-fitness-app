@@ -95,7 +95,15 @@ class SegmentFramePurityTest {
     fun theAnatomyPackageImportsNothingFromOutsideTheMotionCore() {
         val sources = anatomySources()
         assertTrue("the anatomy package has sources", sources.isNotEmpty())
-        val forbidden = listOf("android.", "androidx.", "com.monkfitness.app.ui.", "com.monkfitness.app.render.")
+        val forbidden = listOf(
+            "android.",
+            "androidx.",
+            "com.monkfitness.app.ui.",
+            "com.monkfitness.app.render.",
+            "com.monkfitness.app.character.",
+            "filament.",
+            "com.google.android.filament."
+        )
         val offenders = sources.flatMap { (path, lines) ->
             lines.filter { it.trim().startsWith("import ") }
                 .filter { line -> forbidden.any { line.contains(it) } }

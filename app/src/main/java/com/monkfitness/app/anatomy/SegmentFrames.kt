@@ -4,7 +4,6 @@ import com.monkfitness.app.animation.Joint
 import com.monkfitness.app.animation.SkeletonDefinition
 import com.monkfitness.app.animation.SkeletonPose
 import com.monkfitness.app.animation.Vector3
-import kotlin.math.PI
 import kotlin.math.atan2
 import kotlin.math.sqrt
 
@@ -271,7 +270,7 @@ class SegmentFrames(private val definition: SkeletonDefinition) {
     /**
      * Writes `D · P` for `D` the half-turn of π about the unit axis `(kx, ky, kz)`.
      *
-     * Evaluated in closed form rather than as a rotation by [PI]: `sin(π)` is not zero in `Float`,
+     * Evaluated in closed form rather than as a rotation by π: `sin(π)` is not zero in `Float`,
      * and the antipodal branch is the one place the placed direction is required to be exact.
      */
     private fun writeHalfTurn(parent: SegmentId, k: Vector3, to: SegmentId, out: SegmentFrameSet) {

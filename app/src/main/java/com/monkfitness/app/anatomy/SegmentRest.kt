@@ -16,9 +16,6 @@ object SegmentRest {
     /** Angular threshold that decides the parallel, antiparallel and collinear branches, in radians. */
     const val TAU_ROT = 1e-3f
 
-    /** Direction agreement required of a derived frame, in radians. */
-    const val TAU_DIR = 1e-5f
-
     /**
      * The bind frame's columns: `diag(-1, 1, -1)`, the half-turn about world `+Y` that maps the world
      * axes onto the rest axes, so `R = BIND_FRAME` holds identically at the bind pose.

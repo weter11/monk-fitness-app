@@ -33,6 +33,12 @@ object AnatomyPoseFixture {
     val BUILDERS: List<String> = PoseRegistry.animationIds.sorted()
 
     /**
+     * Direction agreement the tests assert of a computed rotation, in radians. A verification
+     * tolerance rather than a runtime threshold, kept below [SegmentRest.TAU_ROT].
+     */
+    const val TAU_DIR = 1e-5f
+
+    /**
      * The canonical straight-limbed A-pose of §6.6, computed from the definition: `+Y` up, `+X`
      * forward, `+Z` lateral, side `A` on `−Z`.
      */

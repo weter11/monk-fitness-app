@@ -56,7 +56,7 @@ class SegmentFrameDirectionTest {
                     // An inherited or forced-identity frame keeps the parent's aim, so it promises the
                     // branch's own threshold; only a computed rotation promises τ_dir.
                     if (reason == SegmentFrameReason.COINCIDENT) continue
-                    val tolerance = if (reason == SegmentFrameReason.NEAR_PARALLEL) SegmentRest.TAU_ROT else SegmentRest.TAU_DIR
+                    val tolerance = if (reason == SegmentFrameReason.NEAR_PARALLEL) SegmentRest.TAU_ROT else AnatomyPoseFixture.TAU_DIR
                     assertTrue(
                         "$pilot: ${id.name} claims $placed but the pose publishes $published ($error rad, reason $reason)",
                         error <= tolerance
@@ -164,7 +164,7 @@ class SegmentFrameDirectionTest {
         val a = column(set, SegmentId.PELVIS, 1).multiply(-1f)  // pelvis +Y is the femur's rest direction, negated
         val b = femur
         val placed = AnatomyPoseFixture.placedDirection(set, SegmentId.FEMUR_F)!!
-        assertEquals("R = D · P places the direction", 0f, AnatomyPoseFixture.directionError(placed, b), SegmentRest.TAU_DIR)
+        assertEquals("R = D · P places the direction", 0f, AnatomyPoseFixture.directionError(placed, b), AnatomyPoseFixture.TAU_DIR)
 
         // P · D is the reversed order: the minimal rotation applied to the rest direction before the
         // parent's frame, instead of after it. It is a different frame wherever the two do not commute.
@@ -223,7 +223,7 @@ class SegmentFrameDirectionTest {
         assertEquals("outside τ_rot the general branch runs", SegmentFrameReason.UNSET, above.reason(SegmentId.FEMUR_F))
         assertTrue(
             "and it also places the direction",
-            AnatomyPoseFixture.directionError(AnatomyPoseFixture.placedDirection(above, SegmentId.FEMUR_F)!!, justAbove) <= SegmentRest.TAU_DIR
+            AnatomyPoseFixture.directionError(AnatomyPoseFixture.placedDirection(above, SegmentId.FEMUR_F)!!, justAbove) <= AnatomyPoseFixture.TAU_DIR
         )
 
         // The two branches rotate about different axes — the half-turn's axis comes from the
@@ -258,7 +258,7 @@ class SegmentFrameDirectionTest {
             "and it follows the published direction",
             0f,
             AnatomyPoseFixture.directionError(AnatomyPoseFixture.placedDirection(out, SegmentId.FEMUR_F)!!, outside),
-            SegmentRest.TAU_DIR
+            AnatomyPoseFixture.TAU_DIR
         )
     }
 
@@ -277,7 +277,7 @@ class SegmentFrameDirectionTest {
                 "step $step places its direction",
                 0f,
                 AnatomyPoseFixture.directionError(AnatomyPoseFixture.placedDirection(set, SegmentId.FEMUR_F)!!, direction),
-                SegmentRest.TAU_DIR
+                AnatomyPoseFixture.TAU_DIR
             )
             val roll = column(set, SegmentId.FEMUR_F, 0)
             previousRoll?.let { worstStep = maxOf(worstStep, AnatomyPoseFixture.angleBetween(it, roll)) }

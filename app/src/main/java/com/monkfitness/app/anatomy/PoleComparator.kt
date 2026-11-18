@@ -152,7 +152,8 @@ internal class PoleComparator(private val definition: SkeletonDefinition) {
          * `p_grandparent → p_node → p_child` per instance, or `null` where no such triple exists.
          *
          * Six segment types are structurally unmeasurable: the root has no grandparent, `LUMBAR`
-         * and `CLAVICLE` sit on their parent, and `SKULL`/`TOES` are terminal.
+         * and `CLAVICLE` sit on their parent, `SCAPULA`'s parent leg is that same coincident
+         * clavicle, and `SKULL`/`TOES` are terminal.
          */
         internal fun chainOf(id: SegmentId): Array<Joint>? = CHAINS[id.ordinal]
 
