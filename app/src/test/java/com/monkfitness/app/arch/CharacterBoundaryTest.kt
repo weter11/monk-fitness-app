@@ -1,5 +1,6 @@
 package com.monkfitness.app.arch
 
+import com.monkfitness.app.character.CharacterFeature
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.io.File
@@ -36,8 +37,10 @@ class CharacterBoundaryTest {
 
     @Test
     fun theCharacterAssetsLiveInTheAppModuleTheEngineShippedWith() {
-        val asset = File("src/main/assets/characters/humanoid_v1.glb")
-        assertTrue("missing character asset: ${asset.absolutePath}", asset.isFile)
+        // Bound to the runtime's own path: the guard follows a cutover instead of duplicating it.
+        val path = "src/main/assets/${CharacterFeature.ASSET_PATH}"
+        val asset = File(path)
+        assertTrue("the runtime must ship the asset it names: $path", asset.isFile)
         assertTrue("a compressed GLB cannot be memory-mapped by gltfio", asset.length() > 1_000_000)
     }
 }

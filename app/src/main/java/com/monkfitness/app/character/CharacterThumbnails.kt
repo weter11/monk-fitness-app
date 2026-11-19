@@ -25,7 +25,7 @@ object CharacterThumbnails {
     const val MAX_ENTRIES = 24
 
     /** Bumped whenever the packaged character asset changes; part of every cache key. */
-    const val ASSET_VERSION = "humanoid_v1/1"
+    const val ASSET_VERSION = "humanoid_v2/1"
 
     fun key(
         animationId: String,

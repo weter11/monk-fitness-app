@@ -8,8 +8,8 @@ import com.monkfitness.app.BuildConfig
  */
 object CharacterFeature {
 
-    const val ASSET_PATH = "characters/humanoid_v1.glb"
-    const val CHARACTER_ID = "humanoid_v1"
+    const val ASSET_PATH = "characters/humanoid_v2.glb"
+    const val CHARACTER_ID = "humanoid_v2"
 
     val isEnabled: Boolean get() = BuildConfig.FILAMENT_CHARACTER_ENABLED
 }
