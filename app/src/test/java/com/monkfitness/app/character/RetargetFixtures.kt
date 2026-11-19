@@ -2,9 +2,13 @@ package com.monkfitness.app.character
 
 import com.monkfitness.app.animation.Joint
 import com.monkfitness.app.animation.JointRotation
+import com.monkfitness.app.animation.PoseContext
+import com.monkfitness.app.animation.Side
 import com.monkfitness.app.animation.SkeletonDefinition
+import com.monkfitness.app.animation.SkeletonPipeline
 import com.monkfitness.app.animation.SkeletonPose
 import com.monkfitness.app.animation.Vector3
+import com.monkfitness.app.poses.PoseRegistry
 import java.io.File
 import kotlin.math.abs
 import kotlin.math.acos
@@ -29,6 +33,56 @@ internal object RetargetFixtures {
 
     fun x1Pose(): SkeletonPose = SkeletonPose().apply {
         bind.forEach { (joint, position) -> setJoint(joint, position) }
+    }
+
+    /**
+     * A frame a builder publishes, taken after the pipeline has run eleven frames so the solver's
+     * smoothing and per-pose state are settled instead of cold-start transients. The snapshot is a
+     * copy: the pipeline hands back the carrier whose buffers the next frame overwrites.
+     */
+    fun publishedPose(
+        builderId: String,
+        progress: Float,
+        definition: SkeletonDefinition = SkeletonDefinition.DEFAULT_ADULT
+    ): SkeletonPose {
+        val builder = checkNotNull(PoseRegistry.getPoseConfig(builderId)) {
+            "no registered builder named $builderId"
+        }.builder
+        val pipeline = SkeletonPipeline(definition)
+        fun context(p: Float) = PoseContext(
+            progress = p,
+            side = Side.RIGHT,
+            definition = definition,
+            deltaTime = 0.0166f,
+            cycleDuration = 2500f
+        )
+        repeat(11) { pipeline.produceFrame(builder, context(0.3f)) }
+        val result = pipeline.produceFrame(builder, context(progress))
+        return SkeletonPose().apply { copyFrom(result.pose) }
+    }
+
+    /**
+     * The engine-unit head of [joint]'s bone, reconstructed from its skinning matrix
+     * `M = jointWorld · inverseBind` as `M · [v_rest, 1]`. The translation column is
+     * `jointWorld · IBM_t`, which is zero for a rig whose inverse binds carry their pivot, so it
+     * cannot be read as the head.
+     */
+    fun headEngine(
+        matrices: FloatArray,
+        rig: GltfRig,
+        joint: Joint,
+        boneByJoint: Map<Joint, Int>,
+        definition: SkeletonDefinition = SkeletonDefinition.DEFAULT_ADULT
+    ): Vector3 {
+        val node = boneByJoint.getValue(joint)
+        val index = rig.jointNodes.indexOf(node)
+        check(index >= 0) { "$joint is not a skin joint" }
+        val rest = rig.restWorldTranslations()[node]
+        val base = index * 16
+        val x = matrices[base] * rest[0] + matrices[base + 4] * rest[1] + matrices[base + 8] * rest[2] + matrices[base + 12]
+        val y = matrices[base + 1] * rest[0] + matrices[base + 5] * rest[1] + matrices[base + 9] * rest[2] + matrices[base + 13]
+        val z = matrices[base + 2] * rest[0] + matrices[base + 6] * rest[1] + matrices[base + 10] * rest[2] + matrices[base + 14]
+        return X1Bind.toEngine(Vector3(x, y, z), X1Bind.unitsPerMetre(definition))
     }
 
     fun pose(overrides: Map<Joint, Vector3>, rootRotation: Quat = Quat.IDENTITY): SkeletonPose =
