@@ -19,13 +19,19 @@ import com.google.android.filament.gltfio.AssetLoader
 import com.google.android.filament.gltfio.FilamentAsset
 import com.google.android.filament.gltfio.ResourceLoader
 import com.google.android.filament.gltfio.UbershaderProvider
+import com.monkfitness.app.animation.PoseBuilder
 import com.monkfitness.app.animation.SkeletonDefinition
 import com.monkfitness.app.animation.SkeletonPipeline
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
 import java.nio.FloatBuffer
 
-/** One live character and every Filament object it owns; [destroy] is the only teardown path. */
+/**
+ * One live character and every Filament object it owns; [destroy] is the only teardown path.
+ *
+ * A session is per exercise: [CharacterStage] builds a new one when the pose changes, so the camera
+ * is framed once for the exercise here and re-framed only when the surface resizes — never per frame.
+ */
 class CharacterSession(
     private val context: Context,
     private val engine: Engine,
@@ -34,6 +40,8 @@ class CharacterSession(
     private val capabilities: GraphicsCapabilities,
     private val assetPath: String,
     private val poseSource: CharacterPoseSource,
+    private val poseBuilder: PoseBuilder,
+    private val alternating: Boolean,
     private val definition: SkeletonDefinition = SkeletonDefinition.DEFAULT_ADULT
 ) {
 
@@ -46,6 +54,7 @@ class CharacterSession(
     private val uiHelper = UiHelper(UiHelper.ContextErrorPolicy.DONT_CHECK)
     private val choreographer = Choreographer.getInstance()
     private val pipeline = SkeletonPipeline(definition)
+    private val framer = ExerciseCameraFramer3D(definition)
 
     private var swapChain: SwapChain? = null
     private var assetLoader: AssetLoader? = null
@@ -115,7 +124,8 @@ class CharacterSession(
 
         override fun onResized(width: Int, height: Int) {
             view.viewport = Viewport(0, 0, width, height)
-            updateCameraProjection(width, height)
+            if (height <= 0 || width <= 0) return
+            applyFraming(width, height)
         }
     }
 
@@ -230,13 +240,25 @@ class CharacterSession(
             discard = false
         })
 
-        camera.setLensProjection(45.0, 1.0, 0.05, 100.0)
-        camera.lookAt(0.0, 1.05, 3.4, 0.0, 1.0, 0.0, 0.0, 1.0, 0.0)
+        // The surface size is not known until the first resize, which re-frames for the aspect it
+        // actually got; composing for a square placeholder keeps the first frame composed too.
+        applyFraming(PLACEHOLDER_WIDTH, PLACEHOLDER_HEIGHT)
     }
 
-    private fun updateCameraProjection(width: Int, height: Int) {
-        if (height == 0) return
-        camera.setLensProjection(45.0, width.toDouble() / height, 0.05, 100.0)
+    /**
+     * Frames the exercise for the surface it is drawn on: one view for the whole rep, re-derived only
+     * when the exercise or the surface aspect changes. Both are inputs, never the current phase.
+     */
+    private fun applyFraming(width: Int, height: Int) {
+        val view = framer.frame(poseBuilder, alternating, width, height)
+        camera.setLensProjection(
+            view.fovVerticalDegrees.toDouble(), width.toDouble() / height.toDouble(), 0.05, 100.0
+        )
+        camera.lookAt(
+            view.eyeX.toDouble(), view.eyeY.toDouble(), view.eyeZ.toDouble(),
+            view.targetX.toDouble(), view.targetY.toDouble(), view.targetZ.toDouble(),
+            view.upX.toDouble(), view.upY.toDouble(), view.upZ.toDouble()
+        )
     }
 
     fun attach(textureView: TextureView) {
@@ -347,5 +369,9 @@ class CharacterSession(
 
     private companion object {
         const val FRAME_SAMPLE_COUNT = 120
+
+        /** The square surface the camera is composed for until the first size arrives. */
+        const val PLACEHOLDER_WIDTH = 1
+        const val PLACEHOLDER_HEIGHT = 1
     }
 }

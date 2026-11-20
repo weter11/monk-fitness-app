@@ -14,6 +14,7 @@ import androidx.compose.ui.viewinterop.AndroidView
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import com.monkfitness.app.animation.MotionCurves
+import com.monkfitness.app.animation.PoseBuilder
 import com.monkfitness.app.animation.PoseContext
 import com.monkfitness.app.animation.SkeletonDefinition
 import com.monkfitness.app.poses.PoseRegistry
@@ -53,7 +54,12 @@ fun CharacterStage(
         }
     }
 
-    val attachment = rememberCharacterAttachment(poseSource, backendRequest)
+    val attachment = rememberCharacterAttachment(
+        poseSource = poseSource,
+        request = backendRequest,
+        poseBuilder = poseConfig.builder,
+        alternating = poseConfig.alternating
+    )
 
     LaunchedEffect(attachment) {
         attachment.failure?.let(onUnavailable)
@@ -105,10 +111,12 @@ fun CharacterStage(
 @Composable
 private fun rememberCharacterAttachment(
     poseSource: CharacterPoseSource,
-    request: BackendRequest
+    request: BackendRequest,
+    poseBuilder: PoseBuilder,
+    alternating: Boolean
 ): CharacterAttachment {
     val context = LocalContext.current.applicationContext
-    return remember(request, poseSource) {
+    return remember(request, poseSource, poseBuilder, alternating) {
         val token = Any()
         if (!ActiveCharacter.acquire(token)) {
             CharacterAttachment(token, null, "another view already owns the character")
@@ -128,7 +136,9 @@ private fun rememberCharacterAttachment(
                         selection = selection,
                         capabilities = capabilities,
                         assetPath = CharacterFeature.ASSET_PATH,
-                        poseSource = poseSource
+                        poseSource = poseSource,
+                        poseBuilder = poseBuilder,
+                        alternating = alternating
                     )
                     val failure = session.load()
                     if (failure != null) {
