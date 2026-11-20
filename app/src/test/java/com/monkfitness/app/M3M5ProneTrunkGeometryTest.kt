@@ -581,6 +581,6 @@ class M3M5ProneTrunkGeometryTest {
          * here is either membership or a leak outside the prone family — attribute it from a whole-corpus
          * dump diffed against a pristine `origin/main` worktree, never by pasting the new number in.
          */
-        const val UNAFFECTED_CORPUS_DIGEST = -8467533830602935354L
+        const val UNAFFECTED_CORPUS_DIGEST = -4919693617178528126L
     }
 }

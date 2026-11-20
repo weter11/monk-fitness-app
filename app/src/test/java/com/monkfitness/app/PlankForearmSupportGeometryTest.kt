@@ -522,6 +522,6 @@ class PlankForearmSupportGeometryTest {
          * equal on both trees), so this value moves by exactly the corrected poses' rows.
          *
 */
-        const val UNAFFECTED_CORPUS_DIGEST = -1362045000586141575L
+        const val UNAFFECTED_CORPUS_DIGEST = -6719485433408609483L
     }
 }

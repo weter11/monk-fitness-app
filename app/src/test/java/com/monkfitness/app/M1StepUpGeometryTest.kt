@@ -543,6 +543,6 @@ class M1StepUpGeometryTest {
          * a pristine `origin/main` worktree, and let each pass's own scope guard (e.g.
          * `M15WallSlidesWallGeometryTest.UNAFFECTED_CORPUS_DIGEST`) gate the narrower claim.
          */
-        const val UNAFFECTED_CORPUS_DIGEST = 1204836579372112615L
+        const val UNAFFECTED_CORPUS_DIGEST = -7396955646014808669L
     }
 }

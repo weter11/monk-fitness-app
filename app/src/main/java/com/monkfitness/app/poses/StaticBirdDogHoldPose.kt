@@ -9,7 +9,8 @@ class StaticBirdDogHoldPose : BaseBirdDogPose() {
         durationSeconds = 3.0f,
         loopMode = LoopMode.PING_PONG,
         motionCurve = MotionCurve.EASE_IN_OUT,
-        environment = birdDogEnvironment
+        environment = birdDogEnvironment,
+        support = birdDogSupport
     )
 
     override fun onBuild(context: PoseContext): SkeletonPose {

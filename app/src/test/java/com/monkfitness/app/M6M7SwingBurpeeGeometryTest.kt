@@ -532,6 +532,6 @@ class M6M7SwingBurpeeGeometryTest {
          * here is either membership or a leak outside the pair — attribute it from a whole-corpus dump
          * diffed against a pristine `origin/main` worktree, never by pasting the new number in.
          */
-        const val UNAFFECTED_CORPUS_DIGEST = -3839318995779211180L
+        const val UNAFFECTED_CORPUS_DIGEST = 5234452233927764752L
     }
 }

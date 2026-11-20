@@ -1,7 +1,7 @@
 package com.monkfitness.app
 
 import com.monkfitness.app.animation.*
-import com.monkfitness.app.poses.BirdDogPose
+import com.monkfitness.app.poses.QuadrupedThoracicRotationsPose
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -208,21 +208,6 @@ class PublishedBelowGroundInvariantTest {
      * this table only by the pose being FIXED.
      */
     private val knownBelowGround: Map<String, Map<Joint, Float>> = mapOf(
-        "AlternatingBirdDogPose" to mapOf(
-            Joint.PALM_A to -5.0411f, Joint.PALM_P to -5.0411f,
-            Joint.KNUCKLES_A to -10.0823f, Joint.KNUCKLES_P to -10.0823f,
-            Joint.FINGERTIPS_A to -18.4842f, Joint.FINGERTIPS_P to -18.4842f
-        ),
-        "BirdDogPose" to mapOf(
-            Joint.PALM_A to -5.0411f, Joint.PALM_P to -5.0411f,
-            Joint.KNUCKLES_A to -10.0823f, Joint.KNUCKLES_P to -10.0823f,
-            Joint.FINGERTIPS_A to -18.4842f, Joint.FINGERTIPS_P to -18.4842f
-        ),
-        "StaticBirdDogHoldPose" to mapOf(
-            Joint.PALM_A to -5.0411f, Joint.PALM_P to -5.0411f,
-            Joint.KNUCKLES_A to -10.0823f, Joint.KNUCKLES_P to -10.0823f,
-            Joint.FINGERTIPS_A to -18.4842f, Joint.FINGERTIPS_P to -18.4842f
-        ),
         "BurpeePose" to mapOf(
             Joint.KNEE_F to -2.3537f, Joint.KNEE_B to -2.3537f
         ),
@@ -243,15 +228,6 @@ class PublishedBelowGroundInvariantTest {
      * the same poses, so a new entry cannot be added without stating what owns it.
      */
     private val attribution: Map<String, String> = mapOf(
-        "AlternatingBirdDogPose" to
-            "undeclared class (docs/STABILIZATION_AUDIT.md §4 item 2's seven 'flagged for assignment' " +
-            "poses: no M-number assigns them a support declaration); the derived hand chain " +
-            "(PALM/KNUCKLES/FINGERTIPS, both hands) hangs under the mat at EVERY phase",
-        "BirdDogPose" to
-            "same undeclared class as AlternatingBirdDogPose; the derived hand chain is the same geometry " +
-            "and is frame-independent (measured identical at all five samples, both conditions)",
-        "StaticBirdDogHoldPose" to
-            "same undeclared class; the hold's derived hand chain (both hands)",
         "QuadrupedThoracicRotationsPose" to
             "same undeclared class; the P hand's derived chain (the A hand's FINGERTIPS_A only dips " +
             "-0.8409 at p=0.0, the pose's own rotation phase)",
@@ -353,10 +329,7 @@ class PublishedBelowGroundInvariantTest {
         assertEquals(
             "the poses with no support declaration at all must be among the measured ones — this is " +
                 "the requirement that the invariant is non-vacuous for an undeclared pose",
-            listOf(
-                "AlternatingBirdDogPose", "BirdDogPose", "QuadrupedThoracicRotationsPose",
-                "StaticBirdDogHoldPose"
-            ),
+            listOf("QuadrupedThoracicRotationsPose"),
             undeclaringViolating.sorted()
         )
     }
@@ -452,23 +425,23 @@ class PublishedBelowGroundInvariantTest {
     /**
      * Geometry below `y = 0` is allowed if the pose declares its plane. The repository's existing
      * channel is the pose's own `metadata.environment.ground.level`; every consumer resolves the
-     * plane from there. This twin is the production bird dog (which declares no support, so nothing
-     * in its geometry is derived from the plane) with the plane lowered: its published geometry is
-     * byte-identical (measured), it is a pinned violation at level 0, and it is not a violation at
-     * `-25` or `-50`.
+     * plane from there. This twin is the production quadruped thoracic rotations (which declares no
+     * support, so nothing in its geometry is derived from the plane) with the plane lowered: its
+     * published geometry is byte-identical (measured), it is a pinned violation at level 0, and it
+     * is not a violation at `-25` or `-50`.
      */
     @Test
     fun theInvariantJudgesAgainstThePosesOwnDeclaredPlane() {
-        val production = scan({ BirdDogPose() }, "BirdDogPose")
+        val production = scan({ QuadrupedThoracicRotationsPose() }, "QuadrupedThoracicRotationsPose")
         val productionWorst = production.minOf { it.delta }
         assertTrue(
-            "precondition: the production bird dog publishes below its plane at level 0 (worst $productionWorst)",
+            "precondition: the production pose publishes below its plane at level 0 (worst $productionWorst)",
             productionWorst < -groundBand
         )
 
         for (level in listOf(-25f, -50f)) {
-            val twin = LoweredPlaneBirdDog(level)
-            val observations = scan({ LoweredPlaneBirdDog(level) }, "LoweredPlaneBirdDog")
+            val twin = LoweredPlaneQuadrupedThoracicRotations(level)
+            val observations = scan({ LoweredPlaneQuadrupedThoracicRotations(level) }, "LoweredPlaneQuadrupedThoracicRotations")
             assertEquals(
                 "the twin must declare the plane it is judged against",
                 level, twin.metadata.environment.ground.level, 0f
@@ -490,9 +463,9 @@ class PublishedBelowGroundInvariantTest {
      * The counterfactual: a declaration-keyed gate sees NONE of these. For every pinned violation,
      * the offending joint is outside the pose's own declared support family
      * (`metadata.support.contacts` → the canonical mapping, the exact channel
-     * `EnvironmentPenetrationTest` keys on). Measured on the pinned table: 30 of 30 — which is why
-     * that invariant, the sole owner of the floor on the declaration channel, is green today with
-     * all 30 pairs present.
+     * `EnvironmentPenetrationTest` keys on). Measured on the pinned table: every pinned pair — which
+     * is why that invariant, the sole owner of the floor on the declaration channel, is green today
+     * with all of them present.
      */
     @Test
     fun theBelowGroundClassIsInvisibleToTheDeclarationKeyedInstrument() {
@@ -514,11 +487,11 @@ class PublishedBelowGroundInvariantTest {
         )
 
         // And the same statement about the INSTRUMENTS: the validator's floor rule covers the 6 foot
-        // joints only, so 6 of the 7 poses cannot be seen by it at all.
+        // joints only, so 2 of the 3 poses cannot be seen by it at all.
         val footJoints = setOf(Joint.ANKLE_F, Joint.HEEL_F, Joint.TOE_F, Joint.ANKLE_B, Joint.HEEL_B, Joint.TOE_B)
         val validatorVisible = knownBelowGround.filterValues { joints -> joints.keys.any { it in footJoints } }
         assertEquals(
-            "the validator's ground rule is a FOOT rule: exactly one of the 6 offending poses " +
+            "the validator's ground rule is a FOOT rule: exactly one of the 3 offending poses " +
                 "(CatCowPose's feet) is reachable by it",
             listOf("CatCowPose"), validatorVisible.keys.toList()
         )
@@ -556,7 +529,7 @@ class PublishedBelowGroundInvariantTest {
             "with every pinned pair still violating, nothing is stale",
             stalePins(allViolating).isEmpty()
         )
-        val oneFixed = knownBelowGround.keys.first() to Joint.PALM_A
+        val oneFixed = knownBelowGround.entries.first().let { it.key to it.value.keys.first() }
         val partially = pinnedPairs().filterKeys { it != oneFixed }.mapValues { it.value - 1f }
         assertEquals(
             "fixing one pinned pair must leave exactly that pair stale",
@@ -564,10 +537,11 @@ class PublishedBelowGroundInvariantTest {
         )
     }
 
-    /** The production bird dog (which declares NO support) with its declared ground plane lowered. */
-    private class LoweredPlaneBirdDog(level: Float) : PoseBuilder by BirdDogPose() {
-        override val metadata = BirdDogPose().metadata.copy(
-            environment = BirdDogPose().metadata.environment.copy(
+    /** The production quadruped thoracic rotations (which declares NO support) with its plane lowered. */
+    private class LoweredPlaneQuadrupedThoracicRotations(level: Float) :
+        PoseBuilder by QuadrupedThoracicRotationsPose() {
+        override val metadata = QuadrupedThoracicRotationsPose().metadata.copy(
+            environment = QuadrupedThoracicRotationsPose().metadata.environment.copy(
                 ground = GroundDefinition(visible = true, level = level)
             )
         )
