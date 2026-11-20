@@ -208,7 +208,39 @@ no device in the build environment.
 7. **Toolchain.** Filament 1.76+ requires `compileSdk 37`; the app is on 34 / AGP 8.5, so the
    dependency is pinned to 1.75.1. Upgrading is a separate change.
 
-## 11. Next stage (proposed)
+## 11. Camera framing
+
+The 3D hero is shot by `character/ExerciseCameraFramer3D`: one camera per (exercise, viewport
+aspect), derived from the exercise's whole motion cycle, never per frame.
+
+- **What is measured.** The pose is played through a pipeline of the framer's own at 32 phases of
+  the rep, both sides when the exercise is alternating; every joint is converted to asset metres
+  through `X1Bind` and grown by a `0.12 m` body envelope, so a limb's surface, the crown above the
+  head joint and the contact shadow under a foot are inside the measured body — not just the joint
+  centres. The envelope is measured on the camera's axes, not on the corners of a world-axis box:
+  an obliquely viewed box projects up to its diagonal, which sized a push-up at `14%` of the frame.
+- **How the view is solved.** `yaw`/`pitch` from the pose's `PoseMetadata.camera` give the camera
+  basis on the same axes the 2D renderer projects with, and the camera stands on the side the
+  subject faces. The aim point is the centre of the motion's projected extents; the distance is the
+  largest requirement of any sampled point divided by the lens, times `1.13`, so the body fills `88%`
+  of the limiting axis and nothing touches an edge.
+- **When it is derived.** Once per exercise in `CharacterSession`, and again only when the surface
+  resizes (`UiHelper.onResized`). The phase is not an input, so the camera cannot breathe within a
+  rep; `CharacterStage` builds a new session per exercise, so changing the exercise re-derives it.
+
+Measured on `pushup_standard`, `row_standard`, `birddog_reps`, `plank_standard`,
+`glute_bridge_standard`, `squat_standard` and `superman_prone` at aspects `0.45`, `0.5625`, `1.0` and
+`1.333`: every joint stays inside `±0.72` NDC, and every animation in the registry (`66`) inside
+`±0.76`. The fixed view this replaces — eye `(0, 1.05, 3.4)`, target `(0, 1.0, 0)`, `45°` — ran
+`superman_prone` `2.1%` of the frame past the bottom edge at every aspect and left `pushup_standard`
+`0.31%` above it. `CharacterCompositionBaselineTest` records those numbers;
+`ExerciseCameraFramingInvariantTest` holds the new contract.
+
+Known limit: the fit contains the joints plus that envelope, not the skinned triangles. A silhouette
+that leaves the `0.12 m` envelope — a wide stance on a thick thigh, a raised barbell — clips before
+the measured numbers do.
+
+## 12. Next stage (proposed)
 
 1. Device matrix: record backend, FPS, p95 frame time, memory and defects on at least one GLES and
    one Vulkan device; then decide whether `AUTO` stays GLES-first.

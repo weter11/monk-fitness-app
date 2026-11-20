@@ -32,6 +32,9 @@ object X1Bind {
     /** [TAU_RESIDUAL_MM] at the default definition's scale: 1.23684 engine units. */
     val TAU_RESIDUAL: Float = engineUnits(TAU_RESIDUAL_MM)
 
+    /** `B⁻¹` as a matrix: the asset-space axes, computed once instead of per converted joint. */
+    private val ENGINE_TO_ASSET: FloatArray = BoneMap.basis.conjugate().toMatrix3()
+
     /**
      * The canonical A-pose of every engine joint: `+Y` up, `+X` forward, `+Z` lateral, side `A` on
      * `−Z`. Limbs are straightened, so a side's shoulder, elbow and hand share one lateral offset.
@@ -92,8 +95,27 @@ object X1Bind {
      * forward / `+X` left becoming engine `+X` forward / `−Z` left.
      */
     fun toAsset(engine: Vector3, unitsPerMetre: Float = unitsPerMetre()): Vector3 {
-        val rotated = rotate(BoneMap.basis.conjugate(), engine)
-        return Vector3(rotated.x / unitsPerMetre, rotated.y / unitsPerMetre, rotated.z / unitsPerMetre)
+        val out = FloatArray(3)
+        toAssetInto(engine, unitsPerMetre, out)
+        return Vector3(out[0], out[1], out[2])
+    }
+
+    /** [toAsset] into a reusable `[x, y, z]` buffer: the framing sweep converts thousands of joints. */
+    fun toAssetInto(engine: Vector3, unitsPerMetre: Float, out: FloatArray) {
+        val m = ENGINE_TO_ASSET
+        out[0] = (m[0] * engine.x + m[3] * engine.y + m[6] * engine.z) / unitsPerMetre
+        out[1] = (m[1] * engine.x + m[4] * engine.y + m[7] * engine.z) / unitsPerMetre
+        out[2] = (m[2] * engine.x + m[5] * engine.y + m[8] * engine.z) / unitsPerMetre
+    }
+
+    /** A direction on the same axes as [toAsset], unscaled: camera bases are unit vectors already. */
+    fun toAssetDirection(engine: Vector3): Vector3 {
+        val m = ENGINE_TO_ASSET
+        return Vector3(
+            m[0] * engine.x + m[3] * engine.y + m[6] * engine.z,
+            m[1] * engine.x + m[4] * engine.y + m[7] * engine.z,
+            m[2] * engine.x + m[5] * engine.y + m[8] * engine.z
+        )
     }
 
     /** Asset metres → engine units: `unitsPerMetre · B · p_asset`, the inverse of [toAsset]. */
