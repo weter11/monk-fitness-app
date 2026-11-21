@@ -255,32 +255,49 @@ class AnatomyValidator(
             val target = margin + exemption.envelopeSlackMetres * attachmentScale
             if (exemption.fromStation <= 0f) {
                 val bound = exemption.toStation.toDouble()
-                var boundary = bound
-                for (sample in 0..last) {
-                    val station = sample.toDouble() / last
-                    if (station > bound) break
-                    if (clearanceAt(frame, slot, station, profile, last) >= target) {
-                        boundary = station
-                        break
-                    }
-                }
                 orientations[index] = ORIGIN
-                boundaries[index] = boundary
+                boundaries[index] = firstClearance(frame, slot, profile, last, target, bound, true)
             } else {
                 val bound = exemption.fromStation.toDouble()
-                var boundary = bound
-                for (sample in last downTo 0) {
-                    val station = sample.toDouble() / last
-                    if (station < bound) break
-                    if (clearanceAt(frame, slot, station, profile, last) >= target) {
-                        boundary = station
-                        break
-                    }
-                }
                 orientations[index] = INSERTION
-                boundaries[index] = boundary
+                boundaries[index] = firstClearance(frame, slot, profile, last, target, bound, false)
             }
         }
+    }
+
+    /**
+     * The first station, scanned from the exempted endpoint toward [bound], at which the path carries
+     * [target] clearance — refined by bisection between the last station below it and the first at or
+     * above it, because a boundary that snapped to a sample could never land on the margin itself.
+     */
+    private fun firstClearance(
+        frame: AnatomyFrame,
+        slot: Int,
+        profile: RadiusProfile,
+        last: Int,
+        target: Double,
+        bound: Double,
+        fromOrigin: Boolean
+    ): Double {
+        var below = Double.NaN
+        val samples = if (fromOrigin) 0..last else last downTo 0
+        for (sample in samples) {
+            val station = sample.toDouble() / last
+            if (fromOrigin && station > bound) break
+            if (!fromOrigin && station < bound) break
+            if (clearanceAt(frame, slot, station, profile, last) >= target) {
+                if (below.isNaN()) return station
+                var low = below
+                var high = station
+                for (iteration in 0 until BOUNDARY_STEPS) {
+                    val mid = 0.5 * (low + high)
+                    if (clearanceAt(frame, slot, mid, profile, last) >= target) high = mid else low = mid
+                }
+                return high
+            }
+            below = station
+        }
+        return bound
     }
 
     /** `d − r` at a fractional station of the path, through the same distance the predicate uses. */
@@ -331,6 +348,9 @@ class AnatomyValidator(
         const val NONE = 0
         const val ORIGIN = 1
         const val INSERTION = 2
+
+        /** Bisection depth that places the envelope boundary on the margin, not on a sample. */
+        const val BOUNDARY_STEPS = 40
         val ENDPOINTS = intArrayOf(0, 1)
     }
 }
