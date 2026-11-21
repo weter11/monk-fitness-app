@@ -60,8 +60,9 @@ class MusclePathSolver(
         val union = unionOf(muscle)
         val profile = RadiusProfile(muscle.radiusKnots, attachmentScale)
         val corridor = muscle.corridorMetres * attachmentScale
-        var detour = smallestDetour(union, side, pose, frames)
-        if (detour > corridor) {
+        val firstDetour = smallestDetour(union, side, pose, frames)
+        var detourScale = 1.0
+        if (firstDetour > corridor) {
             // No candidate can be placed inside the declared corridor: the search stops before a pass.
             return refuse(frame, slot, PathReason.NO_GEOMETRIC_CAUSE, SearchOutcome.SEARCH_EXHAUSTED)
         }
@@ -72,7 +73,7 @@ class MusclePathSolver(
 
         for (pass in 0 until muscle.passCap) {
             lastPass = pass + 1
-            if (insertDetours(union, side, pose, frames, detour, profile) > 0) {
+            if (insertDetours(union, side, pose, frames, detourScale, profile) > 0) {
                 smooth()
             }
             project(union, side, pose, frames, profile)
@@ -104,8 +105,9 @@ class MusclePathSolver(
                     lastObstacle = blockedObstacle
                 }
             }
-            detour *= ESCALATION
-            if (detour > corridor) {
+            // The scale is a multiplier on d_1, never a distance: d_k = 1.5^(k-1) * d_1.
+            detourScale *= ESCALATION
+            if (firstDetour * detourScale > corridor) {
                 return refuse(frame, slot, lastReason, SearchOutcome.SEARCH_EXHAUSTED, lastObstacle, lastSegment)
             }
         }
@@ -157,7 +159,7 @@ class MusclePathSolver(
         side: MuscleSide,
         pose: SkeletonPose,
         frames: SegmentFrameSet,
-        detour: Double,
+        detourScale: Double,
         profile: RadiusProfile
     ): Int {
         var inserted = 0
@@ -231,7 +233,7 @@ class MusclePathSolver(
                 val ry = obstacle.radii[1] * hy
                 val rz = obstacle.radii[2] * hz
                 val support = sqrt(rx * rx + ry * ry + rz * rz)
-                val distance = (support + validator.margin) * detour
+                val distance = (support + validator.margin) * detourScale
 
                 smoothed[write * 3] = obstacle.centre[0] + lx * distance
                 smoothed[write * 3 + 1] = obstacle.centre[1] + ly * distance
