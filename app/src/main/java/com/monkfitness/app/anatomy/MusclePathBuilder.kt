@@ -126,7 +126,8 @@ class MusclePathBuilder(
         if (!(total > 0f)) return NO_INDEX
 
         val sampling = definition.sampling
-        val wanted = (total / sampling.spacingMetres).roundToInt()
+        // Intervals, then points: a 0.29 m path at a 0.01 m spacing is 29 intervals and 30 samples.
+        val wanted = ((total / sampling.spacingMetres).roundToInt() + 1)
             .coerceIn(sampling.minSamples, sampling.maxSamples)
 
         var segment = 1

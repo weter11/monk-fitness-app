@@ -3,6 +3,7 @@ package com.monkfitness.app.anatomy
 import com.monkfitness.app.animation.SkeletonPose
 import kotlin.math.abs
 import kotlin.math.max
+import kotlin.math.roundToInt
 import kotlin.math.sqrt
 
 /**
@@ -23,6 +24,9 @@ class MusclePathSolver(
     private val points = DoubleArray(MAX_POINTS * 3)
     private val smoothed = DoubleArray(MAX_POINTS * 3)
     private var count = 0
+    /** The 1-based pass that accepted, or the pass the loop stopped on. Reported, never assumed. */
+    var lastPass: Int = 0
+        private set
     private val obstacle = ObstacleGeometry()
     private val unions: Map<String, List<WrapSurface>> =
         definition.muscles.associate { it.id to definition.union(it) }
@@ -67,6 +71,7 @@ class MusclePathSolver(
         var lastObstacle = NO_INDEX
 
         for (pass in 0 until muscle.passCap) {
+            lastPass = pass + 1
             if (insertDetours(union, side, pose, frames, detour, profile) > 0) {
                 smooth()
             }
@@ -119,7 +124,7 @@ class MusclePathSolver(
     private fun resample(control: Int): Int {
         var total = 0.0
         for (index in 1 until control) total += distance(points, index - 1, index)
-        val wanted = (total / definition.sampling.spacingMetres * attachmentScale).toInt()
+        val wanted = ((total / (definition.sampling.spacingMetres * attachmentScale)).roundToInt() + 1)
             .coerceIn(definition.sampling.minSamples, definition.sampling.maxSamples)
         System.arraycopy(points, 0, smoothed, 0, control * 3)
         val source = smoothed
@@ -173,21 +178,64 @@ class MusclePathSolver(
                 )
                 if (verdict.outcome == StageOutcome.CLEAR) continue
                 if (write + 1 >= MAX_POINTS) break
-                val dx = points[(index + 1) * 3] - points[index * 3]
-                val dy = points[(index + 1) * 3 + 1] - points[index * 3 + 1]
-                val dz = points[(index + 1) * 3 + 2] - points[index * 3 + 2]
+
+                val ax = points[index * 3]
+                val ay = points[index * 3 + 1]
+                val az = points[index * 3 + 2]
+                val dx = points[(index + 1) * 3] - ax
+                val dy = points[(index + 1) * 3 + 1] - ay
+                val dz = points[(index + 1) * 3 + 2] - az
                 val length = sqrt(dx * dx + dy * dy + dz * dz)
                 if (!(length > 0.0)) continue
-                // Normal of the segment against world +Y: a stable, deterministic lateral direction.
-                val nx0 = dy * 0.0 - dz * 1.0
-                val ny0 = dz * 0.0 - dx * 0.0
-                val nz0 = dx * 1.0 - dy * 0.0
-                val normalLength = sqrt(nx0 * nx0 + ny0 * ny0 + nz0 * nz0)
-                if (!(normalLength > 0.0)) continue
-                val mid = 0.5
-                smoothed[write * 3] = points[index * 3] + dx * mid + nx0 / normalLength * detour
-                smoothed[write * 3 + 1] = points[index * 3 + 1] + dy * mid + ny0 / normalLength * detour
-                smoothed[write * 3 + 2] = points[index * 3 + 2] + dz * mid + nz0 / normalLength * detour
+                val dxn = dx / length
+                val dyn = dy / length
+                val dzn = dz / length
+
+                // §7.4.5: the lateral component of the chord offset, or the axis least aligned with the
+                // chord — chosen in the obstacle's own frame, because world axes assume Rw = I.
+                val mx = 0.5 * (ax + points[(index + 1) * 3]) - obstacle.centre[0]
+                val my = 0.5 * (ay + points[(index + 1) * 3 + 1]) - obstacle.centre[1]
+                val mz = 0.5 * (az + points[(index + 1) * 3 + 2]) - obstacle.centre[2]
+                val along = mx * dxn + my * dyn + mz * dzn
+                val ux = mx - along * dxn
+                val uy = my - along * dyn
+                val uz = mz - along * dzn
+                val uLength = sqrt(ux * ux + uy * uy + uz * uz)
+
+                var lx = 0.0
+                var ly = 0.0
+                var lz = 0.0
+                if (uLength > MIN_LATERAL) {
+                    lx = ux / uLength; ly = uy / uLength; lz = uz / uLength
+                } else {
+                    // Chord direction in local axes, then the least-aligned local axis, rotated back.
+                    val tx = obstacle.axes[0] * dxn + obstacle.axes[1] * dyn + obstacle.axes[2] * dzn
+                    val ty = obstacle.axes[3] * dxn + obstacle.axes[4] * dyn + obstacle.axes[5] * dzn
+                    val tz = obstacle.axes[6] * dxn + obstacle.axes[7] * dyn + obstacle.axes[8] * dzn
+                    val ax0 = abs(tx); val ay0 = abs(ty); val az0 = abs(tz)
+                    val chooseX = ax0 <= ay0 && ax0 <= az0
+                    val chooseY = !chooseX && ay0 <= az0
+                    val ox = if (chooseX) 1.0 else 0.0
+                    val oy = if (chooseY) 1.0 else 0.0
+                    val oz = if (chooseX || chooseY) 0.0 else 1.0
+                    lx = obstacle.axes[0] * ox + obstacle.axes[3] * oy + obstacle.axes[6] * oz
+                    ly = obstacle.axes[1] * ox + obstacle.axes[4] * oy + obstacle.axes[7] * oz
+                    lz = obstacle.axes[2] * ox + obstacle.axes[5] * oy + obstacle.axes[8] * oz
+                }
+
+                // d_1 = h(l̂_d) + e, with h the support function of the uninflated ellipsoid.
+                val hx = obstacle.axes[0] * lx + obstacle.axes[1] * ly + obstacle.axes[2] * lz
+                val hy = obstacle.axes[3] * lx + obstacle.axes[4] * ly + obstacle.axes[5] * lz
+                val hz = obstacle.axes[6] * lx + obstacle.axes[7] * ly + obstacle.axes[8] * lz
+                val rx = obstacle.radii[0] * hx
+                val ry = obstacle.radii[1] * hy
+                val rz = obstacle.radii[2] * hz
+                val support = sqrt(rx * rx + ry * ry + rz * rz)
+                val distance = (support + validator.margin) * detour
+
+                smoothed[write * 3] = obstacle.centre[0] + lx * distance
+                smoothed[write * 3 + 1] = obstacle.centre[1] + ly * distance
+                smoothed[write * 3 + 2] = obstacle.centre[2] + lz * distance
                 write++
                 inserted++
                 pushed = true
@@ -396,5 +444,8 @@ class MusclePathSolver(
         const val MAX_POINTS = 256
         const val ESCALATION = 1.5
         const val SMOOTH_BLEND = 0.25
+
+        /** Below this lateral offset the chord runs through the centre and the fallback axis decides. */
+        const val MIN_LATERAL = 1e-6
     }
 }
