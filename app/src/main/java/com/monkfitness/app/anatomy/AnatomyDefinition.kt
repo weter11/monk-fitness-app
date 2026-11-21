@@ -8,15 +8,34 @@ enum class MuscleSide {
     A,
     P;
 
-    private val suffixes: Set<String>
-        get() = when (this) {
-            A -> setOf("_A", "_F")
-            P -> setOf("_P", "_B")
-        }
+    /** `+1` for [A] and `−1` for [P]: the lateral coordinate of an authored offset flips sides. */
+    val lateralSign: Float get() = if (this == A) 1f else -1f
 
-    /** The segment instance this side's attachments pin to: arms `_A`/`_P`, legs `_F`/`_B`. */
-    fun instance(segment: Segment): SegmentId =
-        SegmentId.entries.first { it.segment == segment && (it.suffix == null || it.suffix in suffixes) }
+    /**
+     * The segment instance this side's attachments pin to: arms `_A`/`_P`, legs `_F`/`_B`.
+     *
+     * Read from a table resolved once per side and segment: this runs per attachment per frame, and
+     * scanning 23 candidates with a fresh suffix string each time is the stage's only steady-state
+     * allocation.
+     */
+    fun instance(segment: Segment): SegmentId = INSTANCES[segment.ordinal][ordinal]
+
+    private fun claims(suffix: String?): Boolean = when (suffix) {
+        null -> true
+        "_A", "_F" -> this == A
+        "_P", "_B" -> this == P
+        else -> false
+    }
+
+    private companion object {
+        val INSTANCES: Array<Array<SegmentId>> = Array(Segment.entries.size) { segmentIndex ->
+            val segment = Segment.entries[segmentIndex]
+            Array(MuscleSide.entries.size) { sideIndex ->
+                val side = MuscleSide.entries[sideIndex]
+                SegmentId.entries.first { it.segment == segment && side.claims(it.suffix) }
+            }
+        }
+    }
 }
 
 enum class MuscleLayer { SUPERFICIAL, DEEP }

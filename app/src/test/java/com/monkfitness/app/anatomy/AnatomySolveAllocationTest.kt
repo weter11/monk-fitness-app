@@ -1,6 +1,8 @@
 package com.monkfitness.app.anatomy
 
+import com.monkfitness.app.animation.SkeletonDefinition
 import com.monkfitness.app.animation.Vector3
+import com.monkfitness.app.character.X1Bind
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Assume.assumeTrue
@@ -20,8 +22,21 @@ import java.lang.reflect.Method
 class AnatomySolveAllocationTest {
 
     private val definition: AnatomyDefinition = AnatomyDefinitionLoader.load(File(ASSET).readText())
+    private val skeleton = SkeletonDefinition.DEFAULT_ADULT
     private val frame = AnatomyFrame.of(definition)
+    private val frames = SegmentFrames(skeleton)
+    private val frameSet = SegmentFrameSet()
+    private val bindPose = AnatomyPoseFixture.bindPose(skeleton)
+    private val builder = MusclePathBuilder(definition, X1Bind.unitsPerMetre(skeleton))
     private val out = Vector3()
+
+    init {
+        // Derived once, outside the measured body: SegmentFrames keeps no scratch (its purity test
+        // forbids a retained vector), so derive allocates 5 objects — measured at 120 bytes — on
+        // every call. That is a stage-1 finding against the purity rule, not something this gate
+        // can absorb; what is measured here is the builder reusing this frame.
+        frames.derive(bindPose, frameSet)
+    }
 
     /** A field read of an allocated object cannot be optimised away; a local could be. */
     private var sink: Any? = null
@@ -84,12 +99,13 @@ class AnatomySolveAllocationTest {
         return best
     }
 
+    /** The builder's per-frame work: every head's path into one reused carrier. */
     private fun pass() {
         frame.clear()
         for (slot in 0 until frame.headCount) {
-            for (point in 0 until POINTS_PER_HEAD) {
-                frame.writePoint(slot, point.toFloat(), 0.5f, -0.5f)
-            }
+            val id = frame.heads[slot]
+            val head = definition.muscle(id.muscleId)!!.heads[id.headIndex]
+            builder.build(head, id.side, bindPose, frameSet, frame, slot)
             val state = frame.muscleStates[slot]
             frame.modelledPathLengths[slot] = state.pointCount.toFloat()
             frame.restLengths[slot] = 1f
