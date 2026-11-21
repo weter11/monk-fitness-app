@@ -54,6 +54,7 @@ class CharacterSession(
     private val uiHelper = UiHelper(UiHelper.ContextErrorPolicy.DONT_CHECK)
     private val choreographer = Choreographer.getInstance()
     private val pipeline = SkeletonPipeline(definition)
+    private val frameProducer = CharacterFrameProducer(pipeline, poseBuilder.metadata, poseSource)
     private val framer = ExerciseCameraFramer3D(definition)
 
     private var swapChain: SwapChain? = null
@@ -333,7 +334,7 @@ class CharacterSession(
         val started = System.nanoTime()
         val mapper = retargeter ?: return
 
-        val pose = pipeline.produceFrame(poseSource.pose()).pose
+        val pose = frameProducer.next()
         mapper.boneMatrices(pose, unitsPerMetre, out = boneMatrices)
         boneBuffer.clear()
         boneBuffer.put(boneMatrices)

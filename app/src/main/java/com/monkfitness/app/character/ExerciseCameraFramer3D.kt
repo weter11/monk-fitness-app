@@ -14,20 +14,6 @@ import kotlin.math.max
 import kotlin.math.sin
 import kotlin.math.tan
 
-/** Asset-metre bounds of an exercise's whole motion: one box for the rep, never one per frame. */
-data class MotionBounds3D(
-    val minX: Float,
-    val minY: Float,
-    val minZ: Float,
-    val maxX: Float,
-    val maxY: Float,
-    val maxZ: Float
-) {
-    val width: Float get() = maxX - minX
-    val height: Float get() = maxY - minY
-    val depth: Float get() = maxZ - minZ
-}
-
 /**
  * Where a 3D camera stands and what it looks at: [eye] sees [target] with `+Y` tilted to [up] and
  * holds [fovVerticalDegrees] vertically. Filament needs nothing else to place a perspective view.
@@ -97,38 +83,6 @@ class ExerciseCameraFramer3D(
     /** Every sampled joint as `x, y, z` triples in asset metres — one cycle's worth, reused. */
     private var samples = FloatArray(3 * Joint.entries.size * 64)
     private var sampleCount = 0
-
-    /**
-     * The padded asset-metre envelope of [builder]'s whole motion: every joint, over every sampled
-     * phase of every side the exercise plays.
-     */
-    fun bounds(builder: PoseBuilder, alternating: Boolean): MotionBounds3D {
-        sample(builder, alternating)
-        var minX = Float.MAX_VALUE
-        var minY = Float.MAX_VALUE
-        var minZ = Float.MAX_VALUE
-        var maxX = -Float.MAX_VALUE
-        var maxY = -Float.MAX_VALUE
-        var maxZ = -Float.MAX_VALUE
-        var i = 0
-        while (i < sampleCount) {
-            val x = samples[i]
-            val y = samples[i + 1]
-            val z = samples[i + 2]
-            if (x < minX) minX = x
-            if (x > maxX) maxX = x
-            if (y < minY) minY = y
-            if (y > maxY) maxY = y
-            if (z < minZ) minZ = z
-            if (z > maxZ) maxZ = z
-            i += 3
-        }
-        val pad = settings.bodyEnvelopeMetres
-        return MotionBounds3D(
-            minX = minX - pad, minY = minY - pad, minZ = minZ - pad,
-            maxX = maxX + pad, maxY = maxY + pad, maxZ = maxZ + pad
-        )
-    }
 
     /**
      * The view [builder] is shot with on a surface of [aspect] (`width / height`): the authored
@@ -278,7 +232,12 @@ class ExerciseCameraFramer3D(
         val ONE_SIDE = listOf(Side.RIGHT)
         val BOTH_SIDES = listOf(Side.RIGHT, Side.LEFT)
 
-        /** Frames played and discarded before measuring, so the sweep starts from a settled builder. */
-        const val WARM_UP_FRAMES = 12
+        /**
+         * Frames played and discarded before measuring, so the sweep starts from a settled builder.
+         * Eleven is the engine's own cold-start fixed point, the count the invariant sweep and the
+         * retarget fixtures also warm by; a different count measures a different, still-settling
+         * builder.
+         */
+        const val WARM_UP_FRAMES = 11
     }
 }

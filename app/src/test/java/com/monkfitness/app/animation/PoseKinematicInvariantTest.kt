@@ -659,11 +659,17 @@ class PoseKinematicInvariantTest {
         const val WARM_UP_PROGRESS = 0.3f
 
         /**
-         * Millimetres per engine unit at the default definition's scale: `restPelvisHeight / 0.95 m`
-         * = 247.3684 units per metre. Tolerances are stated in millimetres because that is the unit
-         * the rig work and the athlete-facing body model are specified in.
+         * Millimetres per engine unit at the default definition's scale: the pose builders' rest
+         * pelvis height (leg chain plus the `25`-unit floor clearance) over the `0.95 m` trochanter
+         * height the rig scale registers against, inverted — the same ratio `X1Bind.unitsPerMetre`
+         * applies, restated here because the motion core may not import the character side.
          */
-        const val MM_PER_UNIT = 4.04255f
+        val MM_PER_UNIT: Float = 1000f / (
+            (DEF.shinLength + DEF.thighLength + PELVIS_REST_LIFT) / PELVIS_HEIGHT_METRES
+            )
+
+        const val PELVIS_REST_LIFT = 25f
+        const val PELVIS_HEIGHT_METRES = 0.95f
 
         /** Bone-length tolerance: 0.5 mm, the tolerance the rig bind is held to. */
         const val BONE_DEVIATION_MAX_MM = 0.5f
