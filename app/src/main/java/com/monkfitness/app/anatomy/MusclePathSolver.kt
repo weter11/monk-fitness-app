@@ -18,12 +18,22 @@ class MusclePathSolver(
     private val definition: AnatomyDefinition,
     private val builder: MusclePathBuilder,
     private val validator: AnatomyValidator,
-    private val attachmentScale: Double
+    private val attachmentScale: Double,
+    /**
+     * Keeps step 4a's entry and exit construction points instead of letting the waypoint supersede
+     * them. They sit on the surface, so a route anchored on one can never clear; the switch exists
+     * so that claim is measured rather than asserted.
+     */
+    private val retainConstructionPoints: Boolean = false
 ) {
 
     private val points = DoubleArray(MAX_POINTS * 3)
     private val smoothed = DoubleArray(MAX_POINTS * 3)
     private var count = 0
+    /** Per segment, the first obstacle in union order that does not accept it; frozen per pass. */
+    private val blockedBy = IntArray(MAX_POINTS) { NO_INDEX }
+    private val entryStations = DoubleArray(MAX_POINTS)
+    private val exitStations = DoubleArray(MAX_POINTS)
     /** The 1-based pass that accepted, or the pass the loop stopped on. Reported, never assumed. */
     var lastPass: Int = 0
         private set
@@ -73,15 +83,26 @@ class MusclePathSolver(
 
         for (pass in 0 until muscle.passCap) {
             lastPass = pass + 1
+            // The sample count is recomputed from the current arc length at the start of every pass,
+            // so a detour is sampled at the declared spacing instead of inheriting the chord's grid.
+            if (pass > 0) count = resample(count)
             if (insertDetours(union, side, pose, frames, detourScale, profile) > 0) {
                 smooth()
             }
             project(union, side, pose, frames, profile)
 
+            // A capacity refusal is decided before the corridor and the pass cap: it is an abort
+            // inside this pass, not an exhausted search.
+            if (count > frame.pointCapacity) {
+                return refuse(frame, slot, PathReason.BUFFER_CAPACITY, SearchOutcome.REJECTED_IN_SEARCH, segmentIndex = count - 1)
+            }
+
             val check = check(union, side, pose, frames, profile, frame, slot)
             when (check) {
                 Check.CLEARED -> {
-                    writePath(frame, slot, profile)
+                    if (!writePath(frame, slot, profile)) {
+                        return refuse(frame, slot, PathReason.BUFFER_CAPACITY, SearchOutcome.REJECTED_IN_SEARCH, segmentIndex = count - 1)
+                    }
                     frame.statuses[slot] = PathStatus.VALID.ordinal
                     frame.reasonCodes[slot] = PathReason.NO_REASON.ordinal
                     frame.searchOutcomes[slot] = SearchOutcome.CLEARED.ordinal
@@ -151,8 +172,14 @@ class MusclePathSolver(
     }
 
     /**
-     * Inserts one lateral waypoint per blocked segment. The direction is the segment's own normal,
-     * so the detour is a function of the geometry it avoids rather than of a world axis.
+     * Inserts one lateral waypoint per run of consecutive crossed segments. The direction is the
+     * chord's own lateral component, so the detour is a function of the geometry it avoids rather
+     * than of a world axis.
+     *
+     * A run is replaced as a whole: the samples inside the surface and the two entry/exit stations
+     * are construction points the waypoint supersedes, and a point on the surface is a
+     * zero-clearance point the predicate refuses at every detour distance — keeping one would turn a
+     * clearable route into a pass-cap failure.
      */
     private fun insertDetours(
         union: List<WrapSurface>,
@@ -162,88 +189,48 @@ class MusclePathSolver(
         detourScale: Double,
         profile: RadiusProfile
     ): Int {
+        if (!freezeBlockedPairs(union, side, pose, frames, profile)) return 0
+
         var inserted = 0
         var write = 0
-        smoothed.fill(0.0)
-        for (index in 0 until count) {
+        var index = 0
+        while (index < count) {
             copy(points, index, smoothed, write++)
-            if (index == count - 1) continue
+            if (index >= count - 1) break
 
-            var pushed = false
-            for (obstacleIndex in union.indices) {
-                obstacle.load(union[obstacleIndex], side, pose, frames, attachmentScale)
-                obstacle.testSegment(
-                    points[index * 3], points[index * 3 + 1], points[index * 3 + 2],
-                    points[(index + 1) * 3], points[(index + 1) * 3 + 1], points[(index + 1) * 3 + 2],
-                    index.toDouble() / (count - 1), (index + 1).toDouble() / (count - 1),
-                    profile, validator.margin, verdict
-                )
-                if (verdict.outcome == StageOutcome.CLEAR) continue
-                if (write + 1 >= MAX_POINTS) break
-
-                val ax = points[index * 3]
-                val ay = points[index * 3 + 1]
-                val az = points[index * 3 + 2]
-                val dx = points[(index + 1) * 3] - ax
-                val dy = points[(index + 1) * 3 + 1] - ay
-                val dz = points[(index + 1) * 3 + 2] - az
-                val length = sqrt(dx * dx + dy * dy + dz * dz)
-                if (!(length > 0.0)) continue
-                val dxn = dx / length
-                val dyn = dy / length
-                val dzn = dz / length
-
-                // §7.4.5: the lateral component of the chord offset, or the axis least aligned with the
-                // chord — chosen in the obstacle's own frame, because world axes assume Rw = I.
-                val mx = 0.5 * (ax + points[(index + 1) * 3]) - obstacle.centre[0]
-                val my = 0.5 * (ay + points[(index + 1) * 3 + 1]) - obstacle.centre[1]
-                val mz = 0.5 * (az + points[(index + 1) * 3 + 2]) - obstacle.centre[2]
-                val along = mx * dxn + my * dyn + mz * dzn
-                val ux = mx - along * dxn
-                val uy = my - along * dyn
-                val uz = mz - along * dzn
-                val uLength = sqrt(ux * ux + uy * uy + uz * uz)
-
-                var lx = 0.0
-                var ly = 0.0
-                var lz = 0.0
-                if (uLength > MIN_LATERAL) {
-                    lx = ux / uLength; ly = uy / uLength; lz = uz / uLength
-                } else {
-                    // Chord direction in local axes, then the least-aligned local axis, rotated back.
-                    val tx = obstacle.axes[0] * dxn + obstacle.axes[1] * dyn + obstacle.axes[2] * dzn
-                    val ty = obstacle.axes[3] * dxn + obstacle.axes[4] * dyn + obstacle.axes[5] * dzn
-                    val tz = obstacle.axes[6] * dxn + obstacle.axes[7] * dyn + obstacle.axes[8] * dzn
-                    val ax0 = abs(tx); val ay0 = abs(ty); val az0 = abs(tz)
-                    val chooseX = ax0 <= ay0 && ax0 <= az0
-                    val chooseY = !chooseX && ay0 <= az0
-                    val ox = if (chooseX) 1.0 else 0.0
-                    val oy = if (chooseY) 1.0 else 0.0
-                    val oz = if (chooseX || chooseY) 0.0 else 1.0
-                    lx = obstacle.axes[0] * ox + obstacle.axes[3] * oy + obstacle.axes[6] * oz
-                    ly = obstacle.axes[1] * ox + obstacle.axes[4] * oy + obstacle.axes[7] * oz
-                    lz = obstacle.axes[2] * ox + obstacle.axes[5] * oy + obstacle.axes[8] * oz
-                }
-
-                // d_1 = h(l̂_d) + e, with h the support function of the uninflated ellipsoid.
-                val hx = obstacle.axes[0] * lx + obstacle.axes[1] * ly + obstacle.axes[2] * lz
-                val hy = obstacle.axes[3] * lx + obstacle.axes[4] * ly + obstacle.axes[5] * lz
-                val hz = obstacle.axes[6] * lx + obstacle.axes[7] * ly + obstacle.axes[8] * lz
-                val rx = obstacle.radii[0] * hx
-                val ry = obstacle.radii[1] * hy
-                val rz = obstacle.radii[2] * hz
-                val support = sqrt(rx * rx + ry * ry + rz * rz)
-                val distance = (support + validator.margin) * detourScale
-
-                smoothed[write * 3] = obstacle.centre[0] + lx * distance
-                smoothed[write * 3 + 1] = obstacle.centre[1] + ly * distance
-                smoothed[write * 3 + 2] = obstacle.centre[2] + lz * distance
-                write++
-                inserted++
-                pushed = true
-                break
+            val blocker = blockedBy[index]
+            if (blocker == NO_INDEX) {
+                index++
+                continue
             }
-            if (pushed) continue
+            var end = index
+            while (end + 1 < count - 1 && blockedBy[end + 1] == blocker) end++
+
+            val added = if (retainConstructionPoints) 3 else 1
+            if (write + (count - index) + added > MAX_POINTS) {
+                // No room for a waypoint: the run survives as it is and the next pass sees it again.
+                for (interior in index + 1..end) copy(points, interior, smoothed, write++)
+                index = end + 1
+                continue
+            }
+
+            obstacle.load(union[blocker], side, pose, frames, attachmentScale)
+            if (retainConstructionPoints) {
+                lerp(index, entryStations[index], write)
+                write++
+            }
+            if (!placeWaypoint(index, end + 1, detourScale, write)) {
+                for (interior in index + 1..end) copy(points, interior, smoothed, write++)
+                index = end + 1
+                continue
+            }
+            write++
+            inserted++
+            if (retainConstructionPoints) {
+                lerp(end, exitStations[end], write)
+                write++
+            }
+            index = end + 1
         }
         if (inserted > 0) {
             System.arraycopy(smoothed, 0, points, 0, write * 3)
@@ -251,6 +238,119 @@ class MusclePathSolver(
         }
         return inserted
     }
+
+    /**
+     * Freezes the `(segment, obstacle)` pairs to act on this pass, against the pass's input polyline:
+     * the first obstacle in union order that does not accept a segment owns it. Segments created by
+     * this pass are first tested by the next one.
+     */
+    private fun freezeBlockedPairs(
+        union: List<WrapSurface>,
+        side: MuscleSide,
+        pose: SkeletonPose,
+        frames: SegmentFrameSet,
+        profile: RadiusProfile
+    ): Boolean {
+        var blocked = false
+        for (segment in 0 until count - 1) {
+            blockedBy[segment] = NO_INDEX
+            for (obstacleIndex in union.indices) {
+                obstacle.load(union[obstacleIndex], side, pose, frames, attachmentScale)
+                obstacle.testSegment(
+                    points[segment * 3], points[segment * 3 + 1], points[segment * 3 + 2],
+                    points[(segment + 1) * 3], points[(segment + 1) * 3 + 1], points[(segment + 1) * 3 + 2],
+                    segment.toDouble() / (count - 1), (segment + 1).toDouble() / (count - 1),
+                    profile, validator.margin, verdict
+                )
+                if (verdict.outcome == StageOutcome.CLEAR) continue
+                blockedBy[segment] = obstacleIndex
+                entryStations[segment] = clampStation(verdict.rootLo, 0.0)
+                exitStations[segment] = clampStation(verdict.rootHi, 1.0)
+                blocked = true
+                break
+            }
+        }
+        return blocked
+    }
+
+    /**
+     * Places one waypoint on the chord `from → to`, one numeric margin outside the support plane in
+     * the chosen lateral direction: `d = (h(l̂_d) + e) · detourScale`.
+     *
+     * False when the chord has no direction, so a degenerate segment cannot invent one.
+     */
+    private fun placeWaypoint(from: Int, to: Int, detourScale: Double, at: Int): Boolean {
+        val ax = points[from * 3]
+        val ay = points[from * 3 + 1]
+        val az = points[from * 3 + 2]
+        val dx = points[to * 3] - ax
+        val dy = points[to * 3 + 1] - ay
+        val dz = points[to * 3 + 2] - az
+        val length = sqrt(dx * dx + dy * dy + dz * dz)
+        if (!(length > 0.0)) return false
+        val dxn = dx / length
+        val dyn = dy / length
+        val dzn = dz / length
+
+        // The lateral component of the chord offset, or the local axis least aligned with the chord —
+        // chosen in the obstacle's own frame, because world axes assume Rw = I.
+        val mx = 0.5 * (ax + points[to * 3]) - obstacle.centre[0]
+        val my = 0.5 * (ay + points[to * 3 + 1]) - obstacle.centre[1]
+        val mz = 0.5 * (az + points[to * 3 + 2]) - obstacle.centre[2]
+        val along = mx * dxn + my * dyn + mz * dzn
+        val ux = mx - along * dxn
+        val uy = my - along * dyn
+        val uz = mz - along * dzn
+        val uLength = sqrt(ux * ux + uy * uy + uz * uz)
+
+        var lx: Double
+        var ly: Double
+        var lz: Double
+        if (uLength > MIN_LATERAL_METRES * attachmentScale) {
+            lx = ux / uLength; ly = uy / uLength; lz = uz / uLength
+        } else {
+            // Chord direction in local axes, then the least-aligned local axis, rotated back.
+            val tx = obstacle.axes[0] * dxn + obstacle.axes[1] * dyn + obstacle.axes[2] * dzn
+            val ty = obstacle.axes[3] * dxn + obstacle.axes[4] * dyn + obstacle.axes[5] * dzn
+            val tz = obstacle.axes[6] * dxn + obstacle.axes[7] * dyn + obstacle.axes[8] * dzn
+            val ax0 = abs(tx); val ay0 = abs(ty); val az0 = abs(tz)
+            val chooseX = ax0 <= ay0 && ax0 <= az0
+            val chooseY = !chooseX && ay0 <= az0
+            val ox = if (chooseX) 1.0 else 0.0
+            val oy = if (chooseY) 1.0 else 0.0
+            val oz = if (chooseX || chooseY) 0.0 else 1.0
+            lx = obstacle.axes[0] * ox + obstacle.axes[3] * oy + obstacle.axes[6] * oz
+            ly = obstacle.axes[1] * ox + obstacle.axes[4] * oy + obstacle.axes[7] * oz
+            lz = obstacle.axes[2] * ox + obstacle.axes[5] * oy + obstacle.axes[8] * oz
+        }
+
+        // h(l̂_d) is the support function of the uninflated ellipsoid, so the margin is added once.
+        val hx = obstacle.axes[0] * lx + obstacle.axes[1] * ly + obstacle.axes[2] * lz
+        val hy = obstacle.axes[3] * lx + obstacle.axes[4] * ly + obstacle.axes[5] * lz
+        val hz = obstacle.axes[6] * lx + obstacle.axes[7] * ly + obstacle.axes[8] * lz
+        val rx = obstacle.radii[0] * hx
+        val ry = obstacle.radii[1] * hy
+        val rz = obstacle.radii[2] * hz
+        val support = sqrt(rx * rx + ry * ry + rz * rz)
+        val distance = (support + validator.margin) * detourScale
+
+        smoothed[at * 3] = obstacle.centre[0] + lx * distance
+        smoothed[at * 3 + 1] = obstacle.centre[1] + ly * distance
+        smoothed[at * 3 + 2] = obstacle.centre[2] + lz * distance
+        return true
+    }
+
+    /** The point at [station] along segment [segment], written to [at]. */
+    private fun lerp(segment: Int, station: Double, at: Int) {
+        for (component in 0..2) {
+            val from = points[segment * 3 + component]
+            val to = points[(segment + 1) * 3 + component]
+            smoothed[at * 3 + component] = from + (to - from) * station
+        }
+    }
+
+    private fun clampStation(station: Double, fallback: Double): Double =
+        if (station.isNaN()) fallback else station.coerceIn(0.0, 1.0)
 
     /** One Catmull-Rom pass at quarter blend; never run after the final check. */
     private fun smooth() {
@@ -356,10 +456,8 @@ class MusclePathSolver(
 
     private var turnIndex = NO_INDEX
 
-    /**
-     * The largest direction change between consecutive segments. A zero-length pair contributes
-     * nothing: it has no direction to turn.
-     */
+    /** The largest direction change between consecutive segments. A zero-length pair contributes
+     * nothing: it has no direction to turn. */
     private fun worstTurn(): Double {
         var worst = 0.0
         turnIndex = NO_INDEX
@@ -400,12 +498,19 @@ class MusclePathSolver(
 
     private fun unionOf(muscle: MuscleDefinition): List<WrapSurface> = unions.getValue(muscle.id)
 
-    private fun writePath(frame: AnatomyFrame, slot: Int, profile: RadiusProfile) {
-        frame.clear()
+    private fun writePath(frame: AnatomyFrame, slot: Int, profile: RadiusProfile): Boolean {
+        // Only this slot restarts: the frame's other slots, its rest lengths and its mask belong to
+        // the solve, and a head that clears must not erase them.
+        frame.pointCounts[slot] = 0
+        var written = 0
         for (index in 0 until count) {
-            frame.writePoint(slot, points[index * 3].toFloat(), points[index * 3 + 1].toFloat(), points[index * 3 + 2].toFloat())
+            if (!frame.writePoint(slot, points[index * 3].toFloat(), points[index * 3 + 1].toFloat(), points[index * 3 + 2].toFloat())) {
+                return false
+            }
+            written++
         }
         frame.modelledPathLengths[slot] = arcLength().toFloat()
+        return written == count
     }
 
     private fun arcLength(): Double {
@@ -450,6 +555,6 @@ class MusclePathSolver(
         const val SMOOTH_BLEND = 0.25
 
         /** Below this lateral offset the chord runs through the centre and the fallback axis decides. */
-        const val MIN_LATERAL = 1e-6
+        const val MIN_LATERAL_METRES = 1e-6
     }
 }
