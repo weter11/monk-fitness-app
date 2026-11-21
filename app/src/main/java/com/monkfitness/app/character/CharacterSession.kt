@@ -88,6 +88,7 @@ class CharacterSession(
     private var muscleMesh: ProceduralMuscleMesh? = null
     private var sceneFrame: CharacterSceneFrame? = null
     private var morphWeights: MorphWeightSet? = null
+    private var anatomyError: String? = null
     private var muscleTriangles = 0
     private var muscleHeadsRefused = 0
     private var muscleInstancesDrawn = 0
@@ -238,6 +239,16 @@ class CharacterSession(
      */
     private fun prepareAnatomy() {
         if (!CharacterFeature.isEnabled) return
+        // The body is the character and the tubes are an overlay: a broken anatomy asset must leave the
+        // skinned figure on screen and report itself, not take the whole load down with it.
+        try {
+            prepareAnatomyUnchecked()
+        } catch (error: Throwable) {
+            anatomyError = "${error.javaClass.simpleName}: ${error.message.orEmpty()}".trim()
+        }
+    }
+
+    private fun prepareAnatomyUnchecked() {
         val anatomy: AnatomyDefinition = AnatomyDefinitionLoader.load(
             context.assets.open(CharacterFeature.ANATOMY_PATH).use { it.readText() }
         )
@@ -401,7 +412,7 @@ class CharacterSession(
             frameTimeP95Ms = frameTimeP95Nanos() / 1_000_000f,
             hasSurface = swapChain != null,
             running = running,
-            error = error,
+            error = listOfNotNull(error, anatomyError).joinToString("; ").ifEmpty { null },
             muscleHeads = anatomyFrame?.headCount ?: 0,
             muscleHeadsRefused = muscleHeadsRefused,
             muscleInstancesDrawn = muscleInstancesDrawn,

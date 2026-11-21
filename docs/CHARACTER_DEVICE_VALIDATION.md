@@ -459,3 +459,187 @@ Requires a physical device (not executed, not claimed):
 
 - anything in the checklist above: rendering, driver behaviour, backend actually selected per
   device, surface/lifecycle recovery, frame time, memory, thermal behaviour.
+
+## 7. Stage 2 — anatomy kernel and integration (S2-1 … S2-9)
+
+Stage 2 adds a second consumer of the published pose: a pure-Kotlin anatomy kernel that solves each
+muscle's path in the pose, and a procedural tube layer that turns those paths into geometry. Neither
+touches the skinned body: `CharacterFrameProducer` and `PoseRetargeter` are unchanged, and the solve
+sits between `frameProducer.next()` and `mapper.boneMatrices(...)` inside `CharacterSession.render()`
+behind `CharacterFeature.isEnabled`.
+
+### 7.1 What landed
+
+| Unit | Delivered | Evidence |
+| --- | --- | --- |
+| S2-1 | `anatomy_v1.json`, `AnatomyDefinition`, `AnatomyDefinitionLoader`, L3 validation | `AnatomyDefinitionLoaderTest`, `AnatomyDefinitionTest` |
+| S2-2 | `AnatomyFrame` carrier and layout contract | `AnatomyFrameLayoutTest`, `AnatomySolveAllocationTest` |
+| S2-3 | attachment resolution and the control polyline | `MuscleAttachmentTest` |
+| S2-4 | obstacle predicate and clearance state machine | `MusclePathObstacleFixtureTest`, `MusclePathSolverFixturesTest` |
+| S2-5 | pass loop, smoothing, termination | `MusclePathSolverTest`, `MusclePathGeometryTest`, `MusclePathDeterminismTest` |
+| S2-6 | rest lengths, reference lengths, renderability mask | `MuscleRestLengthTest`, `MuscleRenderabilityTest` |
+| S2-7 | `CharacterSceneFrame`, `DynamicGeometrySlot`, `MorphWeightSet`, `CharacterLayer`, `MuscleSelection`, `CharacterLayerController`, `ProceduralMuscleMesh` | `ProceduralTubeBudgetTest`, `SceneFrameHandoffTest`, `MuscleGeometryOwnershipTest` |
+| S2-8 | the solve wired into the render loop, the debug overlay, diagnostics fields, the tuned placeholders, the §7.4.2 L3 check | `LayerToggleTest`, `AnatomyDefinitionCheckBindTest` |
+| S2-9 | this record | — |
+
+The shipped library is 8 muscles, 18 head-slots per side pair and 16 renderable instances, all
+`SUPERFICIAL`. The `DEEP` layer is declared and empty: its chip in the debug overlay is real and
+removing it costs no geometry. That is a fact about the M1 library, not a broken toggle.
+
+### 7.2 Rulings on record
+
+**7.2.1 Curvature bound stays one waypoint per run, at 2.6 rad.** The Stage-2 default
+`thetaMaxRadians` is `2.6` rad (~150°) in `AnatomyDefinition`, in the loader's fallback and in the
+shipped `anatomy_v1.json`. The reason is measured, not stylistic: a single-waypoint detour around an
+ellipsoid folds sharply at its apex — 59.4° between two samples one declared spacing apart in the
+`single_obstacle` fixture — so a 45° bound refuses every such run (`CURVATURE_VIOLATION`, `PASS_CAP`)
+instead of catching a foldback. Multi-waypoint arcs were rejected for Stage 2 because they would move
+the budget and the fixture rows before the shallow layer is on screen at all.
+`MusclePathSolverFixturesTest.theOneWaypointApexIsRefusedAtFortyFiveDegrees` keeps measuring the
+refusal at 45° explicitly, so the decision is a bound this version chose rather than a behaviour it
+lost.
+
+**7.2.2 `REST_LENGTH_INVALID` was expected, and is now closed by geometry.** Before tuning, the bind
+stance solved 2 of 18 heads (`gluteus_maximus P`, `rectus_femoris P`); 16 were `REST_LENGTH_INVALID`
+because their reference path could not be built at all. Two distinct causes, both in the placeholder
+data:
+
+- Eight heads were refused *before the first pass*: `smallestDetour` is the largest radius of the
+  nearest obstacle in that head's union — the global `ribcage` at 140 mm — and every muscle's
+  `corridorMetres` was 100–120 mm, so `firstDetour > corridor` stopped the search every time.
+- Six heads were refused inside the search against a surface that already contained one of their own
+  attachments. `rectus_abdominis` sat 0.42–0.67 of the way to the `ribcage` centre, `gluteus_maximus
+  A` 0.31 to `hip_capsule`, `biceps_femoris` 1.13 to `knee_capsule`. A point that starts inside an
+  obstacle cannot be cleared by any detour, so no corridor was ever going to fix them.
+
+### 7.3 Fixture ledger — the placeholder tuning
+
+Only the wrap surfaces and three corridors moved. Every attachment is still `UNRECORDED`, and the
+`frameUnverified` list is unchanged at 20 rows.
+
+| Parameter | Before | After | Why |
+| --- | --- | --- | --- |
+| `hip_capsule.radiiMetres` | 0.10, 0.09, 0.07 | 0.016, 0.014, 0.012 | its own attachments sat inside it; 24 mm max radius still forces a detour |
+| `ribcage.radiiMetres` | 0.12, 0.14, 0.10 | 0.040, 0.045, 0.032 | the thoracic insertions were inside it; the surface now sits between the chord and them |
+| `knee_capsule.radiiMetres` | 0.07, 0.06, 0.05 | 0.063, 0.054, 0.045 | `biceps_femoris` grazed it at 1.13; 63 mm max radius keeps the detour and the clearance |
+| `biceps_femoris.corridorMetres` | 0.12 | 0.18 | the detour needs one escalation past the obstacle's own radius |
+| `gluteus_maximus.corridorMetres` | 0.12 | 0.18 | same, plus an 18 mm path against a 24 mm tube |
+| `rectus_femoris.corridorMetres` | 0.12 | 0.18 | same |
+| `thetaMaxRadians` | absent (45° default) | 2.6 | §7.2.1 |
+| `shoulder_girdle` | 0.06, 0.05, 0.05 | unchanged | declared, named by no muscle, not global — it is in no union |
+
+The tuned values are a corridor and a capsule, not anatomy. The `gluteus_maximus` A head is the one to
+watch: its two placeholder attachments are 18 mm apart, so a detour around a 24 mm-radius surface has
+an apex close to the curvature bound. Measured over the sweep it holds, and the neighbouring radii
+that fail are recorded in §7.4.
+
+### 7.4 Verification executed in this environment
+
+Not the full suite — the targeted anatomy and character tests, plus a JVM harness that drives the real
+definition through the real solver. Both were compiled with `kotlinc` against a domain slice
+(`anatomy/`, `animation/`, `poses/`, the rig-free `character/` files) because this sandbox has no
+Android SDK or Gradle; CI remains the verifier for the Gradle build.
+
+```
+$ java -cp <slice> com.monkfitness.app.anatomy.AnatomyProbe src/main/assets/anatomy/anatomy_v1.json
+== definition check ==
+  clean=true issues=[]
+  frameUnverified=20 [...]
+  thetaMaxRadians=2.6 heads=18 instances=16
+== bind stance ==
+  heads valid=18 invalid=0  instances renderable=16/16
+== squat_standard @ 0.5 ==
+  heads valid=18 invalid=0  instances renderable=16/16
+== pushup_standard @ 0.5 ==
+  heads valid=18 invalid=0  instances renderable=16/16
+
+$ java -cp <slice> com.monkfitness.app.anatomy.SweepProbe src/main/assets/anatomy/anatomy_v1.json
+swept 36 frames, 648 head-solves, 0 distinct refusals
+
+$ java -cp <slice> org.junit.runner.JUnitCore <22 anatomy test classes>
+OK (190 tests)
+
+$ java -cp <slice> org.junit.runner.JUnitCore \
+    ProceduralTubeBudgetTest SceneFrameHandoffTest MuscleGeometryOwnershipTest LayerToggleTest
+OK (24 tests)
+```
+
+The sweep is nine stations (`0, 0.125 … 0.875, 0.999`), both sides, `squat_standard` and
+`pushup_standard`. Rest lengths at the reference stance, in engine units converted to millimetres:
+
+| Head | Rest length | Head | Rest length |
+| --- | --- | --- | --- |
+| `rectus_abdominis` A/P | 97.8 mm | `biceps_femoris` long A/P | 114.4 mm |
+| `external_oblique` A/P | 95.3 mm | `biceps_femoris` short A/P | 80.9 mm |
+| `erector_spinae` A/P | 97.8 mm | `rectus_femoris` A/P | 104.3 mm |
+| `latissimus_dorsi` A/P | 42.3 mm | `gluteus_medius` A/P | 20.8 mm |
+| `gluteus_maximus` A | 24.1 mm | `gluteus_maximus` P | 17.9 mm |
+
+The capsule window is narrow and is recorded as such: with the knee and corridors as shipped,
+`hip_capsule` first radii of 0.014/0.018/0.021/0.022 m each produced a refusal at
+`squat_standard` (a `CURVATURE_VIOLATION` at one station, `REST_LENGTH_INVALID` at 0.022), while
+0.015–0.017 and 0.019–0.020 solved the whole sweep. 0.016 is mid-window. A real attachment set is
+expected to widen it; a placeholder one should not be read as a physical limit.
+
+Test changes forced by the tune, both recorded rather than worked around:
+
+- `MuscleRestLengthTest.theShippedDefinitionRefusesMostHeadsAtTheReferenceStanceAndSaysWhy` pinned the
+  pre-tuning behaviour. It is now
+  `theShippedDefinitionPublishesAReferenceLengthForEveryHead`, which asserts the opposite property —
+  every head solves, its rest length is finite and positive, and the modelled length equals it at the
+  reference stance.
+- `SegmentFramePurityTest.noProductionConsumerReadsTheSegmentFramesYet` asserted that *no* production
+  file consumed the derivation. S2-8 wires exactly one consumer, on purpose, so the guard was deleted
+  rather than widened; the reverse fence (`AnatomyPurityTest`) still holds anatomy to pure Kotlin.
+
+### 7.5 §7.4.2 L3 — the bind-stance obstacle check
+
+`AnatomyDefinitionCheck.bindStance(definition, skeleton, bindPose, attachmentScale)` reports one row
+per `(muscle, head, side, obstacle)` whose authored attachment polyline comes within an ellipsoid-
+normalized distance of 1.0 — i.e. an attachment inside a surface that head must clear. It is a
+*definition* row, not a per-frame refusal: the fix is the surface or the attachment, and reporting it
+60 times a second would hide that.
+
+| Property | Value |
+| --- | --- |
+| Rows on the shipped definition | 0 |
+| Rows on the pre-tuning definition | 6 heads × 1 row |
+| Rows on a definition with a sphere centred on one attachment | one per head whose union contains it |
+| `AnatomyDefinitionCheck.check(definition)` | unchanged: structural rows only |
+
+### 7.6 What is not wired: the tubes are tessellated, not drawn
+
+`ProceduralMuscleMesh` fills its `DynamicGeometrySlot` with 13,824 triangles every frame the solve
+runs, and the diagnostics report that count, but no Filament renderable consumes the slot yet. Drawing
+it needs a material package (`.filamat`) bound to a runtime `VertexBuffer`/`IndexBuffer`, and this
+repository ships no materials: the character's come from the GLB, and `matc` is not available in this
+environment. Binding a gltfio PBR material to a hand-built tube buffer would work only if its declared
+vertex attributes (position, tangent quaternion, uv0) matched, and a mismatch is a driver-level crash
+in a debug build — not something to guess at.
+
+So the verifiable claim for S2-8 is: **every head solves at the reference stance, in squat and in
+push-up, and the tube geometry is produced at the declared budget and follows the pose.** The GPU
+binding is the next increment, and it is the only thing standing between this and the ruling's
+"render" wording. It is listed here as open, not as done.
+
+### 7.7 Device checklist rows — not executed
+
+Nothing in this section was run on hardware. These are the rows a device build of this branch would
+have to add to §3; they are recorded so the unexecuted set is explicit rather than implied.
+
+| Row | What to look for | Expected |
+| --- | --- | --- |
+| Debug overlay present | `-Pmonk.filamentCharacter=true` + debug activity: `tubes` and layer chips at top-left | overlay visible, `tubes` off by default |
+| Solve built | overlay header | `18 heads · 0 refused · 16 drawn · 0 triangles` with tubes off |
+| Tubes on | tap `tubes` | triangle count becomes `13824`; nothing else on screen changes (no drawable yet, §7.6) |
+| Layer toggle | tap `superficial` | `0 drawn · 0 triangles`; tap again restores `16 · 13824` |
+| Deep toggle | tap `deep` | unchanged — the M1 library has no deep muscle |
+| Readout at rest | squat at the start of the rep | every head within ±0.1 % of the rest stance |
+| Readout mid-rep | squat at the bottom | `rectus_femoris` and `biceps_femoris` positive; `rectus_abdominis` near zero |
+| Refusal budget | squat and push-up, whole rep | `0 refused` on every frame |
+| Frame time | p95 before and after the solve | no more than 1 ms added on a mid-range device |
+| Lifecycle | background / foreground with tubes on | geometry and toggles survive; no crash |
+
+Frame time and memory are the two rows a JVM harness cannot say anything about: the solve is
+allocation-free after construction (`AnatomySolveAllocationTest`) and the mesh writes into
+pre-allocated arrays (`MuscleGeometryOwnershipTest`), but neither is a measurement of a phone.
