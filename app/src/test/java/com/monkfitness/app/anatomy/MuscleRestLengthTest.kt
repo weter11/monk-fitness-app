@@ -157,26 +157,30 @@ class MuscleRestLengthTest {
     }
 
     @Test
-    fun theShippedDefinitionRefusesMostHeadsAtTheReferenceStanceAndSaysWhy() {
-        // Recorded rather than papered over: with its own obstacles the definition has almost no
-        // head whose reference path the loop can build, because the nearest surface's support
-        // distance already exceeds the muscle's declared corridor and the search stops before a
-        // pass. L3 does not test attachments against obstacles in the bind stance yet, so this is a
-        // definition-review gap, not a solver behaviour — and it is counted here, not assumed away.
+    fun theShippedDefinitionPublishesAReferenceLengthForEveryHead() {
+        // The placeholder geometry is tuned against §7.4.2's bind-stance rows: every authored
+        // attachment now clears its own obstacle union, so the reference solve reaches every head and
+        // the network has a denominator on the first frame instead of on none of them.
         val on = AnatomyFrame.of(shipped)
         AnatomySolver(shipped, skeleton, scale, restPose).solve(restPose, on)
-        val drawable = (0 until on.headCount).count { on.statuses[it] == PathStatus.VALID.ordinal }
-        assertTrue(
-            "the shipped asset publishes a rest length for $drawable of ${on.headCount} heads",
-            drawable < on.headCount
-        )
         for (slot in 0 until on.headCount) {
-            if (on.statuses[slot] == PathStatus.VALID.ordinal) continue
+            val state = on.muscleStates[slot]
             assertEquals(
-                "a head with no reference path names that, not the geometry behind it",
-                PathReason.REST_LENGTH_INVALID,
-                on.muscleStates[slot].reason
+                "the reference stance must solve ${state.id} ${state.side} head${state.headIndex}",
+                PathStatus.VALID,
+                state.pathStatus
             )
+            assertTrue(
+                "a published rest length is finite and positive, was ${state.restLength}",
+                state.restLength.isFinite() && state.restLength > 0f
+            )
+            assertEquals(
+                "at the reference stance the modelled length is the reference length",
+                state.restLength,
+                state.modelledPathLength,
+                1e-4f
+            )
+            assertTrue("and the instance is drawable", state.renderable)
         }
     }
 

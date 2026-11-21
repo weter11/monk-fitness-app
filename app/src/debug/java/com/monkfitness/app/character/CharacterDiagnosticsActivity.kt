@@ -95,6 +95,7 @@ private fun DiagnosticsScreen(request: BackendRequest) {
             modifier = Modifier.fillMaxSize(),
             backendRequest = request,
             morphology = morphology,
+            debugLayers = true,
             onSession = { session = it },
             onUnavailable = { reason -> status = "unavailable: $reason" }
         )

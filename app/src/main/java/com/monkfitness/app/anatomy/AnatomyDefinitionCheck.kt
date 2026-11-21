@@ -1,5 +1,8 @@
 package com.monkfitness.app.anatomy
 
+import com.monkfitness.app.animation.SkeletonDefinition
+import com.monkfitness.app.animation.SkeletonPose
+
 /** What a definition check refused, and at which subject. */
 enum class DefinitionIssueKind {
     DUPLICATE_ID,
@@ -16,7 +19,8 @@ enum class DefinitionIssueKind {
     EXEMPTION_SOURCE,
     NON_POSITIVE_DIMENSION,
     SAMPLING,
-    EPSILON
+    EPSILON,
+    ATTACHMENT_INSIDE_OBSTACLE
 }
 
 data class DefinitionIssue(val kind: DefinitionIssueKind, val subject: String, val detail: String)
@@ -38,7 +42,16 @@ class DefinitionReport(val issues: List<DefinitionIssue>, val frameUnverified: L
  */
 object AnatomyDefinitionCheck {
 
-    fun check(definition: AnatomyDefinition): DefinitionReport {
+    fun check(definition: AnatomyDefinition): DefinitionReport = check(definition, emptyList())
+
+    /**
+     * The static verdict plus §7.4.2's L3 bind-stance obstacle check.
+     *
+     * [bindStance] is a separate input because it is the only check that needs a pose: an attachment
+     * sitting inside its own union's obstacle cannot be cleared by any detour, so the definition is
+     * what has to change, and a per-frame refusal would report the same defect sixty times a second.
+     */
+    fun check(definition: AnatomyDefinition, bindStance: List<DefinitionIssue>): DefinitionReport {
         val issues = mutableListOf<DefinitionIssue>()
         val unverified = mutableListOf<String>()
 
@@ -126,8 +139,79 @@ object AnatomyDefinitionCheck {
             }
         }
 
-        return DefinitionReport(issues, unverified)
+        return DefinitionReport(issues + bindStance, unverified)
     }
+
+    /**
+     * §7.4.2 L3 at the bind stance: every authored attachment of every head against every obstacle in
+     * that head's union, in ellipsoid-normalized distance.
+     *
+     * A normalized distance below one is inside the obstacle. The check reports the worst station per
+     * head and obstacle rather than each one, because the fix is the surface or the attachment, and
+     * the reviewer needs the number that has to move past one.
+     */
+    fun bindStance(
+        definition: AnatomyDefinition,
+        skeleton: SkeletonDefinition,
+        bindPose: SkeletonPose,
+        attachmentScale: Double
+    ): List<DefinitionIssue> {
+        val frames = SegmentFrames(skeleton)
+        val set = SegmentFrameSet()
+        frames.derive(bindPose, set)
+        val builder = MusclePathBuilder(definition, attachmentScale.toFloat())
+        val obstacle = ObstacleGeometry()
+        val control = DoubleArray(MAX_CONTROL_POINTS * 3)
+        val issues = mutableListOf<DefinitionIssue>()
+
+        for (muscle in definition.muscles) {
+            val union = definition.union(muscle)
+            if (union.isEmpty()) continue
+            for (side in MuscleSide.entries) {
+                for ((headIndex, head) in muscle.heads.withIndex()) {
+                    val count = builder.resolveControl(head, side, bindPose, set, control)
+                    if (count < 2) continue
+                    for (surface in union) {
+                        obstacle.load(surface, side, bindPose, set, attachmentScale)
+                        if (obstacle.nonFinite || obstacle.degenerate) continue
+                        var worst = Double.MAX_VALUE
+                        for (station in 0 until count) {
+                            val distance = normalized(
+                                control[station * 3], control[station * 3 + 1], control[station * 3 + 2], obstacle
+                            )
+                            if (distance < worst) worst = distance
+                        }
+                        if (worst >= INSIDE_OBSTACLE) continue
+                        issues += DefinitionIssue(
+                            DefinitionIssueKind.ATTACHMENT_INSIDE_OBSTACLE,
+                            "${muscle.id}/head$headIndex/${side}",
+                            "an attachment sits %.2f of the way to \"%s\"'s centre, and no detour can "
+                                .format(worst, surface.id) + "clear a point that starts inside the obstacle"
+                        )
+                    }
+                }
+            }
+        }
+        return issues
+    }
+
+    /** Ellipsoid-normalized distance: `< 1` inside, `1` on the surface, `> 1` outside. */
+    private fun normalized(x: Double, y: Double, z: Double, obstacle: ObstacleGeometry): Double {
+        val dx = x - obstacle.centre[0]
+        val dy = y - obstacle.centre[1]
+        val dz = z - obstacle.centre[2]
+        var sum = 0.0
+        for (axis in 0 until 3) {
+            val projection = dx * obstacle.axes[axis * 3] + dy * obstacle.axes[axis * 3 + 1] + dz * obstacle.axes[axis * 3 + 2]
+            val radius = obstacle.radii[axis]
+            sum += (projection / radius) * (projection / radius)
+        }
+        return kotlin.math.sqrt(sum)
+    }
+
+    private const val MAX_CONTROL_POINTS = 64
+
+    private const val INSIDE_OBSTACLE = 1.0
 
     private fun tendonIssues(muscle: MuscleDefinition): List<DefinitionIssue> {
         val tendon = muscle.tendon

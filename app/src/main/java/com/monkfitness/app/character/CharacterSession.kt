@@ -19,9 +19,16 @@ import com.google.android.filament.gltfio.AssetLoader
 import com.google.android.filament.gltfio.FilamentAsset
 import com.google.android.filament.gltfio.ResourceLoader
 import com.google.android.filament.gltfio.UbershaderProvider
+import com.monkfitness.app.anatomy.AnatomyDefinition
+import com.monkfitness.app.anatomy.AnatomyDefinitionLoader
+import com.monkfitness.app.anatomy.AnatomyFrame
+import com.monkfitness.app.anatomy.AnatomySolver
+import com.monkfitness.app.anatomy.PathStatus
 import com.monkfitness.app.animation.PoseBuilder
 import com.monkfitness.app.animation.SkeletonDefinition
 import com.monkfitness.app.animation.SkeletonPipeline
+import com.monkfitness.app.animation.SkeletonPose
+import com.monkfitness.app.animation.Vector3
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
 import java.nio.FloatBuffer
@@ -72,6 +79,18 @@ class CharacterSession(
 
     private var retargeter: PoseRetargeter? = null
     private var morphology = MorphologyPreset.NEUTRAL
+
+    /** The dev-only layer switchboard: toggled from the debug overlay, read by the diagnostics. */
+    val layers: CharacterLayerController = CharacterLayerController()
+
+    private var anatomySolver: AnatomySolver? = null
+    private var anatomyFrame: AnatomyFrame? = null
+    private var muscleMesh: ProceduralMuscleMesh? = null
+    private var sceneFrame: CharacterSceneFrame? = null
+    private var morphWeights: MorphWeightSet? = null
+    private var muscleTriangles = 0
+    private var muscleHeadsRefused = 0
+    private var muscleInstancesDrawn = 0
 
     private var destroyed = false
     private var lastFrameNanos = 0L
@@ -182,8 +201,10 @@ class CharacterSession(
             boneBuffer = ByteBuffer.allocateDirect(jointCount * 16 * 4)
                 .order(ByteOrder.nativeOrder()).asFloatBuffer()
             unitsPerMetre = X1Bind.unitsPerMetre(definition)
+            morphWeights = MorphWeightSet(morphTargetsByRenderable.values.maxOrNull() ?: 0)
 
             applyMorphology(morphology)
+            prepareAnatomy()
             null
         } catch (error: Throwable) {
             val message = "${error.javaClass.simpleName}: ${error.message.orEmpty()}".trim()
@@ -198,16 +219,72 @@ class CharacterSession(
     }
 
     private fun applyMorphology(preset: MorphologyPreset) {
+        val weights = morphWeights ?: return
         if (morphTargetsByRenderable.isEmpty()) return
-        val source = preset.weights
+        weights.apply(preset)
         morphTargetsByRenderable.forEach { (entity, count) ->
             if (count <= 0) return@forEach
             val renderable = renderableManager.getInstance(entity)
             if (renderable == 0) return@forEach
-            val weights = FloatArray(count)
-            for (i in 0 until minOf(count, source.size)) weights[i] = source[i]
-            renderableManager.setMorphWeights(renderable, weights, 0)
+            val buffer = FloatArray(count)
+            weights.copyInto(buffer)
+            renderableManager.setMorphWeights(renderable, buffer, 0)
         }
+    }
+
+    /**
+     * Builds the anatomy solve this session will run every frame — only when the character flag is on,
+     * because the rest solve is a one-off cost the 2D renderer must never pay.
+     */
+    private fun prepareAnatomy() {
+        if (!CharacterFeature.isEnabled) return
+        val anatomy: AnatomyDefinition = AnatomyDefinitionLoader.load(
+            context.assets.open(CharacterFeature.ANATOMY_PATH).use { it.readText() }
+        )
+        val bind = SkeletonPose()
+        for ((joint, position) in X1Bind.bindJoints(definition)) {
+            bind.setJoint(joint, Vector3(position.x, position.y, position.z))
+        }
+        // The rest stance the anatomy is measured against is the rig's own bind stance, so a muscle's
+        // reference length and the character's reference pose cannot drift apart.
+        val solver = AnatomySolver(anatomy, definition, unitsPerMetre.toDouble(), bind)
+        val frame = AnatomyFrame.of(anatomy)
+        val mesh = ProceduralMuscleMesh(anatomy, unitsPerMetre.toDouble())
+        anatomySolver = solver
+        anatomyFrame = frame
+        muscleMesh = mesh
+        sceneFrame = CharacterSceneFrame(
+            anatomy = frame,
+            morph = morphWeights ?: MorphWeightSet(0),
+            geometry = mesh.slot(),
+            selection = layers.selection
+        )
+    }
+
+    /**
+     * The anatomy solve, between the produced pose and the bone upload: the pose is read here and the
+     * result never reaches the renderer directly, because the tube geometry it fills is consumed by its
+     * own drawable rather than by the skinned body.
+     */
+    private fun solveMuscles(pose: SkeletonPose) {
+        if (!CharacterFeature.isEnabled) return
+        val solver = anatomySolver ?: return
+        val frame = anatomyFrame ?: return
+        val mesh = muscleMesh ?: return
+        val scene = sceneFrame ?: return
+
+        solver.solve(pose, frame)
+        scene.select(layers.selection)
+
+        var refused = 0
+        for (slot in 0 until frame.headCount) {
+            if (frame.statuses[slot] != PathStatus.VALID.ordinal) refused++
+        }
+        muscleHeadsRefused = refused
+        muscleInstancesDrawn = frame.renderable.count { it }
+
+        muscleTriangles = mesh.write(frame, scene.geometry, scene.selection)
+        scene.markBuilt(layers.revision)
     }
 
     private fun configureScene() {
@@ -324,8 +401,28 @@ class CharacterSession(
             frameTimeP95Ms = frameTimeP95Nanos() / 1_000_000f,
             hasSurface = swapChain != null,
             running = running,
-            error = error
+            error = error,
+            muscleHeads = anatomyFrame?.headCount ?: 0,
+            muscleHeadsRefused = muscleHeadsRefused,
+            muscleInstancesDrawn = muscleInstancesDrawn,
+            muscleTriangles = muscleTriangles,
+            muscleReadings = muscleReadings()
         ).also { lastDiagnostics = it }
+    }
+
+    private fun muscleReadings(): List<MuscleHeadReading> {
+        val frame = anatomyFrame ?: return emptyList()
+        val readings = ArrayList<MuscleHeadReading>(frame.headCount)
+        for (slot in 0 until frame.headCount) {
+            val state = frame.muscleStates[slot]
+            val label = state.headLabel.ifBlank { "head" + state.headIndex }
+            readings += MuscleHeadReading(
+                head = state.id + " " + state.side.name + " " + label,
+                relativePathLengthChange = state.relativePathLengthChange,
+                drawn = state.renderable
+            )
+        }
+        return readings
     }
 
     private fun render(frameTimeNanos: Long) {
@@ -335,6 +432,7 @@ class CharacterSession(
         val mapper = retargeter ?: return
 
         val pose = frameProducer.next()
+        solveMuscles(pose)
         mapper.boneMatrices(pose, unitsPerMetre, out = boneMatrices)
         boneBuffer.clear()
         boneBuffer.put(boneMatrices)

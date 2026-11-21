@@ -22,5 +22,21 @@ data class CharacterDiagnostics(
     val frameTimeP95Ms: Float,
     val hasSurface: Boolean,
     val running: Boolean,
-    val error: String?
+    val error: String?,
+    /** Anatomy heads in the definition; zero until a flagged session has built its solve. */
+    val muscleHeads: Int = 0,
+    val muscleHeadsRefused: Int = 0,
+    val muscleInstancesDrawn: Int = 0,
+    val muscleTriangles: Int = 0,
+    val muscleReadings: List<MuscleHeadReading> = emptyList()
+)
+
+/**
+ * One head's modelled reading. [relativePathLengthChange] is a ratio against the rest stance, so it is
+ * dimensionless: a percentage of the reference length, never a length in any unit.
+ */
+data class MuscleHeadReading(
+    val head: String,
+    val relativePathLengthChange: Float,
+    val drawn: Boolean
 )

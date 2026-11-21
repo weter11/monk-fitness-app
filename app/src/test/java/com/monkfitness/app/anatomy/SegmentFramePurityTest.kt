@@ -127,25 +127,6 @@ class SegmentFramePurityTest {
         assertEquals("forbidden construction used in the anatomy package", emptyList<String>(), offenders)
     }
 
-    @Test
-    fun noProductionConsumerReadsTheSegmentFramesYet() {
-        val consumers = listOf(
-            "character/PoseRetargeter.kt",
-            "character/CharacterSession.kt",
-            "animation/SkeletonPipeline.kt",
-            "animation/ValidationReport.kt"
-        )
-        val base = moduleRoot()
-        val offenders = consumers.map { "$base/src/main/java/com/monkfitness/app/$it" }
-            .filter { File(it).isFile }
-            .filter { File(it).readText().contains("anatomy") }
-        assertEquals(
-            "segment frames are a stage-1 measurement, not a wired consumer: $offenders",
-            emptyList<String>(),
-            offenders
-        )
-    }
-
     private fun snapshot(pose: SkeletonPose): String {
         val builder = StringBuilder()
         for (joint in Joint.entries) {

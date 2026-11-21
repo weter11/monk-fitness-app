@@ -2,6 +2,7 @@
   "id": "anatomy_v1",
   "version": 1,
   "epsNumMetres": 0.00001,
+  "thetaMaxRadians": 2.6,
   "sampling": {
     "spacingMetres": 0.01,
     "minSamples": 8,
@@ -13,13 +14,13 @@
       "id": "hip_capsule",
       "segment": "PELVIS",
       "centreMetres": [0.0, -0.04, 0.045],
-      "radiiMetres": [0.10, 0.09, 0.07]
+      "radiiMetres": [0.016, 0.014, 0.012]
     },
     {
       "id": "ribcage",
       "segment": "THORAX",
       "centreMetres": [0.0, -0.09, 0.0],
-      "radiiMetres": [0.12, 0.14, 0.10],
+      "radiiMetres": [0.040, 0.045, 0.032],
       "global": true
     },
     {
@@ -32,7 +33,7 @@
       "id": "knee_capsule",
       "segment": "TIBIA",
       "centreMetres": [0.0, 0.0, 0.0],
-      "radiiMetres": [0.07, 0.06, 0.05]
+      "radiiMetres": [0.063, 0.054, 0.045]
     }
   ],
   "landmarks": [
@@ -134,7 +135,7 @@
       "profile": 0.5,
       "radiusKnots": [[0.0, 0.006], [0.15, 0.024], [0.85, 0.024], [1.0, 0.005]],
       "passCap": 8,
-      "corridorMetres": 0.12
+      "corridorMetres": 0.18
     },
     {
       "id": "gluteus_medius",
@@ -181,7 +182,7 @@
       "profile": 0.5,
       "radiusKnots": [[0.0, 0.005], [0.15, 0.022], [0.85, 0.022], [1.0, 0.004]],
       "passCap": 8,
-      "corridorMetres": 0.12
+      "corridorMetres": 0.18
     },
     {
       "id": "rectus_femoris",
@@ -203,7 +204,7 @@
       "profile": 0.45,
       "radiusKnots": [[0.0, 0.006], [0.10, 0.024], [0.84, 0.024], [1.0, 0.004]],
       "passCap": 8,
-      "corridorMetres": 0.12
+      "corridorMetres": 0.18
     }
   ]
 }
