@@ -281,7 +281,9 @@ class MusclePathSolver(
     ) {
         for (obstacleIndex in union.indices) {
             obstacle.load(union[obstacleIndex], side, pose, frames, attachmentScale)
-            for (index in 0 until count) {
+            // Indices 0 and last are the resolved attachments: they are boundary conditions, and a
+            // route that cannot clear from them is refused, never repaired by moving the muscle.
+            for (index in 1 until count - 1) {
                 val station = index.toDouble() / (count - 1)
                 val need = profile.at(station) + validator.margin
                 val d = obstacle.distanceTo(points[index * 3], points[index * 3 + 1], points[index * 3 + 2])
