@@ -13,7 +13,9 @@ class BirdDogPose : BaseBirdDogPose() {
         camera = birdDogCamera,
         durationSeconds = 3.0f,
         loopMode = LoopMode.LOOP,
-        motionCurve = MotionCurve.SINE
+        motionCurve = MotionCurve.SINE,
+        environment = birdDogEnvironment,
+        support = birdDogSupport
     )
 
     override fun onBuild(context: PoseContext): SkeletonPose {

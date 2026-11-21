@@ -27,6 +27,26 @@ abstract class BaseBirdDogPose : BasePose() {
         ground = GroundDefinition(visible = true, level = 0f)
     )
 
+    /**
+     * The quadruped's four-point base on the ONE support channel: both hands and both knees rest on
+     * the mat. Bird Dog alternates which diagonal leaves the floor, so all four points are declared
+     * for the whole cycle — the planted pair is derived ONTO the plane and the extending pair rises
+     * above it.
+     *
+     * The declaration is what derives the hands' support plane: without it the Finalizer lays the
+     * palm/knuckles/fingertips chain along the forearm direction, which points down-and-forward to a
+     * planted hand and buries the whole chain under the mat.
+     */
+    protected val birdDogSupport = SupportDefinition(
+        pivot = PivotType.KNEES,
+        contacts = setOf(
+            SupportContact.LEFT_HAND,
+            SupportContact.RIGHT_HAND,
+            SupportContact.LEFT_KNEE,
+            SupportContact.RIGHT_KNEE
+        )
+    )
+
     protected var roots: List<SkeletonNode>? = null
     protected var pelvis: SkeletonNode? = null; protected var chest: SkeletonNode? = null; protected var neck: SkeletonNode? = null; protected var head: SkeletonNode? = null
     protected var shoulderA: SkeletonNode? = null; protected var elbowA: SkeletonNode? = null; protected var handA: SkeletonNode? = null; protected var palmA: SkeletonNode? = null; protected var knucklesA: SkeletonNode? = null; protected var fingertipsA: SkeletonNode? = null

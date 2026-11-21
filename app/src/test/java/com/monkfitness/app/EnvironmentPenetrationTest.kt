@@ -202,14 +202,13 @@ class EnvironmentPenetrationTest {
      *    would drive the authored pointed foot through the floor (measured `TOE_F` 21.55 → −2.57 at
      *    p=0.5). It records a vocabulary gap (the seated pelvis/leg mat support has no consumed
      *    point), not a missing declaration.
-     *  - `AlternatingBirdDogPose` / `BirdDogPose` / `StaticBirdDogHoldPose` /
-     *    `QuadrupedThoracicRotationsPose` / `ThoracicExtensionPose` / `DeadBugPose` / `LegRaisePose`
+     *  - `QuadrupedThoracicRotationsPose` / `ThoracicExtensionPose` / `DeadBugPose` / `LegRaisePose`
      *    — no record assigns them a declaration, and their floor contact is torso/hips (no derivation
      *    consumes `HIPS`/`PELVIS`/`BACK`) plus a planted hand or hand-on-mat chain a future pass owns.
      */
     private val undeclaringPoses = setOf(
-        "AlternatingBirdDogPose", "BirdDogPose", "DeadBugPose", "HamstringStretchPose",
-        "LegRaisePose", "QuadrupedThoracicRotationsPose", "StaticBirdDogHoldPose", "ThoracicExtensionPose"
+        "DeadBugPose", "HamstringStretchPose", "LegRaisePose",
+        "QuadrupedThoracicRotationsPose", "ThoracicExtensionPose"
     )
 
     /** The worst (most negative) delta of every declared pose/contact pair. */

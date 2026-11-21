@@ -11,7 +11,8 @@ class AlternatingBirdDogPose : BaseBirdDogPose() {
         // LINEAR is intentional: the sine-wave phase map below governs acceleration
         // continuously, so an eased curve would double-modulate the motion.
         motionCurve = MotionCurve.LINEAR,
-        environment = birdDogEnvironment
+        environment = birdDogEnvironment,
+        support = birdDogSupport
     )
 
     override fun onBuild(context: PoseContext): SkeletonPose {

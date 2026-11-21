@@ -367,6 +367,6 @@ class M15WallSlidesWallGeometryTest {
          * it from a whole-corpus dump diffed against a pristine `origin/main` worktree, never by pasting
          * the new number in.
          */
-        const val UNAFFECTED_CORPUS_DIGEST = 7262105918843113657L
+        const val UNAFFECTED_CORPUS_DIGEST = 7151485323361491054L
     }
 }
