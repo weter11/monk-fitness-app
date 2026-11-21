@@ -139,7 +139,9 @@ data class AnatomyDefinition(
     val wrapSurfaces: List<WrapSurface>,
     val landmarks: List<LandmarkDefinition>,
     val epsNumMetres: Float,
-    val sampling: Sampling
+    val sampling: Sampling,
+    /** The largest direction change a path may carry at an interior sample before it is refused. */
+    val thetaMaxRadians: Float = 0.7853982f
 ) {
     private val musclesById: Map<String, MuscleDefinition> = muscles.associateBy { it.id }
     private val wrapsById: Map<String, WrapSurface> = wrapSurfaces.associateBy { it.id }

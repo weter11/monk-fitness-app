@@ -70,6 +70,37 @@ class MusclePathBuilder(
     }
 
     /**
+     * Resolves [head]'s attachments into [out] as x,y,z triples and returns the count, so a caller
+     * that routes before resampling does not pay for a resample it will replace.
+     */
+    fun resolveControl(
+        head: MuscleHead,
+        side: MuscleSide,
+        pose: SkeletonPose,
+        frames: SegmentFrameSet,
+        out: DoubleArray
+    ): Int {
+        var written = 0
+        var ok = resolve(head.origin, side, pose, frames, turned)
+        if (!ok) return 0
+        out[0] = turned.x.toDouble(); out[1] = turned.y.toDouble(); out[2] = turned.z.toDouble()
+        written = 1
+        val waypoints = head.waypoints
+        for (index in waypoints.indices) {
+            if (!resolve(waypoints[index], side, pose, frames, turned)) return 0
+            out[written * 3] = turned.x.toDouble()
+            out[written * 3 + 1] = turned.y.toDouble()
+            out[written * 3 + 2] = turned.z.toDouble()
+            written++
+        }
+        if (!resolve(head.insertion, side, pose, frames, turned)) return 0
+        out[written * 3] = turned.x.toDouble()
+        out[written * 3 + 1] = turned.y.toDouble()
+        out[written * 3 + 2] = turned.z.toDouble()
+        return written + 1
+    }
+
+    /**
      * Writes [head]'s path for [side] into [frame]'s [slot] and returns its point count, or
      * [NO_INDEX] when the pose cannot support it — a segment with no usable frame, or a control
      * polyline of zero length, which is refused rather than resampled by a division.

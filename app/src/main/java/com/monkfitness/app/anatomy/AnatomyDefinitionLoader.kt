@@ -37,7 +37,8 @@ object AnatomyDefinitionLoader {
                 )
             },
             epsNumMetres = root.requiredFloat("epsNumMetres", "definition"),
-            sampling = sampling(root.requiredObject("sampling", "definition"))
+            sampling = sampling(root.requiredObject("sampling", "definition")),
+            thetaMaxRadians = root.optDouble("thetaMaxRadians", 0.7853982).toFloat()
         )
     }
 
