@@ -18,7 +18,7 @@ enum class MuscleSide {
      * scanning 23 candidates with a fresh suffix string each time is the stage's only steady-state
      * allocation.
      */
-    fun instance(segment: Segment): SegmentId = INSTANCES[segment.ordinal][ordinal]
+    fun instance(segment: Segment): SegmentId = SIDE_TABLE[segment.ordinal][ordinal]
 
     private fun claims(suffix: String?): Boolean = when (suffix) {
         null -> true
@@ -28,7 +28,7 @@ enum class MuscleSide {
     }
 
     private companion object {
-        val INSTANCES: Array<Array<SegmentId>> = Array(Segment.entries.size) { segmentIndex ->
+        val SIDE_TABLE: Array<Array<SegmentId>> = Array(Segment.entries.size) { segmentIndex ->
             val segment = Segment.entries[segmentIndex]
             Array(MuscleSide.entries.size) { sideIndex ->
                 val side = MuscleSide.entries[sideIndex]
