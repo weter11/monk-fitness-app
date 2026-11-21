@@ -104,9 +104,11 @@ class RuntimeArchitectureBaselineTest {
         // arm chain realizes in the trunk frame the pose itself declares rather than a
         // pelvis-only frame replaced after realization: handA/handP sit on their authored target
         // instead of floating 55.6 units above the floor. Pelvis/feet and the SETTLED rep are
-        // unchanged (see ColdFrameLimbRealizationTest).
-        val handA = floatArrayOf(-58.321594f, 7.6293945E-6f, -68.99999f)
-        val handP = floatArrayOf(-58.321594f, 7.6293945E-6f, 68.99999f)
+        // unchanged (see ColdFrameLimbRealizationTest). The hands land on the authored point to the
+        // last bit because the frame now also carries the girdle's own articulation, so the
+        // arm's local-direction conversion at this phase rounds onto the target rather than 4e-6 off it.
+        val handA = floatArrayOf(-58.32159f, 7.6293945E-6f, -69.0f)
+        val handP = floatArrayOf(-58.32159f, 7.6293945E-6f, 69.0f)
         val ankleF = floatArrayOf(268.00098f, 25.0f, -22.0f)
         val ankleB = floatArrayOf(268.00098f, 25.0f, 22.0f)
         val toeF = floatArrayOf(285.57257f, 42.5716f, -22.0f)

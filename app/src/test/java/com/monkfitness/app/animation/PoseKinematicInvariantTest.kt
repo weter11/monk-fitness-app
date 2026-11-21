@@ -738,11 +738,12 @@ class PoseKinematicInvariantTest {
          * Both are the same defect, on the same bone: an authored hand target that leaves the arm's
          * reachable annulus, so `clampTargetToReach` realizes the hand somewhere else and the forearm
          * publishes longer than its bone. `pike_pushup_standard` asks for a hand 54 units beyond the
-         * reach at the top of its rep; `row_standard` leaves the band by 10.
+         * reach at the top of its rep; `row_standard` leaves the band by 10, reduced to 9.7 by the
+         * girdle drive carrying its glenoid back.
          */
         val knownSegmentStretch: Map<String, Map<String, Float>> = mapOf(
             "pike_pushup_standard" to mapOf("ELBOW-WRIST_A" to 219.631f),
-            "row_standard" to mapOf("ELBOW-WRIST_A" to 39.539f)
+            "row_standard" to mapOf("ELBOW-WRIST_A" to 38.379f)
         )
 
         /**
@@ -750,7 +751,8 @@ class PoseKinematicInvariantTest {
          *
          * Every entry is a branch switch or a phase discontinuity inside the authored rep (the burpee
          * swings its knees round at the plant, the y-jack's arm flips at the top, the child's pose
-         * hands snap as the hips fold), recorded so a NEW jump cannot be introduced silently.
+         * hands snap as the hips fold), recorded so a NEW jump cannot be introduced silently. The row's
+         * worst step is measured with its girdle drive authored.
          */
         val knownStepJumps: Map<String, Float> = mapOf(
             "burpee_standard" to 841.302f,
@@ -760,7 +762,7 @@ class PoseKinematicInvariantTest {
             "jumping_jack_standard" to 210.214f,
             "ninety_ninety_hips" to 146.941f,
             "reverse_snow_angel_prone" to 98.633f,
-            "row_standard" to 116.201f,
+            "row_standard" to 121.848f,
             "shoulder_cars_standard" to 84.090f,
             "squat_jump" to 96.600f,
             "superman_prone" to 80.123f,

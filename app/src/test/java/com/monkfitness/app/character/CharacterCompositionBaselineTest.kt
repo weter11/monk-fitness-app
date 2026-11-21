@@ -169,9 +169,11 @@ class CharacterCompositionBaselineTest {
     fun theLegacyCameraLeavesAFixedCompositionForEveryPose() {
         // The widest pose of the corpus at the narrowest viewport, the standing pose at the widest:
         // one camera cannot compose both, which is why the frame had to be measured rather than fixed.
+        // The push-up's extent is measured with its girdle drive authored (the drive widens the
+        // shoulder's sweep at the bottom of the rep).
         val widest = legacyBounds("pushup_standard", 0.45f)
         val standing = legacyBounds("squat_standard", 1.0f)
-        assertEquals("pushup_standard @ 0.45: horizontal extent moved", 0.6758f.toDouble(), widest[1].toDouble(), 0.002)
+        assertEquals("pushup_standard @ 0.45: horizontal extent moved", 0.6839684f.toDouble(), widest[1].toDouble(), 0.002)
         assertEquals("squat_standard @ 1.0: vertical extent moved", 0.4132f.toDouble(), standing[3].toDouble(), 0.002)
         assertTrue(
             "the fixed camera must spend under 40% of the narrow viewport's width on the widest pose " +
