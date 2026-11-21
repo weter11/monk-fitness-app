@@ -778,6 +778,24 @@ data class ContactConstraint(
         return out
     }
 
+    /**
+     * The mirrored pair of scapular rotations for one bilateral girdle drive.
+     *
+     * [buildScapularRotation] mirrors only depression, so a retraction value shared by both blades
+     * is applied with the same sign and the shoulder line ROLLS: one glenoid travels dorsally while
+     * the other travels ventrally. A girdle that draws both blades back is a mirror pair, so the
+     * passive blade takes the negated retraction. `active` is the -Z side, `passive` the +Z side.
+     */
+    fun buildSymmetricScapularRotations(
+        retraction: Float,
+        depression: Float,
+        active: JointRotation,
+        passive: JointRotation
+    ) {
+        buildScapularRotation(retraction, depression, -1f, active)
+        buildScapularRotation(-retraction, depression, 1f, passive)
+    }
+
     // Clavicle degrees of freedom. The clavicle is the PROXIMAL member of the shoulder girdle
     // (CHEST -> CLAVICLE -> SCAPULA -> SHOULDER) and carries genuine SC/AC rotations: elevation
     // (transverse X), protraction (vertical Y) and axial rotation about its own long Z axis. Left
@@ -829,6 +847,22 @@ data class ContactConstraint(
         multiplyMatrices(clavColRX, clavColRY, clavColRZ, clavColCX, clavColCY, clavColCZ, clavColAX, clavColAY, clavColAZ)
         getRotationFromMatrix(clavColAX, clavColAY, clavColAZ, out)
         return out
+    }
+
+    /**
+     * The mirrored pair of clavicular rotations for one bilateral girdle drive; see
+     * [buildSymmetricScapularRotations] for why protraction and axial rotation are negated on the
+     * passive side.
+     */
+    fun buildSymmetricClavicularRotations(
+        elevation: Float,
+        protraction: Float,
+        axialRotation: Float,
+        active: JointRotation,
+        passive: JointRotation
+    ) {
+        buildClavicularRotation(elevation, protraction, axialRotation, -1f, active)
+        buildClavicularRotation(elevation, -protraction, -axialRotation, 1f, passive)
     }
 
     // General axis-angle composition: `out = a ∘ b` (apply `b` first, then `a`) by multiplying the

@@ -301,7 +301,7 @@ class HamstringForwardReachTest {
          * pass carries the attribution in its own blast-radius gate.
          *
 */
-        const val UNAFFECTED_CORPUS_DIGEST = -6646687038559954655L
+        const val UNAFFECTED_CORPUS_DIGEST = 1015555362281730856L
     }
 }
 

@@ -108,10 +108,14 @@ abstract class BaseBarSupportPose : BasePose() {
     /**
      * The scapular girdle drive on the ONE canonical channel: retraction and depression are real
      * scapula rotations, so the glenoid's position is DERIVED from the girdle, not translated by hand.
+     *
+     * The pair is mirrored across the mid-line ([SkeletonMath.buildSymmetricScapularRotations]), so a
+     * positive retraction draws BOTH blades back; a shared sign would roll the shoulder line.
      */
     protected fun driveScapula(retraction: Float, depression: Float) {
-        SkeletonMath.buildScapularRotation(retraction, depression, -1f, scapulaA!!.localRotation)
-        SkeletonMath.buildScapularRotation(retraction, depression, 1f, scapulaP!!.localRotation)
+        SkeletonMath.buildSymmetricScapularRotations(
+            retraction, depression, scapulaA!!.localRotation, scapulaP!!.localRotation
+        )
     }
 
     /** Places the shoulders at their anatomical lateral offset from the (rotated) girdle. */

@@ -430,6 +430,6 @@ class M8M9M10SupportDeclarationTest {
          * from a whole-corpus dump diffed against a pristine `origin/main` worktree, never by pasting the
          * new number in.
          */
-        const val UNAFFECTED_CORPUS_DIGEST = -7208367135762157721L
+        const val UNAFFECTED_CORPUS_DIGEST = 2591671124285107054L
     }
 }

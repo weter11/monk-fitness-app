@@ -26,6 +26,19 @@ abstract class BasePushUpPose : BasePose() {
     // still leave the authored hand target inside `SkeletonMath`'s reachable annulus.
     private val kneePivotDepthHipFlexion: Float = 0.42f
 
+    // The press's girdle cycle, in the shared scapular activation units `SkeletonMath` maps to
+    // degrees: the top of a push-up is a protracted, serratus-held lockout, and lowering the chest
+    // lets the blades retract and settle while the scapulae wrap the rib cage. Negative retraction
+    // is protraction. The arm IK below re-aims to the SAME planted hand target, so the girdle moves
+    // the glenoid and the arm, never the contact.
+    private val girdleTopRetraction: Float = -2.5f
+    private val girdleBottomRetraction: Float = 3.5f
+    private val girdleBottomDepression: Float = 1.5f
+    private val girdleTopClavicularProtraction: Float = 0.5f
+
+    /** Shoulder-height allowance for the lockout girdle's reach cost; see the top-of-rep height. */
+    private val girdleLockoutReachAllowance: Float = 2f
+
     /**
      * The flat plank's trunk-frame roll, in radians, about the chest's lateral Z axis.
      *
@@ -57,7 +70,9 @@ abstract class BasePushUpPose : BasePose() {
     protected var roots: List<SkeletonNode>? = null
     protected var ankleF: SkeletonNode? = null; protected var kneeF: SkeletonNode? = null; protected var hipF: SkeletonNode? = null; protected var pelvis: SkeletonNode? = null; protected var chest: SkeletonNode? = null; protected var neck: SkeletonNode? = null; protected var head: SkeletonNode? = null
     protected var shoulderA: SkeletonNode? = null; protected var elbowA: SkeletonNode? = null; protected var handA: SkeletonNode? = null; protected var palmA: SkeletonNode? = null; protected var knucklesA: SkeletonNode? = null; protected var fingertipsA: SkeletonNode? = null
+    protected var clavicleA: SkeletonNode? = null; protected var scapulaA: SkeletonNode? = null
     protected var shoulderP: SkeletonNode? = null; protected var elbowP: SkeletonNode? = null; protected var handP: SkeletonNode? = null; protected var palmP: SkeletonNode? = null; protected var knucklesP: SkeletonNode? = null; protected var fingertipsP: SkeletonNode? = null
+    protected var clavicleP: SkeletonNode? = null; protected var scapulaP: SkeletonNode? = null
     protected var hipB: SkeletonNode? = null; protected var kneeB: SkeletonNode? = null; protected var ankleB: SkeletonNode? = null
     protected var heelF: SkeletonNode? = null; protected var toeF: SkeletonNode? = null; protected var heelB: SkeletonNode? = null; protected var toeB: SkeletonNode? = null
 
@@ -85,12 +100,16 @@ abstract class BasePushUpPose : BasePose() {
         neck = nodes.neck
         head = nodes.head
         shoulderA = nodes.shoulderA
+        clavicleA = nodes.clavicleA
+        scapulaA = nodes.scapulaA
         elbowA = nodes.elbowA
         handA = nodes.handA
         palmA = nodes.palmA
         knucklesA = nodes.knucklesA
         fingertipsA = nodes.fingertipsA
         shoulderP = nodes.shoulderP
+        clavicleP = nodes.clavicleP
+        scapulaP = nodes.scapulaP
         elbowP = nodes.elbowP
         handP = nodes.handP
         palmP = nodes.palmP
@@ -197,7 +216,12 @@ abstract class BasePushUpPose : BasePose() {
             // and the (near-straight) legs slope up from the floor to the raised hips.
             val depth = 0.5f - 0.5f * cos(context.progress * 2f * PI.toFloat())
             val armLen = def.upperArmLength + def.forearmLength
-            val topH = armLen * 0.92f            // shoulders near full extension at the top
+            // The lockout girdle protraction carries the glenoid away from the hand along the trunk's
+            // lateral axis, so the arm's reach budget at the top of the rep is not the full `0.92`:
+            // authoring the shoulder height at the bare arm fraction leaves the widest grips exactly
+            // on the reach cap, where any girdle motion clamps the target and slides the planted hand.
+            // The allowance is measured on the widest grip's own margin, not a tolerance.
+            val topH = armLen * 0.92f - girdleLockoutReachAllowance
             val botH = def.shinLength * 0.55f     // chest just above the floor at the bottom
             val bodyH = topH + (botH - topH) * depth   // shoulder/chest/hip height this frame
 
@@ -246,11 +270,29 @@ abstract class BasePushUpPose : BasePose() {
         // not of the frame.
         declareFlatPlankTrunkFrame()
 
+        // The girdle's own share of the press, authored before the FK pass so the arm IK below reads
+        // the glenoid the scapula actually places. Protraction at lockout is what holds the top of a
+        // push-up away from the floor; retraction plus a little depression is what the blades do as
+        // the chest comes down. Depth is the same raised cosine the trunk rides, so the cycle starts
+        // and ends at lockout.
+        val girdleDepth = 0.5f - 0.5f * cos(context.progress * 2f * PI.toFloat())
+        val girdleRetraction = SkeletonMath.lerp(girdleTopRetraction, girdleBottomRetraction, girdleDepth)
+        val girdleDepression = SkeletonMath.lerp(0f, girdleBottomDepression, girdleDepth)
+        SkeletonMath.buildSymmetricScapularRotations(
+            girdleRetraction, girdleDepression, scapulaA!!.localRotation, scapulaP!!.localRotation
+        )
+        val clavicularProtraction =
+            SkeletonMath.lerp(girdleTopClavicularProtraction, 0f, girdleDepth)
+        SkeletonMath.buildSymmetricClavicularRotations(
+            0f, clavicularProtraction, 0f, clavicleA!!.localRotation, clavicleP!!.localRotation
+        )
+
         buildGaze(neck!!, head!!, def.neckLength, pushUpHeadDirection)
 
-        // Seat the shoulder girdle on the chest (clavicle/scapula are identity, so this places
-        // shoulderA/P at chest ± shoulderWidth). Required before the FK pass so the arm IK reads
-        // the correct world shoulder root (MIGRATION_RULES A6: no hand-computed rotAround).
+        // Seat the shoulder girdle on the chest (this places shoulderA/P at the girdle's ±shoulderWidth,
+        // rotated by whatever scapular/clavicular articulation the frame authored). Required before the
+        // FK pass so the arm IK reads the correct world shoulder root (MIGRATION_RULES A6: no
+        // hand-computed rotAround).
         buildShoulders(shoulderA!!, shoulderP!!, def.shoulderWidth)
 
         // Authoring-FK: establish world frames so the arm IK bakes below read correct parent/world
@@ -260,8 +302,8 @@ abstract class BasePushUpPose : BasePose() {
             roots!![i].updateWorldTransforms(zeroVector, identityRotation)
         }
 
-        // Shoulder world positions come straight from the FK-updated hierarchy (MIGRATION_RULES A6: no
-        // hand-computed rotAround — the clothed clavicle/scapula are identity, so the geometry is unchanged).
+        // Shoulder world positions come straight from the FK-updated hierarchy, girdle rotation included
+        // (MIGRATION_RULES A6: no hand-computed rotAround).
         val shoulderAW = shoulderA!!.worldPosition
         val shoulderPW = shoulderP!!.worldPosition
 

@@ -355,6 +355,6 @@ class M11M12LimbRealizationMigrationTest {
          * attribute it from a whole-corpus dump diffed against a pristine `origin/main` worktree, never
          * by pasting the new number in.
          */
-        const val UNAFFECTED_CORPUS_DIGEST = 4289311186553674303L
+        const val UNAFFECTED_CORPUS_DIGEST = -8940055962290759610L
     }
 }

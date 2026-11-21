@@ -97,12 +97,13 @@ class RowsPose : BaseBarSupportPose() {
         neck!!.localPosition.set(0f, 0f, 0f)
         head!!.localPosition.set(0f, 0f, 0f)
 
-        // The girdle drive is the pull's own driver, and it is authored on the RETRACTION axis the
-        // copy names ("squeezing shoulder blades together", `steps` §2). See [TOP_RETRACTION] for why
-        // the depression axis is deliberately NOT driven here.
+        // The girdle drive is the pull's own driver, on both axes the copy names: retraction
+        // ("squeezing shoulder blades together", `steps` §2) and depression (the blades settle down
+        // and back as the chest comes to the bar), so the shoulder girdle draws back at peak
+        // contraction instead of the arms hinging at the glenohumeral joint alone.
         driveScapula(
             retraction = SkeletonMath.lerp(0f, TOP_RETRACTION, progress),
-            depression = 0f
+            depression = SkeletonMath.lerp(0f, TOP_DEPRESSION, progress)
         )
         buildShoulders(def)
         buildPelvis(pelvis!!, hipF!!, hipB!!, def.hipWidth)
@@ -196,18 +197,23 @@ class RowsPose : BaseBarSupportPose() {
 
         /**
          * `steps` §2's "squeezing shoulder blades together": the girdle's own activation units (the
-         * shared `SkeletonMath` constants, as the vertical-pull family authors its pull).
+         * shared `SkeletonMath` constants, as the vertical-pull family authors its pull). Eleven
+         * degrees of scapular retraction is inside the joint's own range and moves the glenoid
+         * several centimetres, which is what makes the pull read at the girdle rather than only at
+         * the elbow.
          *
-         * **The DEPRESSION axis is deliberately not driven.** `SkeletonPoseFinalizer.
-         * reconstructChestFrame` re-derives an UNAUTHORED thorax from the shoulder line, so a girdle
-         * rotation whose composition is not a pure retraction is read back into the thorax's roll —
-         * and the published shoulders then carry the girdle twice (measured: `12.709 u` of dorsal
-         * travel at a 4-unit retraction against the girdle's own `6.4 u`, and with the depression
-         * added the two shoulders swing `±12.7 u` asymmetrically). A pure retraction is the fixed
-         * point of that fallback (the inferred frame reproduces it exactly), so the grip stays on the
-         * bar — which is why the pose drives retraction alone.
+         * Both axes are driven because this pose authors a non-zero [trunkThoracicBrace]:
+         * `SkeletonPoseFinalizer.reconstructChestFrame` returns early on an authored thorax, so the
+         * girdle rotation is never read back into the chest's roll and carried twice.
          */
-        const val TOP_RETRACTION = 4f
+        const val TOP_RETRACTION = 5.5f
+
+        /**
+         * Scapular depression at the top of the pull, in the same shared units: the blades settle
+         * down and back as the chest approaches the bar, the downward half of the "draw the shoulder
+         * girdle back" cue.
+         */
+        const val TOP_DEPRESSION = 1.2f
 
         /**
          * The thorax's own maintained extension (radians): the "chest proud" posture of a pull, at the
