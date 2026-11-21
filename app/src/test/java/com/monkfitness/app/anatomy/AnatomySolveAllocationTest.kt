@@ -28,6 +28,7 @@ class AnatomySolveAllocationTest {
     private val frameSet = SegmentFrameSet()
     private val bindPose = AnatomyPoseFixture.bindPose(skeleton)
     private val builder = MusclePathBuilder(definition, X1Bind.unitsPerMetre(skeleton))
+    private val validator = AnatomyValidator(definition, X1Bind.unitsPerMetre(skeleton).toDouble())
     private val out = Vector3()
 
     init {
@@ -99,12 +100,13 @@ class AnatomySolveAllocationTest {
         return best
     }
 
-    /** The builder's per-frame work: every head's path into one reused carrier. */
+    /** The stage's per-frame work: every head's path and clearance verdict into one carrier. */
     private fun pass() {
         frame.clear()
         for (slot in 0 until frame.headCount) {
             val id = frame.heads[slot]
-            val head = definition.muscle(id.muscleId)!!.heads[id.headIndex]
+            val muscle = definition.muscle(id.muscleId)!!
+            val head = muscle.heads[id.headIndex]
             builder.build(head, id.side, bindPose, frameSet, frame, slot)
             val state = frame.muscleStates[slot]
             frame.modelledPathLengths[slot] = state.pointCount.toFloat()
@@ -115,6 +117,7 @@ class AnatomySolveAllocationTest {
             frame.searchOutcomes[slot] = SearchOutcome.CLEARED.ordinal
             frame.renderable[frame.instanceOf(slot)] = true
             state.pathPoint(0, out)
+            validator.validate(muscle, id.side, bindPose, frameSet, frame, slot, SearchOutcome.PASS_CAP)
         }
     }
 
