@@ -1,0 +1,128 @@
+package com.monkfitness.app.character
+
+import com.monkfitness.app.anatomy.AnatomyDefinition
+import com.monkfitness.app.anatomy.AnatomyDefinitionLoader
+import com.monkfitness.app.anatomy.AnatomyFrame
+import com.monkfitness.app.anatomy.MuscleLayer
+import com.monkfitness.app.anatomy.MuscleSide
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertTrue
+import org.junit.Test
+import java.io.File
+
+/**
+ * The tube budget is a contract with the GPU: one tessellation per version, so a slot sized from the
+ * definition can never be overrun and a frame cannot quietly cost more than the last one.
+ */
+class ProceduralTubeBudgetTest {
+
+    private val definition: AnatomyDefinition = AnatomyDefinitionLoader.load(File(ASSET).readText())
+    private val unitsPerMetre = X1Bind.unitsPerMetre().toDouble()
+    private val mesh = ProceduralMuscleMesh(definition, unitsPerMetre)
+    private val capped = ProceduralMuscleMesh(definition, unitsPerMetre)
+
+    /** Every head carries a two-point path, so the budget is measured rather than partly skipped. */
+    private fun solvedFrame(): AnatomyFrame {
+        val frame = AnatomyFrame.of(definition)
+        for (slot in 0 until frame.headCount) {
+            frame.writePoint(slot, 0f, 0f, 0f)
+            frame.writePoint(slot, 0f, 10f, 0f)
+            frame.writePoint(slot, 0f, 20f, 0f)
+        }
+        return frame
+    }
+
+    @Test
+    fun theShippedDefinitionCostsTheDeclaredTriangleBudget() {
+        val samples = definition.sampling.maxSamples
+        val segments = ProceduralMuscleMesh.RADIAL_SEGMENTS
+        assertEquals(48, samples)
+        assertEquals(8, segments)
+        assertEquals("2 · R · (N − 1) band triangles per head", 2 * segments * (samples - 1), mesh.bandTrianglesPerHead)
+        assertEquals("one R-triangle fan per end", 2 * segments, mesh.capTrianglesPerHead)
+        assertEquals("a head is its bands plus its caps", 768, mesh.trianglesPerHead)
+        assertEquals("the shipped definition's caps-on budget", 13_824, mesh.triangleCapacity)
+        assertEquals(
+            "the band-only budget the handoff was specified with",
+            13_536,
+            ProceduralMuscleMesh(definition, unitsPerMetre, caps = false).triangleCapacity
+        )
+        assertEquals("rings plus two cap centres per head", 48 * segments + 2, mesh.verticesPerHead)
+        assertEquals(mesh.triangleCapacity * 3, mesh.slot().indexCapacity)
+    }
+
+    @Test
+    fun aFullyShownFrameFillsExactlyTheBudget() {
+        val frame = solvedFrame()
+        val slot = mesh.slot()
+        val all = MuscleSelection(showsTubes = true)
+        assertEquals(mesh.triangleCapacity, mesh.write(frame, slot, all))
+        assertEquals(mesh.triangleCapacity, slot.triangleCount)
+        assertEquals(mesh.vertexCapacity, slot.vertexCount)
+        assertEquals("every index must name a vertex that exists", true, (0 until slot.indexCount).all { slot.indices[it] in 0 until slot.vertexCount })
+    }
+
+    @Test
+    fun aHiddenLayerRemovesExactlyItsOwnHeads() {
+        val frame = solvedFrame()
+        val slot = mesh.slot()
+        val superficialOnly = MuscleSelection(showsTubes = true).withLayer(MuscleLayer.DEEP, false)
+        // The M1 library is eight superficial muscles: the deep layer is a declared placeholder, so
+        // hiding it costs nothing and hiding the superficial one costs every head.
+        assertEquals("no shipped muscle is deep", 0, mesh.trianglesPerLayer(MuscleLayer.DEEP))
+        assertEquals(mesh.triangleCapacity, mesh.trianglesPerLayer(MuscleLayer.SUPERFICIAL))
+        assertEquals(mesh.trianglesPerLayer(MuscleLayer.SUPERFICIAL), mesh.write(frame, slot, superficialOnly))
+
+        val nothing = superficialOnly.withLayer(MuscleLayer.SUPERFICIAL, false)
+        assertEquals("hiding both layers leaves no tube to draw", 0, mesh.write(frame, slot, nothing))
+    }
+
+    @Test
+    fun aTubesOffSelectionWritesNothingAndLeavesNoGeometryBehind() {
+        val frame = solvedFrame()
+        val slot = mesh.slot()
+        assertEquals(mesh.triangleCapacity, mesh.write(frame, slot, MuscleSelection(showsTubes = true)))
+        assertEquals(0, mesh.write(frame, slot, MuscleSelection(showsTubes = false)))
+        assertEquals("a hidden build must not leave the previous frame's tubes", 0, slot.vertexCount)
+        assertEquals(0, slot.indexCount)
+    }
+
+    @Test
+    fun aHeadWithoutAPathIsSkippedRatherThanTessellated() {
+        val frame = solvedFrame()
+        val single = frame.heads.indexOfFirst { it.side == MuscleSide.A }
+        val slot = mesh.slot()
+        val full = mesh.write(frame, slot, MuscleSelection(showsTubes = true))
+
+        val truncated = solvedFrame()
+        val id = truncated.heads[single]
+        // One point is not a path: the tube needs two stations to have a tangent at all.
+        val onlyOne = AnatomyFrame.of(definition).apply {
+            for (slotIndex in 0 until headCount) {
+                if (heads[slotIndex] != id) {
+                    writePoint(slotIndex, 0f, 0f, 0f)
+                    writePoint(slotIndex, 0f, 10f, 0f)
+                } else {
+                    writePoint(slotIndex, 0f, 0f, 0f)
+                }
+            }
+        }
+        val without = mesh.write(onlyOne, slot, MuscleSelection(showsTubes = true))
+        assertEquals("the refused head contributes no triangles", full - mesh.trianglesPerHead, without)
+    }
+
+    @Test
+    fun aSlotSizedForFewerHeadsIsRefusedWholeWithNoGeometryWritten() {
+        val frame = solvedFrame()
+        val small = DynamicGeometrySlot(mesh.verticesPerHead, mesh.trianglesPerHead * 3)
+        assertEquals(0, mesh.write(frame, small, MuscleSelection(showsTubes = true)))
+        assertNotNull("a refusal must say why", mesh.lastRefusal)
+        assertEquals("a refused build writes nothing", 0, small.vertexCount)
+        assertEquals(0, small.indexCount)
+    }
+
+    private companion object {
+        const val ASSET = "src/main/assets/anatomy/anatomy_v1.json"
+    }
+}
