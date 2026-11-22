@@ -31,9 +31,9 @@ class TubeVertexLayoutTest {
     private val definition: AnatomyDefinition = AnatomyDefinitionLoader.load(File(ASSET).readText())
     private val unitsPerMetre = X1Bind.unitsPerMetre(SkeletonDefinition.DEFAULT_ADULT)
     private val mesh = ProceduralMuscleMesh(definition, unitsPerMetre.toDouble())
-    private val plan = TubeAttributePlanner.plan(TubeAttributePlanner.UBERSHADER_ATTRIBUTES)
+    private val plan = TubeAttributePlanner.plan(TubeAttributePlanner.UBERSHADER_ATTRIBUTES) as TubeAttributePlan.Supported
     private val layout = TubeVertexLayout(
-        plan as TubeAttributePlan.Supported,
+        plan,
         mesh.vertexCapacity,
         mesh.triangleCapacity * 3
     )
