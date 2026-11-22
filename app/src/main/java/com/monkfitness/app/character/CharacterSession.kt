@@ -250,7 +250,7 @@ class CharacterSession(
 
     private fun prepareAnatomyUnchecked() {
         val anatomy: AnatomyDefinition = AnatomyDefinitionLoader.load(
-            context.assets.open(CharacterFeature.ANATOMY_PATH).use { it.readText() }
+            context.assets.open(CharacterFeature.ANATOMY_PATH).bufferedReader().use { it.readText() }
         )
         val bind = SkeletonPose()
         for ((joint, position) in X1Bind.bindJoints(definition)) {
