@@ -663,7 +663,9 @@ One of those blockers is gone: the instance the provider returns now reports
 `POSITION,UV0,UV1,COLOR`, so the attribute refusal no longer happens. The other is replaced by a
 harder one: with the tube renderable in the scene the process dies inside Filament's render pass
 0.55 s after the engine is created, with the layer **off**, so every row that needs a frame is
-blocked by the crash and not by the material.
+blocked by the crash and not by the material. A second session, recorded under "The minimal
+triangle" below, reduces that blocker to one call — an index-buffer upload on a renderable the scene
+already references — and finds it in Filament's OpenGL backend rather than in this layer.
 
 | Row | What to look for | Expected |
 | --- | --- | --- |
@@ -727,7 +729,7 @@ Each one changes a single thing and is not part of the shipped build:
 | Row | Measured | Verdict |
 | --- | --- | --- |
 | Attributes | Probe B, same build, overlay verbatim: `attrs POSITION,UV0,UV1,COLOR`. No `TANGENTS`, no `tubes:` refusal line, and `logcat` holds zero `FILAMENT_CHECK_PRECONDITION`, zero Adreno/Filament error lines in probe B's log — its only Filament warning is the known `eglGetFrameTimestampsANDROID failed with error 12290`, and the shipped artifact's own log has no Filament warning at all. | **PASS** — the row #404 recorded as FAIL |
-| Tubes on | Not observable on the shipped artifact: the process dies 0.55 s after `FEngine created`, before the 500 ms overlay poll writes anything, three launches out of three. Probe B prints `0 triangles` because tubes are off by default there, and the toggle cannot be reached. | **FAIL (crash)** |
+| Tubes on | Not observable on the shipped artifact: the process dies 0.55 s after `FEngine created`, before the 500 ms overlay poll writes anything, three launches out of three. Probe B prints `0 triangles` because tubes are off by default there, and the toggle cannot be reached. `T4`, the probe build that stops redefining its geometry, does draw: the overlay reads `18 heads · 0 refused · 16 drawn · 13824 triangles` with `attrs POSITION,UV0,UV1,COLOR · candidate 0` and 486 frames at 48 fps — the count the row expects, from a tree that is not this one. | **FAIL (crash)** on the shipped artifact; the draw itself is reachable |
 | Axis alignment / winding | No frame survives, so no pixel and no seam reading exists. `TAU_RESIDUAL_MM` is the §0.3 bind/posed residual (5.0 mm over the A2 rows), not a tube-to-limb seam, and the layer has no device readout for one. | **BLOCKED** by the crash |
 | Tint | No belly and no end ramp to compare. | **BLOCKED** by the crash |
 | Layer toggle | Unreachable. The crash needs neither the toggle nor the layer: it happens with `tubes` off, which is the default. | **BLOCKED** by the crash |
@@ -810,16 +812,56 @@ that feeds it:
 - the material instance alone (probe A) is harmless, so the unlit permutation and the
   `createMaterialInstance` call are not the fault;
 - the vertex buffer, the index buffer and the upload rings without a renderable (probe B) are
-  harmless, so the attribute declaration and the buffer sizes are not the fault either;
+  harmless, so the attribute declaration and the buffer sizes are not the fault;
 - the renderable with zero indices (probe C) crashes, so it is not the draw or the index count;
 - the renderable hidden by a zero layer mask (probe D) crashes, so `setVisible` is not the trigger
   and no toggle can avoid it.
 
-What remains is the renderable's own pipeline: the unlit ubershader instance against a vertex layout
-of `POSITION,UV0,UV1,COLOR` built by this app. `CharacterSession.prepareAnatomy` builds this renderable
-unconditionally, so this is not confined to the debug overlay: the flagged build puts it in the scene
-on every character screen. That last sentence is a reading of `CharacterSession.kt:284`, not a second
-device measurement — the product hero was not opened during this run.
+A second session then replaced the layer's own construction with Filament's `hellotriangle` and
+found the call underneath it; that run is below, and it changes the conclusion from "the layer's
+renderable" to "an index upload on a live renderable".
+
+#### The minimal triangle — second device run
+
+A temporary control stood in for the layer: three `FLOAT3` positions, three `USHORT` indices, one
+provider instance whose material requires `POSITION,COLOR,UV0,UV1`, `culling(false)`, a fixed
+`2 m` box, and no `TubeMesh` code on the path at all. Every run below is the same build of the app
+with one line of that control changed, on the same handset and driver as §7.7.
+
+| Run | What the renderable does | Result |
+| --- | --- | --- |
+| `T1` | triangle in the scene beside the asset; every declared stream uploaded **once, before** the renderable exists, then never again | runs: `attrs PROBE POSITION,COLOR,UV0,UV1`, 466 frames, 42 fps, p95 24.73 ms, no tombstone |
+| `T2` | `T1` plus one vertex-stream upload per frame (`VertexBuffer.setBufferAt`, all four streams) | runs: 486 frames at 48 fps, no tombstone |
+| `T3` | `T1` plus one **index-buffer** upload per frame (`IndexBuffer.setBuffer`, three `USHORT`) | SIGSEGV in `libfilament-jni.so` `pc 0x1eb8f4`, fault addr `0x4`, after 661 uploads / 23 s |
+| `T4` | this app's layer, with the renderable built once after the first frame's streams are committed and no geometry redefinition afterwards | draws `18 heads · 0 refused · 16 drawn · 13824 triangles`, 486 frames at 48 fps, no tombstone in that window; the shape-change path was not exercised |
+| `T5` | this app's layer, full-capacity geometry built before the first frame, index upload on every shape change | SIGSEGV at `0x1eb8f4` 0.55 s after `FEngine created`, and again the first time `superficial` was toggled |
+
+`T3` is the one that decides it. Its primitive is a single six-byte index buffer and three
+positions; it has no tube geometry, no `BufferObject`, no `setGeometryAt`, and no attribute the
+ubershader could not resolve. It survives indefinitely while it only uploads vertex streams (`T2`)
+and dies at `0x1eb8f4` once the index buffer is re-uploaded on a renderable that is already in the
+scene.
+
+The rule the five runs agree on, and the one the tombstone has shown every time:
+
+- a **vertex-stream** upload after the renderable exists is harmless (`T2`, `T4`);
+- an **index-buffer** upload after the renderable exists faults the process inside Filament's cull
+  pass (`T3`, `T5`, and the shipped artifact, whose first solved frame uploads indices);
+- a primitive built with the geometry already in place is safe (`T1`, `T4`).
+
+So the fault is neither the material, the attribute set, the vertex types, `culling`, the layer mask,
+the shadow flags, the transform or `BufferObject` — each of those was varied on the layer itself and
+reproduced the same `pc` and fault address — nor the tube geometry, which a three-vertex triangle
+replaces without consequence. It is Filament 1.75.1's OpenGL backend on the Adreno 735
+(`BuildId 9f781035e69554b12b04f4317229be349165c219`) mishandling an index-buffer upload on a
+primitive that a scene already references. Filament's native preconditions are compiled out of the
+release binary, so the null is not a refused call arriving late; nothing in this layer can decline
+the call, because the solved set of heads is what sizes its indices.
+
+This is recorded as an engine defect, to be closed by moving the engine rather than by reshaping the
+tube layer. Avoiding the call from this side would mean never uploading indices after the primitive
+exists, which the layer cannot promise while its geometry is the solved head set; `T4` survives
+precisely because it stops changing geometry, and stops being the layer.
 
 #### What this run still cannot answer
 
@@ -831,3 +873,7 @@ device measurement — the product hero was not opened during this run.
   they bound neither the layer's CPU cost nor its GPU cost; the question of whether the UV/colour
   uploads should move into the `topologyRevision` pass cannot be answered from them.
 - PSS: memory was not sampled.
+- Every row above, until the engine moves. `T4` shows the geometry, the material and the counts are
+  right and that the draw itself costs 48 fps alongside the asset; it cannot show alignment, tint or
+  a seam because it is not this layer. Those readings wait on a Filament version whose OpenGL backend
+  survives the index upload, which is its own change (`compileSdk` + Filament), not this one.
