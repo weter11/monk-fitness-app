@@ -21,10 +21,12 @@ import java.nio.IntBuffer
  * The debug tube layer as one Filament renderable: buffers sized once, rewritten in place, and visible
  * only while the layer controller says so.
  *
- * Every CPU-side buffer comes in two copies ([Ring]) because `setBufferAt` hands Filament the address of
- * a direct buffer and only releases it after the GPU has consumed it; rewriting one copy per frame is a
- * tear, not an exception. [prepare] never leaves a half-built renderable behind: a material whose
- * required attributes this layer cannot fill is reported as [failure] and the body still draws.
+ * Every CPU-side buffer comes in three copies ([Ring]) because `setBufferAt` hands Filament the address
+ * of a direct buffer and only releases it after the GPU has consumed it; rewriting a copy whose upload
+ * is still pending is a tear, not an exception. Three slots cover the two frames a pipelined renderer
+ * can hold while the third is being filled. [prepare] never leaves a half-built renderable behind: a
+ * material whose required attributes this layer cannot fill is reported as [failure] and the body still
+ * draws.
  */
 internal class TubeMesh(
     private val engine: Engine,
@@ -145,13 +147,21 @@ internal class TubeMesh(
         // just the revision — decides whether the static attributes and the index count still hold.
         val shapeMoved = rebuild || count != uploadedVertexCount || geometry.indexCount != uploadedIndexCount
         if (shapeMoved) {
-            built.writeUvs(geometry, ring.uvs)
-            built.writeColors(geometry, ring.colorBytes)
-            built.writeUv1Dummy(ring.uv1Bytes, vertexCapacity)
+            // A material that does not ask for UV0, UV1 or colour has no slot to upload them to, and
+            // asking for one is an exception: the plan is the authority on which attributes exist.
+            built.bufferIndexOfOrNull(TubeAttribute.UV0)?.let { slot ->
+                built.writeUvs(geometry, ring.uvs)
+                vb.setBufferAt(engine, slot, ring.uvs, 0, count * UV_COMPONENTS)
+            }
+            built.bufferIndexOfOrNull(TubeAttribute.UV1)?.let { slot ->
+                built.writeUv1Dummy(ring.uv1Bytes, vertexCapacity)
+                vb.setBufferAt(engine, slot, ring.uv1Bytes, 0, vertexCapacity * UV1_BYTES)
+            }
+            built.bufferIndexOfOrNull(TubeAttribute.COLOR)?.let { slot ->
+                built.writeColors(geometry, ring.colorBytes)
+                vb.setBufferAt(engine, slot, ring.colorBytes, 0, vertexCapacity * COLOR_BYTES)
+            }
             built.writeIndices(geometry, ring.indices)
-            vb.setBufferAt(engine, built.bufferIndexOf(TubeAttribute.UV0), ring.uvs, 0, count * UV_COMPONENTS)
-            vb.setBufferAt(engine, built.bufferIndexOf(TubeAttribute.UV1), ring.uv1Bytes, 0, vertexCapacity * UV1_BYTES)
-            vb.setBufferAt(engine, built.bufferIndexOf(TubeAttribute.COLOR), ring.colorBytes, 0, vertexCapacity * COLOR_BYTES)
             ib.setBuffer(engine, ring.indices, 0, geometry.indexCount)
             renderableManager.setGeometryAt(
                 entity, 0, RenderableManager.PrimitiveType.TRIANGLES, vb, ib, 0, geometry.indexCount
@@ -220,7 +230,8 @@ internal class TubeMesh(
         RenderableManager.Builder(1)
             .boundingBox(box)
             .culling(true)
-            // Neither shadow flag is used by a debug overlay, which also keeps an empty box legal.
+            // The box above is what makes culling legal: Filament aborts on an empty AABB while
+            // culling is on, whatever the shadow flags say, so bounds.fallback() is the real guard.
             .castShadows(false)
             .receiveShadows(false)
             .geometry(0, RenderableManager.PrimitiveType.TRIANGLES, vb, ib, 0, 0)
@@ -300,7 +311,7 @@ internal class TubeMesh(
         return reason
     }
 
-    /** One parity of the CPU-side buffers: two of these exist so an upload in flight is never rewritten. */
+    /** One parity of the CPU-side buffers: three exist so no slot is rewritten while its upload is pending. */
     private class Ring(vertexCapacity: Int, indexCapacity: Int) {
 
         val positionBytes: ByteBuffer = direct(vertexCapacity * TubeAttribute.POSITION.bytesPerVertex)
@@ -323,7 +334,7 @@ internal class TubeMesh(
     }
 
     private companion object {
-        const val RING_DEPTH = 2
+        const val RING_DEPTH = 3
         const val LAYER_BIT = 1
         const val LABEL = "muscleTubes"
         const val UNSKINNED_DONOR = "Ground"

@@ -43,8 +43,12 @@ sealed interface TubeAttributePlan {
         val bufferCount: Int get() = slots.size
 
         fun bufferIndexOf(attribute: TubeAttribute): Int =
-            slots.firstOrNull { it.attribute == attribute }?.bufferIndex
+            bufferIndexOfOrNull(attribute)
                 ?: throw IllegalArgumentException("attribute $attribute is not declared")
+
+        /** The slot [attribute] occupies, or null when this material does not ask for it. */
+        fun bufferIndexOfOrNull(attribute: TubeAttribute): Int? =
+            slots.firstOrNull { it.attribute == attribute }?.bufferIndex
 
         /** Bytes one attribute needs for [vertexCount] vertices, on both sides of the upload. */
         fun bytesFor(attribute: TubeAttribute, vertexCount: Int): Int {

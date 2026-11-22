@@ -39,6 +39,9 @@ class MeshBounds {
     }
 
     fun include(x: Float, y: Float, z: Float) {
+        // One non-finite component would otherwise pin min/max at NaN for every later vertex, and a
+        // NaN box is not empty, so it would pass the renderable's precondition and break culling.
+        if (!x.isFinite() || !y.isFinite() || !z.isFinite()) return
         if (isEmpty) {
             minX = x
             minY = y
@@ -107,6 +110,9 @@ class TubeVertexLayout(
 
     /** The vertex-buffer slot [attribute] occupies in the plan this layout was built from. */
     fun bufferIndexOf(attribute: TubeAttribute): Int = plan.bufferIndexOf(attribute)
+
+    /** The slot [attribute] occupies, or null when the material does not ask for it. */
+    fun bufferIndexOfOrNull(attribute: TubeAttribute): Int? = plan.bufferIndexOfOrNull(attribute)
 
     fun indexBytes(indexCount: Int): Int = indexCount * UINT_BYTES
 

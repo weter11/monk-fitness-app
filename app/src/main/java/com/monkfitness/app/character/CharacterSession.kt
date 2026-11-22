@@ -406,15 +406,19 @@ class CharacterSession(
         uiHelper.detach()
         swapChain?.let { engine.destroySwapChain(it) }
         swapChain = null
+        // Before the asset and the provider that own this layer's material: the tube instance was made
+        // by the provider and, on the fallback path, copied an instance the asset is about to free.
+        tubeMesh?.destroy()
+        tubeMesh = null
         asset?.let { loaded ->
             scene.removeEntities(loaded.entities)
             assetLoader?.destroyAsset(loaded)
         }
-        // Before the engine goes: the tube entity, its buffers and the instance this session owns only.
-        tubeMesh?.destroy()
-        tubeMesh = null
         assetLoader?.destroy()
         assetLoader = null
+        // Materials outlive every instance that references them, so the provider goes last of the three.
+        materialProvider?.destroyMaterials()
+        materialProvider?.destroy()
         materialProvider = null
         asset = null
         indirectLight?.let { engine.destroyIndirectLight(it) }
