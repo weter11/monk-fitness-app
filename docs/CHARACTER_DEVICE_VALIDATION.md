@@ -618,7 +618,7 @@ the GLB was loaded with.
 | Property | Value |
 | --- | --- |
 | Material | `UbershaderProvider.createMaterialInstance` with `hasVertexColors`, `doubleSided`, `alphaMode = OPAQUE`, tinted from `SkinPalette.DEFAULT`; falls back to `MaterialInstance.duplicate` of the asset's `Ground` instance, and refuses the layer with a diagnostics line if neither exists |
-| Declared attributes | exactly `Material.requiredAttributes` — planned for `POSITION, UV0, UV1, COLOR` with `TANGENTS` absent, so shading would be derivative-based (faceted). **Measured on the Adreno 735: the instance reports `TANGENTS`, so the layer refuses and draws nothing — §7.7** |
+| Declared attributes | exactly `Material.requiredAttributes`, filled from the first candidate the planner can satisfy: the unlit permutation the layer requests reports `POSITION,UV0,UV1,COLOR` on the Adreno 735 (§7.7), where the instance the provider returned before it reported `TANGENTS` and was refused by name |
 | `UV1` | the `0xFF` fill gltfio itself uses for a missing second UV set (`USHORT2`, normalized) |
 | `COLOR` | per-vertex tendon ramp written by the mesh (`UBYTE4`, normalized) |
 | Indices | `UINT`, 41,472 capacity, uploaded only when the drawn-head set changes |
@@ -657,8 +657,13 @@ with Shizuku running, e.g. `rish -c "pm list packages | grep monkfitness"` to co
 
 ### 7.7 Device run — muscle tubes
 
-The rows below are the ones this layer adds to §3. They have now been run on hardware, on `main` at
-`e6d7b2b` (PR #403); every row is either measured or marked with what blocked it.
+The rows below are the ones this layer adds to §3. They were run on hardware at `main` `9aecc9fe`
+(PR #405), which supersedes the run at `e6d7b2b` (PR #403) and the two blocker rows PR #404 recorded.
+One of those blockers is gone: the instance the provider returns now reports
+`POSITION,UV0,UV1,COLOR`, so the attribute refusal no longer happens. The other is replaced by a
+harder one: with the tube renderable in the scene the process dies inside Filament's render pass
+0.55 s after the engine is created, with the layer **off**, so every row that needs a frame is
+blocked by the crash and not by the material.
 
 | Row | What to look for | Expected |
 | --- | --- | --- |
@@ -686,9 +691,12 @@ build-tools 34.0.0 `aapt2` executed through `qemu-x86_64` because the shipped bi
   -Pandroid.aapt2FromMavenOverride=<shim>/aapt2
 ```
 
-`BUILD SUCCESSFUL in 6m 20s`, APK 22,814,418 bytes. Installed with the package-installer session API
-(`cmd package install-create/-write/-commit` over `rish`; `pm install` is refused on this channel),
-`versionCode` 989591 → 994075.
+`BUILD SUCCESSFUL in 5m 14s`, APK 22,830,802 bytes,
+`sha256 93eac491f495ab09b7ea53c8c7497509e845f7132378eb78927d7c42f5b17e7f`,
+`FILAMENT_CHARACTER_ENABLED = true` in the generated `BuildConfig`. Installed with the
+package-installer session API over `rish`, `versionCode` 994075 → 994231; the final reinstall
+(`install-create -r -d`, because the probe builds below carried a higher code) reports
+`lastUpdateTime=2026-11-22 14:27:50`.
 
 | Property | Value |
 | --- | --- |
@@ -702,90 +710,124 @@ build-tools 34.0.0 `aapt2` executed through `qemu-x86_64` because the shipped bi
 | Launch | `am start -n com.monkfitness.app/.character.CharacterDiagnosticsActivity` |
 | Overlay label | the `tubes` chip renders **localized** (`трубки`); select it by resource, not by the English word |
 
+Four further APKs were built from the same tree and installed one at a time to attribute the crash.
+Each one changes a single thing and is not part of the shipped build:
+
+| Build | What it does differently | Result |
+| --- | --- | --- |
+| `e6d7b2b` (PR #403, control) | nothing — the pre-#405 tree | runs; overlay is the #404 record (`tubes: material requires TANGENTS…`, `0 triangles`); 474 frames, 42 fps, p95 24.72 ms |
+| `72f08a59` | the unlit permutation alone (first commit of #405) | SIGSEGV, same fault address and same `pc` offsets as #405 |
+| probe A | `TubeMesh.prepare()` returns after taking the material instance: no vertex buffer, no index buffer, no renderable | runs, no crash |
+| probe B | vertex/index buffers and the upload rings are built, `buildRenderable()` is skipped | runs, no crash; overlay prints `attrs POSITION,UV0,UV1,COLOR`; 512 frames, 43 fps, p95 24.85 ms |
+| probe C | renderable built and visible, but `setGeometryAt`/`setBuffer` skipped so the geometry keeps its builder's zero index count | SIGSEGV, same signature |
+| probe D | renderable built, `setVisible(false)` forced so its layer mask stays 0 | SIGSEGV, same signature |
+
 #### Results
 
 | Row | Measured | Verdict |
 | --- | --- | --- |
-| Attributes | The instance the `UbershaderProvider` returns reports **`TANGENTS`** among its required attributes, so `TubeMesh.prepare` (`TubeMesh.kt:80`) hands a set the planner refuses (`TubeAttributePlan.kt:76-79`, `:98`). No `attrs` line is printed at all; the overlay prints `tubes: material requires TANGENTS, which a rigid tube does not supply` on every frame. No `FILAMENT_CHECK_PRECONDITION` line, no Adreno error, `logcat -b crash` empty. | **FAIL** — the layer never builds on this driver |
-| Axis alignment / orientation | Not observable: the layer is refused, nothing is added to the scene. Triangle count rises to `13824` and no red pixel reaches the screen (see evidence), so neither the 90° axis question, the outward winding, nor any seam residual can be read here. | **BLOCKED** by the attribute refusal |
-| Tint | Not observable for the same reason — there is no belly or end-ramp to compare. The readout half of the row **passes**: `relativePathLengthChange` changes per head across the squat rep, `0 refused` on every sample. | **Tint BLOCKED · readout PASS** |
-| Frame time | p95 CPU frame time (`beginFrame`→`endFrame` wall clock, rolling 120 frames) with the layer on vs off, two rounds in opposite order: **+2.18 ms** and **+2.24 ms** median. Since the layer is refused, that delta is the solve + 13,824-triangle write + layer bookkeeping only — the upload returns early (`TubeMesh.kt:130`) and no draw is submitted. | **FAIL against the ≤ 1 ms bar**, and the draw half is still unmeasured |
-| Tubes on | `18 heads · 0 refused · 16 drawn · 13824 triangles`; nothing appears over the body. | FAIL (row above) |
-| Layer toggle | `superficial` → `16 drawn · 0 triangles`, tap again → `16 · 13824`. | PASS |
-| Deep toggle | unchanged (`16 · 13824`) — the M1 library has no deep muscle. | PASS |
-| Readout budget | `0 refused` on every sample, squat at rest and mid-rep. | PASS |
-| Lifecycle | home → 6 s → return with tubes on: same session, `surface true · running true`, triangle count unchanged, no crash entry. | PASS |
+| Attributes | Probe B, same build, overlay verbatim: `attrs POSITION,UV0,UV1,COLOR`. No `TANGENTS`, no `tubes:` refusal line, and `logcat` holds zero `FILAMENT_CHECK_PRECONDITION`, zero Adreno/Filament error lines in probe B's log — its only Filament warning is the known `eglGetFrameTimestampsANDROID failed with error 12290`, and the shipped artifact's own log has no Filament warning at all. | **PASS** — the row #404 recorded as FAIL |
+| Tubes on | Not observable on the shipped artifact: the process dies 0.55 s after `FEngine created`, before the 500 ms overlay poll writes anything, three launches out of three. Probe B prints `0 triangles` because tubes are off by default there, and the toggle cannot be reached. | **FAIL (crash)** |
+| Axis alignment / winding | No frame survives, so no pixel and no seam reading exists. `TAU_RESIDUAL_MM` is the §0.3 bind/posed residual (5.0 mm over the A2 rows), not a tube-to-limb seam, and the layer has no device readout for one. | **BLOCKED** by the crash |
+| Tint | No belly and no end ramp to compare. | **BLOCKED** by the crash |
+| Layer toggle | Unreachable. The crash needs neither the toggle nor the layer: it happens with `tubes` off, which is the default. | **BLOCKED** by the crash |
+| Deep toggle | Same. | **BLOCKED** by the crash |
+| Readout at rest | Not observed: the earliest dump this run could take (53 frames, ~1.3 s after launch) already reads `gluteus_maximus P +60.8 %`, and the lowest hip value across thirteen samples is `+13.0 %`. There is no rest window on this build to compare against. | **UNMEASURED** |
+| Readout mid-rep | Probe B, ten dumps across one squat rep, per head: `rectus_femoris A -0.6 … +17.8 %`, `biceps_femoris A long head +6.6 … +19.6 %`, `biceps_femoris A short head -12.0 … +16.2 %`, `gluteus_maximus A +0.0 … +44.7 %`, `latissimus_dorsi +7.2 … +9.9 %`, while `rectus_abdominis`, both `external_oblique` heads and both `erector_spinae` heads read ±0.0 % throughout. | PASS (probe) |
+| Refusal budget | `0 refused` on every sample of every run, the control included. | PASS |
+| Frame time | Full-frame p95 (the session's `beginFrame`→`endFrame` clock, 120 rolling samples) is 24.72 ms on the control and 24.85 ms on probe B — the layer adds nothing to it in either state, because in both the renderable never draws. The layer-on reading that the ≤ 1 ms budget is about does not exist on this build. | **BLOCKED** by the crash |
+| Lifecycle | Unreachable: there is no live session to background. | **BLOCKED** by the crash |
+| Exercise switch | Unreachable on device. The handoff itself is covered on the JVM by `CharacterStageHandoffTest`; the device cell stays unmeasured. | **BLOCKED** by the crash |
 
 #### Evidence
 
-Overlay, verbatim, squat with the layer on (`16 drawn · 13824 triangles`):
+The shipped artifact, fourteen seconds after launch — the app is gone and the launcher is in front:
 
 ```
-18 heads · 0 refused · 16 drawn · 13824 triangles
-rectus_abdominis A head0: modelled +0.0%
-…
-latissimus_dorsi A head0: modelled +7.6%
-gluteus_maximus A head0: modelled +4.1%
-biceps_femoris A short head: modelled +15.5%
-rectus_femoris A head0: modelled -1.2%
-tubes: material requires TANGENTS, which a rigid tube does not supply
-```
-
-and the same block later in the rep, showing the readout moving (`gluteus_maximus A +42.2%`,
-`biceps_femoris A short head -17.9%`, `rectus_femoris A +22.7%`), with the refusal line unchanged.
-
-Frame time, p95 ms per 1 s sample, squat rep cycle:
-
-| State | Samples | Median | FPS range |
-| --- | --- | --- | --- |
-| tubes off, round 1 | 24.45, 24.37, 24.20, 25.72, 24.24, 24.20, 25.81, 25.28 | 24.41 | 44–50 |
-| tubes on, round 1 | 26.59, 26.51, 28.33, 26.52, 26.59, 26.60, 26.71, 26.30 | 26.59 | 39–46 |
-| tubes off, round 2 | median 24.61 (24.28–25.30) | 24.61 | 43–52 |
-| tubes on, round 2 | median 26.85 (26.37–28.02) | 26.85 | 40–47 |
-
-`logcat`, engine creation (the only Filament lines besides the frame-timestamp warning):
-
-```
-I Filament: FEngine (64 bits) created at 0x6f25e35ad0 (threading is enabled)
+I Filament: FEngine (64 bits) created at 0x6f25e2b420 (threading is enabled)
 I Filament: FEngine resolved backend: OpenGL
 I Filament: [Qualcomm], [Adreno (TM) 735], [OpenGL ES 3.2 V@0762.40 …], [OpenGL ES GLSL ES 3.20]
 I Filament: Feature level: 2
-W Filament: eglGetFrameTimestampsANDROID failed with error 12290. Disabling frame timestamps query.
+I Filament: Backend feature level: 2
+I Filament: FEngine feature level: 1
+F libc    : Fatal signal 11 (SIGSEGV), code 1 (SEGV_MAPERR), fault addr 0x4 in tid 15553 (monkfitness.app)
 ```
 
-Filament's precondition checks are compiled out of release builds, so an absent abort is not proof of
-anything; the refusal happens before any GPU binding regardless.
+`0.546 s` separate those two lines. The tombstone, trimmed to the frames that name code:
 
-Pixels: 1220 × 2712 screenshot, every second pixel sampled (827,160 samples). Strongly red samples
-(`r > 110 ∧ r ≥ 1.9·g ∧ r ≥ 1.9·b`): **0** with the layer off and **0** with it on.
+```
+F DEBUG   : Cmdline: com.monkfitness.app
+F DEBUG   : Cause: null pointer dereference
+F DEBUG   :       #00 pc 00000000001eb8f4  …/base.apk!libfilament-jni.so (offset 0xc08000)
+F DEBUG   :       #01 pc 00000000001d9424  …/base.apk!libfilament-jni.so (offset 0xc08000)
+F DEBUG   :       #02 pc 00000000001d8ba4  …/base.apk!libfilament-jni.so (offset 0xc08000)
+F DEBUG   :       #03 pc 0000000000161670  …/base.apk!libfilament-jni.so (offset 0xc08000)
+F DEBUG   :       #04 pc 000000000015b904  …/base.apk!libfilament-jni.so (Java_com_google_android_filament_Renderer_nRender+24)
+F DEBUG   :       #10 pc 0000000000278c14  (com.google.android.filament.Renderer.render+0)
+F DEBUG   :       #14 pc 00000000000170b4  (com.monkfitness.app.character.CharacterSession.render+0)
+F DEBUG   :       #18 pc 000000000001683c  (com.monkfitness.app.character.CharacterSession.access$render+0)
+F DEBUG   :       #22 pc 00000000000158d8  (com.monkfitness.app.character.CharacterSession$frameCallback$1.doFrame+0)
+```
 
-#### The two blockers
+The identical `pc` offsets, fault address `0x4` and `BuildId 9f781035e69554b12b04f4317229be349165c219`
+recur on all three `#405` launches and on `72f08a59`; the control build on the same driver, same
+session, produces no crash and no tombstone. Filament's own native preconditions are compiled out of
+the release library, and nothing here is a driver error: the fault is inside Filament's frame, before
+any draw it could attribute to Adreno.
 
-1. **`TANGENTS` is requested and not supplied.** §7.6 recorded the ubershader as declaring
-   `POSITION, UV0, UV1, COLOR` with "`TANGENTS` not declared"; on this driver the instance reports it.
-   The refusal is the designed behaviour (a missing attribute is a silent driver default, not a
-   crash), but it means rows 2 and 3 cannot be answered until the layer supplies a tangent stream or
-   takes a variant that does not ask for one.
-2. **An exercise switch drops the character entirely.** Squat → Push-up leaves the host on
-   `no character session` and does not recover while the chip stays on Push-up; switching back to
-   Squat restores a session. `CharacterStage.kt:227` keys the attachment on the pose builder and
-   `:229` acquires the single-owner slot inside that `remember`, while the old stage releases it in
-   `DisposableEffect.onDispose` (`:110`) — the new composition acquires before the old effect is
-   disposed, so the new attachment fails with `another view already owns the character`. Push-up was
-   therefore never exercised; every push-up cell in this section is unmeasured, not passed.
+The control build, `e6d7b2b`, squat with the layer off — this is the #404 reading reproduced, and it
+is what licenses the comparison:
+
+```
+18 heads · 0 refused · 16 drawn · 0 triangles
+rectus_abdominis A head0: modelled -0.0%
+gluteus_maximus A head0: modelled +36.8%
+biceps_femoris A short head: modelled +12.7%
+rectus_femoris A head0: modelled +2.8%
+tubes: material requires TANGENTS, which a rigid tube does not supply
+```
+
+Probe B, the same build as the shipped artifact with only `buildRenderable()` suppressed:
+
+```
+18 heads · 0 refused · 16 drawn · 0 triangles
+…
+rectus_femoris A head0: modelled +11.4%
+attrs POSITION,UV0,UV1,COLOR
+requested Auto → active OPENGL
+device API 36 · GLES 3.2 · Vulkan 1.3.0, level 1
+34 bones · 5 morphs · neutral
+512 frames · 43 fps · p95 24.85 ms · surface true · running true
+```
+
+#### The blocker
+
+The attribute refusal is resolved and the exercise switch is fixed in composition, but the layer
+cannot draw: Filament's render pass dereferences a null four bytes past its base as soon as the tube
+renderable is in the scene. The probes narrow it to the renderable itself rather than to anything
+that feeds it:
+
+- the material instance alone (probe A) is harmless, so the unlit permutation and the
+  `createMaterialInstance` call are not the fault;
+- the vertex buffer, the index buffer and the upload rings without a renderable (probe B) are
+  harmless, so the attribute declaration and the buffer sizes are not the fault either;
+- the renderable with zero indices (probe C) crashes, so it is not the draw or the index count;
+- the renderable hidden by a zero layer mask (probe D) crashes, so `setVisible` is not the trigger
+  and no toggle can avoid it.
+
+What remains is the renderable's own pipeline: the unlit ubershader instance against a vertex layout
+of `POSITION,UV0,UV1,COLOR` built by this app. `CharacterSession.prepareAnatomy` builds this renderable
+unconditionally, so this is not confined to the debug overlay: the flagged build puts it in the scene
+on every character screen. That last sentence is a reading of `CharacterSession.kt:284`, not a second
+device measurement — the product hero was not opened during this run.
 
 #### What this run still cannot answer
 
-- Alignment, orientation, winding in situ, tendon tint, and the GPU draw cost — all downstream of
-  blocker 1.
-- There is no `TAU_RESIDUAL_MM` (or any millimetre seam residual) in this repository; the layer's
-  metres, bounds and winding are pinned by `TubeVertexLayoutTest` and `ProceduralTubeBudgetTest` on
-  the JVM, and the device has no corresponding readout to compare against.
-- The push-up half of every row, because of blocker 2.
-
-Frame time and memory are the two rows a JVM harness cannot say anything about: the solve adds no
-allocation of its own after construction — `AnatomySolveAllocationTest` measures the live
-`AnatomySolver.solve` against an empty loop, while `SegmentFrames.derive` nominally builds five
-scratch `Vector3`s (the JIT may scalar-replace them on the inlined path) — and the mesh writes into
-pre-allocated arrays (`MuscleGeometryOwnershipTest`), but neither is a measurement of a phone. §7.7 now
-carries the device p95 for the write path; PSS was not sampled, so memory is still unread.
+- Alignment, orientation, winding in situ, tendon tint and the GPU draw cost: all downstream of a
+  frame, and there is none.
+- The push-up half of every row, and the exercise switch on device. `CharacterStageHandoffTest` pins
+  the claim-side handoff on the JVM; this run did not see either exercise render with tubes.
+- The ≤ 1 ms write-path budget. The two p95 readings above are full frames with nothing drawn, so
+  they bound neither the layer's CPU cost nor its GPU cost; the question of whether the UV/colour
+  uploads should move into the `topologyRevision` pass cannot be answered from them.
+- PSS: memory was not sampled.
