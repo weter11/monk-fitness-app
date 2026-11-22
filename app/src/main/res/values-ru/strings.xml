@@ -1257,4 +1257,5 @@
     <string name="library_counts_exercises">Анимированные упражнения</string>
     <string name="library_counts_foods">Продукты</string>
     <string name="library_counts_dishes">Блюда</string>
+    <string name="character_debug_layer_tubes">трубки</string>
 </resources>

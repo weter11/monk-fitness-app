@@ -1264,4 +1264,5 @@
     <string name="library_counts_exercises">Ejercicios animados</string>
     <string name="library_counts_foods">Alimentos</string>
     <string name="library_counts_dishes">Platos</string>
+    <string name="character_debug_layer_tubes">tubos</string>
 </resources>
