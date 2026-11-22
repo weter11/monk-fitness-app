@@ -640,6 +640,8 @@ have to add to §3; they are recorded so the unexecuted set is explicit rather t
 | Frame time | p95 before and after the solve | no more than 1 ms added on a mid-range device |
 | Lifecycle | background / foreground with tubes on | geometry and toggles survive; no crash |
 
-Frame time and memory are the two rows a JVM harness cannot say anything about: the solve is
-allocation-free after construction (`AnatomySolveAllocationTest`) and the mesh writes into
+Frame time and memory are the two rows a JVM harness cannot say anything about: the solve adds no
+allocation of its own after construction — `AnatomySolveAllocationTest` measures the live
+`AnatomySolver.solve` against an empty loop, while `SegmentFrames.derive` nominally builds five
+scratch `Vector3`s (the JIT may scalar-replace them on the inlined path) — and the mesh writes into
 pre-allocated arrays (`MuscleGeometryOwnershipTest`), but neither is a measurement of a phone.

@@ -58,6 +58,8 @@ class ProceduralMuscleMesh(
     private val points = DoubleArray(samples * 3)
     private val radii = DoubleArray(samples)
     private val tangents = DoubleArray(samples * 3)
+    /** Per-segment lengths for [resample], one entry per path point the frame can hold. */
+    private val lengths = DoubleArray(definition.sampling.maxPointsPerHead)
     private val profileCache = HashMap<String, com.monkfitness.app.anatomy.RadiusProfile>()
 
     /**
@@ -199,7 +201,6 @@ class ProceduralMuscleMesh(
 
     /** Resamples the slot's path to [samples] equal-arc points; returns the arc length in units. */
     private fun resample(frame: AnatomyFrame, slotIndex: Int, count: Int): Double {
-        val lengths = DoubleArray(count)
         var total = 0.0
         for (index in 1 until count) {
             val dx = frame.pointComponent(slotIndex, index, 0) - frame.pointComponent(slotIndex, index - 1, 0)
