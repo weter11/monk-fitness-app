@@ -1264,4 +1264,5 @@
     <string name="library_counts_exercises">Esercizi animati</string>
     <string name="library_counts_foods">Alimenti</string>
     <string name="library_counts_dishes">Piatti</string>
+    <string name="character_debug_layer_tubes">tubi</string>
 </resources>

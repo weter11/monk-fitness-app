@@ -40,6 +40,9 @@ class MusclePathSolver(
     private val obstacle = ObstacleGeometry()
     private val unions: Map<String, List<WrapSurface>> =
         definition.muscles.associate { it.id to definition.union(it) }
+    /** One profile per muscle: each owns two arrays, and every head is solved on every frame. */
+    private val profiles: Map<String, RadiusProfile> =
+        definition.muscles.associate { it.id to RadiusProfile(it.radiusKnots, attachmentScale) }
     private val verdict = PairVerdict()
 
     init {
@@ -68,7 +71,7 @@ class MusclePathSolver(
         count = resample(control)
 
         val union = unionOf(muscle)
-        val profile = RadiusProfile(muscle.radiusKnots, attachmentScale)
+        val profile = profiles.getValue(muscle.id)
         val corridor = muscle.corridorMetres * attachmentScale
         val firstDetour = smallestDetour(union, side, pose, frames)
         var detourScale = 1.0

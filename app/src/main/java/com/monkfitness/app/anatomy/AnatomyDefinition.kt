@@ -140,8 +140,13 @@ data class AnatomyDefinition(
     val landmarks: List<LandmarkDefinition>,
     val epsNumMetres: Float,
     val sampling: Sampling,
-    /** The largest direction change a path may carry at an interior sample before it is refused. */
-    val thetaMaxRadians: Float = 0.7853982f
+    /**
+     * The largest direction change a path may carry at an interior sample before it is refused.
+     *
+     * The Stage-2 value is 2.6 rad (~150°): a single-waypoint detour around an ellipsoid folds
+     * sharply at its apex, and a 45° bound refuses every such run instead of catching a real foldback.
+     */
+    val thetaMaxRadians: Float = 2.6f
 ) {
     private val musclesById: Map<String, MuscleDefinition> = muscles.associateBy { it.id }
     private val wrapsById: Map<String, WrapSurface> = wrapSurfaces.associateBy { it.id }

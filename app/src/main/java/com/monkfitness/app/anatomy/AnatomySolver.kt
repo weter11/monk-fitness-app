@@ -11,8 +11,10 @@ import com.monkfitness.app.animation.SkeletonPose
  * the reference state and the runtime cannot disagree. A head whose reference length is not finite
  * and positive is [PathReason.REST_LENGTH_INVALID] on every frame and never divides.
  *
- * One allocation at construction, none per solve: the frames, the pass loop and the scratch rest
- * carrier are owned here and reused.
+ * The frames, the pass loop and the rest carrier are owned here and reused across solves, so a
+ * solve adds no allocation of its own. `SegmentFrames.derive` nominally builds five `Vector3`
+ * scratch vectors per call, because its purity guard forbids retaining them; nothing else here
+ * allocates.
  */
 class AnatomySolver(
     private val definition: AnatomyDefinition,

@@ -18,6 +18,11 @@ import java.lang.reflect.Method
  * It is never compared against a bare zero: measuring an empty loop reports a small cost of its own,
  * so each assertion compares the work against that empty-loop baseline. A zero the instrument could
  * reach without observing anything is not evidence.
+ *
+ * `SegmentFrames.derive` builds five `Vector3` scratch vectors at its own call site, because its
+ * purity guard forbids retaining them. The loop is therefore gated against the empty loop, and the
+ * live solve is gated one-sided against that derivation: it may be cheaper when the JIT
+ * scalar-replaces the vectors, but it can never add an allocation of its own.
  */
 class AnatomySolveAllocationTest {
 
@@ -27,35 +32,61 @@ class AnatomySolveAllocationTest {
     private val frames = SegmentFrames(skeleton)
     private val frameSet = SegmentFrameSet()
     private val bindPose = AnatomyPoseFixture.bindPose(skeleton)
-    private val builder = MusclePathBuilder(definition, X1Bind.unitsPerMetre(skeleton))
-    private val validator = AnatomyValidator(definition, X1Bind.unitsPerMetre(skeleton).toDouble())
+    private val scale = X1Bind.unitsPerMetre(skeleton).toDouble()
+    private val solver = AnatomySolver(definition, skeleton, scale, bindPose)
+    private val loop = MusclePathSolver(
+        definition,
+        MusclePathBuilder(definition, X1Bind.unitsPerMetre(skeleton)),
+        AnatomyValidator(definition, scale),
+        scale
+    )
     private val out = Vector3()
-
-    init {
-        // Derived once, outside the measured body: SegmentFrames keeps no scratch (its purity test
-        // forbids a retained vector), so derive allocates 5 objects — measured at 120 bytes — on
-        // every call. That is a stage-1 finding against the purity rule, not something this gate
-        // can absorb; what is measured here is the builder reusing this frame.
-        frames.derive(bindPose, frameSet)
-    }
 
     /** A field read of an allocated object cannot be optimised away; a local could be. */
     private var sink: Any? = null
     private var accumulator = 0
 
     @Test
-    fun clearingAndRefillingTheFrameCostsNoMoreThanAnEmptyLoop() {
+    fun solvingEveryHeadAddsNothingToItsSegmentDerivation() {
         val counter = allocationCounter()
-        repeat(WARMUP) { pass() }
+        repeat(WARMUP) { solver.solve(bindPose, frame) }
+
+        val derive = steadyAllocation(counter) { frames.derive(bindPose, frameSet) }
+        val solve = steadyAllocation(counter) { solver.solve(bindPose, frame) }
+
+        assertTrue(
+            "the live solve must not allocate beyond its derivation: derive=$derive solve=$solve bytes",
+            solve <= derive
+        )
+        val solved = (0 until frame.headCount).count { frame.statuses[it] == PathStatus.VALID.ordinal }
+        assertTrue("the measured solve must have produced paths, not a skipped body", solved > 0)
+    }
+
+    @Test
+    fun thePathLoopAllocatesNothingPerHead() {
+        frames.derive(bindPose, frameSet)
+        val counter = allocationCounter()
+        repeat(WARMUP) { solveEveryHeadWithTheLoop() }
 
         val baseline = steadyAllocation(counter) { }
-        val measured = steadyAllocation(counter) { pass() }
+        val measured = steadyAllocation(counter) { solveEveryHeadWithTheLoop() }
 
         assertEquals(
-            "a reuse pass over ${frame.headCount} heads must allocate no more than the loop itself",
+            "the loop over ${frame.headCount} heads must allocate no more than an empty loop",
             baseline,
             measured
         )
+        val solved = (0 until frame.headCount).count { frame.statuses[it] == PathStatus.VALID.ordinal }
+        assertTrue("the measured loop must have produced paths, not a skipped body", solved > 0)
+    }
+
+    private fun solveEveryHeadWithTheLoop() {
+        frame.clear()
+        for (slot in 0 until frame.headCount) {
+            val id = frame.heads[slot]
+            val muscle = definition.muscle(id.muscleId) ?: continue
+            loop.solve(muscle, id.side, bindPose, frameSet, frame, slot)
+        }
     }
 
     @Test
@@ -98,27 +129,6 @@ class AnatomySolveAllocationTest {
             best = minOf(best, counter.bytes() - before)
         }
         return best
-    }
-
-    /** The stage's per-frame work: every head's path and clearance verdict into one carrier. */
-    private fun pass() {
-        frame.clear()
-        for (slot in 0 until frame.headCount) {
-            val id = frame.heads[slot]
-            val muscle = definition.muscle(id.muscleId)!!
-            val head = muscle.heads[id.headIndex]
-            builder.build(head, id.side, bindPose, frameSet, frame, slot)
-            val state = frame.muscleStates[slot]
-            frame.modelledPathLengths[slot] = state.pointCount.toFloat()
-            frame.restLengths[slot] = 1f
-            frame.relativePathLengthChanges[slot] = 0.25f
-            frame.statuses[slot] = PathStatus.VALID.ordinal
-            frame.reasonCodes[slot] = PathReason.NO_REASON.ordinal
-            frame.searchOutcomes[slot] = SearchOutcome.CLEARED.ordinal
-            frame.renderable[frame.instanceOf(slot)] = true
-            state.pathPoint(0, out)
-            validator.validate(muscle, id.side, bindPose, frameSet, frame, slot, SearchOutcome.PASS_CAP)
-        }
     }
 
     private fun readEverything(state: MuscleState) {
