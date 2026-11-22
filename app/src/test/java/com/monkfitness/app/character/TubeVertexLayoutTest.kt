@@ -3,11 +3,15 @@ package com.monkfitness.app.character
 import com.monkfitness.app.anatomy.AnatomyDefinition
 import com.monkfitness.app.anatomy.AnatomyDefinitionLoader
 import com.monkfitness.app.anatomy.AnatomyFrame
+import com.monkfitness.app.anatomy.AnatomySolver
 import com.monkfitness.app.anatomy.MuscleLayer
 import com.monkfitness.app.animation.Joint
 import com.monkfitness.app.animation.SkeletonDefinition
+import com.monkfitness.app.animation.SkeletonPose
+import com.monkfitness.app.animation.Vector3
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Assume.assumeTrue
 import org.junit.Test
@@ -22,9 +26,10 @@ import java.nio.IntBuffer
  * The upload seam, checked where it can be checked: every assertion here runs on a JVM with heap
  * buffers, because the only thing that needs a device is Filament itself.
  *
- * The three failures these tests exist for are all silent: a rotation dropped (the tubes sit 90° off
- * the body), a stride off by one (every tube shears), and a required attribute left unplanned
- * (Filament logs a warning and shades the mesh with driver defaults).
+ * The four failures these tests exist for are all silent: a rotation dropped (the tubes sit 90° off
+ * the body), a scale dropped (they land 247x out, past the far plane, and are culled), a stride off by
+ * one (every tube shears), and a required attribute left unplanned (Filament logs a warning and shades
+ * the mesh with driver defaults).
  */
 class TubeVertexLayoutTest {
 
@@ -62,23 +67,20 @@ class TubeVertexLayoutTest {
 
     @Test
     fun theAssetConversionPinsBothRotatedAxes() {
-        // The mesh divides engine units by unitsPerMetre and stops; the layout rotates. Composing the
-        // two must equal the conversion the rig itself uses, or the tubes sit 90° off the body.
+        // The layout's whole job on positions is the basis rotation: the mesh hands it metres and it
+        // must not scale them a second time. `toAssetDirection` is that rotation without the scale.
         val binds = X1Bind.bindJoints(SkeletonDefinition.DEFAULT_ADULT)
         val joints = listOf(Joint.SHOULDER_A, Joint.HIP_F, Joint.TOE_B)
         val slot = DynamicGeometrySlot(joints.size, 3)
         for (joint in joints) {
             val engine = binds.getValue(joint)
-            slot.pushVertex(
-                engine.x / unitsPerMetre, engine.y / unitsPerMetre, engine.z / unitsPerMetre,
-                0f, 1f, 0f, 0f, 0f, 1f, 1f, 1f
-            )
+            slot.pushVertex(engine.x, engine.y, engine.z, 0f, 1f, 0f, 0f, 0f, 1f, 1f, 1f)
         }
 
         layout.writePositions(slot, positions, bounds)
 
         joints.forEachIndexed { index, joint ->
-            val expected = X1Bind.toAsset(binds.getValue(joint), unitsPerMetre)
+            val expected = X1Bind.toAssetDirection(binds.getValue(joint))
             assertEquals("x of $joint", expected.x, positions.get(index * 3), TOLERANCE)
             assertEquals("y of $joint", expected.y, positions.get(index * 3 + 1), TOLERANCE)
             assertEquals("z of $joint", expected.z, positions.get(index * 3 + 2), TOLERANCE)
@@ -92,8 +94,33 @@ class TubeVertexLayoutTest {
         // Control: dropping the rotation leaves engine +Z on the asset's z axis instead of −x.
         assertTrue(
             "the conversion must move engine +Z onto asset −X",
-            kotlin.math.abs(positions.get(0) - binds.getValue(Joint.SHOULDER_A).z / unitsPerMetre) > 1e-3f
+            kotlin.math.abs(positions.get(0) - binds.getValue(Joint.SHOULDER_A).z) > 1e-3f
         )
+    }
+
+    @Test
+    fun theSolvedMeshUploadsInHumanMetres() {
+        // The renderer's world is the asset's, in metres: the pelvis sits at 0.95 m and the camera's far
+        // plane is 100 m, so a centre line still in engine units lands ~247x out and is culled away
+        // entirely — a failure no count or winding assertion can see.
+        val bind = SkeletonPose()
+        for ((joint, position) in X1Bind.bindJoints(SkeletonDefinition.DEFAULT_ADULT)) {
+            bind.setJoint(joint, Vector3(position.x, position.y, position.z))
+        }
+        val frame = AnatomyFrame.of(definition)
+        AnatomySolver(definition, SkeletonDefinition.DEFAULT_ADULT, unitsPerMetre.toDouble(), bind).solve(bind, frame)
+
+        val slot = mesh.slot()
+        assertTrue("the bind stance must solve every head", mesh.write(frame, slot, shown()) > 0)
+        layout.writePositions(slot, positions, bounds)
+
+        assertFalse("a solved build must produce a box", bounds.isEmpty)
+        assertTrue(
+            "uploaded y is ${bounds.minY}..${bounds.maxY} m, which is not a body",
+            bounds.minY >= 0f && bounds.maxY <= 1.9f
+        )
+        assertTrue("uploaded x half extent is ${bounds.halfX} m", bounds.halfX <= 0.5f)
+        assertTrue("uploaded z half extent is ${bounds.halfZ} m", bounds.halfZ <= 0.5f)
     }
 
     @Test
@@ -196,6 +223,48 @@ class TubeVertexLayoutTest {
         assertFalse("a build that wrote nothing still needs a box", nothing.isEmpty)
         assertEquals(0f, nothing.centreX, 0f)
         assertTrue(nothing.halfX > 0f && nothing.halfY > 0f && nothing.halfZ > 0f)
+    }
+
+    @Test
+    fun aNonFiniteVertexCannotPoisonTheBox() {
+        // A NaN component compares false against everything, so an unguarded box keeps it as min and
+        // max for every later vertex: the AABB then reads as non-empty with NaN extents and culling
+        // fails on a box Filament was told was valid.
+        val slot = DynamicGeometrySlot(2, 3)
+        slot.pushVertex(Float.NaN, 0f, 0f, 0f, 1f, 0f, 0f, 0f, 1f, 1f, 1f)
+        slot.pushVertex(1f, 2f, 3f, 0f, 1f, 0f, 0f, 0f, 1f, 1f, 1f)
+
+        layout.writePositions(slot, positions, bounds)
+
+        assertFalse(bounds.isEmpty)
+        for (component in floatArrayOf(bounds.minX, bounds.minY, bounds.minZ, bounds.maxX, bounds.maxY, bounds.maxZ)) {
+            assertTrue("the box carries a non-finite extent $component", component.isFinite())
+        }
+        assertEquals("the finite vertex alone defines the box", -3f, bounds.minX, 0f)
+        assertEquals(1f, bounds.maxZ, 0f)
+    }
+
+    @Test
+    fun aMinimalPlanExposesNoOptionalSlot() {
+        // A material that asks only for position is a supported plan, so the upload path must be able
+        // to skip UV0, UV1 and colour instead of asking for a slot the plan never declared.
+        val minimal = TubeAttributePlanner.plan(emptyList()) as TubeAttributePlan.Supported
+        val minimalLayout = TubeVertexLayout(minimal, 2, 3)
+
+        assertEquals(0, minimalLayout.bufferIndexOf(TubeAttribute.POSITION))
+        for (optional in listOf(TubeAttribute.UV0, TubeAttribute.UV1, TubeAttribute.COLOR)) {
+            assertNull("$optional must not be declared", minimalLayout.bufferIndexOfOrNull(optional))
+        }
+
+        val slot = DynamicGeometrySlot(2, 3)
+        slot.pushVertex(0f, 0f, 0f, 0f, 1f, 0f, 0f, 0f, 1f, 1f, 1f)
+        slot.pushVertex(1f, 2f, 3f, 0f, 1f, 0f, 0f, 0f, 1f, 1f, 1f)
+        slot.pushTriangle(0, 1, 0)
+
+        val box = MeshBounds()
+        minimalLayout.writePositions(slot, floatBuffer(slot.vertexCapacity * 3), box)
+        assertFalse("a position-only build still needs a box", box.isEmpty)
+        assertTrue(box.halfX > 0f && box.halfY > 0f && box.halfZ > 0f)
     }
 
     @Test
