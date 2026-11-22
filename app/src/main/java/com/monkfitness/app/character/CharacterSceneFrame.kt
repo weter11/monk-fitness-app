@@ -94,6 +94,13 @@ class DynamicGeometrySlot(vertexCapacity: Int, indexCapacity: Int) {
     var indexCount: Int = 0
         private set
 
+    /**
+     * Advances every time a builder writes new index content, so a mesh can tell whether the array
+     * still holds the topology it wrote and skip re-emitting it.
+     */
+    var topologyRevision: Long = 0L
+        private set
+
     val triangleCount: Int get() = indexCount / 3
 
     val vertexCapacity: Int get() = positions.size / 3
@@ -141,6 +148,44 @@ class DynamicGeometrySlot(vertexCapacity: Int, indexCapacity: Int) {
         indices[indexCount + 1] = b
         indices[indexCount + 2] = c
         indexCount += 3
+    }
+
+    /**
+     * Reserves [count] vertices and returns the index they start at, for a builder that fills
+     * [positions] and the other attribute arrays itself. This is the capacity gate; the run is not
+     * re-checked per vertex, which is what keeps a 7,000-vertex rebuild one pass.
+     */
+    internal fun claimVertexRun(count: Int): Int {
+        require(count >= 0 && vertexCount + count <= vertexCapacity) {
+            "a vertex run of $count at $vertexCount is outside $vertexCapacity"
+        }
+        val start = vertexCount
+        vertexCount += count
+        return start
+    }
+
+    /**
+     * Reserves [count] index slots and returns the offset to write them at, for a builder that fills
+     * [indices] in one pass. This is the capacity gate; the run itself is not re-checked per index.
+     */
+    internal fun claimIndexRun(count: Int): Int {
+        require(count >= 0 && indexCount + count <= indexCapacity) {
+            "an index run of $count at $indexCount is outside $indexCapacity"
+        }
+        val start = indexCount
+        indexCount += count
+        topologyRevision++
+        return start
+    }
+
+    /**
+     * Re-declares a topology [indices] already holds, so a frame that only moved the pose keeps the
+     * bytes — and the upload — the previous one left. Index content is a function of how many heads
+     * drew and the per-head layout, never of where their paths are.
+     */
+    internal fun reuseIndices(count: Int) {
+        require(count >= 0 && count <= indexCapacity) { "an index count of $count is outside $indexCapacity" }
+        indexCount = count
     }
 
     /** Whether [index] is referenced by the geometry this slot currently holds. */

@@ -330,6 +330,41 @@ class TubeVertexLayoutTest {
         assertTrue("the instrument must see a known allocation", measured > baseline)
     }
 
+    /**
+     * The per-frame path the device pays for: tessellate a moved pose, then write the uploaded bytes.
+     * A frame that allocated would add GC pressure to the p95 the frame-time budget is measured on, so
+     * the steady state is compared against an empty loop rather than against zero.
+     */
+    @Test
+    fun aMovedPoseTessellatesAndUploadsWithoutAllocating() {
+        val frame = solvedFrame()
+        val slot = mesh.slot()
+        val shown = shown()
+        mesh.write(frame, slot, shown)
+        val counter = allocationCounter()
+        repeat(WARMUP) { fillFrame(frame, slot, shown) }
+
+        val baseline = steadyAllocation(counter) { }
+        val measured = steadyAllocation(counter) { fillFrame(frame, slot, shown) }
+
+        assertEquals(
+            "a frame must not allocate beyond an empty loop: baseline=$baseline measured=$measured",
+            baseline,
+            measured
+        )
+        assertTrue("the measured frame must have tessellated", slot.vertexCount > 0)
+    }
+
+    private fun fillFrame(frame: AnatomyFrame, slot: DynamicGeometrySlot, selection: MuscleSelection) {
+        for (head in 0 until frame.headCount) {
+            frame.writePoint(head, 0f, head + 0f, 0f)
+            frame.writePoint(head, 0f, head + 10f, 0f)
+            frame.writePoint(head, 0f, head + 20f, 0f)
+        }
+        mesh.write(frame, slot, selection)
+        fillOnce(slot)
+    }
+
     private fun fillOnce(slot: DynamicGeometrySlot) {
         layout.writePositions(slot, positions, bounds)
         layout.writeUvs(slot, uvs)

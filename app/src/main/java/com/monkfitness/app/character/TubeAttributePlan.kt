@@ -95,8 +95,23 @@ object TubeAttributePlanner {
         return plan(mapped)
     }
 
+    /**
+     * The first candidate in preference order that this layer can fill, with the position it was
+     * found at: the choice is made on what a shader was compiled to read, never on a material's name.
+     */
+    fun choose(candidates: List<Collection<String>>): TubeMaterialChoice? {
+        for (index in candidates.indices) {
+            val planned = planFromNames(candidates[index])
+            if (planned is TubeAttributePlan.Supported) return TubeMaterialChoice(index, planned)
+        }
+        return null
+    }
+
     private val UNSUPPORTED = setOf(TubeAttribute.TANGENTS, TubeAttribute.BONE_INDICES, TubeAttribute.BONE_WEIGHTS)
 }
 
 /** One attribute and the buffer slot it occupies. */
 class TubeSlot(val attribute: TubeAttribute, val bufferIndex: Int)
+
+/** A plannable material: where it appeared in the candidate list, and the slots it needs. */
+class TubeMaterialChoice(val candidate: Int, val plan: TubeAttributePlan.Supported)
