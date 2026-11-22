@@ -84,6 +84,8 @@ class DynamicGeometrySlot(vertexCapacity: Int, indexCapacity: Int) {
     val positions = FloatArray(vertexCapacity * 3)
     val normals = FloatArray(vertexCapacity * 3)
     val uvs = FloatArray(vertexCapacity * 2)
+    /** Linear RGB per vertex, so a tendon end can be tinted without a second draw call. */
+    val colors = FloatArray(vertexCapacity * 3)
     val indices = IntArray(indexCapacity)
 
     var vertexCount: Int = 0
@@ -110,7 +112,12 @@ class DynamicGeometrySlot(vertexCapacity: Int, indexCapacity: Int) {
             indices <= indexCapacity - indexCount
 
     /** Appends one vertex; the caller has already passed [claim]. */
-    fun pushVertex(x: Float, y: Float, z: Float, nx: Float, ny: Float, nz: Float, u: Float, v: Float) {
+    fun pushVertex(
+        x: Float, y: Float, z: Float,
+        nx: Float, ny: Float, nz: Float,
+        u: Float, v: Float,
+        r: Float, g: Float, b: Float
+    ) {
         val vertex = vertexCount
         require(vertex < vertexCapacity) { "vertex $vertex outside ${vertexCapacity}" }
         positions[vertex * 3] = x
@@ -121,6 +128,9 @@ class DynamicGeometrySlot(vertexCapacity: Int, indexCapacity: Int) {
         normals[vertex * 3 + 2] = nz
         uvs[vertex * 2] = u
         uvs[vertex * 2 + 1] = v
+        colors[vertex * 3] = r
+        colors[vertex * 3 + 1] = g
+        colors[vertex * 3 + 2] = b
         vertexCount = vertex + 1
     }
 

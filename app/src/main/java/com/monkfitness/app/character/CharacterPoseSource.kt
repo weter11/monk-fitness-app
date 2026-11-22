@@ -28,7 +28,11 @@ data class CharacterDiagnostics(
     val muscleHeadsRefused: Int = 0,
     val muscleInstancesDrawn: Int = 0,
     val muscleTriangles: Int = 0,
-    val muscleReadings: List<MuscleHeadReading> = emptyList()
+    val muscleReadings: List<MuscleHeadReading> = emptyList(),
+    /** The vertex attributes the tube material required, as planned; empty until a flagged session ran. */
+    val muscleAttributes: String = "",
+    /** Why the tube layer refused to build, or null when it drew. */
+    val muscleMaterialError: String? = null
 )
 
 /**

@@ -53,6 +53,41 @@ class ProceduralTubeBudgetTest {
     }
 
     @Test
+    fun theTubeWindingMatchesItsOutwardNormals() {
+        val frame = solvedFrame()
+        val slot = mesh.slot()
+        mesh.write(frame, slot, MuscleSelection(showsTubes = true))
+
+        // A mesh can carry outward normals and still be wound inside-out; back-face culling follows
+        // (v1 − v0) × (v2 − v0), so that is what has to point the way the normals do.
+        var inverted = 0
+        var degenerate = 0
+        for (triangle in 0 until slot.triangleCount) {
+            val a = slot.indices[triangle * 3]
+            val b = slot.indices[triangle * 3 + 1]
+            val c = slot.indices[triangle * 3 + 2]
+            val e1x = slot.positions[b * 3] - slot.positions[a * 3]
+            val e1y = slot.positions[b * 3 + 1] - slot.positions[a * 3 + 1]
+            val e1z = slot.positions[b * 3 + 2] - slot.positions[a * 3 + 2]
+            val e2x = slot.positions[c * 3] - slot.positions[a * 3]
+            val e2y = slot.positions[c * 3 + 1] - slot.positions[a * 3 + 1]
+            val e2z = slot.positions[c * 3 + 2] - slot.positions[a * 3 + 2]
+            val nx = e1y * e2z - e1z * e2y
+            val ny = e1z * e2x - e1x * e2z
+            val nz = e1x * e2y - e1y * e2x
+            val vx = (slot.normals[a * 3] + slot.normals[b * 3] + slot.normals[c * 3]) / 3f
+            val vy = (slot.normals[a * 3 + 1] + slot.normals[b * 3 + 1] + slot.normals[c * 3 + 1]) / 3f
+            val vz = (slot.normals[a * 3 + 2] + slot.normals[b * 3 + 2] + slot.normals[c * 3 + 2]) / 3f
+            val facing = nx * vx + ny * vy + nz * vz
+            if (facing < 0f) inverted++ else if (facing == 0f) degenerate++
+        }
+
+        assertTrue("the measured build must contain triangles", slot.triangleCount > 0)
+        assertEquals("every triangle is back-facing under its own normals", 0, inverted)
+        assertEquals("a degenerate facing means the probe measured nothing", 0, degenerate)
+    }
+
+    @Test
     fun aFullyShownFrameFillsExactlyTheBudget() {
         val frame = solvedFrame()
         val slot = mesh.slot()

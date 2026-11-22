@@ -607,20 +607,52 @@ normalized distance of 1.0 — i.e. an attachment inside a surface that head mus
 | Rows on a definition with a sphere centred on one attachment | one per head whose union contains it |
 | `AnatomyDefinitionCheck.check(definition)` | unchanged: structural rows only |
 
-### 7.6 What is not wired: the tubes are tessellated, not drawn
+### 7.6 The tubes are drawn: the GPU binding
 
 `ProceduralMuscleMesh` fills its `DynamicGeometrySlot` with 13,824 triangles every frame the solve
-runs, and the diagnostics report that count, but no Filament renderable consumes the slot yet. Drawing
-it needs a material package (`.filamat`) bound to a runtime `VertexBuffer`/`IndexBuffer`, and this
-repository ships no materials: the character's come from the GLB, and `matc` is not available in this
-environment. Binding a gltfio PBR material to a hand-built tube buffer would work only if its declared
-vertex attributes (position, tangent quaternion, uv0) matched, and a mismatch is a driver-level crash
-in a debug build — not something to guess at.
+runs; `TubeMesh` now draws them. No `.filamat` and no `matc` are involved: the layer takes an instance
+from the `UbershaderProvider` the session already creates for `AssetLoader`, so the material is the one
+the GLB was loaded with.
 
-So the verifiable claim for S2-8 is: **every head solves at the reference stance, in squat and in
-push-up, and the tube geometry is produced at the declared budget and follows the pose.** The GPU
-binding is the next increment, and it is the only thing standing between this and the ruling's
-"render" wording. It is listed here as open, not as done.
+| Property | Value |
+| --- | --- |
+| Material | `UbershaderProvider.createMaterialInstance` with `hasVertexColors`, `doubleSided`, `alphaMode = OPAQUE`, tinted from `SkinPalette.DEFAULT`; falls back to `MaterialInstance.duplicate` of the asset's `Ground` instance, and refuses the layer with a diagnostics line if neither exists |
+| Declared attributes | exactly `Material.requiredAttributes` — `POSITION, UV0, UV1, COLOR` for the ubershader. `TANGENTS` is not declared, so shading is derivative-based (faceted) for this pass |
+| `UV1` | the `0xFF` fill gltfio itself uses for a missing second UV set (`USHORT2`, normalized) |
+| `COLOR` | per-vertex tendon ramp written by the mesh (`UBYTE4`, normalized) |
+| Indices | `UINT`, 41,472 capacity, uploaded only when the drawn-head set changes |
+| Bounds | exact min/max over the written asset-space vertices, `fallback()` when nothing was written; that non-empty box is what satisfies `RenderableManager`'s `culling(true)` precondition, and non-finite components are dropped so one bad vertex cannot pin the box at `NaN`. `castShadows(false)`, `receiveShadows(false)` because the overlay neither casts nor receives |
+| Upload | a 3-deep ring of direct buffers, so two frames in flight cannot collide with the slot being filled; one position upload per frame (81 KiB), colour/UV/index only on a shape change |
+| Axes | `(x, y, z) → (−z, y, x)` applied once in `TubeVertexLayout.writePositions`, with no second scale; the mesh hands it metres, converting the centre line and the radius by `unitsPerMetre` alike |
+| Winding | fixed: the band was wound inside-out (`a, c, b` / `b, c, d`) and is now `a, b, c` / `b, d, c`, so back-face culling keeps the walls the asset's single-sided materials would have culled |
+
+Evidence that is a JVM test, not a device claim: `ProceduralTubeBudgetTest.theTubeWindingMatchesItsOutwardNormals`
+(reverting the winding makes 13,536 of 13,824 triangles read as back-facing), and `TubeVertexLayoutTest`
+— asset conversion against `X1Bind.toAssetDirection` with a wrong-basis control, `theSolvedMeshUploadsInHumanMetres`
+solving the real definition through `AnatomySolver` and pinning the uploaded AABB to a body's metres
+(`y` 0.456–1.421 m, half extents ≤ 0.5 m — a centre line left in engine units reads 113–350 m and fails),
+byte strides, attribute planning including a `POSITION`-only plan, index-count bounds, AABB containment,
+a `NaN`-vertex bounds guard, and an allocation gate over the whole upload fill.
+
+The centre line was the one value that had escaped both the counts and the winding: it left
+`ProceduralMuscleMesh` in engine units while the radius was converted, so the tubes sat ~247x out, past
+the camera's 100 m far plane, and drew nothing. It is converted with the radius now, and the metre bound
+above is asserted end to end rather than assumed.
+
+What is still a device claim: that the material the provider returns reports exactly those attributes on
+a given driver. `CharacterDiagnostics.muscleAttributes` records what the material actually required and
+`muscleMaterialError` records a refusal, so the first device run answers it instead of implying it.
+
+Launch a flagged build and open the debug overlay:
+
+```bash
+./gradlew :app:assembleDebug -Pmonk.filamentCharacter=true
+adb install -r app/build/outputs/apk/debug/app-debug.apk
+adb shell am start -n com.monkfitness.app/.MainActivity   # then: exercise → hero → `tubes` chip
+```
+
+`adb` needs a host; on this handset the equivalent is `/data/data/com.termux/files/home/bin/rish -c`
+with Shizuku running, e.g. `rish -c "pm list packages | grep monkfitness"` to confirm the install.
 
 ### 7.7 Device checklist rows — not executed
 
@@ -631,8 +663,11 @@ have to add to §3; they are recorded so the unexecuted set is explicit rather t
 | --- | --- | --- |
 | Debug overlay present | `-Pmonk.filamentCharacter=true` + debug activity: `tubes` and layer chips at top-left | overlay visible, `tubes` off by default |
 | Solve built | overlay header | `18 heads · 0 refused · 16 drawn · 0 triangles` with tubes off |
-| Tubes on | tap `tubes` | triangle count becomes `13824`; nothing else on screen changes (no drawable yet, §7.6) |
-| Layer toggle | tap `superficial` | `0 drawn · 0 triangles`; tap again restores `16 · 13824` |
+| Tubes on | tap `tubes` | 18 red tubes appear over the body, inside it rather than beside it; triangle count `13824` |
+| Attributes | overlay `attrs` line | `POSITION,UV0,UV1,COLOR` — anything else means the provider returned another variant, and a refusal line names what was missing |
+| Tint | the belly against the two ends of a tube | belly muscle red, both ends shifted toward the tendon tone |
+| Axis alignment | squat, side view | tubes run along the limbs they belong to and do not sit 90° across them |
+| Layer toggle | tap `superficial` | `0 drawn · 0 triangles`, tubes disappear; tap again restores `16 · 13824` |
 | Deep toggle | tap `deep` | unchanged — the M1 library has no deep muscle |
 | Readout at rest | squat at the start of the rep | every head within ±0.1 % of the rest stance |
 | Readout mid-rep | squat at the bottom | `rectus_femoris` and `biceps_femoris` positive; `rectus_abdominis` near zero |

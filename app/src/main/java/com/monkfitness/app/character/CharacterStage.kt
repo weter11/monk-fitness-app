@@ -208,6 +208,10 @@ private fun describeMuscles(diagnostics: CharacterDiagnostics): String = buildSt
         append(String.format(Locale.US, "%+.1f%%", reading.relativePathLengthChange * 100f))
         if (!reading.drawn) append(" · not drawn")
     }
+    if (diagnostics.muscleAttributes.isNotBlank()) {
+        append("\nattrs ").append(diagnostics.muscleAttributes)
+    }
+    diagnostics.muscleMaterialError?.let { append("\ntubes: ").append(it) }
 }
 
 private const val DEBUG_REFRESH_MILLIS = 500L

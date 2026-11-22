@@ -2,6 +2,7 @@ package com.monkfitness.app.character
 
 import com.monkfitness.app.anatomy.AnatomyDefinition
 import com.monkfitness.app.anatomy.AnatomyFrame
+import com.monkfitness.app.anatomy.TendonSpec
 import kotlin.math.abs
 import kotlin.math.cos
 import kotlin.math.sin
@@ -14,12 +15,15 @@ import kotlin.math.sqrt
  * `maxSamples` and [radialSegments] is the tube's ring, so the same definition always costs the same
  * geometry and a slot sized from [vertexCapacity]/[triangleCapacity] can never overflow.
  *
- * Positions are metres. The anatomy solves in engine units, so [unitsPerMetre] is the one conversion
- * on this path and it happens here rather than in the renderer.
+ * Positions are metres in engine axes (`+Y` up, `+X` forward, `+Z` lateral). The anatomy solves in
+ * engine units, so [unitsPerMetre] is the one scale conversion on this path and it happens here
+ * rather than in the renderer, applied to the centre line and the radius alike; the axis change into
+ * the asset's own frame is the renderer's, because only the renderer knows which asset it is drawing.
  */
 class ProceduralMuscleMesh(
     private val definition: AnatomyDefinition,
     private val unitsPerMetre: Double,
+    private val palette: SkinPalette = SkinPalette.DEFAULT,
     val samples: Int = definition.sampling.maxSamples,
     val radialSegments: Int = RADIAL_SEGMENTS,
     private val caps: Boolean = true
@@ -61,6 +65,11 @@ class ProceduralMuscleMesh(
     /** Per-segment lengths for [resample], one entry per path point the frame can hold. */
     private val lengths = DoubleArray(definition.sampling.maxPointsPerHead)
     private val profileCache = HashMap<String, com.monkfitness.app.anatomy.RadiusProfile>()
+
+    /** The station's tint, written by [tintInto] so a station costs no allocation. */
+    private var tintRed = 0f
+    private var tintGreen = 0f
+    private var tintBlue = 0f
 
     /**
      * Rebuilds [slot] from [frame] for the instances [selection] shows, and returns the triangle
@@ -145,6 +154,7 @@ class ProceduralMuscleMesh(
             val bz = tx * ny - ty * nx
             val radius = radii[index] / unitsPerMetre
             val v = index.toDouble() / (stations - 1)
+            tintInto(v, muscle.tendon)
             for (ring in 0 until radialSegments) {
                 val angle = TWO_PI * ring / radialSegments
                 val c = cos(angle)
@@ -155,7 +165,8 @@ class ProceduralMuscleMesh(
                 slot.pushVertex(
                     (cx + radius * dx).toFloat(), (cy + radius * dy).toFloat(), (cz + radius * dz).toFloat(),
                     dx.toFloat(), dy.toFloat(), dz.toFloat(),
-                    ring.toFloat() / radialSegments, v.toFloat()
+                    ring.toFloat() / radialSegments, v.toFloat(),
+                    tintRed, tintGreen, tintBlue
                 )
             }
         }
@@ -167,8 +178,10 @@ class ProceduralMuscleMesh(
                 val b = base + band * radialSegments + next
                 val c = base + (band + 1) * radialSegments + ring
                 val d = base + (band + 1) * radialSegments + next
-                slot.pushTriangle(a, c, b)
-                slot.pushTriangle(b, c, d)
+                // Front-facing under the (v1 − v0) × (v2 − v0) convention: the ring runs along
+                // +b and the band runs along +t, so this order is the only one that faces outward.
+                slot.pushTriangle(a, b, c)
+                slot.pushTriangle(b, d, c)
             }
         }
 
@@ -177,12 +190,14 @@ class ProceduralMuscleMesh(
                 val index = if (end == 0) 0 else stations - 1
                 val sign = if (end == 0) -1.0 else 1.0
                 val centre = slot.vertexCount
+                tintInto(if (end == 0) 0.0 else 1.0, muscle.tendon)
                 slot.pushVertex(
                     points[index * 3].toFloat(), points[index * 3 + 1].toFloat(), points[index * 3 + 2].toFloat(),
                     (sign * tangents[index * 3]).toFloat(),
                     (sign * tangents[index * 3 + 1]).toFloat(),
                     (sign * tangents[index * 3 + 2]).toFloat(),
-                    0.5f, if (end == 0) 0f else 1f
+                    0.5f, if (end == 0) 0f else 1f,
+                    tintRed, tintGreen, tintBlue
                 )
                 val ringBase = base + index * radialSegments
                 for (ring in 0 until radialSegments) {
@@ -199,7 +214,7 @@ class ProceduralMuscleMesh(
         return (slot.indexCount - first) / 3
     }
 
-    /** Resamples the slot's path to [samples] equal-arc points; returns the arc length in units. */
+    /** Resamples the slot's path to [samples] equal-arc points in metres; returns the arc in units. */
     private fun resample(frame: AnatomyFrame, slotIndex: Int, count: Int): Double {
         var total = 0.0
         for (index in 1 until count) {
@@ -224,7 +239,10 @@ class ProceduralMuscleMesh(
             for (component in 0..2) {
                 val from = frame.pointComponent(slotIndex, segment - 1, component)
                 val to = frame.pointComponent(slotIndex, segment, component)
-                points[index * 3 + component] = (from + (to - from) * u).toDouble()
+                // The frame is in engine units and the renderer's world is the asset's, in metres:
+                // the radius is converted below, and a centre line left in units would put the tubes
+                // two hundred times too far out to be inside the frustum at all.
+                points[index * 3 + component] = (from + (to - from) * u) / unitsPerMetre
             }
         }
         return total
@@ -257,6 +275,23 @@ class ProceduralMuscleMesh(
             any = true
         }
         return any
+    }
+
+    /**
+     * Tints a station toward the tendon colour across the authored fractions. Linear, because a
+     * hard step reads as a seam at this tube's radius while a tendon has no edge there.
+     */
+    private fun tintInto(v: Double, tendon: TendonSpec) {
+        val fromOrigin = if (tendon.originFraction > 0f) 1.0 - v / tendon.originFraction else 0.0
+        val fromInsertion = if (tendon.insertionFraction > 0f) {
+            (v - (1.0 - tendon.insertionFraction)) / tendon.insertionFraction
+        } else {
+            0.0
+        }
+        val blend = (maxOf(fromOrigin, fromInsertion).coerceIn(0.0, 1.0) * palette.tendonBlend).toFloat()
+        tintRed = palette.muscleRed + (palette.tendonRed - palette.muscleRed) * blend
+        tintGreen = palette.muscleGreen + (palette.tendonGreen - palette.muscleGreen) * blend
+        tintBlue = palette.muscleBlue + (palette.tendonBlue - palette.muscleBlue) * blend
     }
 
     private fun normalAxisX(tx: Double, ty: Double, tz: Double): Double = crossX(tx, ty, tz, axisX(tx, ty, tz), axisY(tx, ty, tz), axisZ(tx, ty, tz))
