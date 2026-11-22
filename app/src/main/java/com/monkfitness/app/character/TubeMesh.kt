@@ -132,6 +132,8 @@ internal class TubeMesh(
         // alive: Filament throws when the instance goes first, which a configuration change turns
         // into a crash on the way out of the activity.
         engine.destroyEntity(entity)
+        // 1.75.1's Java binding has no `destroyBufferObject`: the streaming buffers live until the
+        // engine goes down, so clearing the map only drops this layer's handles to them.
         uploads.clear()
         vertexBuffer?.let { engine.destroyVertexBuffer(it) }
         indexBuffer?.let { engine.destroyIndexBuffer(it) }
@@ -254,26 +256,14 @@ internal class TubeMesh(
             .bufferCount(plan.bufferCount)
             .enableBufferObjects(true)
         for (slot in plan.slots) {
-            when (slot.attribute) {
-                TubeAttribute.POSITION ->
-                    builder.attribute(ATTRIBUTE_POSITION, slot.bufferIndex, VertexBuffer.AttributeType.FLOAT3)
-
-                TubeAttribute.UV0 ->
-                    builder.attribute(ATTRIBUTE_UV0, slot.bufferIndex, VertexBuffer.AttributeType.FLOAT2)
-
-                TubeAttribute.UV1 -> {
-                    builder.attribute(ATTRIBUTE_UV1, slot.bufferIndex, VertexBuffer.AttributeType.USHORT2)
-                    builder.normalized(ATTRIBUTE_UV1)
-                }
-
-                TubeAttribute.COLOR -> {
-                    builder.attribute(ATTRIBUTE_COLOR, slot.bufferIndex, VertexBuffer.AttributeType.UBYTE4)
-                    builder.normalized(ATTRIBUTE_COLOR)
-                }
-
-                // The planner refuses these before a builder exists, so reaching one is a bug.
-                else -> throw IllegalStateException("attribute ${slot.attribute} cannot be declared")
+            val attribute = TubeVertexTypes.slot(slot.attribute)
+            val type = TubeVertexTypes.of(slot.attribute)
+            // The planner refuses these before a builder exists, so reaching one is a bug.
+            if (attribute == null || type == null) {
+                throw IllegalStateException("attribute ${slot.attribute} cannot be declared")
             }
+            builder.attribute(attribute, slot.bufferIndex, type)
+            if (TubeVertexTypes.isNormalized(slot.attribute)) builder.normalized(attribute)
         }
         return builder.build(engine)
     }
@@ -450,10 +440,5 @@ internal class TubeMesh(
         const val ROUGHNESS = 0.55f
         const val UINT_BYTES = 4
         const val MIN_HALF_EXTENT = 1e-4f
-
-        val ATTRIBUTE_POSITION: VertexBuffer.VertexAttribute = VertexBuffer.VertexAttribute.POSITION
-        val ATTRIBUTE_UV0: VertexBuffer.VertexAttribute = VertexBuffer.VertexAttribute.UV0
-        val ATTRIBUTE_UV1: VertexBuffer.VertexAttribute = VertexBuffer.VertexAttribute.UV1
-        val ATTRIBUTE_COLOR: VertexBuffer.VertexAttribute = VertexBuffer.VertexAttribute.COLOR
     }
 }

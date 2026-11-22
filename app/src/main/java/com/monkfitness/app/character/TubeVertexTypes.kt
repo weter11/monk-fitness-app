@@ -3,13 +3,21 @@ package com.monkfitness.app.character
 import com.google.android.filament.VertexBuffer
 
 /**
- * The vertex-buffer type each declarable attribute is declared with.
+ * The vertex-buffer slot each declarable attribute occupies, and the type it is declared with.
  *
  * A material can report any attribute; this is the one place that decides which of them a rigid
  * tube can actually declare, so an attribute the layer cannot type is refused instead of reaching
  * Filament as a half-declared slot.
  */
 internal object TubeVertexTypes {
+
+    fun slot(attribute: TubeAttribute): VertexBuffer.VertexAttribute? = when (attribute) {
+        TubeAttribute.POSITION -> VertexBuffer.VertexAttribute.POSITION
+        TubeAttribute.UV0 -> VertexBuffer.VertexAttribute.UV0
+        TubeAttribute.UV1 -> VertexBuffer.VertexAttribute.UV1
+        TubeAttribute.COLOR -> VertexBuffer.VertexAttribute.COLOR
+        TubeAttribute.TANGENTS, TubeAttribute.BONE_INDICES, TubeAttribute.BONE_WEIGHTS -> null
+    }
 
     fun of(attribute: TubeAttribute): VertexBuffer.AttributeType? = when (attribute) {
         TubeAttribute.POSITION -> VertexBuffer.AttributeType.FLOAT3

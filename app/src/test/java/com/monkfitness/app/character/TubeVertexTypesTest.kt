@@ -21,8 +21,10 @@ class TubeVertexTypesTest {
             val plannable = TubeAttributePlanner.plan(setOf(attribute)) is TubeAttributePlan.Supported
             if (plannable) {
                 assertNotNull("$attribute is plannable, so it needs a vertex type", TubeVertexTypes.of(attribute))
+                assertNotNull("$attribute is plannable, so it needs a vertex slot", TubeVertexTypes.slot(attribute))
             } else {
                 assertNull("$attribute is refused by the planner, so it has no vertex type", TubeVertexTypes.of(attribute))
+                assertNull("$attribute is refused by the planner, so it has no vertex slot", TubeVertexTypes.slot(attribute))
             }
         }
     }
