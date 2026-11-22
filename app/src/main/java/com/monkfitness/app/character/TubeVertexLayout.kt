@@ -121,9 +121,17 @@ class TubeVertexLayout(
      * vertex, so the bounding box handed to Filament is the mesh's own rather than a guess.
      */
     fun writePositions(geometry: DynamicGeometrySlot, out: FloatBuffer, bounds: MeshBounds): Int {
-        bounds.reset()
         val count = geometry.vertexCount
         val source = geometry.positions
+        // Extents are accumulated in locals: this runs over every vertex of a frame, and one box
+        // adoption afterwards is cheaper than a guarded include per component.
+        var minX = 0f
+        var minY = 0f
+        var minZ = 0f
+        var maxX = 0f
+        var maxY = 0f
+        var maxZ = 0f
+        var finite = false
         for (vertex in 0 until count) {
             val assetX = -source[vertex * 3 + 2]
             val assetY = source[vertex * 3 + 1]
@@ -131,9 +139,33 @@ class TubeVertexLayout(
             out.put(vertex * 3, assetX)
             out.put(vertex * 3 + 1, assetY)
             out.put(vertex * 3 + 2, assetZ)
-            bounds.include(assetX, assetY, assetZ)
+            // A NaN extent would pin the box for every later vertex, and a NaN box is not empty, so it
+            // would pass the renderable's precondition and break culling.
+            if (!assetX.isFinite() || !assetY.isFinite() || !assetZ.isFinite()) continue
+            if (!finite) {
+                minX = assetX
+                minY = assetY
+                minZ = assetZ
+                maxX = assetX
+                maxY = assetY
+                maxZ = assetZ
+                finite = true
+                continue
+            }
+            if (assetX < minX) minX = assetX
+            if (assetY < minY) minY = assetY
+            if (assetZ < minZ) minZ = assetZ
+            if (assetX > maxX) maxX = assetX
+            if (assetY > maxY) maxY = assetY
+            if (assetZ > maxZ) maxZ = assetZ
         }
-        if (count == 0) bounds.fallback()
+        bounds.reset()
+        if (finite) {
+            bounds.include(minX, minY, minZ)
+            bounds.include(maxX, maxY, maxZ)
+        } else if (count == 0) {
+            bounds.fallback()
+        }
         return count
     }
 

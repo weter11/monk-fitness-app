@@ -88,6 +88,40 @@ class MuscleGeometryOwnershipTest {
     }
 
     @Test
+    fun aFrameThatOnlyMovedThePoseKeepsTheIndexBytesItAlreadyHas() {
+        // The indices name a head's ring vertices, not where they are: a frame that moved every path
+        // but drew the same heads leaves the uploaded index buffer correct, so re-emitting it is pure
+        // cost. Marking one entry proves the array is not rewritten; a count that changed must rewrite.
+        val frame = solvedFrame()
+        val slot = mesh.slot()
+        val shown = MuscleSelection(showsTubes = true)
+        mesh.write(frame, slot, shown)
+        val indexCount = slot.indexCount
+        assertTrue(indexCount > 0)
+
+        slot.indices[0] = MARKER
+        for (head in 0 until frame.headCount) {
+            frame.writePoint(head, 6f, head + 0f, 7f)
+            frame.writePoint(head, 8f, head + 10f, 9f)
+            frame.writePoint(head, 10f, head + 20f, 11f)
+        }
+        mesh.write(frame, slot, shown)
+
+        assertEquals("a pose-only frame keeps the index count", indexCount, slot.indexCount)
+        assertEquals("the index array must be left alone, not re-emitted", MARKER, slot.indices[0])
+
+        slot.indices[0] = 0
+        val hidden = shown.withInstance(MuscleInstanceId(definition.muscles.first().id, MuscleSide.A), false)
+        mesh.write(frame, slot, hidden)
+        assertTrue("a smaller head set moves the topology", slot.indexCount < indexCount)
+        assertTrue("a moved topology is rebuilt, byte for byte", slot.indices[0] == 0)
+        assertFalse(
+            "a rebuilt topology only names vertices this frame wrote",
+            (0 until slot.indexCount).any { slot.indices[it] >= slot.vertexCount }
+        )
+    }
+
+    @Test
     fun writingOneSlotNeverTouchesAnother() {
         val frame = solvedFrame()
         val written = mesh.slot()
@@ -157,5 +191,8 @@ class MuscleGeometryOwnershipTest {
 
     private companion object {
         const val ASSET = "src/main/assets/anatomy/anatomy_v1.json"
+
+        /** No triangle of this mesh can start at a negative vertex, so this marks an untouched entry. */
+        const val MARKER = -1
     }
 }

@@ -2,6 +2,8 @@ package com.monkfitness.app.character
 
 import com.monkfitness.app.anatomy.AnatomyDefinition
 import com.monkfitness.app.anatomy.AnatomyFrame
+import com.monkfitness.app.anatomy.MuscleDefinition
+import com.monkfitness.app.anatomy.RadiusProfile
 import com.monkfitness.app.anatomy.TendonSpec
 import kotlin.math.abs
 import kotlin.math.cos
@@ -19,6 +21,10 @@ import kotlin.math.sqrt
  * engine units, so [unitsPerMetre] is the one scale conversion on this path and it happens here
  * rather than in the renderer, applied to the centre line and the radius alike; the axis change into
  * the asset's own frame is the renderer's, because only the renderer knows which asset it is drawing.
+ *
+ * A frame only moves the pose. The ring basis, the radius profile and the tendon tint are properties
+ * of the definition, so they are derived once ([ringCos], [StationTable]) instead of per station per
+ * head, and the index buffer is re-emitted only when the drawn head count changes ([write]).
  */
 class ProceduralMuscleMesh(
     private val definition: AnatomyDefinition,
@@ -60,11 +66,29 @@ class ProceduralMuscleMesh(
     fun slot(): DynamicGeometrySlot = DynamicGeometrySlot(vertexCapacity, triangleCapacity * 3)
 
     private val points = DoubleArray(samples * 3)
-    private val radii = DoubleArray(samples)
     private val tangents = DoubleArray(samples * 3)
     /** Per-segment lengths for [resample], one entry per path point the frame can hold. */
     private val lengths = DoubleArray(definition.sampling.maxPointsPerHead)
-    private val profileCache = HashMap<String, com.monkfitness.app.anatomy.RadiusProfile>()
+
+    /**
+     * The ring's angle pair per segment. Every vertex of a station reads the same two values, so
+     * re-deriving them per station per head was the largest per-frame cost of the tessellation.
+     */
+    private val ringCos = DoubleArray(radialSegments) { cos(TWO_PI * it / radialSegments) }
+    private val ringSin = DoubleArray(radialSegments) { sin(TWO_PI * it / radialSegments) }
+    private val ringU = FloatArray(radialSegments) { it.toFloat() / radialSegments }
+    private val stationV = FloatArray(samples) { (it.toDouble() / (samples - 1)).toFloat() }
+
+    /** Radius and tendon tint per station, built once per muscle: neither moves with the pose. */
+    private val stationTables = HashMap<String, StationTable>()
+
+    /** The vertex each drawn head started at, so its indices can be emitted in a second pass. */
+    private val headBases = IntArray(definition.headCount)
+
+    private var topologySlot: DynamicGeometrySlot? = null
+    private var topologyRevision = -1L
+    private var topologyVertices = -1
+    private var topologyIndices = -1
 
     /** The station's tint, written by [tintInto] so a station costs no allocation. */
     private var tintRed = 0f
@@ -95,42 +119,72 @@ class ProceduralMuscleMesh(
             return 0
         }
 
-        var triangles = 0
+        var written = 0
         for (slotIndex in 0 until frame.headCount) {
             val state = frame.muscleStates[slotIndex]
             val instance = frame.instances[frame.instanceOf(slotIndex)]
             if (!selection.shows(instance, state.layer)) continue
-            triangles += tube(frame, slotIndex, state.id, slot)
+            val base = pushVertices(frame, slotIndex, state.id, slot)
+            if (base < 0) continue
+            headBases[written] = base
+            written++
         }
-        return triangles
+        if (written == 0) return 0
+
+        // A head writes its whole quota or nothing, so the index buffer is a function of how many
+        // heads drew: the same count on the same untouched slot is the topology already in its array.
+        val indexCount = written * trianglesPerHead * 3
+        val vertexCount = written * verticesPerHead
+        if (slot === topologySlot && slot.topologyRevision == topologyRevision &&
+            vertexCount == topologyVertices && indexCount == topologyIndices
+        ) {
+            slot.reuseIndices(indexCount)
+        } else {
+            writeIndices(slot.indices, slot.claimIndexRun(indexCount), headBases, written)
+            topologySlot = slot
+            topologyRevision = slot.topologyRevision
+            topologyVertices = vertexCount
+            topologyIndices = indexCount
+        }
+        return indexCount / 3
     }
 
     /** Triangles one layer contributes when every instance of it is shown and solved. */
     fun trianglesPerLayer(layer: com.monkfitness.app.anatomy.MuscleLayer): Int =
         definition.muscles.filter { it.layer == layer }.sumOf { it.headSideCount * trianglesPerHead }
 
-    private fun tube(frame: AnatomyFrame, slotIndex: Int, muscleId: String, slot: DynamicGeometrySlot): Int {
-        val muscle = definition.muscle(muscleId) ?: return 0
+    /**
+     * Writes one head's ring and cap vertices and returns the vertex it started at, or `-1` when the
+     * head has nothing drawable. Every refusal happens before the first vertex is written, which is
+     * what lets [write] treat the drawn head set as the whole topology.
+     */
+    private fun pushVertices(
+        frame: AnatomyFrame,
+        slotIndex: Int,
+        muscleId: String,
+        slot: DynamicGeometrySlot
+    ): Int {
+        val muscle = definition.muscle(muscleId) ?: return -1
         val count = frame.pointCounts[slotIndex]
-        if (count < 2) return 0
+        if (count < 2) return -1
 
-        val profile = profileCache.getOrPut(muscleId) {
-            com.monkfitness.app.anatomy.RadiusProfile(muscle.radiusKnots, unitsPerMetre)
-        }
         val total = resample(frame, slotIndex, count)
-        if (total <= 0.0) return 0
+        if (total <= 0.0) return -1
         // The tube is tessellated at the version's station count, not at the path's own point count:
         // the budget is fixed by the definition, and a solver that returned a shorter path must not
         // change what the layer costs.
         val stations = samples
-        if (!tangents(stations)) return 0
+        if (!tangents(stations)) return -1
 
-        val base = slot.vertexCount
-        val first = slot.indexCount
-        for (index in 0 until stations) {
-            radii[index] = profile.at(index.toDouble() / (stations - 1))
-        }
-
+        val table = stationTable(muscle)
+        val base = slot.claimVertexRun(verticesPerHead)
+        // Array handles are hoisted out of both loops: this runs over every vertex of the frame, and a
+        // slot accessor per component would be a field read per component as well.
+        val positions = slot.positions
+        val normals = slot.normals
+        val uvs = slot.uvs
+        val colors = slot.colors
+        var vertex = base
         for (index in 0 until stations) {
             val cx = points[index * 3]
             val cy = points[index * 3 + 1]
@@ -138,9 +192,15 @@ class ProceduralMuscleMesh(
             val tx = tangents[index * 3]
             val ty = tangents[index * 3 + 1]
             val tz = tangents[index * 3 + 2]
-            var nx = normalAxisX(tx, ty, tz)
-            var ny = normalAxisY(tx, ty, tz)
-            var nz = normalAxisZ(tx, ty, tz)
+            // The ring frame is built from the world axis least aligned with the tangent, so the ring
+            // never collapses onto it; resolving that axis once keeps the three cross components from
+            // each re-deciding it.
+            val ax = axisX(tx, ty, tz)
+            val ay = axisY(tx, ty, tz)
+            val az = 1.0 - ax - ay
+            var nx = ty * az - tz * ay
+            var ny = tz * ax - tx * az
+            var nz = tx * ay - ty * ax
             // t × ref is only unit when the two are unit and perpendicular; the axis is chosen to be
             // least aligned, not orthogonal, so the ring basis is normalized here.
             val nLength = sqrt(nx * nx + ny * ny + nz * nz)
@@ -152,36 +212,30 @@ class ProceduralMuscleMesh(
             val bx = ty * nz - tz * ny
             val by = tz * nx - tx * nz
             val bz = tx * ny - ty * nx
-            val radius = radii[index] / unitsPerMetre
-            val v = index.toDouble() / (stations - 1)
-            tintInto(v, muscle.tendon)
+            val radius = table.radii[index]
+            val v = stationV[index]
+            val red = table.reds[index]
+            val green = table.greens[index]
+            val blue = table.blues[index]
             for (ring in 0 until radialSegments) {
-                val angle = TWO_PI * ring / radialSegments
-                val c = cos(angle)
-                val s = sin(angle)
+                val c = ringCos[ring]
+                val s = ringSin[ring]
                 val dx = c * nx + s * bx
                 val dy = c * ny + s * by
                 val dz = c * nz + s * bz
-                slot.pushVertex(
-                    (cx + radius * dx).toFloat(), (cy + radius * dy).toFloat(), (cz + radius * dz).toFloat(),
-                    dx.toFloat(), dy.toFloat(), dz.toFloat(),
-                    ring.toFloat() / radialSegments, v.toFloat(),
-                    tintRed, tintGreen, tintBlue
-                )
-            }
-        }
-
-        for (band in 0 until stations - 1) {
-            for (ring in 0 until radialSegments) {
-                val next = (ring + 1) % radialSegments
-                val a = base + band * radialSegments + ring
-                val b = base + band * radialSegments + next
-                val c = base + (band + 1) * radialSegments + ring
-                val d = base + (band + 1) * radialSegments + next
-                // Front-facing under the (v1 − v0) × (v2 − v0) convention: the ring runs along
-                // +b and the band runs along +t, so this order is the only one that faces outward.
-                slot.pushTriangle(a, b, c)
-                slot.pushTriangle(b, d, c)
+                val at = vertex * 3
+                positions[at] = (cx + radius * dx).toFloat()
+                positions[at + 1] = (cy + radius * dy).toFloat()
+                positions[at + 2] = (cz + radius * dz).toFloat()
+                normals[at] = dx.toFloat()
+                normals[at + 1] = dy.toFloat()
+                normals[at + 2] = dz.toFloat()
+                uvs[vertex * 2] = ringU[ring]
+                uvs[vertex * 2 + 1] = v
+                colors[at] = red
+                colors[at + 1] = green
+                colors[at + 2] = blue
+                vertex++
             }
         }
 
@@ -189,29 +243,72 @@ class ProceduralMuscleMesh(
             for (end in 0 until 2) {
                 val index = if (end == 0) 0 else stations - 1
                 val sign = if (end == 0) -1.0 else 1.0
-                val centre = slot.vertexCount
-                tintInto(if (end == 0) 0.0 else 1.0, muscle.tendon)
-                slot.pushVertex(
-                    points[index * 3].toFloat(), points[index * 3 + 1].toFloat(), points[index * 3 + 2].toFloat(),
-                    (sign * tangents[index * 3]).toFloat(),
-                    (sign * tangents[index * 3 + 1]).toFloat(),
-                    (sign * tangents[index * 3 + 2]).toFloat(),
-                    0.5f, if (end == 0) 0f else 1f,
-                    tintRed, tintGreen, tintBlue
-                )
-                val ringBase = base + index * radialSegments
+                val at = vertex * 3
+                positions[at] = points[index * 3].toFloat()
+                positions[at + 1] = points[index * 3 + 1].toFloat()
+                positions[at + 2] = points[index * 3 + 2].toFloat()
+                normals[at] = (sign * tangents[index * 3]).toFloat()
+                normals[at + 1] = (sign * tangents[index * 3 + 1]).toFloat()
+                normals[at + 2] = (sign * tangents[index * 3 + 2]).toFloat()
+                uvs[vertex * 2] = 0.5f
+                uvs[vertex * 2 + 1] = if (end == 0) 0f else 1f
+                colors[at] = table.reds[index]
+                colors[at + 1] = table.greens[index]
+                colors[at + 2] = table.blues[index]
+                vertex++
+            }
+        }
+
+        require(vertex == base + verticesPerHead) { "a head wrote ${vertex - base} vertices, not $verticesPerHead" }
+        return base
+    }
+
+    /**
+     * Emits the bands and caps of every drawn head into [out] from [start], in one pass.
+     *
+     * Front-facing under the `(v1 − v0) × (v2 − v0)` convention: the ring runs along `+b` and the
+     * band along `+t`, so `(a, b, c)` is the only order that faces outward.
+     */
+    private fun writeIndices(out: IntArray, start: Int, bases: IntArray, written: Int) {
+        var at = start
+        for (head in 0 until written) {
+            val base = bases[head]
+            for (band in 0 until samples - 1) {
                 for (ring in 0 until radialSegments) {
-                    val next = (ring + 1) % radialSegments
-                    if (end == 0) {
-                        slot.pushTriangle(centre, ringBase + next, ringBase + ring)
-                    } else {
-                        slot.pushTriangle(centre, ringBase + ring, ringBase + next)
+                    val next = if (ring + 1 == radialSegments) 0 else ring + 1
+                    val a = base + band * radialSegments + ring
+                    val b = base + band * radialSegments + next
+                    val c = base + (band + 1) * radialSegments + ring
+                    val d = base + (band + 1) * radialSegments + next
+                    out[at] = a
+                    out[at + 1] = b
+                    out[at + 2] = c
+                    out[at + 3] = b
+                    out[at + 4] = d
+                    out[at + 5] = c
+                    at += 6
+                }
+            }
+            if (caps) {
+                for (end in 0 until 2) {
+                    val index = if (end == 0) 0 else samples - 1
+                    val centre = base + samples * radialSegments + end
+                    val ringBase = base + index * radialSegments
+                    for (ring in 0 until radialSegments) {
+                        val next = if (ring + 1 == radialSegments) 0 else ring + 1
+                        out[at] = centre
+                        if (end == 0) {
+                            out[at + 1] = ringBase + next
+                            out[at + 2] = ringBase + ring
+                        } else {
+                            out[at + 1] = ringBase + ring
+                            out[at + 2] = ringBase + next
+                        }
+                        at += 3
                     }
                 }
             }
         }
-
-        return (slot.indexCount - first) / 3
     }
 
     /** Resamples the slot's path to [samples] equal-arc points in metres; returns the arc in units. */
@@ -240,8 +337,8 @@ class ProceduralMuscleMesh(
                 val from = frame.pointComponent(slotIndex, segment - 1, component)
                 val to = frame.pointComponent(slotIndex, segment, component)
                 // The frame is in engine units and the renderer's world is the asset's, in metres:
-                // the radius is converted below, and a centre line left in units would put the tubes
-                // two hundred times too far out to be inside the frustum at all.
+                // the radius is converted in [StationTable], and a centre line left in units would
+                // put the tubes two hundred times too far out to be inside the frustum at all.
                 points[index * 3 + component] = (from + (to - from) * u) / unitsPerMetre
             }
         }
@@ -277,6 +374,36 @@ class ProceduralMuscleMesh(
         return any
     }
 
+    private fun stationTable(muscle: MuscleDefinition): StationTable {
+        stationTables[muscle.id]?.let { return it }
+        val table = StationTable(muscle)
+        stationTables[muscle.id] = table
+        return table
+    }
+
+    /**
+     * Radius in metres and tendon tint of every station of one muscle: both are read from the
+     * definition and the palette, and no pose input reaches either.
+     */
+    private inner class StationTable(muscle: MuscleDefinition) {
+        val radii = DoubleArray(samples)
+        val reds = FloatArray(samples)
+        val greens = FloatArray(samples)
+        val blues = FloatArray(samples)
+
+        init {
+            val profile = RadiusProfile(muscle.radiusKnots, unitsPerMetre)
+            for (index in 0 until samples) {
+                val v = index.toDouble() / (samples - 1)
+                radii[index] = profile.at(v) / unitsPerMetre
+                tintInto(v, muscle.tendon)
+                reds[index] = tintRed
+                greens[index] = tintGreen
+                blues[index] = tintBlue
+            }
+        }
+    }
+
     /**
      * Tints a station toward the tendon colour across the authored fractions. Linear, because a
      * hard step reads as a seam at this tube's radius while a tendon has no edge there.
@@ -294,27 +421,12 @@ class ProceduralMuscleMesh(
         tintBlue = palette.muscleBlue + (palette.tendonBlue - palette.muscleBlue) * blend
     }
 
-    private fun normalAxisX(tx: Double, ty: Double, tz: Double): Double = crossX(tx, ty, tz, axisX(tx, ty, tz), axisY(tx, ty, tz), axisZ(tx, ty, tz))
-
-    private fun normalAxisY(tx: Double, ty: Double, tz: Double): Double = crossY(tx, ty, tz, axisX(tx, ty, tz), axisY(tx, ty, tz), axisZ(tx, ty, tz))
-
-    private fun normalAxisZ(tx: Double, ty: Double, tz: Double): Double = crossZ(tx, ty, tz, axisX(tx, ty, tz), axisY(tx, ty, tz), axisZ(tx, ty, tz))
-
     /** The world axis least aligned with the tangent, so the ring never collapses onto it. */
-    private fun axisX(tx: Double, ty: Double, tz: Double): Double = if (abs(tx) <= abs(ty) && abs(tx) <= abs(tz)) 1.0 else 0.0
+    private fun axisX(tx: Double, ty: Double, tz: Double): Double =
+        if (abs(tx) <= abs(ty) && abs(tx) <= abs(tz)) 1.0 else 0.0
 
-    private fun axisY(tx: Double, ty: Double, tz: Double): Double = if (abs(ty) < abs(tx) && abs(ty) <= abs(tz)) 1.0 else 0.0
-
-    private fun axisZ(tx: Double, ty: Double, tz: Double): Double = 1.0 - axisX(tx, ty, tz) - axisY(tx, ty, tz)
-
-    private fun crossX(ax: Double, ay: Double, az: Double, bx: Double, by: Double, bz: Double): Double =
-        ay * bz - az * by
-
-    private fun crossY(ax: Double, ay: Double, az: Double, bx: Double, by: Double, bz: Double): Double =
-        az * bx - ax * bz
-
-    private fun crossZ(ax: Double, ay: Double, az: Double, bx: Double, by: Double, bz: Double): Double =
-        ax * by - ay * bx
+    private fun axisY(tx: Double, ty: Double, tz: Double): Double =
+        if (abs(ty) < abs(tx) && abs(ty) <= abs(tz)) 1.0 else 0.0
 
     companion object {
         /** Ring segments around the tube: eight reads as a tube at the character's scale. */
