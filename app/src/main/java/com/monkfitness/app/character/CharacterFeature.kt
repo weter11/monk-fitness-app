@@ -22,6 +22,9 @@ object ActiveCharacter {
     fun acquire(token: Any): Boolean = slot.acquire(token)
     fun release(token: Any): Boolean = slot.release(token)
     val isOccupied: Boolean get() = slot.isOccupied
+
+    /** Claims the process-wide slot and builds inside it; see [CharacterSlot.claim]. */
+    fun <T> claim(build: () -> T?): CharacterClaim<T> = slot.claim(build)
 }
 
 /**
@@ -52,4 +55,40 @@ class CharacterSlot {
 
     @get:Synchronized
     val isOccupied: Boolean get() = owner != null
+
+    /**
+     * Claims the slot and runs [build] inside it, releasing again when the build yields nothing.
+     * Stages call this after the composition commit, so an outgoing stage has already released.
+     */
+    fun <T> claim(build: () -> T?): CharacterClaim<T> {
+        val token = Any()
+        if (!acquire(token)) return CharacterClaim(this, token, null, slotWasFree = false)
+        val built = try {
+            build()
+        } catch (error: Throwable) {
+            release(token)
+            throw error
+        }
+        if (built == null) {
+            release(token)
+            return CharacterClaim(this, token, null, slotWasFree = true)
+        }
+        return CharacterClaim(this, token, built, slotWasFree = true)
+    }
 }
+
+/** A claim on the single-owner slot: what was built inside it and the token that holds it. */
+class CharacterClaim<T> internal constructor(
+    private val slot: CharacterSlot,
+    /** The token that owns the slot; no other token can release it. */
+    val token: Any,
+    /** What [CharacterSlot.claim]'s build returned, or null when nothing was built. */
+    val session: T?,
+    /** False when another live stage still owned the slot, so nothing was built. */
+    val slotWasFree: Boolean
+) {
+
+    /** Frees the slot. A claim the slot has already moved past frees nothing. */
+    fun release(): Boolean = slot.release(token)
+}
+

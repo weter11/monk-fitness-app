@@ -1,5 +1,6 @@
 package com.monkfitness.app.character
 
+import android.content.Context
 import android.view.TextureView
 import android.view.View
 import androidx.compose.foundation.background
@@ -41,11 +42,26 @@ import com.monkfitness.app.render.rememberAnimationController
 import kotlinx.coroutines.delay
 import java.util.Locale
 
+/** Everything one stage's session is built from; a keyed exercise switch produces a new value. */
+private class CharacterAttachSpec(
+    val request: BackendRequest,
+    val poseSource: CharacterPoseSource,
+    val poseBuilder: PoseBuilder,
+    val alternating: Boolean
+)
+
+/** What a claim built: a live session, or why there is none. */
+private class CharacterLoad(val session: CharacterSession?, val failure: String?)
+
 private class CharacterAttachment(
-    val token: Any,
     val session: CharacterSession?,
     val failure: String?
-)
+) {
+    companion object {
+        /** The state of a stage whose effect has not claimed the slot yet. */
+        val NONE = CharacterAttachment(null, null)
+    }
+}
 
 /** The live 3D character for one exercise, or the 2D fallback when it cannot start. */
 @Composable
@@ -86,13 +102,15 @@ fun CharacterStage(
     LaunchedEffect(attachment) {
         attachment.failure?.let(onUnavailable)
     }
-    LaunchedEffect(morphology) {
+    // The session arrives after the effect below commits, so the morphology follows the session and
+    // not the first composition: keying on it alone would leave the initial preset unapplied.
+    LaunchedEffect(attachment.session, morphology) {
         attachment.session?.setMorphology(morphology)
     }
 
+    val session = attachment.session
     val lifecycleOwner = LocalLifecycleOwner.current
-    DisposableEffect(attachment, lifecycleOwner) {
-        val session = attachment.session
+    DisposableEffect(session, lifecycleOwner) {
         val observer = LifecycleEventObserver { _, event ->
             when (event) {
                 Lifecycle.Event.ON_RESUME -> session?.start()
@@ -106,12 +124,9 @@ fun CharacterStage(
         onDispose {
             lifecycleOwner.lifecycle.removeObserver(observer)
             onSession(null)
-            session?.destroy()
-            ActiveCharacter.release(attachment.token)
         }
     }
 
-    val session = attachment.session
     if (session != null) {
         Box(modifier = modifier.fillMaxSize()) {
             AndroidView(
@@ -224,44 +239,62 @@ private fun rememberCharacterAttachment(
     alternating: Boolean
 ): CharacterAttachment {
     val context = LocalContext.current.applicationContext
-    return remember(request, poseSource, poseBuilder, alternating) {
-        val token = Any()
-        if (!ActiveCharacter.acquire(token)) {
-            CharacterAttachment(token, null, "another view already owns the character")
-        } else {
-            try {
-                val capabilities = GraphicsProbe.read(context)
-                val selection = FilamentEngines.create(request)
-                val engine = selection.value
-                if (engine == null) {
-                    ActiveCharacter.release(token)
-                    CharacterAttachment(token, null, selection.fallbackReason ?: "no Filament backend available")
-                } else {
-                    val session = CharacterSession(
-                        context = context,
-                        engine = engine,
-                        request = request,
-                        selection = selection,
-                        capabilities = capabilities,
-                        assetPath = CharacterFeature.ASSET_PATH,
-                        poseSource = poseSource,
-                        poseBuilder = poseBuilder,
-                        alternating = alternating
-                    )
-                    val failure = session.load()
-                    if (failure != null) {
-                        session.destroy()
-                        ActiveCharacter.release(token)
-                        CharacterAttachment(token, null, failure)
-                    } else {
-                        CharacterAttachment(token, session, null)
-                    }
-                }
-            } catch (error: Throwable) {
-                ActiveCharacter.release(token)
-                CharacterAttachment(token, null, "${error.javaClass.simpleName}: ${error.message.orEmpty()}")
+    val spec = remember(request, poseSource, poseBuilder, alternating) {
+        CharacterAttachSpec(request, poseSource, poseBuilder, alternating)
+    }
+    var attachment by remember(spec) { mutableStateOf(CharacterAttachment.NONE) }
+
+    // The claim is made here, in a disposal-scoped effect, and not in a remember: on a keyed switch
+    // Compose disposes the outgoing stage's effect before this block runs, so the incoming claim can
+    // never meet a slot its own predecessor still holds. A claim made during composition ran before
+    // that dispose, was refused, and left the new exercise showing the 2D fallback for good.
+    DisposableEffect(spec) {
+        val claim = ActiveCharacter.claim { loadCharacter(context, spec) }
+        val loaded = claim.session
+        if (loaded?.session == null) claim.release()
+        attachment = CharacterAttachment(
+            session = loaded?.session,
+            failure = when {
+                loaded?.session != null -> null
+                !claim.slotWasFree -> "another view already owns the character"
+                else -> loaded?.failure ?: "no Filament backend available"
             }
+        )
+        onDispose {
+            attachment = CharacterAttachment.NONE
+            loaded?.session?.destroy()
+            claim.release()
         }
     }
+    return attachment
 }
 
+/** Builds the session this stage would draw with; runs inside the claim, so a failure frees nothing. */
+private fun loadCharacter(context: Context, spec: CharacterAttachSpec): CharacterLoad {
+    return try {
+        val capabilities = GraphicsProbe.read(context)
+        val selection = FilamentEngines.create(spec.request)
+        val engine = selection.value
+            ?: return CharacterLoad(null, selection.fallbackReason ?: "no Filament backend available")
+        val session = CharacterSession(
+            context = context,
+            engine = engine,
+            request = spec.request,
+            selection = selection,
+            capabilities = capabilities,
+            assetPath = CharacterFeature.ASSET_PATH,
+            poseSource = spec.poseSource,
+            poseBuilder = spec.poseBuilder,
+            alternating = spec.alternating
+        )
+        val failure = session.load()
+        if (failure != null) {
+            session.destroy()
+            CharacterLoad(null, failure)
+        } else {
+            CharacterLoad(session, null)
+        }
+    } catch (error: Throwable) {
+        CharacterLoad(null, "${error.javaClass.simpleName}: ${error.message.orEmpty()}")
+    }
+}
