@@ -621,15 +621,23 @@ the GLB was loaded with.
 | `UV1` | the `0xFF` fill gltfio itself uses for a missing second UV set (`USHORT2`, normalized) |
 | `COLOR` | per-vertex tendon ramp written by the mesh (`UBYTE4`, normalized) |
 | Indices | `UINT`, 41,472 capacity, uploaded only when the drawn-head set changes |
-| Bounds | exact min/max over the written asset-space vertices, `fallback()` when nothing was written; `castShadows(false)`, `receiveShadows(false)` so an empty box cannot trip the builder's precondition |
-| Upload | a 2-deep ring of direct buffers; one position upload per frame (81 KiB), colour/UV/index only on a shape change |
-| Axes | `(x, y, z) → (−z, y, x)` applied once in `TubeVertexLayout.writePositions`; the mesh is already metres |
+| Bounds | exact min/max over the written asset-space vertices, `fallback()` when nothing was written; that non-empty box is what satisfies `RenderableManager`'s `culling(true)` precondition, and non-finite components are dropped so one bad vertex cannot pin the box at `NaN`. `castShadows(false)`, `receiveShadows(false)` because the overlay neither casts nor receives |
+| Upload | a 3-deep ring of direct buffers, so two frames in flight cannot collide with the slot being filled; one position upload per frame (81 KiB), colour/UV/index only on a shape change |
+| Axes | `(x, y, z) → (−z, y, x)` applied once in `TubeVertexLayout.writePositions`, with no second scale; the mesh hands it metres, converting the centre line and the radius by `unitsPerMetre` alike |
 | Winding | fixed: the band was wound inside-out (`a, c, b` / `b, c, d`) and is now `a, b, c` / `b, d, c`, so back-face culling keeps the walls the asset's single-sided materials would have culled |
 
 Evidence that is a JVM test, not a device claim: `ProceduralTubeBudgetTest.theTubeWindingMatchesItsOutwardNormals`
 (reverting the winding makes 13,536 of 13,824 triangles read as back-facing), and `TubeVertexLayoutTest`
-— asset conversion against `X1Bind.toAsset` with a wrong-basis control, byte strides, attribute
-planning, index-count bounds, AABB containment, and an allocation gate over the whole upload fill.
+— asset conversion against `X1Bind.toAssetDirection` with a wrong-basis control, `theSolvedMeshUploadsInHumanMetres`
+solving the real definition through `AnatomySolver` and pinning the uploaded AABB to a body's metres
+(`y` 0.456–1.421 m, half extents ≤ 0.5 m — a centre line left in engine units reads 113–350 m and fails),
+byte strides, attribute planning including a `POSITION`-only plan, index-count bounds, AABB containment,
+a `NaN`-vertex bounds guard, and an allocation gate over the whole upload fill.
+
+The centre line was the one value that had escaped both the counts and the winding: it left
+`ProceduralMuscleMesh` in engine units while the radius was converted, so the tubes sat ~247x out, past
+the camera's 100 m far plane, and drew nothing. It is converted with the radius now, and the metre bound
+above is asserted end to end rather than assumed.
 
 What is still a device claim: that the material the provider returns reports exactly those attributes on
 a given driver. `CharacterDiagnostics.muscleAttributes` records what the material actually required and
