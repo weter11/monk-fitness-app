@@ -49,6 +49,20 @@ class TubeMaterialSelectionTest {
     }
 
     @Test
+    fun thePlanMirrorsTheCandidateThatWon() {
+        val candidates = listOf(litPermutation, unlitPermutation)
+        val choice = TubeAttributePlanner.choose(candidates)
+
+        assertTrue("a plannable candidate must be found", choice != null)
+        assertEquals("the winning candidate index is reported", 1, choice!!.candidate)
+        assertEquals(
+            "the plan must declare exactly what the winning candidate reports",
+            candidates[choice.candidate].toSet(),
+            choice.plan.attributes.map { it.name }.toSet(),
+        )
+    }
+
+    @Test
     fun aCandidateListWithNothingFillableSelectsNothing() {
         assertNull(TubeAttributePlanner.choose(listOf(litPermutation)))
         assertNull(TubeAttributePlanner.choose(emptyList()))

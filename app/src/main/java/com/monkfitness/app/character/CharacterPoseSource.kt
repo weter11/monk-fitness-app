@@ -32,7 +32,9 @@ data class CharacterDiagnostics(
     /** The vertex attributes the tube material required, as planned; empty until a flagged session ran. */
     val muscleAttributes: String = "",
     /** Why the tube layer refused to build, or null when it drew. */
-    val muscleMaterialError: String? = null
+    val muscleMaterialError: String? = null,
+    /** Which material candidate drew: 0 is the provider's permutation, n>0 a donor instance. */
+    val muscleMaterialCandidate: Int = -1
 )
 
 /**

@@ -117,6 +117,22 @@ class TubeVertexLayout(
     fun indexBytes(indexCount: Int): Int = indexCount * UINT_BYTES
 
     /**
+     * The count a `FloatBuffer` upload takes for [vertexCount] vertices.
+     *
+     * `VertexBuffer.setBufferAt` counts elements of the buffer it is handed, not bytes: the JNI
+     * shifts the caller's count by the buffer's element size before sizing the descriptor
+     * (`AutoBuffer` in `NioUtils.cpp`). A float buffer therefore takes one count per component, and
+     * passing bytes instead overruns it — Filament throws `BufferOverflowException` rather than
+     * uploading.
+     */
+    fun floatUploadCount(attribute: TubeAttribute, vertexCount: Int): Int =
+        vertexCount * (attribute.bytesPerVertex / FLOAT_BYTES)
+
+    /** The count a `ByteBuffer` upload takes: bytes, one per byte of the attribute's stride. */
+    fun byteUploadCount(attribute: TubeAttribute, vertexCount: Int): Int =
+        vertexCount * attribute.bytesPerVertex
+
+    /**
      * Writes [geometry]'s positions in the renderer's axes and grows [bounds] with every written
      * vertex, so the bounding box handed to Filament is the mesh's own rather than a guess.
      */
@@ -215,6 +231,7 @@ class TubeVertexLayout(
 
     private companion object {
         const val UINT_BYTES = 4
+        const val FLOAT_BYTES = 4
         const val OPAQUE: Byte = -1
         const val DUMMY_UV: Byte = -1
     }
