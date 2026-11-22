@@ -17,6 +17,7 @@ import com.google.android.filament.Viewport
 import com.google.android.filament.android.UiHelper
 import com.google.android.filament.gltfio.AssetLoader
 import com.google.android.filament.gltfio.FilamentAsset
+import com.google.android.filament.gltfio.FilamentInstance
 import com.google.android.filament.gltfio.ResourceLoader
 import com.google.android.filament.gltfio.UbershaderProvider
 import com.monkfitness.app.anatomy.AnatomyDefinition
@@ -67,6 +68,7 @@ class CharacterSession(
     private var swapChain: SwapChain? = null
     private var assetLoader: AssetLoader? = null
     private var asset: FilamentAsset? = null
+    private var materialProvider: UbershaderProvider? = null
     private var indirectLight: IndirectLight? = null
 
     private var skinnedRenderables: IntArray = IntArray(0)
@@ -87,6 +89,8 @@ class CharacterSession(
     private var anatomyFrame: AnatomyFrame? = null
     private var muscleMesh: ProceduralMuscleMesh? = null
     private var sceneFrame: CharacterSceneFrame? = null
+    private var tubeMesh: TubeMesh? = null
+    private var tubeError: String? = null
     private var morphWeights: MorphWeightSet? = null
     private var anatomyError: String? = null
     private var muscleTriangles = 0
@@ -164,7 +168,11 @@ class CharacterSession(
             buffer.put(bytes)
             buffer.rewind()
 
-            val loader = AssetLoader(engine, UbershaderProvider(engine), EntityManager.get())
+            // The provider owns every material instance the session clones; dropping it here would leave
+            // the tube layer holding instances whose materials no longer exist.
+            val provider = UbershaderProvider(engine)
+            materialProvider = provider
+            val loader = AssetLoader(engine, provider, EntityManager.get())
             assetLoader = loader
             val loaded = loader.createAsset(buffer) ?: return "gltfio could not load $assetPath"
             asset = loaded
@@ -205,7 +213,7 @@ class CharacterSession(
             morphWeights = MorphWeightSet(morphTargetsByRenderable.values.maxOrNull() ?: 0)
 
             applyMorphology(morphology)
-            prepareAnatomy()
+            prepareAnatomy(instance)
             null
         } catch (error: Throwable) {
             val message = "${error.javaClass.simpleName}: ${error.message.orEmpty()}".trim()
@@ -237,18 +245,18 @@ class CharacterSession(
      * Builds the anatomy solve this session will run every frame — only when the character flag is on,
      * because the rest solve is a one-off cost the 2D renderer must never pay.
      */
-    private fun prepareAnatomy() {
+    private fun prepareAnatomy(instance: FilamentInstance) {
         if (!CharacterFeature.isEnabled) return
         // The body is the character and the tubes are an overlay: a broken anatomy asset must leave the
         // skinned figure on screen and report itself, not take the whole load down with it.
         try {
-            prepareAnatomyUnchecked()
+            prepareAnatomyUnchecked(instance)
         } catch (error: Throwable) {
             anatomyError = "${error.javaClass.simpleName}: ${error.message.orEmpty()}".trim()
         }
     }
 
-    private fun prepareAnatomyUnchecked() {
+    private fun prepareAnatomyUnchecked(instance: FilamentInstance) {
         val anatomy: AnatomyDefinition = AnatomyDefinitionLoader.load(
             context.assets.open(CharacterFeature.ANATOMY_PATH).bufferedReader().use { it.readText() }
         )
@@ -264,12 +272,26 @@ class CharacterSession(
         anatomySolver = solver
         anatomyFrame = frame
         muscleMesh = mesh
+        val geometry = mesh.slot()
         sceneFrame = CharacterSceneFrame(
             anatomy = frame,
             morph = morphWeights ?: MorphWeightSet(0),
-            geometry = mesh.slot(),
+            geometry = geometry,
             selection = layers.selection
         )
+        // The GPU layer is built here, where the engine and the asset both exist and the buffers can be
+        // sized from the definition once instead of per frame.
+        val tubes = TubeMesh(
+            engine = engine,
+            scene = scene,
+            vertexCapacity = mesh.vertexCapacity,
+            indexCapacity = mesh.triangleCapacity * 3,
+            palette = SkinPalette.DEFAULT,
+            provider = materialProvider,
+            assetInstance = instance
+        )
+        tubeMesh = tubes
+        tubeError = tubes.prepare()
     }
 
     /**
@@ -294,7 +316,12 @@ class CharacterSession(
         muscleHeadsRefused = refused
         muscleInstancesDrawn = frame.renderable.count { it }
 
+        val rebuild = scene.needsRebuild(layers.revision)
         muscleTriangles = mesh.write(frame, scene.geometry, scene.selection)
+        tubeMesh?.let { tubes ->
+            tubes.upload(scene.geometry, rebuild)
+            tubes.setVisible(scene.geometry.indexCount > 0)
+        }
         scene.markBuilt(layers.revision)
     }
 
@@ -383,8 +410,12 @@ class CharacterSession(
             scene.removeEntities(loaded.entities)
             assetLoader?.destroyAsset(loaded)
         }
+        // Before the engine goes: the tube entity, its buffers and the instance this session owns only.
+        tubeMesh?.destroy()
+        tubeMesh = null
         assetLoader?.destroy()
         assetLoader = null
+        materialProvider = null
         asset = null
         indirectLight?.let { engine.destroyIndirectLight(it) }
         indirectLight = null
@@ -417,7 +448,9 @@ class CharacterSession(
             muscleHeadsRefused = muscleHeadsRefused,
             muscleInstancesDrawn = muscleInstancesDrawn,
             muscleTriangles = muscleTriangles,
-            muscleReadings = muscleReadings()
+            muscleReadings = muscleReadings(),
+            muscleAttributes = tubeMesh?.materialAttributes.orEmpty(),
+            muscleMaterialError = tubeError
         ).also { lastDiagnostics = it }
     }
 
