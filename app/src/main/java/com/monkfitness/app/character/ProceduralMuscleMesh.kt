@@ -17,8 +17,8 @@ import kotlin.math.sqrt
  *
  * Positions are metres in engine axes (`+Y` up, `+X` forward, `+Z` lateral). The anatomy solves in
  * engine units, so [unitsPerMetre] is the one scale conversion on this path and it happens here
- * rather than in the renderer; the axis change into the asset's own frame is the renderer's, because
- * only the renderer knows which asset it is drawing.
+ * rather than in the renderer, applied to the centre line and the radius alike; the axis change into
+ * the asset's own frame is the renderer's, because only the renderer knows which asset it is drawing.
  */
 class ProceduralMuscleMesh(
     private val definition: AnatomyDefinition,
@@ -214,7 +214,7 @@ class ProceduralMuscleMesh(
         return (slot.indexCount - first) / 3
     }
 
-    /** Resamples the slot's path to [samples] equal-arc points; returns the arc length in units. */
+    /** Resamples the slot's path to [samples] equal-arc points in metres; returns the arc in units. */
     private fun resample(frame: AnatomyFrame, slotIndex: Int, count: Int): Double {
         var total = 0.0
         for (index in 1 until count) {
@@ -239,7 +239,10 @@ class ProceduralMuscleMesh(
             for (component in 0..2) {
                 val from = frame.pointComponent(slotIndex, segment - 1, component)
                 val to = frame.pointComponent(slotIndex, segment, component)
-                points[index * 3 + component] = (from + (to - from) * u).toDouble()
+                // The frame is in engine units and the renderer's world is the asset's, in metres:
+                // the radius is converted below, and a centre line left in units would put the tubes
+                // two hundred times too far out to be inside the frustum at all.
+                points[index * 3 + component] = (from + (to - from) * u) / unitsPerMetre
             }
         }
         return total
