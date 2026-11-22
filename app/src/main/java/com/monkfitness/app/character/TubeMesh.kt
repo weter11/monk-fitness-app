@@ -61,6 +61,9 @@ internal class TubeMesh(
     var failure: String? = null
         private set
 
+    /** Why no material instance could be used, when that is what refused the layer. */
+    private var materialRefusal: String? = null
+
     /** The attributes the material asked for, as planned, for the diagnostics overlay. */
     var materialAttributes: String = ""
         private set
@@ -74,17 +77,14 @@ internal class TubeMesh(
         if (prepared) return failure
         prepared = true
 
-        val instance = createMaterial() ?: return refuse("no material instance is available for the muscle layer")
-        material = instance
+        val chosen = selectMaterial()
+            ?: return refuse(materialRefusal ?: "no material instance is available for the muscle layer")
+        material = chosen.instance
+        val plan = chosen.plan
 
-        val required = instance.material.requiredAttributes.map { it.name }
-        val plan = when (val planned = TubeAttributePlanner.planFromNames(required)) {
-            is TubeAttributePlan.Refused -> return refuse(planned.reason)
-            is TubeAttributePlan.Supported -> planned
-        }
         materialAttributes = plan.attributes.joinToString(",") { it.name }
         usesVertexColors = TubeAttribute.COLOR in plan.attributes
-        if (!usesVertexColors) {
+        if (chosen.flatTint) {
             // The fallback instance carries the tint in baseColorFactor, so the overlay says which one drew.
             materialAttributes += " (flat tint)"
         }
@@ -257,41 +257,76 @@ internal class TubeMesh(
         )
     }
 
+    /** The instance that will draw, the slots its shader needs, and whether its tint is per-vertex. */
+    private class ChosenMaterial(
+        val instance: MaterialInstance,
+        val plan: TubeAttributePlan.Supported,
+        val flatTint: Boolean
+    )
+
     /**
-     * A dedicated instance when the provider can make one, so the tube gets vertex colours and a colour
-     * of its own; otherwise a copy of the asset's unskinned instance, which is single-parameter.
+     * Picks the instance by what its shader requires, never by its name.
+     *
+     * Every lit Filament shading model requires `TANGENTS` (`MaterialBuilder` sets it for anything
+     * that is not unlit, whatever textures the material declares), so the layer asks for the unlit
+     * permutation first and only falls back to the asset's own instances when one of them needs
+     * nothing a rigid tube cannot fill. The planner stays the authority: an instance that still asks
+     * for `TANGENTS` is refused by name rather than under-filled.
      */
-    private fun createMaterial(): MaterialInstance? {
-        provider?.let { ubershaders ->
-            val key = MaterialProvider.MaterialKey().apply {
-                doubleSided = true
-                hasVertexColors = true
-                alphaMode = OPAQUE_ALPHA_MODE
-                baseColorUV = 0
-                metallicRoughnessUV = 0
-            }
-            val created = ubershaders.createMaterialInstance(key, IntArray(UV_SETS), LABEL, null)
-            if (created != null) {
-                // The tint lives in the vertices, so the factor stays neutral and only scales it.
-                created.setParameter("baseColorFactor", 1f, 1f, 1f, 1f)
-                created.setParameter("metallicFactor", METALLIC)
-                created.setParameter("roughnessFactor", ROUGHNESS)
-                created.setCullingMode(Material.CullingMode.BACK)
-                ownsMaterial = true
-                return created
-            }
+    private fun selectMaterial(): ChosenMaterial? {
+        val provided = provider?.createMaterialInstance(tubeKey(), IntArray(UV_SETS), LABEL, null)
+        val donors = assetInstance?.materialInstances.orEmpty()
+
+        val required = ArrayList<Collection<String>>(donors.size + 1)
+        provided?.let { required += it.material.requiredAttributes.map { attribute -> attribute.name } }
+        for (donor in donors) {
+            required += donor.material.requiredAttributes.map { attribute -> attribute.name }
         }
 
-        val donor = assetInstance?.materialInstances
-            ?.firstOrNull { it.name.equals(UNSKINNED_DONOR, ignoreCase = true) }
-            ?: return null
+        val choice = TubeAttributePlanner.choose(required)
+        if (choice == null) {
+            provided?.let { engine.destroyMaterialInstance(it) }
+            materialRefusal = (
+                required.firstOrNull()?.let { TubeAttributePlanner.planFromNames(it) } as? TubeAttributePlan.Refused
+                )?.reason
+            return null
+        }
+
+        if (provided != null && choice.candidate == 0) {
+            // The tint lives in the vertices, so the factor stays neutral and only scales it.
+            provided.setParameter("baseColorFactor", 1f, 1f, 1f, 1f)
+            provided.setParameter("metallicFactor", METALLIC)
+            provided.setParameter("roughnessFactor", ROUGHNESS)
+            provided.setCullingMode(Material.CullingMode.BACK)
+            ownsMaterial = true
+            return ChosenMaterial(provided, choice.plan, flatTint = false)
+        }
+
+        val donorIndex = choice.candidate - if (provided != null) 1 else 0
+        val donor = donors.getOrNull(donorIndex)
+        // Ours only if it was chosen; a provider instance that lost to a donor still owns memory.
+        provided?.let { engine.destroyMaterialInstance(it) }
+        if (donor == null) return null
         val copy = MaterialInstance.duplicate(donor, LABEL)
         copy.setParameter("baseColorFactor", palette.muscleRed, palette.muscleGreen, palette.muscleBlue, 1f)
         copy.setParameter("metallicFactor", METALLIC)
         copy.setParameter("roughnessFactor", ROUGHNESS)
         copy.setCullingMode(Material.CullingMode.BACK)
         ownsMaterial = true
-        return copy
+        return ChosenMaterial(copy, choice.plan, flatTint = true)
+    }
+
+    /**
+     * The ubershader permutation the tube layer requests. `unlit` is what keeps `TANGENTS` out of the
+     * shader's `requires`; it also keeps the draw to one pass, which the frame budget depends on.
+     */
+    private fun tubeKey(): MaterialProvider.MaterialKey = MaterialProvider.MaterialKey().apply {
+        unlit = true
+        doubleSided = false
+        hasVertexColors = true
+        alphaMode = OPAQUE_ALPHA_MODE
+        baseColorUV = 0
+        metallicRoughnessUV = 0
     }
 
     private fun refuse(reason: String): String {
@@ -337,7 +372,6 @@ internal class TubeMesh(
         const val RING_DEPTH = 3
         const val LAYER_BIT = 1
         const val LABEL = "muscleTubes"
-        const val UNSKINNED_DONOR = "Ground"
         const val OPAQUE_ALPHA_MODE = 0
         const val UV_SETS = 8
         const val METALLIC = 0f
