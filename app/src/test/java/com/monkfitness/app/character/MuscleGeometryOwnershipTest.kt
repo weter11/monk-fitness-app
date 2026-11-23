@@ -50,25 +50,30 @@ class MuscleGeometryOwnershipTest {
     }
 
     @Test
-    fun aShorterBuildLeavesNoStaleGeometryBehindTheNewCounts() {
+    fun aHiddenInstanceCollapsesInPlaceRatherThanShrinkingTheBuild() {
         val frame = solvedFrame()
         val slot = mesh.slot()
         val all = MuscleSelection(showsTubes = true)
         mesh.write(frame, slot, all)
         val full = slot.vertexCount
+        val fullIndices = slot.indexCount
 
         val hidden = definition.muscles.first()
         val shorter = all.withInstance(MuscleInstanceId(hidden.id, MuscleSide.A), false)
         mesh.write(frame, slot, shorter)
 
-        val skipped = hidden.heads.size * mesh.trianglesPerHead
-        assertTrue("the second build is smaller", slot.vertexCount < full)
-        assertEquals((mesh.triangleCapacity - skipped) * 3, slot.indexCount)
+        assertEquals("a hidden instance does not resize the build", full, slot.vertexCount)
+        assertEquals(fullIndices, slot.indexCount)
         assertFalse(
             "an index into the previous frame's tail would read a tube that is not there",
             (0 until slot.indexCount).any { slot.indices[it] >= slot.vertexCount }
         )
-        assertTrue("the bytes past the counts are unreferenced, not authoritative", slot.positions.isNotEmpty())
+        val owned = (0 until frame.headCount).filter {
+            frame.heads[it].muscleId == hidden.id && frame.heads[it].side == MuscleSide.A
+        }
+        for (head in owned) {
+            assertEquals("head $head is collapsed", 0f, CollapsedHeads.maxTriangleArea(slot, mesh, head), 0f)
+        }
     }
 
     @Test
@@ -113,10 +118,10 @@ class MuscleGeometryOwnershipTest {
         slot.indices[0] = 0
         val hidden = shown.withInstance(MuscleInstanceId(definition.muscles.first().id, MuscleSide.A), false)
         mesh.write(frame, slot, hidden)
-        assertTrue("a smaller head set moves the topology", slot.indexCount < indexCount)
-        assertTrue("a moved topology is rebuilt, byte for byte", slot.indices[0] == 0)
+        assertEquals("a hidden instance collapses in place, so the topology stays", indexCount, slot.indexCount)
+        assertEquals("and the index bytes are still the ones already uploaded", 0, slot.indices[0])
         assertFalse(
-            "a rebuilt topology only names vertices this frame wrote",
+            "a kept topology only names vertices this frame wrote",
             (0 until slot.indexCount).any { slot.indices[it] >= slot.vertexCount }
         )
     }

@@ -24,7 +24,8 @@ import kotlin.math.sqrt
  *
  * A frame only moves the pose. The ring basis, the radius profile and the tendon tint are properties
  * of the definition, so they are derived once ([ringCos], [StationTable]) instead of per station per
- * head, and the index buffer is re-emitted only when the drawn head count changes ([write]).
+ * head, and the index buffer is a function of the definition's head set alone: it is written once and
+ * reused for every frame after it, whatever the solver refuses.
  */
 class ProceduralMuscleMesh(
     private val definition: AnatomyDefinition,
@@ -99,48 +100,48 @@ class ProceduralMuscleMesh(
      * Rebuilds [slot] from [frame] for the instances [selection] shows, and returns the triangle
      * count written. The slot is emptied first, so a hidden instance leaves no stale tube behind;
      * a selection the slot cannot hold is refused whole rather than written part-way.
+     *
+     * Every head of the definition owns its quota on every frame while the tubes are on: a head the
+     * selection hides or the solver refuses is written collapsed onto one point instead of being
+     * skipped. The counts are therefore a property of the definition alone, which is what keeps the
+     * GPU primitive above this one alive across a rep — a refusal moves vertices, never topology.
      */
     fun write(frame: AnatomyFrame, slot: DynamicGeometrySlot, selection: MuscleSelection): Int {
         lastRefusal = null
         slot.begin()
+        if (!selection.showsTubes) return 0
 
-        var heads = 0
-        for (slotIndex in 0 until frame.headCount) {
-            val state = frame.muscleStates[slotIndex]
-            val instance = frame.instances[frame.instanceOf(slotIndex)]
-            if (selection.shows(instance, state.layer)) heads++
-        }
+        val heads = frame.headCount
         if (heads == 0) return 0
 
-        if (!slot.claim(heads * verticesPerHead, heads * trianglesPerHead * 3)) {
+        val vertexCount = heads * verticesPerHead
+        val indexCount = heads * trianglesPerHead * 3
+        if (!slot.claim(vertexCount, indexCount)) {
             lastRefusal =
-                "$heads heads need ${heads * verticesPerHead} vertices / ${heads * trianglesPerHead} triangles, " +
+                "$heads heads need $vertexCount vertices / ${heads * trianglesPerHead} triangles, " +
                     "the slot holds ${slot.vertexCapacity} / ${slot.triangleCount}"
             return 0
         }
 
-        var written = 0
-        for (slotIndex in 0 until frame.headCount) {
+        for (slotIndex in 0 until heads) {
             val state = frame.muscleStates[slotIndex]
             val instance = frame.instances[frame.instanceOf(slotIndex)]
-            if (!selection.shows(instance, state.layer)) continue
-            val base = pushVertices(frame, slotIndex, state.id, slot)
-            if (base < 0) continue
-            headBases[written] = base
-            written++
+            val base = if (selection.shows(instance, state.layer)) {
+                pushVertices(frame, slotIndex, state.id, slot)
+            } else {
+                -1
+            }
+            headBases[slotIndex] = if (base >= 0) base else collapse(frame, slotIndex, slot)
         }
-        if (written == 0) return 0
 
-        // A head writes its whole quota or nothing, so the index buffer is a function of how many
-        // heads drew: the same count on the same untouched slot is the topology already in its array.
-        val indexCount = written * trianglesPerHead * 3
-        val vertexCount = written * verticesPerHead
+        // The head set no longer varies, so the index buffer is a function of the definition: the
+        // same slot holding the same revision is the topology already in its array.
         if (slot === topologySlot && slot.topologyRevision == topologyRevision &&
             vertexCount == topologyVertices && indexCount == topologyIndices
         ) {
             slot.reuseIndices(indexCount)
         } else {
-            writeIndices(slot.indices, slot.claimIndexRun(indexCount), headBases, written)
+            writeIndices(slot.indices, slot.claimIndexRun(indexCount), headBases, heads)
             topologySlot = slot
             topologyRevision = slot.topologyRevision
             topologyVertices = vertexCount
@@ -260,6 +261,42 @@ class ProceduralMuscleMesh(
         }
 
         require(vertex == base + verticesPerHead) { "a head wrote ${vertex - base} vertices, not $verticesPerHead" }
+        return base
+    }
+
+    /**
+     * Writes one head's quota collapsed onto a single point, for a head that is hidden or refused.
+     *
+     * Every vertex of the head lands on the same position, so each of its triangles has zero area and
+     * rasterises nothing, while the head keeps the vertex and index ranges the primitive above was
+     * built with. The point is the head's first solved sample when the solver left one — a hidden head
+     * still sits inside the body — and the origin when the solver refused it and published no path.
+     */
+    private fun collapse(frame: AnatomyFrame, slotIndex: Int, slot: DynamicGeometrySlot): Int {
+        val base = slot.claimVertexRun(verticesPerHead)
+        val solved = frame.pointCounts[slotIndex] > 0
+        val x = if (solved) frame.pointComponent(slotIndex, 0, 0) else 0f
+        val y = if (solved) frame.pointComponent(slotIndex, 0, 1) else 0f
+        val z = if (solved) frame.pointComponent(slotIndex, 0, 2) else 0f
+        val positions = slot.positions
+        val normals = slot.normals
+        val uvs = slot.uvs
+        val colors = slot.colors
+        for (offset in 0 until verticesPerHead) {
+            val vertex = base + offset
+            val at = vertex * 3
+            positions[at] = x
+            positions[at + 1] = y
+            positions[at + 2] = z
+            normals[at] = 0f
+            normals[at + 1] = 1f
+            normals[at + 2] = 0f
+            uvs[vertex * 2] = 0f
+            uvs[vertex * 2 + 1] = 0f
+            colors[at] = 0f
+            colors[at + 1] = 0f
+            colors[at + 2] = 0f
+        }
         return base
     }
 
