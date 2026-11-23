@@ -28,6 +28,8 @@ class MusclePathSolver(
 ) {
 
     private val points = DoubleArray(MAX_POINTS * 3)
+    /** The polyline as [unfold] received it, so a repair that does not work leaves no trace. */
+    private val unfoldSaved = DoubleArray(MAX_POINTS * 3)
     private val smoothed = DoubleArray(MAX_POINTS * 3)
     private var count = 0
     /** Per segment, the first obstacle in union order that does not accept it; frozen per pass. */
@@ -93,6 +95,7 @@ class MusclePathSolver(
                 smooth()
             }
             project(union, side, pose, frames, profile)
+            unfold(union, side, pose, frames, profile)
 
             // A capacity refusal is decided before the corridor and the pass cap: it is an abort
             // inside this pass, not an exhausted search.
@@ -355,6 +358,74 @@ class MusclePathSolver(
     private fun clampStation(station: Double, fallback: Double): Double =
         if (station.isNaN()) fallback else station.coerceIn(0.0, 1.0)
 
+    /**
+     * Removes the one-point fold that [project] can leave behind.
+     *
+     * A sample pushed out of an obstacle while its neighbours stay put becomes a spike: the curvature
+     * test reads it as a fold and the head is refused, although the route itself is clearable. Moving
+     * that sample onto the chord of its neighbours and pushing it back out of the obstacle it was
+     * clearing straightens the spike where it is, so a path the projection did not fold is untouched.
+     *
+     * Bounded and undecided: a fold this cannot remove reaches [check] and is refused there, exactly as
+     * before.
+     */
+    private fun unfold(
+        union: List<WrapSurface>,
+        side: MuscleSide,
+        pose: SkeletonPose,
+        frames: SegmentFrameSet,
+        profile: RadiusProfile
+    ) {
+        if (worstTurn() <= thetaMax) return
+        System.arraycopy(points, 0, unfoldSaved, 0, count * 3)
+        var pass = 0
+        while (pass++ < UNFOLD_PASSES && worstTurn() > thetaMax) {
+            val fold = turnIndex
+            val from = (fold - UNFOLD_WINDOW).coerceAtLeast(1)
+            val to = (fold + UNFOLD_WINDOW).coerceAtMost(count - 2)
+            // The fold is the apex of a detour, so the repair is a window and not a point: relaxing the
+            // samples around it toward their own chords and pushing the whole window back out of the
+            // obstacle turns a spike into the arc the detour was trying to be.
+            for (index in from..to) {
+                for (component in 0..2) {
+                    points[index * 3 + component] =
+                        0.5 * (points[(index - 1) * 3 + component] + points[(index + 1) * 3 + component])
+                }
+            }
+            for (index in from..to) projectSample(union, side, pose, frames, profile, index)
+        }
+        // A fold this cannot remove is the geometry's, not the projection's: the polyline goes back
+        // exactly as it came in, and the check reports the cause it would have reported anyway.
+        if (worstTurn() > thetaMax) System.arraycopy(unfoldSaved, 0, points, 0, count * 3)
+    }
+
+    /** Pushes one interior sample out of every obstacle it still sits inside, as [project] does. */
+    private fun projectSample(
+        union: List<WrapSurface>,
+        side: MuscleSide,
+        pose: SkeletonPose,
+        frames: SegmentFrameSet,
+        profile: RadiusProfile,
+        index: Int
+    ) {
+        val station = index.toDouble() / (count - 1)
+        for (obstacleIndex in union.indices) {
+            obstacle.load(union[obstacleIndex], side, pose, frames, attachmentScale)
+            val need = profile.at(station) + validator.margin
+            val d = obstacle.distanceTo(points[index * 3], points[index * 3 + 1], points[index * 3 + 2])
+            if (d >= need) continue
+            val dx = points[index * 3] - obstacle.centre[0]
+            val dy = points[index * 3 + 1] - obstacle.centre[1]
+            val dz = points[index * 3 + 2] - obstacle.centre[2]
+            val length = sqrt(dx * dx + dy * dy + dz * dz)
+            if (!(length > 0.0)) continue
+            val push = (need - d) / length
+            points[index * 3] += dx * push
+            points[index * 3 + 1] += dy * push
+            points[index * 3 + 2] += dz * push
+        }
+    }
+
     /** One Catmull-Rom pass at quarter blend; never run after the final check. */
     private fun smooth() {
         if (count < 3) return
@@ -554,6 +625,8 @@ class MusclePathSolver(
 
     private companion object {
         const val MAX_POINTS = 256
+        const val UNFOLD_PASSES = 6
+        const val UNFOLD_WINDOW = 2
         const val ESCALATION = 1.5
         const val SMOOTH_BLEND = 0.25
 
