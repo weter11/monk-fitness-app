@@ -1,15 +1,15 @@
 [versions]
-agp = "8.5.0"
-kotlin = "2.0.0"
+agp = "9.3.2"
+kotlin = "2.2.10"
 coreKtx = "1.13.1"
 appcompat = "1.7.1"
 lifecycleRuntimeKtx = "2.8.2"
 activityCompose = "1.9.0"
 composeBom = "2024.06.00"
-room = "2.6.1"
+room = "2.7.2"
 datastore = "1.1.1"
 navigationCompose = "2.7.7"
-ksp = "2.0.0-1.0.21"
+ksp = "2.2.10-2.0.2"
 mpAndroidChart = "v3.1.0"
 # 1.76+ sets minCompileSdk 37; the app is on compileSdk 34 / AGP 8.5.
 filament = "1.75.1"
@@ -40,6 +40,5 @@ filament-gltfio = { group = "com.google.android.filament", name = "gltfio-androi
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }
-jetbrains-kotlin-android = { id = "org.jetbrains.kotlin.android", version.ref = "kotlin" }
 compose-compiler = { id = "org.jetbrains.kotlin.plugin.compose", version.ref = "kotlin" }
 ksp = { id = "com.google.devtools.ksp", version.ref = "ksp" }

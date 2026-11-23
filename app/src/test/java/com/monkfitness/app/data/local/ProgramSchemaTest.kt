@@ -1586,7 +1586,10 @@ class ProgramSchemaTest {
 
     @Test
     fun theFreshRoomSchemaContainsTheFinalSlotIdentityDefinition() {
+        // Room 2.7 under KSP2 emits Kotlin; the Java names are kept for the older generator.
         val generated = sequenceOf(
+            File("build/generated/ksp/debug/kotlin/com/monkfitness/app/data/local/AppDatabase_Impl.kt"),
+            File("app/build/generated/ksp/debug/kotlin/com/monkfitness/app/data/local/AppDatabase_Impl.kt"),
             File("build/generated/ksp/debug/java/com/monkfitness/app/data/local/AppDatabase_Impl.java"),
             File("app/build/generated/ksp/debug/java/com/monkfitness/app/data/local/AppDatabase_Impl.java")
         ).first(File::isFile).readText()
