@@ -863,6 +863,8 @@ tube layer. Avoiding the call from this side would mean never uploading indices 
 exists, which the layer cannot promise while its geometry is the solved head set; `T4` survives
 precisely because it stops changing geometry, and stops being the layer.
 
+That conclusion did not survive the engine move — see *The 1.81.0 run* below.
+
 #### What this run still cannot answer
 
 - Alignment, orientation, winding in situ, tendon tint and the GPU draw cost: all downstream of a
@@ -873,7 +875,43 @@ precisely because it stops changing geometry, and stops being the layer.
   they bound neither the layer's CPU cost nor its GPU cost; the question of whether the UV/colour
   uploads should move into the `topologyRevision` pass cannot be answered from them.
 - PSS: memory was not sampled.
-- Every row above, until the engine moves. `T4` shows the geometry, the material and the counts are
-  right and that the draw itself costs 48 fps alongside the asset; it cannot show alignment, tint or
-  a seam because it is not this layer. Those readings wait on a Filament version whose OpenGL backend
-  survives the index upload, which is its own change (`compileSdk` + Filament), not this one.
+- Every row above, until the layer stops redefining its geometry. `T4` shows the geometry, the material
+  and the counts are right and that the draw itself costs 48 fps alongside the asset; it cannot show
+  alignment, tint or a seam because it is not this layer. Those readings wait on a layer whose
+  primitive is given its geometry once — not on a Filament version, as the 1.81.0 run below shows.
+
+#### The 1.81.0 run — the engine move does not close it
+
+The same PR that raised `compileSdk` to 37 also moved Filament to 1.81.0. That build was installed
+over the previous one and run twice on the same handset and driver.
+
+| Run | Backend | Result | `BuildId` |
+| --- | --- | --- | --- |
+| default intent | requested Auto → active **OPENGL** | `Fatal signal 11 (SIGSEGV), code 1 (SEGV_MAPERR), fault addr 0x0000000000000004`, process uptime **3 s** | `831f673f590c30fce635baf49cd029339febce3c` |
+| `--es backend VULKAN` | **VULKAN** — `Selected physical device 'Adreno (TM) 735' … api 1.3`, `Backend feature level: 3` | the same fault, **0.5 s** after `FEngine created` | `831f673f590c30fce635baf49cd029339febce3c` |
+
+Both tombstones carry the same chain:
+
+```
+Cause: null pointer dereference
+#04 pc … libfilament-jni.so (Java_com_google_android_filament_Renderer_nRender+24)
+#10 … (com.google.android.filament.Renderer.render+0)
+#14 … (com.monkfitness.app.character.CharacterSession.render+0)
+```
+
+Only the offsets inside the library move (`0x1d78a4` where 1.75.1 had `0x1eb8f4`); the fault
+address, the frame it lands in and the Java caller do not.
+
+Three readings follow, and they replace the engine-defect conclusion above:
+
+- the fault is **not backend-specific**: Vulkan reaches it with its own driver, so the Adreno OpenGL
+  driver mishandling an index upload is excluded;
+- the fault is **not version-specific**: 1.81.0's library fails where 1.75.1's did, so neither the
+  engine version nor `compileSdk` is the lever;
+- what both runs share is this layer's primitive — a renderable built before the first solved frame
+  and then redefined (`IndexBuffer.setBuffer` + `RenderableManager.setGeometryAt`) on the frames
+  after. `T1` and `T4` survived by never doing that, on the same engine, driver and material.
+
+What is left to change is therefore the renderable's geometry lifecycle, not the engine: give the
+primitive its geometry once, per shape revision, and rebuild rather than rewrite it. That is a change
+to this layer and needs its own run; every row above stays unmeasured until it has one.
