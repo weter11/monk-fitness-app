@@ -114,3 +114,15 @@ dependencies {
 ksp {
     arg("room.schemaLocation", "$projectDir/schemas")
 }
+
+// Filament 1.76 and later ship Java 21 bytecode; a 17 test JVM cannot load a class file it cannot
+// parse. The app still compiles to 17, and D8 dexes the library's 21 bytecode without complaint.
+tasks.withType<Test>().configureEach {
+    javaLauncher = javaToolchains.launcherFor { languageVersion = JavaLanguageVersion.of(21) }
+}
+
+// Filament 1.81 declares kotlin-stdlib 2.4.0, whose metadata the compiler AGP 9.3 ships (2.2.10)
+// cannot read; nothing here or in Filament's Java bindings calls a 2.4-only stdlib symbol.
+configurations.configureEach {
+    resolutionStrategy.force("org.jetbrains.kotlin:kotlin-stdlib:2.2.10")
+}

@@ -11,8 +11,8 @@ datastore = "1.1.1"
 navigationCompose = "2.7.7"
 ksp = "2.2.10-2.0.2"
 mpAndroidChart = "v3.1.0"
-# 1.76+ sets minCompileSdk 37; the app is on compileSdk 34 / AGP 8.5.
-filament = "1.75.1"
+# Newest published release; 1.76+ needs compileSdk 37, which AGP 9.3 provides.
+filament = "1.81.0"
 
 [libraries]
 androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "coreKtx" }
