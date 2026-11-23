@@ -1,6 +1,7 @@
 package com.monkfitness.app.character
 
 import com.google.android.filament.Box
+import com.google.android.filament.BufferObject
 import com.google.android.filament.Engine
 import com.google.android.filament.EntityManager
 import com.google.android.filament.IndexBuffer
@@ -56,6 +57,21 @@ internal class TubeMesh(
     private var inScene = false
     private var uploadedVertexCount = 0
     private var uploadedIndexCount = 0
+    private var primed = false
+
+    /**
+     * One streaming buffer per declared attribute.
+     *
+     * `setBufferAt` writes through the vertex buffer's own storage, which the renderable's primitive
+     * captured when it was built; a `BufferObject` is the streamed handle instead, and the vertex
+     * buffer holds only the binding. Updating the former after the renderable exists dereferences
+     * nothing inside Filament's frame — a SIGSEGV with no log line and no attributable tombstone.
+     */
+    private val uploads = LinkedHashMap<TubeAttribute, BufferObject>()
+
+    /** Which material candidate drew: 0 is the provider's own permutation, n>0 a donor instance. */
+    var materialCandidate: Int = -1
+        private set
 
     /** Why the layer could not be built, or null when it draws. */
     var failure: String? = null
@@ -94,6 +110,8 @@ internal class TubeMesh(
         vertexBuffer = buildVertexBuffer(plan)
         indexBuffer = buildIndexBuffer()
         rings = Array(RING_DEPTH) { Ring(vertexCapacity, indexCapacity) }
+        createUploads(plan)
+        primeBuffers()
 
         buildRenderable()
         return null
@@ -110,6 +128,13 @@ internal class TubeMesh(
             scene.removeEntity(entity)
             inScene = false
         }
+        // The entity owns the renderable, and the renderable is what keeps the material instance
+        // alive: Filament throws when the instance goes first, which a configuration change turns
+        // into a crash on the way out of the activity.
+        engine.destroyEntity(entity)
+        // 1.75.1's Java binding has no `destroyBufferObject`: the streaming buffers live until the
+        // engine goes down, so clearing the map only drops this layer's handles to them.
+        uploads.clear()
         vertexBuffer?.let { engine.destroyVertexBuffer(it) }
         indexBuffer?.let { engine.destroyIndexBuffer(it) }
         // A duplicated or provider-created instance is ours; one owned by the asset must not be freed here.
@@ -119,7 +144,6 @@ internal class TubeMesh(
         material = null
         rings = null
         layout = null
-        engine.destroyEntity(entity)
     }
 
     /**
@@ -139,8 +163,8 @@ internal class TubeMesh(
         parity = (parity + 1) % RING_DEPTH
 
         built.writePositions(geometry, ring.positions, bounds)
-        vb.setBufferAt(
-            engine, built.bufferIndexOf(TubeAttribute.POSITION), ring.positions, 0, count * POSITION_COMPONENTS
+        uploads[TubeAttribute.POSITION]?.setBuffer(
+            engine, ring.positions, 0, built.floatUploadCount(TubeAttribute.POSITION, count)
         )
 
         // A head that refuses changes both counts without touching the selection, so the shape — not
@@ -151,15 +175,21 @@ internal class TubeMesh(
             // asking for one is an exception: the plan is the authority on which attributes exist.
             built.bufferIndexOfOrNull(TubeAttribute.UV0)?.let { slot ->
                 built.writeUvs(geometry, ring.uvs)
-                vb.setBufferAt(engine, slot, ring.uvs, 0, count * UV_COMPONENTS)
+                uploads[TubeAttribute.UV0]?.setBuffer(
+                    engine, ring.uvs, 0, built.floatUploadCount(TubeAttribute.UV0, count)
+                )
             }
             built.bufferIndexOfOrNull(TubeAttribute.UV1)?.let { slot ->
                 built.writeUv1Dummy(ring.uv1Bytes, vertexCapacity)
-                vb.setBufferAt(engine, slot, ring.uv1Bytes, 0, vertexCapacity * UV1_BYTES)
+                uploads[TubeAttribute.UV1]?.setBuffer(
+                    engine, ring.uv1Bytes, 0, built.byteUploadCount(TubeAttribute.UV1, vertexCapacity)
+                )
             }
             built.bufferIndexOfOrNull(TubeAttribute.COLOR)?.let { slot ->
                 built.writeColors(geometry, ring.colorBytes)
-                vb.setBufferAt(engine, slot, ring.colorBytes, 0, vertexCapacity * COLOR_BYTES)
+                uploads[TubeAttribute.COLOR]?.setBuffer(
+                    engine, ring.colorBytes, 0, built.byteUploadCount(TubeAttribute.COLOR, vertexCapacity)
+                )
             }
             built.writeIndices(geometry, ring.indices)
             ib.setBuffer(engine, ring.indices, 0, geometry.indexCount)
@@ -181,31 +211,59 @@ internal class TubeMesh(
         renderableManager.setLayerMask(entity, LAYER_BIT, if (on) LAYER_BIT else 0)
     }
 
+    /** Creates one streaming buffer per declared attribute and binds it to the vertex buffer. */
+    private fun createUploads(plan: TubeAttributePlan.Supported) {
+        val vb = vertexBuffer ?: return
+        for (slot in plan.slots) {
+            val buffer = BufferObject.Builder()
+                .size(vertexCapacity * slot.attribute.bytesPerVertex)
+                .bindingType(BufferObject.Builder.BindingType.VERTEX)
+                .build(engine)
+            vb.setBufferObjectAt(engine, slot.bufferIndex, buffer)
+            uploads[slot.attribute] = buffer
+        }
+    }
+
+    /**
+     * Fills every declared buffer once, before the renderable that references it exists, so the
+     * primitive is built against a vertex buffer whose streams are all present.
+     */
+    private fun primeBuffers() {
+        val ib = indexBuffer ?: return
+        val built = layout ?: return
+        val ring = rings?.firstOrNull() ?: return
+
+        uploads[TubeAttribute.POSITION]?.setBuffer(
+            engine, ring.positions, 0, built.floatUploadCount(TubeAttribute.POSITION, vertexCapacity)
+        )
+        uploads[TubeAttribute.UV0]?.setBuffer(
+            engine, ring.uvs, 0, built.floatUploadCount(TubeAttribute.UV0, vertexCapacity)
+        )
+        uploads[TubeAttribute.UV1]?.let { buffer ->
+            built.writeUv1Dummy(ring.uv1Bytes, vertexCapacity)
+            buffer.setBuffer(engine, ring.uv1Bytes, 0, built.byteUploadCount(TubeAttribute.UV1, vertexCapacity))
+        }
+        uploads[TubeAttribute.COLOR]?.setBuffer(
+            engine, ring.colorBytes, 0, built.byteUploadCount(TubeAttribute.COLOR, vertexCapacity)
+        )
+        ib.setBuffer(engine, ring.indices, 0, indexCapacity)
+        primed = true
+    }
+
     private fun buildVertexBuffer(plan: TubeAttributePlan.Supported): VertexBuffer {
         val builder = VertexBuffer.Builder()
             .vertexCount(vertexCapacity)
             .bufferCount(plan.bufferCount)
+            .enableBufferObjects(true)
         for (slot in plan.slots) {
-            when (slot.attribute) {
-                TubeAttribute.POSITION ->
-                    builder.attribute(ATTRIBUTE_POSITION, slot.bufferIndex, VertexBuffer.AttributeType.FLOAT3)
-
-                TubeAttribute.UV0 ->
-                    builder.attribute(ATTRIBUTE_UV0, slot.bufferIndex, VertexBuffer.AttributeType.FLOAT2)
-
-                TubeAttribute.UV1 -> {
-                    builder.attribute(ATTRIBUTE_UV1, slot.bufferIndex, VertexBuffer.AttributeType.USHORT2)
-                    builder.normalized(ATTRIBUTE_UV1)
-                }
-
-                TubeAttribute.COLOR -> {
-                    builder.attribute(ATTRIBUTE_COLOR, slot.bufferIndex, VertexBuffer.AttributeType.UBYTE4)
-                    builder.normalized(ATTRIBUTE_COLOR)
-                }
-
-                // The planner refuses these before a builder exists, so reaching one is a bug.
-                else -> throw IllegalStateException("attribute ${slot.attribute} cannot be declared")
+            val attribute = TubeVertexTypes.slot(slot.attribute)
+            val type = TubeVertexTypes.of(slot.attribute)
+            // The planner refuses these before a builder exists, so reaching one is a bug.
+            if (attribute == null || type == null) {
+                throw IllegalStateException("attribute ${slot.attribute} cannot be declared")
             }
+            builder.attribute(attribute, slot.bufferIndex, type)
+            if (TubeVertexTypes.isNormalized(slot.attribute)) builder.normalized(attribute)
         }
         return builder.build(engine)
     }
@@ -225,6 +283,7 @@ internal class TubeMesh(
         val ib = indexBuffer ?: return
         val instance = material ?: return
 
+        require(primed) { "a renderable must be built against primed buffers" }
         bounds.fallback()
         applyBounds()
         RenderableManager.Builder(1)
@@ -237,6 +296,8 @@ internal class TubeMesh(
             .geometry(0, RenderableManager.PrimitiveType.TRIANGLES, vb, ib, 0, 0)
             .material(0, instance)
             .build(engine, entity)
+        // A scene entity without a transform reads an unset component on every frame.
+        engine.transformManager.create(entity)
         scene.addEntity(entity)
         inScene = true
         renderableManager.setLayerMask(entity, LAYER_BIT, 0)
@@ -292,6 +353,7 @@ internal class TubeMesh(
             return null
         }
 
+        materialCandidate = choice.candidate
         if (provided != null && choice.candidate == 0) {
             // The tint lives in the vertices, so the factor stays neutral and only scales it.
             provided.setParameter("baseColorFactor", 1f, 1f, 1f, 1f)
@@ -376,16 +438,7 @@ internal class TubeMesh(
         const val UV_SETS = 8
         const val METALLIC = 0f
         const val ROUGHNESS = 0.55f
-        const val POSITION_COMPONENTS = 3
-        const val UV_COMPONENTS = 2
-        const val UV1_BYTES = 4
-        const val COLOR_BYTES = 4
         const val UINT_BYTES = 4
         const val MIN_HALF_EXTENT = 1e-4f
-
-        val ATTRIBUTE_POSITION: VertexBuffer.VertexAttribute = VertexBuffer.VertexAttribute.POSITION
-        val ATTRIBUTE_UV0: VertexBuffer.VertexAttribute = VertexBuffer.VertexAttribute.UV0
-        val ATTRIBUTE_UV1: VertexBuffer.VertexAttribute = VertexBuffer.VertexAttribute.UV1
-        val ATTRIBUTE_COLOR: VertexBuffer.VertexAttribute = VertexBuffer.VertexAttribute.COLOR
     }
 }

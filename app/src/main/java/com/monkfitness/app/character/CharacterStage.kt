@@ -225,6 +225,9 @@ private fun describeMuscles(diagnostics: CharacterDiagnostics): String = buildSt
     }
     if (diagnostics.muscleAttributes.isNotBlank()) {
         append("\nattrs ").append(diagnostics.muscleAttributes)
+        if (diagnostics.muscleMaterialCandidate >= 0) {
+            append(" · candidate ").append(diagnostics.muscleMaterialCandidate)
+        }
     }
     diagnostics.muscleMaterialError?.let { append("\ntubes: ").append(it) }
 }
