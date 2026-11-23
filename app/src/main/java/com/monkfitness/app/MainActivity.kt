@@ -5,8 +5,10 @@ import android.content.Intent
 import android.view.WindowManager
 import androidx.appcompat.app.AppCompatActivity
 import androidx.activity.compose.setContent
+import androidx.activity.enableEdgeToEdge
 import androidx.activity.viewModels
 import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.layout.consumeWindowInsets
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Favorite
@@ -50,6 +52,9 @@ class MainActivity : AppCompatActivity() {
     private val viewModel: MainViewModel by viewModels()
 
     override fun onCreate(savedInstanceState: Bundle?) {
+        // Before super.onCreate: the window's decor must stop insetting the content for the scaffold to
+        // receive real insets instead of zeroes.
+        enableEdgeToEdge()
         super.onCreate(savedInstanceState)
 
         // Triggered here, not from the Application object: the app-locale API reaches the platform
@@ -183,7 +188,11 @@ fun MainApp(viewModel: MainViewModel) {
         NavHost(
             navController = navController,
             startDestination = if (isOnboardingCompleted) Screen.Home.route else "onboarding",
-            modifier = Modifier.padding(innerPadding)
+            // The padding already keeps every destination clear of the bars; consuming it here is what
+            // stops a destination's own Scaffold from insetting for the same bars a second time.
+            modifier = Modifier
+                .padding(innerPadding)
+                .consumeWindowInsets(innerPadding)
         ) {
             composable("onboarding") {
                 OnboardingScreen(onFinish = {
