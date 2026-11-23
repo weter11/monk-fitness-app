@@ -86,6 +86,13 @@ internal class SqliteAppDatabase(private val engine: SqliteTestDatabase) : AppDa
     /** The faults a suite can plant in the DAO layer, to prove a failed write is rolled back. */
     val faults = DatabaseFaults()
 
+    /**
+     * Room 2.7's `close()` cancels a coroutine scope it only creates when the database is opened, and
+     * this double is never opened through Room: it answers the abstract accessors over the engine it
+     * was handed, so the engine is what has to be closed.
+     */
+    override fun close() = engine.close()
+
     /** The number of rows in one table of this database, as the engine reports it. */
     fun rowCount(table: String): Int = engine.count(table)
 

@@ -1,13 +1,12 @@
 plugins {
     alias(libs.plugins.android.application)
-    alias(libs.plugins.jetbrains.kotlin.android)
     alias(libs.plugins.compose.compiler)
     alias(libs.plugins.ksp)
 }
 
 android {
     namespace = "com.monkfitness.app"
-    compileSdk = 34
+    compileSdk = 37
 
     signingConfigs {
         getByName("debug") {
@@ -56,9 +55,6 @@ android {
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
-    }
-    kotlinOptions {
-        jvmTarget = "17"
     }
     buildFeatures {
         compose = true
@@ -117,4 +113,16 @@ dependencies {
 // later step can prove what a migration changed without a device.
 ksp {
     arg("room.schemaLocation", "$projectDir/schemas")
+}
+
+// Filament 1.76 and later ship Java 21 bytecode; a 17 test JVM cannot load a class file it cannot
+// parse. The app still compiles to 17, and D8 dexes the library's 21 bytecode without complaint.
+tasks.withType<Test>().configureEach {
+    javaLauncher = javaToolchains.launcherFor { languageVersion = JavaLanguageVersion.of(21) }
+}
+
+// Filament 1.81 declares kotlin-stdlib 2.4.0, whose metadata the compiler AGP 9.3 ships (2.2.10)
+// cannot read; nothing here or in Filament's Java bindings calls a 2.4-only stdlib symbol.
+configurations.configureEach {
+    resolutionStrategy.force("org.jetbrains.kotlin:kotlin-stdlib:2.2.10")
 }

@@ -125,15 +125,16 @@ internal class TubeMesh(
         if (destroyed) return
         destroyed = true
         if (inScene) {
-            scene.removeEntity(entity)
+            scene.remove(entity)
             inScene = false
         }
         // The entity owns the renderable, and the renderable is what keeps the material instance
         // alive: Filament throws when the instance goes first, which a configuration change turns
         // into a crash on the way out of the activity.
         engine.destroyEntity(entity)
-        // 1.75.1's Java binding has no `destroyBufferObject`: the streaming buffers live until the
-        // engine goes down, so clearing the map only drops this layer's handles to them.
+        // The renderable bound these streams; freeing them before the vertex buffer leaves nothing
+        // pointing at a buffer that is already gone.
+        uploads.values.forEach { engine.destroyBufferObject(it) }
         uploads.clear()
         vertexBuffer?.let { engine.destroyVertexBuffer(it) }
         indexBuffer?.let { engine.destroyIndexBuffer(it) }
@@ -217,7 +218,7 @@ internal class TubeMesh(
         for (slot in plan.slots) {
             val buffer = BufferObject.Builder()
                 .size(vertexCapacity * slot.attribute.bytesPerVertex)
-                .bindingType(BufferObject.Builder.BindingType.VERTEX)
+                .bindingType(BufferObject.BindingType.VERTEX)
                 .build(engine)
             vb.setBufferObjectAt(engine, slot.bufferIndex, buffer)
             uploads[slot.attribute] = buffer
@@ -394,7 +395,7 @@ internal class TubeMesh(
     private fun refuse(reason: String): String {
         failure = reason
         if (inScene) {
-            scene.removeEntity(entity)
+            scene.remove(entity)
             inScene = false
         }
         vertexBuffer?.let { engine.destroyVertexBuffer(it) }
