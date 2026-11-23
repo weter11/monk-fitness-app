@@ -183,6 +183,14 @@ private fun CharacterDiagnostics.describe(request: BackendRequest): String = bui
     append('\n').append(frames).append(" frames · ").append(fps.toInt()).append(" fps · p95 ")
     append(String.format(Locale.US, "%.2f", frameTimeP95Ms)).append(" ms")
     append(" · surface ").append(hasSurface).append(" · running ").append(running)
+    if (frameStages.isNotEmpty()) {
+        append('\n').append("stage p50/p95 ms:")
+        for (reading in frameStages) {
+            append(' ').append(reading.stage).append(' ')
+            append(String.format(Locale.US, "%.2f", reading.p50Ms)).append('/')
+            append(String.format(Locale.US, "%.2f", reading.p95Ms))
+        }
+    }
     if (muscleTubeBuilds > 0) append(" · ").append(muscleTubeBuilds).append(" primitive build(s)")
     error?.let { append('\n').append("error: ").append(it) }
 }
