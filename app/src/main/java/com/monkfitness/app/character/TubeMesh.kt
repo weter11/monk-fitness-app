@@ -19,15 +19,19 @@ import java.nio.FloatBuffer
 import java.nio.IntBuffer
 
 /**
- * The debug tube layer as one Filament renderable: buffers sized once, rewritten in place, and visible
- * only while the layer controller says so.
+ * The debug tube layer, as one immutable primitive per shape.
  *
- * Every CPU-side buffer comes in three copies ([Ring]) because `setBufferAt` hands Filament the address
- * of a direct buffer and only releases it after the GPU has consumed it; rewriting a copy whose upload
- * is still pending is a tear, not an exception. Three slots cover the two frames a pipelined renderer
- * can hold while the third is being filled. [prepare] never leaves a half-built renderable behind: a
- * material whose required attributes this layer cannot fill is reported as [failure] and the body still
- * draws.
+ * A primitive is built only when a solved frame has geometry, and a shape change replaces it whole:
+ * `IndexBuffer.setBuffer` or `RenderableManager.setGeometryAt` against a renderable the scene already
+ * references faults inside Filament's render pass on this device (`CHARACTER_DEVICE_VALIDATION.md`
+ * §7.7), while a primitive handed its geometry once does not. Nothing is built before the first
+ * solved frame, so there is no placeholder renderable to redefine.
+ *
+ * Positions still move every frame through a [BufferObject] stream in a three-deep ring, because a
+ * vertex upload against a live renderable is the one upload the device tolerates; the three slots
+ * cover the two frames a pipelined renderer can hold while the third is being filled. [prepare]
+ * never leaves a half-built primitive behind: a material whose required attributes this layer cannot
+ * fill is reported as [failure] and the body still draws.
  */
 internal class TubeMesh(
     private val engine: Engine,
@@ -40,13 +44,11 @@ internal class TubeMesh(
 ) {
 
     private val renderableManager: RenderableManager = engine.renderableManager
-    private val entity: Int = EntityManager.get().create()
     private val bounds = MeshBounds()
     private val box = Box()
 
     private var layout: TubeVertexLayout? = null
-    private var vertexBuffer: VertexBuffer? = null
-    private var indexBuffer: IndexBuffer? = null
+    private var plan: TubeAttributePlan.Supported? = null
     private var material: MaterialInstance? = null
     private var ownsMaterial = false
     private var rings: Array<Ring>? = null
@@ -54,20 +56,12 @@ internal class TubeMesh(
     private var prepared = false
     private var destroyed = false
     private var visible = false
-    private var inScene = false
-    private var uploadedVertexCount = 0
-    private var uploadedIndexCount = 0
-    private var primed = false
 
-    /**
-     * One streaming buffer per declared attribute.
-     *
-     * `setBufferAt` writes through the vertex buffer's own storage, which the renderable's primitive
-     * captured when it was built; a `BufferObject` is the streamed handle instead, and the vertex
-     * buffer holds only the binding. Updating the former after the renderable exists dereferences
-     * nothing inside Filament's frame — a SIGSEGV with no log line and no attributable tombstone.
-     */
-    private val uploads = LinkedHashMap<TubeAttribute, BufferObject>()
+    /** The entity the layer owns for its whole life; each shape replaces its components, not its id. */
+    private var entity: Int = 0
+
+    /** The primitive that draws now: the buffers bound to the entity, and the streams behind them. */
+    private var primitive: Primitive? = null
 
     /** Which material candidate drew: 0 is the provider's own permutation, n>0 a donor instance. */
     var materialCandidate: Int = -1
@@ -96,167 +90,191 @@ internal class TubeMesh(
         val chosen = selectMaterial()
             ?: return refuse(materialRefusal ?: "no material instance is available for the muscle layer")
         material = chosen.instance
-        val plan = chosen.plan
+        plan = chosen.plan
 
-        materialAttributes = plan.attributes.joinToString(",") { it.name }
-        usesVertexColors = TubeAttribute.COLOR in plan.attributes
+        materialAttributes = chosen.plan.attributes.joinToString(",") { it.name }
+        usesVertexColors = TubeAttribute.COLOR in chosen.plan.attributes
         if (chosen.flatTint) {
             // The fallback instance carries the tint in baseColorFactor, so the overlay says which one drew.
             materialAttributes += " (flat tint)"
         }
 
-        val built = TubeVertexLayout(plan, vertexCapacity, indexCapacity)
-        layout = built
-        vertexBuffer = buildVertexBuffer(plan)
-        indexBuffer = buildIndexBuffer()
+        layout = TubeVertexLayout(chosen.plan, vertexCapacity, indexCapacity)
         rings = Array(RING_DEPTH) { Ring(vertexCapacity, indexCapacity) }
-        createUploads(plan)
-        primeBuffers()
-
-        buildRenderable()
+        entity = EntityManager.get().create()
         return null
     }
 
-    /**
-     * Tears the layer down before the engine it belongs to; the entity goes first so nothing in the
-     * scene can reference a buffer that is already gone.
-     */
+    /** Releases the primitive before the engine it belongs to, in the order Filament requires. */
     fun destroy() {
         if (destroyed) return
         destroyed = true
-        if (inScene) {
-            scene.remove(entity)
-            inScene = false
+        releasePrimitive()
+        if (entity != 0) {
+            EntityManager.get().destroy(entity)
+            entity = 0
         }
-        // The entity owns the renderable, and the renderable is what keeps the material instance
-        // alive: Filament throws when the instance goes first, which a configuration change turns
-        // into a crash on the way out of the activity.
-        engine.destroyEntity(entity)
-        // The renderable bound these streams; freeing them before the vertex buffer leaves nothing
-        // pointing at a buffer that is already gone.
-        uploads.values.forEach { engine.destroyBufferObject(it) }
-        uploads.clear()
-        vertexBuffer?.let { engine.destroyVertexBuffer(it) }
-        indexBuffer?.let { engine.destroyIndexBuffer(it) }
         // A duplicated or provider-created instance is ours; one owned by the asset must not be freed here.
         if (ownsMaterial) material?.let { engine.destroyMaterialInstance(it) }
-        vertexBuffer = null
-        indexBuffer = null
         material = null
         rings = null
         layout = null
+        plan = null
     }
 
     /**
-     * Uploads one solved frame. Positions move every frame; colour, UV and indices only change when the
-     * set of drawn heads did, so a pose change costs one 12-byte-per-vertex copy.
+     * Uploads one solved frame. A shape change builds a whole new primitive; every other frame costs
+     * one position stream, so a pose change is one 12-byte-per-vertex copy and never a geometry call.
      */
     fun upload(geometry: DynamicGeometrySlot, rebuild: Boolean) {
         if (destroyed || failure != null) return
-        val vb = vertexBuffer ?: return
-        val ib = indexBuffer ?: return
         val built = layout ?: return
-        val pool = rings ?: return
+        val slots = rings ?: return
         val count = geometry.vertexCount
-        if (count == 0) return
-
-        val ring = pool[parity]
-        parity = (parity + 1) % RING_DEPTH
-
-        built.writePositions(geometry, ring.positions, bounds)
-        uploads[TubeAttribute.POSITION]?.setBuffer(
-            engine, ring.positions, 0, built.floatUploadCount(TubeAttribute.POSITION, count)
-        )
-
-        // A head that refuses changes both counts without touching the selection, so the shape — not
-        // just the revision — decides whether the static attributes and the index count still hold.
-        val shapeMoved = rebuild || count != uploadedVertexCount || geometry.indexCount != uploadedIndexCount
-        if (shapeMoved) {
-            // A material that does not ask for UV0, UV1 or colour has no slot to upload them to, and
-            // asking for one is an exception: the plan is the authority on which attributes exist.
-            built.bufferIndexOfOrNull(TubeAttribute.UV0)?.let { slot ->
-                built.writeUvs(geometry, ring.uvs)
-                uploads[TubeAttribute.UV0]?.setBuffer(
-                    engine, ring.uvs, 0, built.floatUploadCount(TubeAttribute.UV0, count)
-                )
-            }
-            built.bufferIndexOfOrNull(TubeAttribute.UV1)?.let { slot ->
-                built.writeUv1Dummy(ring.uv1Bytes, vertexCapacity)
-                uploads[TubeAttribute.UV1]?.setBuffer(
-                    engine, ring.uv1Bytes, 0, built.byteUploadCount(TubeAttribute.UV1, vertexCapacity)
-                )
-            }
-            built.bufferIndexOfOrNull(TubeAttribute.COLOR)?.let { slot ->
-                built.writeColors(geometry, ring.colorBytes)
-                uploads[TubeAttribute.COLOR]?.setBuffer(
-                    engine, ring.colorBytes, 0, built.byteUploadCount(TubeAttribute.COLOR, vertexCapacity)
-                )
-            }
-            built.writeIndices(geometry, ring.indices)
-            ib.setBuffer(engine, ring.indices, 0, geometry.indexCount)
-            renderableManager.setGeometryAt(
-                entity, 0, RenderableManager.PrimitiveType.TRIANGLES, vb, ib, 0, geometry.indexCount
-            )
-            uploadedVertexCount = count
-            uploadedIndexCount = geometry.indexCount
+        if (count == 0 || geometry.indexCount == 0) {
+            // No heads drawn is not a primitive with zero indices: it is no draw, and nothing to keep
+            // alive in the scene for the frames that follow.
+            releasePrimitive()
+            return
         }
 
-        updateBounds()
+        val current = primitive
+        if (rebuild || current == null || count != current.vertexCount ||
+            geometry.indexCount != current.indexCount
+        ) {
+            // A head that refuses changes both counts without touching the selection, so the shape —
+            // not just the revision — decides whether the primitive still describes this frame.
+            releasePrimitive()
+            primitive = buildPrimitive(geometry, built)
+        } else {
+            uploadPositions(current, geometry, built, slots)
+        }
     }
 
-    /** Objects toggles a layer; a zero index count is not a draw of nothing, it is unfilled geometry. */
+    /** Objects toggles a layer; the mask is kept for the primitive a later frame will build. */
     fun setVisible(on: Boolean) {
         if (destroyed || !prepared || failure != null) return
         if (on == visible) return
         visible = on
-        renderableManager.setLayerMask(entity, LAYER_BIT, if (on) LAYER_BIT else 0)
-    }
-
-    /** Creates one streaming buffer per declared attribute and binds it to the vertex buffer. */
-    private fun createUploads(plan: TubeAttributePlan.Supported) {
-        val vb = vertexBuffer ?: return
-        for (slot in plan.slots) {
-            val buffer = BufferObject.Builder()
-                .size(vertexCapacity * slot.attribute.bytesPerVertex)
-                .bindingType(BufferObject.BindingType.VERTEX)
-                .build(engine)
-            vb.setBufferObjectAt(engine, slot.bufferIndex, buffer)
-            uploads[slot.attribute] = buffer
-        }
+        primitive?.let { renderableManager.setLayerMask(entity, LAYER_BIT, if (on) LAYER_BIT else 0) }
     }
 
     /**
-     * Fills every declared buffer once, before the renderable that references it exists, so the
-     * primitive is built against a vertex buffer whose streams are all present.
+     * Builds one primitive for one shape: an index buffer sized to that shape's indices, a vertex
+     * buffer whose streams are the [BufferObject]s, and a renderable handed the geometry it keeps.
      */
-    private fun primeBuffers() {
-        val ib = indexBuffer ?: return
-        val built = layout ?: return
-        val ring = rings?.firstOrNull() ?: return
+    private fun buildPrimitive(geometry: DynamicGeometrySlot, built: TubeVertexLayout): Primitive {
+        val declared = plan ?: error("a primitive needs a planned attribute set")
+        val instance = material ?: error("a primitive needs a material instance")
+        val count = geometry.vertexCount
+        val indexCount = geometry.indexCount
+        // Sized to this shape rather than to the mesh's capacity: the primitive is never rewritten, so
+        // a buffer it cannot fill would only reserve memory the driver has to keep.
+        val streams = Ring(count, indexCount)
 
-        uploads[TubeAttribute.POSITION]?.setBuffer(
-            engine, ring.positions, 0, built.floatUploadCount(TubeAttribute.POSITION, vertexCapacity)
-        )
-        uploads[TubeAttribute.UV0]?.setBuffer(
-            engine, ring.uvs, 0, built.floatUploadCount(TubeAttribute.UV0, vertexCapacity)
-        )
-        uploads[TubeAttribute.UV1]?.let { buffer ->
-            built.writeUv1Dummy(ring.uv1Bytes, vertexCapacity)
-            buffer.setBuffer(engine, ring.uv1Bytes, 0, built.byteUploadCount(TubeAttribute.UV1, vertexCapacity))
+        built.writePositions(geometry, streams.positions, bounds)
+
+        val vertexBuffer = buildVertexBuffer(declared, count)
+        val streamsByAttribute = LinkedHashMap<TubeAttribute, BufferObject>()
+        for (slot in declared.slots) {
+            val attribute = slot.attribute
+            val buffer = BufferObject.Builder()
+                .size(count * attribute.bytesPerVertex)
+                .bindingType(BufferObject.BindingType.VERTEX)
+                .build(engine)
+            vertexBuffer.setBufferObjectAt(engine, slot.bufferIndex, buffer)
+            streamsByAttribute[attribute] = buffer
         }
-        uploads[TubeAttribute.COLOR]?.setBuffer(
-            engine, ring.colorBytes, 0, built.byteUploadCount(TubeAttribute.COLOR, vertexCapacity)
+
+        // A material that does not ask for UV0, UV1 or colour has no slot to upload them to, and
+        // asking for one is an exception: the plan is the authority on which attributes exist.
+        streamsByAttribute[TubeAttribute.POSITION]?.setBuffer(
+            engine, streams.positions, 0, built.floatUploadCount(TubeAttribute.POSITION, count)
         )
-        ib.setBuffer(engine, ring.indices, 0, indexCapacity)
-        primed = true
+        built.bufferIndexOfOrNull(TubeAttribute.UV0)?.let {
+            built.writeUvs(geometry, streams.uvs)
+            streamsByAttribute[TubeAttribute.UV0]?.setBuffer(
+                engine, streams.uvs, 0, built.floatUploadCount(TubeAttribute.UV0, count)
+            )
+        }
+        built.bufferIndexOfOrNull(TubeAttribute.UV1)?.let {
+            built.writeUv1Dummy(streams.uv1Bytes, count)
+            streamsByAttribute[TubeAttribute.UV1]?.setBuffer(
+                engine, streams.uv1Bytes, 0, built.byteUploadCount(TubeAttribute.UV1, count)
+            )
+        }
+        built.bufferIndexOfOrNull(TubeAttribute.COLOR)?.let {
+            built.writeColors(geometry, streams.colorBytes)
+            streamsByAttribute[TubeAttribute.COLOR]?.setBuffer(
+                engine, streams.colorBytes, 0, built.byteUploadCount(TubeAttribute.COLOR, count)
+            )
+        }
+
+        built.writeIndices(geometry, streams.indices)
+        val indexBuffer = IndexBuffer.Builder()
+            .indexCount(indexCount)
+            .bufferType(IndexBuffer.Builder.IndexType.UINT)
+            .build(engine)
+        indexBuffer.setBuffer(engine, streams.indices, 0, indexCount)
+
+        if (bounds.isEmpty) bounds.fallback()
+        applyBounds()
+        RenderableManager.Builder(1)
+            // Culling is off and the box is the builder's static one, which is the shape the surviving
+            // T1/T4 controls used. A culled renderable would need a DYNAMIC geometry type to keep its
+            // AABB in step with a mesh that moves every frame, and that is the code path under test.
+            .boundingBox(box)
+            .culling(false)
+            .castShadows(false)
+            .receiveShadows(false)
+            .geometry(0, RenderableManager.PrimitiveType.TRIANGLES, vertexBuffer, indexBuffer, 0, indexCount)
+            .material(0, instance)
+            .build(engine, entity)
+        // A scene entity without a transform reads an unset component on every frame.
+        engine.transformManager.create(entity)
+        scene.addEntity(entity)
+        renderableManager.setLayerMask(entity, LAYER_BIT, if (visible) LAYER_BIT else 0)
+
+        return Primitive(vertexBuffer, indexBuffer, streamsByAttribute, streams, count, indexCount)
     }
 
-    private fun buildVertexBuffer(plan: TubeAttributePlan.Supported): VertexBuffer {
+    /** Streams one frame's positions into the primitive that is already built. */
+    private fun uploadPositions(
+        primitive: Primitive,
+        geometry: DynamicGeometrySlot,
+        built: TubeVertexLayout,
+        slots: Array<Ring>
+    ) {
+        val ring = slots[parity]
+        parity = (parity + 1) % RING_DEPTH
+        built.writePositions(geometry, ring.positions, bounds)
+        primitive.uploads[TubeAttribute.POSITION]?.setBuffer(
+            engine, ring.positions, 0, built.floatUploadCount(TubeAttribute.POSITION, geometry.vertexCount)
+        )
+    }
+
+    /**
+     * Frees the primitive in the order its references dictate: the scene first, then the entity's
+     * components, then the buffers those components bound. The id itself belongs to the layer and
+     * goes only in [destroy] — an id freed per shape is one the entity pool can hand to a later
+     * primitive while an older handle still exists.
+     */
+    private fun releasePrimitive() {
+        val current = primitive ?: return
+        primitive = null
+        scene.remove(entity)
+        engine.destroyEntity(entity)
+        current.uploads.values.forEach { engine.destroyBufferObject(it) }
+        engine.destroyVertexBuffer(current.vertexBuffer)
+        engine.destroyIndexBuffer(current.indexBuffer)
+    }
+
+    private fun buildVertexBuffer(declared: TubeAttributePlan.Supported, vertexCount: Int): VertexBuffer {
         val builder = VertexBuffer.Builder()
-            .vertexCount(vertexCapacity)
-            .bufferCount(plan.bufferCount)
+            .vertexCount(vertexCount)
+            .bufferCount(declared.bufferCount)
             .enableBufferObjects(true)
-        for (slot in plan.slots) {
+        for (slot in declared.slots) {
             val attribute = TubeVertexTypes.slot(slot.attribute)
             val type = TubeVertexTypes.of(slot.attribute)
             // The planner refuses these before a builder exists, so reaching one is a bug.
@@ -267,47 +285,6 @@ internal class TubeMesh(
             if (TubeVertexTypes.isNormalized(slot.attribute)) builder.normalized(attribute)
         }
         return builder.build(engine)
-    }
-
-    private fun buildIndexBuffer(): IndexBuffer =
-        IndexBuffer.Builder()
-            .indexCount(indexCapacity)
-            .bufferType(IndexBuffer.Builder.IndexType.UINT)
-            .build(engine)
-
-    /**
-     * Builds the renderable with an explicit non-empty box: Filament aborts on an empty bounds while
-     * culling is on, and its builder defaults leave the box empty.
-     */
-    private fun buildRenderable() {
-        val vb = vertexBuffer ?: return
-        val ib = indexBuffer ?: return
-        val instance = material ?: return
-
-        require(primed) { "a renderable must be built against primed buffers" }
-        bounds.fallback()
-        applyBounds()
-        RenderableManager.Builder(1)
-            .boundingBox(box)
-            .culling(true)
-            // The box above is what makes culling legal: Filament aborts on an empty AABB while
-            // culling is on, whatever the shadow flags say, so bounds.fallback() is the real guard.
-            .castShadows(false)
-            .receiveShadows(false)
-            .geometry(0, RenderableManager.PrimitiveType.TRIANGLES, vb, ib, 0, 0)
-            .material(0, instance)
-            .build(engine, entity)
-        // A scene entity without a transform reads an unset component on every frame.
-        engine.transformManager.create(entity)
-        scene.addEntity(entity)
-        inScene = true
-        renderableManager.setLayerMask(entity, LAYER_BIT, 0)
-    }
-
-    private fun updateBounds() {
-        if (bounds.isEmpty) bounds.fallback()
-        applyBounds()
-        renderableManager.setAxisAlignedBoundingBox(entity, box)
     }
 
     private fun applyBounds() {
@@ -394,22 +371,27 @@ internal class TubeMesh(
 
     private fun refuse(reason: String): String {
         failure = reason
-        if (inScene) {
-            scene.remove(entity)
-            inScene = false
-        }
-        vertexBuffer?.let { engine.destroyVertexBuffer(it) }
-        indexBuffer?.let { engine.destroyIndexBuffer(it) }
+        releasePrimitive()
         if (ownsMaterial) material?.let { engine.destroyMaterialInstance(it) }
-        vertexBuffer = null
-        indexBuffer = null
         material = null
         rings = null
         layout = null
+        plan = null
         return reason
     }
 
-    /** One parity of the CPU-side buffers: three exist so no slot is rewritten while its upload is pending. */
+    /** One primitive and everything it keeps alive: its buffers and the CPU streams behind them. */
+    private class Primitive(
+        val vertexBuffer: VertexBuffer,
+        val indexBuffer: IndexBuffer,
+        val uploads: Map<TubeAttribute, BufferObject>,
+        /** Held, not read: Filament reads these buffers until the GPU has consumed the upload. */
+        val streams: Ring,
+        val vertexCount: Int,
+        val indexCount: Int
+    )
+
+    /** One set of CPU-side buffers: three per frame, plus one per primitive that stays alive with it. */
     private class Ring(vertexCapacity: Int, indexCapacity: Int) {
 
         val positionBytes: ByteBuffer = direct(vertexCapacity * TubeAttribute.POSITION.bytesPerVertex)
@@ -419,7 +401,6 @@ internal class TubeMesh(
         val uvs: FloatBuffer = uvBytes.asFloatBuffer()
 
         val uv1Bytes: ByteBuffer = direct(vertexCapacity * TubeAttribute.UV1.bytesPerVertex)
-
         val colorBytes: ByteBuffer = direct(vertexCapacity * TubeAttribute.COLOR.bytesPerVertex)
 
         val indexBytes: ByteBuffer = direct(indexCapacity * UINT_BYTES)

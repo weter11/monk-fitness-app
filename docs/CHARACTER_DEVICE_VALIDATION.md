@@ -915,3 +915,35 @@ Three readings follow, and they replace the engine-defect conclusion above:
 What is left to change is therefore the renderable's geometry lifecycle, not the engine: give the
 primitive its geometry once, per shape revision, and rebuild rather than rewrite it. That is a change
 to this layer and needs its own run; every row above stays unmeasured until it has one.
+
+#### The primitive-per-shape run — the crash is gone
+
+The layer now selects the material and the attribute plan in `prepare`, and builds the primitive —
+vertex buffer, its `BufferObject` streams, index buffer, renderable — on the first solved frame that
+has geometry, replacing it whole when the shape changes. Nothing calls `IndexBuffer.setBuffer` or
+`RenderableManager.setGeometryAt` on a live renderable, and a steady frame costs one position stream.
+The entity is created once for the layer and only its components are rebuilt: an intermediate build
+that created and destroyed an entity per primitive made the *body's* own upload fail with
+`setBones: Disable skinning buffer mode to use this API`, which stopped as soon as the id outlived
+the shape.
+
+Same handset, same driver, requested Auto → active OPENGL:
+
+| Row | Measured | Verdict |
+| --- | --- | --- |
+| Crash gate | 60 s with the layer on: process alive, `logcat -b crash` empty, 3763 frames | **PASS** — the `nRender+24` tombstone is gone |
+| Solve built | `18 heads · 0 refused · 16 drawn · 0 triangles` with tubes off | PASS |
+| Tubes on | `16 drawn · 13824 triangles`, `attrs POSITION,UV0,UV1,COLOR · candidate 0` | PASS |
+| Axis alignment | squat: the tubes run along the thighs and the torso, longitudinally rather than across | PASS |
+| Tint | deep red at the belly, lighter toward both ends of the same tube | PASS |
+| Layer toggle | `superficial` → `16 drawn · 0 triangles`, back → `16 · 13824` | PASS |
+| Deep toggle | unchanged (`16 · 13824`) | PASS |
+| Exercise switch | Squat → Push-up → Squat: a new session each time (`18 heads · 16 drawn · 13824`), never `no character session` | PASS |
+| Lifecycle | home → 7 s → return: same process, `16 drawn · 13824`, `surface true · running true`, no tombstone | PASS |
+| Refusal budget | 20 samples over a rep: 16 × `0 refused`, 1 × `1 refused` (`gluteus_maximus A head0`), 3 × `2 refused` (`biceps_femoris` long and short heads) | **FAIL** as written ("0 refused on every frame") |
+| Frame time | p95 with the layer off 27.20 ms, on 29.73 ms, same session 15 s apart: **+2.53 ms** | **FAIL** against the ≤ 1 ms bar |
+| Readout at rest | a looping rep has no rest window; the mid-rep readings move as §7.7 records | UNMEASURED |
+
+The two failures are measurements of the solve and of the draw — refusals come from `AnatomyFrame`
+and the frame time from the 13,824-triangle submission — not of the geometry lifecycle, and neither
+is a crash. They are recorded as they read rather than retuned.
