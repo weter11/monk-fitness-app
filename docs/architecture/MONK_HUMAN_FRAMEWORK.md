@@ -444,16 +444,18 @@ Forbidden edges:
 - `character/` calling IK, constraint solving, or pose mutation;
 - any module other than the renderer importing `filament`/`gltfio`.
 
-**Scope of the enforcement: review-only, not enforced.** `ArchitectureBoundaryTest` walks `animation/` and `poses/`
-only, and within them only the four prefixes above — there is **no `com.google.android.filament.` rule** in its forbidden
-list, and `character/` legitimately imports Filament at its renderer boundary. The Filament fence is also *not* covered
-sideways by the `android.` prefix: `com.google.android.filament.` does not start with `android.`, so the earlier claim
-that the prefix rule catches it is wrong. The `anatomy/` and `character/` edges and the "only the renderer imports
-`filament`/`gltfio`" rule are architecture decisions **reviewed by a human**, not assertions of a green test; when those
-packages exist and are added to the test's source set, the same two-test shape extends to them. Every fence in this
-section that is not in that forbidden list is labelled review-only, no roadmap gate may cite it as automated, and
-adding the Filament prefix to the list is a one-line stage-1 change rather than a claim this document can make today.
-That is a gap in enforcement, not a licence.
+**Scope of the enforcement: three of the fences are green tests, and one edge is still a review.** `ArchitectureBoundaryTest`
+walks **`animation/`, `poses/` and `anatomy/`**, and its forbidden list carries seven prefixes —
+`androidx.compose.`, `android.`, `com.monkfitness.app.ui.`, `com.monkfitness.app.render.`,
+**`com.monkfitness.app.character.`**, **`filament.`** and **`com.google.android.filament.`** — so a Filament import in the
+motion core or in the anatomy kernel now fails a green test, not a review. `anatomy/` carries a second fence of its own:
+`AnatomyPurityTest` rejects `android.`, `androidx.`, `com.google.android.filament`, `com.monkfitness.app.character`,
+`com.monkfitness.app.ui` and `com.monkfitness.app.render` from every file in the package, which is what keeps the kernel a
+pure-Kotlin JVM module. `CharacterBoundaryTest` asserts the reverse edge: no file in `animation/` or `poses/` names
+Filament or `character`. **What no test asserts is the first-class `character/` edge** — that the presenter does not call
+IK, constraint solving or pose mutation (the third forbidden edge above). That one fence is architecture **reviewed by a
+human**; adding it is a test change, not a claim this document can make today. That is a gap in enforcement, not a
+licence.
 
 ---
 
@@ -755,15 +757,16 @@ library, one anatomy library and one animation library serve every body.
 | Scale | one uniform scale per character; no per-bone scaling for appearance | non-uniform bone scale distorts joint volume and is not a morphology tool |
 | Fingers | visual-only, 2 segments per finger or a single segment in tier `reduced` | the engine has no finger kinematics beyond `HAND_A`; the rig may add them as static/derived |
 
-`humanoid_v2` target bone counts: **23 mapped bones + up to 30 visual-only bones (fingers, jaw, eyes, twist) + muscle
-helper bones** (§7.5). The 30 is a budget for the parts the rig may add, and the arithmetic is checked against what M1
-actually carries: 20 finger segments (5 fingers × 2 segments × 2 hands) + a jaw + two eyes + up to six twist bones (upper
-arm, forearm and thigh per side) = **29 of 30**, so one bone of headroom. M1's rig keeps **10** of them — 5 single-segment
-fingers per hand, which is what the PR #385 asset authors — and the remaining 19 (a jaw, two eyes, six twists and the ten
-spare finger segments a two-segment-per-finger v2 rig would add) stay inside the same allowance: `10 + 9 + 10 = 29 ≤ 30`.
-Visual-only means the engine has no joint for any of them; it does **not** mean unmapped-and-forgotten (§6.2, X2). The
-current PR #385 asset has 32 joints, 5 single-segment fingers per hand, no scapula, no twist bones. The scapula addition
-is the only rig change that materially affects anatomy quality.
+`humanoid_v2` target bone counts: **23 mapped bones + up to 30 visual-only bones (crown, fingers, jaw, eyes, twist) +
+muscle helper bones** (§7.5). The 30 is a budget for the parts the rig may add, and the arithmetic is checked against a
+fully equipped v2 rig: 20 finger segments (5 fingers × 2 segments × 2 hands) + a jaw + two eyes + up to six twist bones
+(upper arm, forearm and thigh per side) + a crown = **30 of 30**, so the allowance is exactly consumed and there is no
+headroom for a seventh visual part. The **shipped** `humanoid_v2` asset carries **34 skin joints = 23 mapped + 11
+visual-only leaves** — 5 single-segment fingers per hand plus `HeadTop_End` — and the remaining 19 (a jaw, two eyes, six
+twists and the ten spare finger segments a two-segment-per-finger rig would add) stay inside the same allowance:
+`11 + 19 = 30`. Visual-only means the engine has no joint for any of them; it does **not** mean unmapped-and-forgotten
+(§6.2, X2). Both **scapulae are present** (`LeftScapula`, `RightScapula`), which is what §6.2's 23-joint map needs; twist
+bones are absent and cost nothing at this layer count.
 
 **X2 — the ten finger bones stay, as visual-only bones.** *Reversed by owner: fingers kept.* The engine still has no
 finger kinematics — it publishes `HAND_A` plus `WRIST`, `PALM`, `KNUCKLES` and `FINGERTIPS` in a straight chain — so a
@@ -3148,7 +3151,7 @@ regression.
 
 | Strategy | Anatomy quality | CPU per frame | Filament fit | Art cost | Verdict |
 | --- | --- | --- | --- | --- | --- |
-| **A. Procedural tube/sheet from the path** (AA-3D's approach) | low–medium: correct length, generic constant cross-section (§7.6), no surface detail | high: full rebuild of every muscle every frame (AA-3D: 30.9 k tris, 4.6 ms desktop) | easy: one buffer, one dynamic mesh per layer | none | **phase A / debug / tier `reduced`** |
+| **A. Procedural tube/sheet from the path** (AA-3D's approach) | low–medium: correct length, generic constant cross-section (§7.6), no surface detail | high: full rebuild of every muscle every frame (AA-3D: 30.9 k tris, 4.6 ms desktop; **this project's own layer measures 2.66 ms p50 for write + upload at 13,824 triangles**, §12.3) | easy: one buffer, one dynamic mesh per layer | none | **phase A / debug / tier `reduced`** |
 | **B. Pre-authored muscle mesh skinned to the body rig** | high surface, but the mesh follows bones, not the path; length is implicit and cannot be measured or trusted | ~0 | easy | high | rejected as the primary strategy |
 | **C. Hybrid: authored mesh skinned to path-driven helper bones** | high surface *and* path-correct length | low: ~4 helper transforms per muscle | good: one skin, standard skinning | medium–high (mesh + helper bind) | **target** |
 | **D. GPU deformation (compute/vertex shader from path uniforms)** | same as C, potentially finer | lowest CPU | needs a custom material; Filament material authoring, no simple glTF path | high | research; not v1 |
@@ -3385,6 +3388,10 @@ contraction mode: an earlier revision used `phaseSource: UNREVIEWED`, which was 
 `phases` entries of `CONCENTRIC`/`ECCENTRIC`/`ISOMETRIC`, which asserted a contraction mode per muscle. The example above
 is schema-shaped, not reviewed content.
 
+**Status on `main`: the `MuscleRole` enum exists at `anatomy/AnatomyDefinition.kt:44` and is referenced by no file.** No
+`ActivationTable`, no validator, no `phases_v1.json`, no `activation_v1.json`, no display gate — the schema, the validator
+and the gate are the whole of stage 2b (§15), and the enum alone should not read as "roles started".
+
 Rules:
 
 - **Every entry carries a source.** No source, no entry — the validator rejects it (§8.3).
@@ -3431,9 +3438,22 @@ aggregates the other; the UI may show both, but a green motion report never impl
 
 ### 9.1 Layer model
 
+The target model is five orthogonal layers; the code carries three of them:
+
 ```kotlin
-enum class CharacterLayer { SKIN, MUSCLES_SUPERFICIAL, MUSCLES_DEEP, SKELETON, SELECTED }
+enum class CharacterLayerId { BODY, SUPERFICIAL_MUSCLE, DEEP_MUSCLE }   // shipped
+enum class MuscleLayer { SUPERFICIAL, DEEP }
 ```
+
+| Target layer | In code today | Note |
+| --- | --- | --- |
+| `SKIN` | `CharacterLayerId.BODY` | the body asset carries its own skin |
+| `MUSCLES_SUPERFICIAL` | `SUPERFICIAL_MUSCLE` + `MuscleLayer.SUPERFICIAL` | M1 **generates the tubes in process**; the GLB below is stage 3 |
+| `MUSCLES_DEEP` | `DEEP_MUSCLE` + `MuscleLayer.DEEP` | reserved; no asset and no renderable |
+| `SKELETON` | **absent** | M1 ships no skeleton overlay (§12.5, §15 M1 item 3) |
+| `SELECTED` | **absent until stage 2b** | state only, never geometry |
+
+The table that follows is the **target** asset and lifetime model; the middle column above is what exists.
 
 | Layer | Asset | Loaded when | Unloaded when | Cost when visible |
 | --- | --- | --- | --- | --- |
@@ -3445,6 +3465,11 @@ enum class CharacterLayer { SKIN, MUSCLES_SUPERFICIAL, MUSCLES_DEEP, SKELETON, S
 
 `MUSCLES_DEEP` exists in the enum from the start as a reserved value; in M1 it has no asset and no renderable, and it is
 not counted in M1's layers (§7.7, §9.2).
+
+**The M1 muscle layer is not free when hidden, and that is a defect rather than a design.** The anatomy solve runs on
+every frame the character renders, gated only by the build flag — measured at **21.33 ms p50 with the layer off and
+`0 triangles` drawn** (§12.3). The "Cost when visible" column above therefore states an intent the code does not yet
+honour: until the solve is gated on layer visibility, a hidden muscle layer costs the entire frame budget.
 
 Rules:
 
@@ -3618,6 +3643,11 @@ tube — not 6.0 k, which is half the object. The canonical M1 set (§7.7.1) is 
 biceps femoris has two heads, so its uncapped cost is `18 × 752 = ` **13,536** and **13,824** with caps. A two-head muscle
 adds a tube, not a second muscle.
 
+**The formula is measured now, not only derived.** The shipped layer reports `18 heads · 0 refused · 16 drawn ·
+13,824 triangles` — **768 per head**, exactly `2 · 47 · 8 + 2 · 8` — so `N_final = 48` for every head in the measured
+poses and `pointCapacity` (96 in `anatomy_v1.json`) was never reached. The "floor, since construction inserts points" caveat
+below therefore still stands for a pose that detours; none of the measured ones did.
+
 **The cap topology is part of the number.** A fan cap is `R` triangles per end, so two caps add `2R = 16` per tube:
 `12,288` for 16 instances and `13,824` for 18. A rule that added `2R` **per end** (four times `R` per tube) would give
 `12,544` and `14,112` instead — 256 and 288 triangles more — so the topology has to be pinned before the total means
@@ -3660,6 +3690,11 @@ which is a property of the **regional split**, not of the library size. A split 
 each of three regional skins carries roughly a third of the helpers each, and the split therefore has to be designed
 against the palette number rather than derived from 313. The 255 limit is what makes the split mandatory for v2 — not the
 specific total.
+
+**Stage 3 fits one skin; the split belongs to v2.** For M1's eight muscles, `palette(skin) = 34 base + 4 × 18 = ` **106 of
+255**, so strategy C needs **no** regional split at stage 3 even with every instance on a single skin. The limit binds the
+**v2 library** (~35 bilateral muscles, ≈ 313), which is exactly what "mandatory for v2" above means — and reading it as a
+stage-3 constraint would commission a split nothing in M1 needs.
 
 **M1 has no helper bones at all.** Strategy A generates the tube geometry directly (§7.5, §7.6), so an M1 muscle layer is
 one dynamic mesh per layer and its skin carries **zero** helpers; the palette is the 33 base joints plus whatever visual
@@ -3793,7 +3828,7 @@ Seven levels, each with one owner, one report and an explicit automation status.
 | **L3 Attachments** | every attachment's joint exists; the offset is **authored in the segment's derived frame (§7.2)** and every attachment — origin, insertion **and waypoint** — carries `Attachment.frame` naming that convention rather than leaving it to be inferred; offset inside a segment envelope; L/R mirror; head count; origin ≠ insertion; span ≥ 2 segments. The frame's **sign** is a review fact, not an L3 fact: L3 can check that a declared frame is the one the resolver applies, and an attachment whose authoring frame is `UNRECORDED` puts its whole head-side instance in **frame unverified** rather than passed (§7.3, §12.4 RV1) | yes | all | the anatomy data is wrong; block |
 | **L4 Path** | every segment of the final polyline tested against every obstacle in the head's ordered union, in one exhaustive three-stage state machine — bounding-sphere clear, a quadratic **intersection test that requires a witness station** (a chord whose entry cannot beat the coefficient error, or cannot carry a proved enclosure for it, routes onward and is never called an intersection), then the finite-segment minimum of `d(t) − r(t)` (**solid** ellipsoid distance) with a Lipschitz bracket, the radius taper split at every knot, and `UNCERTAIN` failing closed — plus the sample-outside check; unverifiable geometry reported `INVALID` with a reason from the one table; deterministic outcome for overlapping, nested and closed routes; tangent and curvature continuity at entry/exit (gated); a **solver-derived rest length that is finite, strictly positive and reproducible** for every head (§7.4.4), and — **only where the definition or the review names one** — a comparison against a sourced external reference recorded with source, task, population and uncertainty, where a missing reference is an evidence gap and neither a pass nor a blocker. The continuity observer is **diagnostic only** and is not part of this gate (X6). The clearance floor itself is **conditional** on the input bounds, the error analysis of §7.4.1 and a bound for the point-to-ellipsoid solve — which §7.4.1b-1 does not yet have, so **no numerical floor is claimed until it does** | yes, with adversarial fixtures | all | the solver or the data is wrong; block |
 | **L5 Mesh** | self-intersection, degenerate triangles, weight sums, volume sanity per muscle, helper-bone bind match | partly (tool) | **subset** (§12.5) | the mesh is wrong; block release, not build |
-| **L6 Morphology** | declared ranges respected per target; **mesh** ring/mask vertices relative to joint pivots within `ε_morph`; delta bounds | **yes — the morph and ring checks only** | **subset** (§12.5) | a preset breaks the surface the muscles sit under; block the preset. A bone-landmark rest invariant is **not** an L6 assertion: a vertex-only morph cannot move a bone, so it is tautological. **"Anatomy still inside the body" is not automated and is not L6**: it needs a mesh-intersection tool M1 does not ship, so it is an L7 RV2/RV3 judgement (§12.5, §13 question 9) |
+| **L6 Morphology** | declared ranges respected per target; **mesh** ring/mask vertices relative to joint pivots within `ε_morph`; delta bounds | **no — neither test exists yet** (`MorphPresetRangeTest`, `MorphRingPreservationTest` are stage 5 deliverables) | **subset** (§12.5) | a preset breaks the surface the muscles sit under; block the preset. A bone-landmark rest invariant is **not** an L6 assertion: a vertex-only morph cannot move a bone, so it is tautological. **"Anatomy still inside the body" is not automated and is not L6**: it needs a mesh-intersection tool M1 does not ship, so it is an L7 RV2/RV3 judgement (§12.5, §13 question 9) |
 | **L7 Anatomical review** | RV1–RV6 in §12.4: attachment locations, position vs bone and body surface, visible intersections, shape/path plausibility across poses, preset consistency, provenance | no — human, **required for M1** | all | the model is not accepted; M1 does not ship |
 
 ### 12.1 What is genuinely automatable
@@ -3842,10 +3877,19 @@ Seven levels, each with one owner, one report and an explicit automation status.
 | `MuscleSelectionReadoutTest` | presentation | §5.3/§9.2/§15 stage 2b: `setSelected` keys the instance by `(muscleId, side)` — selecting `biceps_femoris` side A leaves side P unselected, and selecting side P changes the row — and the readout renders **one row per head** (two for biceps femoris on one side) with **no aggregated instance value**; each row carries the muscle name, `MuscleState.headLabel` where the instance has more than one, `MuscleState.layer`, the role returned by `ReviewedRoleSource.roleFor(exerciseId, muscleId)` where one exists and "no reviewed role" otherwise, and `relativePathLengthChange` labelled modelled — and nothing else; the role comes from that second input and not from `MuscleState`, so changing `exerciseId` changes the role text with no re-solve and an `UNREVIEWED` row renders as "no reviewed role" exactly as an absent one does; no row shows an absolute metre value (X4); an instance whose `renderable` entry is `false` renders no row at all rather than a stale one; and no string is drawn from `PathReason`, a status or a debug label. It is separate from stage 2's dev readout, which it does not replace |
 | `ProceduralTubeBudgetTest` | L5 (M1 subset) | generated triangles match the §10.3 formula for the declared `N` and `R`; no zero-area ring; all coordinates finite |
 | `MorphPresetRangeTest` | L6 | every declared weight lies inside its target's declared `min`/`max`; every preset declares a value for every target; a name the asset does not carry fails rather than defaulting to zero |
-| `MorphRingPreservationTest` | L6 | the mesh ring masked around each joint pivot keeps its pivot-relative positions within `ε_morph` under every preset — the test that can fail, and the one that says anything about the surface a muscle sits under |
+| `MorphRingPreservationTest` | L6 | the mesh ring masked around each joint pivot keeps its pivot-relative positions within `ε_morph` under every preset — the test that can fail, and the one that says anything about the surface a muscle sits under. **Neither this row nor `MorphPresetRangeTest` exists on `main`**, so the L6 M1 subset (§12.5) is ungreen until they do |
 | `LayerToggleTest` | presentation | toggling a layer changes visibility only; no engine or pose rebuild; an evicted layer reloads and re-shows |
-| `ArchitectureBoundaryTest` | architecture | §4.5: every file in `animation/` and `poses/` imports none of the **four** prefixes its forbidden list actually contains — `androidx.compose.`, `android.`, `com.monkfitness.app.ui.`, `com.monkfitness.app.render.` — via `theMotionCoreImportsNoComposeOrFrameworkCode` and `theMotionCoreImportsNoOtherAndroidxCode`. **There is no `com.google.android.filament.` rule**, and the `anatomy/`, `character/` and Filament fences are **review-only**, not enforced by this test |
+| `ArchitectureBoundaryTest` | architecture | §4.5: every file in `animation/`, `poses/` and **`anatomy/`** imports none of the **seven** prefixes its forbidden list carries — `androidx.compose.`, `android.`, `com.monkfitness.app.ui.`, `com.monkfitness.app.render.`, `com.monkfitness.app.character.`, `filament.`, `com.google.android.filament.` — via `theMotionCoreImportsNoComposeOrFrameworkCode` and `theMotionCoreImportsNoOtherAndroidxCode`. `AnatomyPurityTest` repeats the anatomy fence from the package's own side, and `CharacterBoundaryTest` asserts the reverse edge (no Filament or `character` name inside `animation/` or `poses/`). **The `character/` → IK/constraint/pose-mutation edge is not asserted**: it is the one §4.5 fence still reviewed by a human |
 | `AssetBudgetTest` | L5 | triangle/texture/bone budgets per tier from the manifest |
+
+**Where the inventory stands on `main`.** Of the 34 rows above, **23 have a test** on the #413 tree. The eleven without
+one are the two stage-2b rows (`ActivationDefinitionTest`, `MuscleSelectionReadoutTest`) and nine L4/L5/L6 rows
+(`failingObstacleIndexOrderTest`, `MusclePathContinuityTest`, `MuscleLengthDeterminismTest`, `MuscleLengthReferenceTest`,
+`MuscleLengthScaleTest`, `MuscleDirectionalExpectationTest`, `MorphPresetRangeTest`, `MorphRingPreservationTest`,
+`AssetBudgetTest`); `MuscleLengthDeterminismTest` ships under the name `MusclePathDeterminismTest`. Two shipped guards are
+not listed above and are load-bearing for this document's own arguments: **`AnatomyPurityTest`** (the §4.5 anatomy fence)
+and **`AnatomySolveAllocationTest`** (the zero-allocation guard on the solve carrier). A reader should treat this table as
+the specification it is, not as a report of what runs.
 
 All except `LayerToggleTest` are JVM tests (the character session itself requires a device). `LayerToggleTest` splits:
 a pure state test on the controller in JVM, and a device smoke test in the existing diagnostics screen.
@@ -4001,14 +4045,31 @@ fails L4 twice — once for the geometry and once for accepting it.
 
 ### 12.3 Device evidence
 
-A device exists. One run of the #384 spike on the owner's phone — Adreno 735, OpenGL ES 3.2, feature level 2 — held
-~59 fps on the skinned 30,720-triangle asset, and the launch defects that run exposed are recorded as known traps in §13.
-That is the whole of the device evidence: one device, one asset, one run; no p95, no thermal soak, no context-loss test,
-no second device.
+A device exists, and since the frame-timing change (PR #413) the session publishes **p50/p95 per frame stage**, not one
+total. The measured baseline on the owner's phone — Motorola Edge 50 Ultra, Adreno 735, API 36, GLES 3.2, OpenGL backend,
+battery 33.0 °C and discharging (cool SoC) — is:
 
-Frame time, jank, thermal drift, surface recreation and context loss therefore remain unmeasured as budgets.
-`docs/CHARACTER_DEVICE_VALIDATION.md` (PR #385) is the procedure that records backend, FPS, p95 frame time and defects
-per device; it has not been filled in by a machine run, and filling it in is device work, not agent work.
+| Stage | tubes off (p50/p95 ms) | tubes on (p50/p95 ms) |
+| --- | --- | --- |
+| pose build | 0.35 / 0.48 | 0.35 / 0.50 |
+| **anatomy solve** | **21.33 / 30.39** | **21.24 / 30.42** |
+| tube write + upload | 0.01 / 0.01 | 2.66 / 2.94 |
+| retarget + bone upload | 0.12 / 0.15 | 0.09 / 0.15 |
+| `beginFrame` (swapchain) | 0.04 / 0.05 | 0.04 / 0.06 |
+| render + `endFrame` | 0.11 / 0.17 | 0.12 / 0.22 |
+| **frame total (p95)** | **31.04** | **33.95** |
+
+Four facts follow, and they are the point of the table rather than a footnote to it. The **anatomy solve is the frame**:
+21 ms p50 against a 16.67 ms budget, so every frame misses its deadline and the Choreographer quantises to two vsync
+intervals — the ~30 ms the app actually exhibits. The solve is **not** conditional on the muscle layer being visible:
+21.33 ms is measured with the layer off and `0 triangles` drawn, which is a defect against §9.1 rather than a design
+choice. The **tube layer costs 2.5–2.7 ms**, a tenth of the solve, so it is not what sets the frame. And `beginFrame`
+reads 0.04 ms because the GL backend returns without blocking, which puts the vsync wait in the Choreographer delta
+rather than in this window — reading that as "no vsync cost" would be wrong.
+
+`docs/CHARACTER_DEVICE_VALIDATION.md` is the procedure **and the record**: it carries the Stage 1 evidence set and the
+executed device rows of the tube layer. Frame time, jank, thermal drift, surface recreation and context loss stay
+recorded, not budgeted.
 
 **Formal FPS and thermal gating is deferred by the owner's decision.** The priority is a correct result first and
 optimisation later, so nothing in this document gates on a frame-rate or thermal number; those numbers are recorded as
@@ -4101,7 +4162,7 @@ rule and the M1 checklist all cite it, and none of them may require a check the 
 | L3 | all mechanical checks, evaluated in the bind stance | — | definition-time data check |
 | L4 | all path checks, validator fixtures and solver fixtures | — | the geometry contract |
 | L5 | body asset checks (degenerate triangles, weight sums, budgets) and **generated tube structure**: finite coordinates, no zero-area ring, triangle count equal to the §10.3 formula | muscle-vs-skin intersection; authored-mesh helper binds | M1 has no authored muscle mesh; no mesh intersection test ships in M1 |
-| L6 | one preset: declared ranges respected, mesh ring preservation around joint pivots, delta bounds | cross-preset coverage; "anatomy still inside the body" as an automated pass; the bone-landmark rest invariant, which a vertex-only morph cannot affect and which therefore proves nothing | one preset exists; body-anatomy intersection needs a tool M1 does not ship, so it is an L7 RV2/RV3 judgement |
+| L6 | one preset: declared ranges respected, mesh ring preservation around joint pivots, delta bounds — **no test ships for either half today, so this subset is not green and M1 cannot pass on it** | cross-preset coverage; "anatomy still inside the body" as an automated pass; the bone-landmark rest invariant, which a vertex-only morph cannot affect and which therefore proves nothing | one preset exists; body-anatomy intersection needs a tool M1 does not ship, so it is an L7 RV2/RV3 judgement |
 | L7 | RV1–RV6 with a valid record (§12.4) | — | the human gate |
 | §9.2/X4 readout | the **selected-muscle readout** stage 2b delivers displays `relativePathLengthChange` only, labelled modelled, with no absolute metres, and nothing for an unrenderable instance | any absolute length in the UI before a named calibration pair and an evidence-backed uncertainty exist | a dimensionless ratio and a metre value are not the same claim, and only one of them is available today |
 | §8 roles | the categorical role entries for the four pilot exercises of X8 only — `squat`, `standard push-up`, `bird-dog`, `row_standard` — each with `source`, `task`, `population`, `reviewStatus`, validated against its reviewed `PhaseTimeline`; unreviewed or `UNKNOWN` rows are not displayed | numeric activation, EMG-derived output, per-muscle contraction mode, medical claims, and roles for any exercise without a reviewed source | roles are cheap to validate and dishonest to guess; a display gate is what makes a partial table acceptable (X8) |
@@ -4113,13 +4174,19 @@ exercises validates (every displayed row carries a reviewed source, and every ex
 the §12.4 record exists for the exact `(anatomyVersion, rigVersion, assetVersion, presetId)` shipped. Any other
 combination is not an M1 pass, whatever the individual reports say.
 
+**Four items on this gate cannot be met by the tree as it stands**, and each is a package rather than a defect: the L6
+subset has no test (`MorphPresetRangeTest`, `MorphRingPreservationTest`); the §12.4 record does not exist and neither does
+`docs/anatomy/`; the §8 role table and its display gate are absent (the `MuscleRole` enum is the only fragment); and the
+**skeleton overlay does not exist at all** (§9.1 has no `SKELETON` layer), so the device configuration this paragraph
+names cannot be run as written. L1–L5 are green today — 3,942 JVM tests, 0 failures, on the #413 tree.
+
 ---
 
 ## 13. Risks and unresolved decisions
 
 | # | Risk | Likelihood | Impact | Mitigation | Owner |
 | --- | --- | --- | --- | --- | --- |
-| R1 | Filament toolchain pin (1.75.1, compileSdk 34) blocks needed features | medium | medium | keep the pin; treat the compileSdk upgrade as a separate change with its own CI | engineering |
+| R1 | **Closed:** the pin is gone. `main` ships Filament **1.81.0**, `compileSdk 37`, AGP **9.3.2**, Gradle **9.5.0**, Kotlin 2.2.10 and a JDK 21 unit-test JVM (PRs #408 and #410) | low | low | the upgrade was taken as its own change with its own CI, exactly as this row asked; the residual cost is that Filament 1.76+ ships Java 21 bytecode, so the test JVM must stay at 21 | engineering |
 | R2 | Muscle authoring cost is much larger than estimated | high | high | M1 uses 8 muscles; strategy A proves the pipeline before art is commissioned | product + art |
 | R3 | Per-renderable bone budget too small for the library | medium | high | regional renderable split (§10.3); measure at stage 1 | engineering |
 | R4 | Device evidence is one run on one phone | certain | medium | record each run (§12.3); generalise no number beyond the device it came from; FPS/thermal gating deferred by the owner | engineering |
@@ -4139,11 +4206,12 @@ combination is not an M1 pass, whatever the individual reports say.
    eight-muscle layer with **72 helpers** on one device (18 head-side instances × 4 helpers — correct arithmetic for that
    hypothetical layer; an earlier revision said 32, which is two helpers per instance and a figure the strategy-C spec
    cannot produce). Two limits on what it decides: M1 has **zero** helpers (strategy A generates tubes, §10.3), so this
-   measures nothing about M1's layer; and doubling from 72 goes 144 → 288, crossing the documented 255 limit in one step,
-   so it establishes *that* a split is needed rather than *where*. The split is designed against `palette(skin)` (§10.3)
-   measured per regional skin, not against the library total. *(1b) M1, stage 2:* for each of the 18 instances record the
-   **final** `N_final` the solver produced (not the `N = 48` cap), the triangle count against the §10.3 formula and the
-   frame cost of the generated layer, beside the FPS and thermal readings that are informational (§12.3).
+   measures nothing about M1's layer; and the arithmetic that once made the split look mandatory at stage 3 is now known
+   to be wrong for it — eight muscles are `34 + 4 × 18 = ` **106 of 255** (§10.3), so the experiment belongs to the **v2**
+   library alone. *(1b) M1, stage 2:* **answered for the measured poses by the #413 run** — `13,824` triangles total,
+   `768` per head, so `N_final = 48` on every head, and the layer costs **2.66 ms p50 / 2.94 ms p95** in write + upload
+   beside the **21.24 ms** solve it depends on (§12.3). What remains owed is the per-instance `N_final` table on a pose
+   that actually detours, plus the FPS and thermal readings that are informational.
    `pointCapacity` is what the budget must hold against, and this is the measurement that shows how far past 48 a tier's
    inserted points go. Neither half gates anything; together they replace two estimates with numbers.
 2. **Strategy C authoring effort** — one muscle (rectus femoris) taken from attachment data to a path-rigged mesh end to
@@ -4548,18 +4616,29 @@ named.
 
 **Summary**
 
-| Stage | Outcome | Eng. | Art / expertise | Gate |
-| --- | --- | --- | --- | --- |
-| 0 | This RFC reviewed and accepted | 0 | — | reviewer sign-off |
-| 1 | Rig v2 + asset validation + device evidence | 3–4 | 2–3 rig-art | L2 green including A1/A2, and a device run recorded |
-| 2 | Anatomy kernel + 8 muscles as procedural tubes | 4–5 | 1 anatomist week | L3/L4 green on fixtures |
-| 2b | M1 role schema, four timelines, display gate, landmark taps | 1–2 | 1 review week | §8 validator green on the four pilots; tap-hint demo |
-| **M1** | **one character, 1 preset, the four pilot exercises, 8 muscles, 3 layers** | — | — | **demo + §12.5 gate + §12.4 record** |
-| 3 | Path-rigged authored muscle meshes | 4 | 6–8 muscle art | L5 + visual review |
-| 4 | Role tables beyond the pilot + phase timelines + education panel | 2 | 1 review week | §8 validator + sign-off |
-| 5 | Morphology v2: four body families (the first stage with more than one preset) | 3 | 6 art | L6 green per preset |
-| 6 | Library expansion: ~35 superficial, ~12 deep | 6–8 | 12–16 art | L3/L4/L5 at scale |
-| 7 | Labels, picking, explanations | 3 | 2 | visual review |
+| Stage | Outcome | Eng. | Art / expertise | Gate | Status on `main` |
+| --- | --- | --- | --- | --- | --- |
+| 0 | This RFC reviewed and accepted | 0 | — | reviewer sign-off | **open** — this draft, PR #387 |
+| 1 | Rig v2 + asset validation + device evidence | 3–4 | 2–3 rig-art | L2 green including A1/A2, and a device run recorded | **shipped** (#391–#396; evidence in `docs/CHARACTER_DEVICE_VALIDATION.md` §0) |
+| 2 | Anatomy kernel + 8 muscles as procedural tubes | 4–5 | 1 anatomist week | L3/L4 green on fixtures | **shipped** (#407–#411) |
+| 2b | M1 role schema, four timelines, display gate, landmark taps, production readout | 1–2 | 1 review week | §8 validator green on the four pilots; tap-hint demo | **half** — the tube layer closed in #411; all **seven** package deliverables are not started (§15 Stage 2b) |
+| **M1** | **one character, 1 preset, the four pilot exercises, 8 muscles, 3 layers** | — | — | **demo + §12.5 gate + §12.4 record** | **not met** — four named gaps below |
+| 3 | Path-rigged authored muscle meshes | 4 | 6–8 muscle art | L5 + visual review | **not started**; blocked on the solver-profile decision (Stage 3, prerequisite) |
+| 4 | Role tables beyond the pilot + phase timelines + education panel | 2 | 1 review week | §8 validator + sign-off | not started |
+| 5 | Morphology v2: four body families (the first stage with more than one preset) | 3 | 6 art | L6 green per preset | not started |
+| 6 | Library expansion: ~35 superficial, ~12 deep | 6–8 | 12–16 art | L3/L4/L5 at scale | not started |
+| 7 | Labels, picking, explanations | 3 | 2 | visual review | not started |
+
+**What M1 is still missing, stated once so no other section has to imply it.** Four packages, none of them started:
+
+1. **The Stage 2b role package** — `ActivationTable`, `ActivationValidator`, the four reviewed `phases_v1.json` timelines,
+   the four `activation_v1.json` tables, the §9.2 display gate, `AttachmentHint`, and the production selected-muscle
+   readout. Seven deliverables; the `MuscleRole` enum is the only fragment in the tree.
+2. **The L6 M1 subset** — `MorphPresetRangeTest` and `MorphRingPreservationTest` do not exist, so the gate §12.5 grants
+   "automated" has no test behind it.
+3. **The §12.4 record** — `docs/anatomy/anatomy_review_v1.md` does not exist, and neither does the directory.
+4. **The skeleton overlay** — there is no `SKELETON` layer in the code (§9.1), so the M1 device configuration named by
+   §12.5 (skin + muscle layer + skeleton overlay) cannot be run as specified.
 
 ### Stage 0 — Ratify this document
 
@@ -4726,14 +4805,23 @@ regression at the same time, so the rest-invariant extraction ships in the same 
   in the M1 record of §12.4, so stage 2's session is an input to that record, not a substitute for it.
 - **Recorded information, not a gate:** the clearance cost of §7.4.1 — the per-frame segment-to-ellipsoid distance
   evaluations on the pairs that fail the two-comparison accept — is measured here and recorded with the frame, the
-  obstacle count and the pose it was measured on. It sits beside the FPS and thermal readings (§12.3): a poor number
-  commissions a coarser certified surrogate or fewer obstacles, never a weaker criterion, and fails nothing.
+  obstacle count and the pose it was measured on. **Measured (#413, Edge 50 Ultra, cool SoC): 21.24 ms p50 / 30.42 ms p95
+  for the whole 18-head solve, 1.18 ms per head-side instance, with 13,824 triangles and `N_final = 48` on every head
+  (§12.3).** It sits beside the FPS and thermal readings: a poor number commissions a coarser certified surrogate or
+  fewer obstacles, never a weaker criterion, and fails nothing — but the number is the frame, so it is the first thing the
+  next pass looks at.
 - **Risks:** calibration drift (R7); wrap parameters; the tube look invites quality complaints — state clearly that
   stage 2 is a mechanism demo, not final visuals.
 - **Effort:** 4–5 engineering weeks + ~1 anatomist week.
 - **Art/expertise:** anatomy, not art.
 
 ### Stage 2b — M1 role and interaction package (pre-M1)
+
+**Status — the geometry half is closed, the role half is not.** The tube layer these roles will eventually describe is
+merged: the stage-2b closure (#411) landed one tube primitive per rep and collapsed refused heads onto their sample, with
+its own diagnostics. That is the geometry the solved paths fill, and it satisfies **none** of the seven deliverables
+below. A merged tube layer is evidence that the paths are drawn, never that a single activation row was reviewed, sourced
+or displayed.
 
 - **Objective:** deliver the M1 checklist items that neither stage 1 nor stage 2 produces and that stage 4 assumes already
   exist — the role schema and its validator, the four sourced phase timelines, the display gate, the attachment-landmark
@@ -4834,6 +4922,12 @@ attachment-landmark hints of item 9), a muscle library beyond eight, and any cla
 - **Components:** helper-bone export tool (JVM, reuses `anatomy`), `MuscleLayerSkinner`, per-muscle GLB sections, asset
   validation for helper binds, L5 tooling.
 - **Dependencies:** M1's path contract; muscle art pipeline.
+- **Prerequisite — freeze the solver before the binds are authored.** The export tool writes helper bind positions **from
+  the solver's rest path** (acceptance below: within 1e-3), so any later change to `N`, to the route heuristic or to the
+  rest-length definition invalidates every authored bind and forces a re-export. The sampling and route profile — and with
+  it the cost decision of §12.3 — must be frozen, or a re-export accepted as a named step of this stage's gate, **before**
+  muscle art is commissioned against the binds. This is the one ordering constraint the roadmap carries, and it is why
+  the solver work sits ahead of stage 3's art in the plan.
 - **Expected files:** `tools/anatomy-export/`, `character/MuscleLayerSkinner.kt`,
   `app/src/main/assets/characters/*/muscles_sup.glb`, `app/src/test/.../HelperBindTest.kt`.
 - **User-visible deliverable:** the same eight muscles, now with surface anatomy, with their control points on the path
@@ -4841,7 +4935,10 @@ attachment-landmark hints of item 9), a muscle library beyond eight, and any cla
 - **Automated acceptance:** helper bind positions equal the solver's rest path within 1e-3; helper scale is uniform, with
   no cross-section response (§7.6); the measured between-helper deviation is within the declared tolerance and recorded
   in L5; frame cost of the muscle layer **recorded as information, not gated** — the owner's decision is result first,
-  optimisation later, so no stage gate depends on a frame-rate number (§12.3).
+  optimisation later, so no stage gate depends on a frame-rate number (§12.3). The number this stage records is bounded
+  and known in advance: strategy C **removes** the tube write (measured 2.66 ms p50) and **keeps** the solve (21.24 ms),
+  so it moves a ~24.5 ms frame to ~22.0 ms and does not change the vsync bucket (§12.3). Stage 3 is a visual-quality
+  stage; no reader should take its gate as a performance claim.
 - **Gate: per-instance visibility and selection of authored muscle meshes (§7.4).** The property, not the mechanism: one
   authored instance can be hidden **and** selected while its neighbours keep drawing — per instance, never per layer and
   never per regional renderable; the carrier that expresses both is renderer-neutral (no muscle id, status or reason
