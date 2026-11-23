@@ -275,9 +275,11 @@ class ProceduralMuscleMesh(
     private fun collapse(frame: AnatomyFrame, slotIndex: Int, slot: DynamicGeometrySlot): Int {
         val base = slot.claimVertexRun(verticesPerHead)
         val solved = frame.pointCounts[slotIndex] > 0
-        val x = if (solved) frame.pointComponent(slotIndex, 0, 0) else 0f
-        val y = if (solved) frame.pointComponent(slotIndex, 0, 1) else 0f
-        val z = if (solved) frame.pointComponent(slotIndex, 0, 2) else 0f
+        // Metres, as in [resample]: the frame solves in engine units, and a head copied through raw
+        // would sit hundreds of times too far out to be inside any body.
+        val x = if (solved) (frame.pointComponent(slotIndex, 0, 0) / unitsPerMetre).toFloat() else 0f
+        val y = if (solved) (frame.pointComponent(slotIndex, 0, 1) / unitsPerMetre).toFloat() else 0f
+        val z = if (solved) (frame.pointComponent(slotIndex, 0, 2) / unitsPerMetre).toFloat() else 0f
         val positions = slot.positions
         val normals = slot.normals
         val uvs = slot.uvs
