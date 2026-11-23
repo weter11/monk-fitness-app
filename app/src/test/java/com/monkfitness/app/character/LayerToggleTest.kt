@@ -76,16 +76,25 @@ class LayerToggleTest {
     }
 
     @Test
-    fun hidingAMuscleLayerRemovesExactlyThatLayerAndNothingElse() {
+    fun hidingAMuscleLayerCollapsesItsHeadsAndKeepsTheTopology() {
         val controller = CharacterLayerController()
         controller.toggleTubes(true)
         val frame = solvedFrame()
         val slot = mesh.slot()
         val all = mesh.write(frame, slot, controller.selection)
         assertEquals(mesh.triangleCapacity, all)
+        val drawn = (0 until frame.headCount).filter { !CollapsedHeads.isCollapsed(slot, mesh, it) }
+        assertTrue("the shown layer draws real tubes", drawn.isNotEmpty())
 
         assertFalse("the toggle reports the layer's new state", controller.toggleLayer(CharacterLayerId.SUPERFICIAL_MUSCLE))
-        assertEquals(all - mesh.trianglesPerLayer(MuscleLayer.SUPERFICIAL), mesh.write(frame, slot, controller.selection))
+        assertEquals(
+            "the topology belongs to the definition, not to the selection",
+            all,
+            mesh.write(frame, slot, controller.selection)
+        )
+        for (head in drawn) {
+            assertEquals("head $head is collapsed now", 0f, CollapsedHeads.maxTriangleArea(slot, mesh, head), 0f)
+        }
         assertTrue("the deeper layer is untouched", controller.showsLayer(MuscleLayer.DEEP))
         assertFalse(controller.showsLayer(MuscleLayer.SUPERFICIAL))
         assertTrue("the body is still the thing the tubes are read against", controller.layer(CharacterLayerId.BODY)?.visible == true)
@@ -99,7 +108,7 @@ class LayerToggleTest {
     }
 
     @Test
-    fun hidingOneInstanceMovesTheGeometryByThatInstanceAlone() {
+    fun hidingOneInstanceCollapsesThatInstanceAlone() {
         val controller = CharacterLayerController()
         controller.toggleTubes(true)
         val frame = solvedFrame()
@@ -107,9 +116,21 @@ class LayerToggleTest {
         val all = mesh.write(frame, slot, controller.selection)
 
         val instance = MuscleInstanceId(definition.muscles.first().id, MuscleSide.A)
-        val heads = definition.muscles.first().heads.size
+        val owned = (0 until frame.headCount).filter {
+            frame.heads[it].muscleId == instance.muscleId && frame.heads[it].side == instance.side
+        }
+        assertTrue("the instance owns at least one head", owned.isNotEmpty())
         controller.setInstanceVisible(instance, false)
-        assertEquals(all - heads * mesh.trianglesPerHead, mesh.write(frame, slot, controller.selection))
+        assertEquals("hiding an instance moves no topology", all, mesh.write(frame, slot, controller.selection))
+        for (head in owned) {
+            assertEquals("head $head is collapsed", 0f, CollapsedHeads.maxTriangleArea(slot, mesh, head), 0f)
+        }
+        for (head in (0 until frame.headCount) - owned.toSet()) {
+            assertTrue(
+                "head $head still draws",
+                CollapsedHeads.maxTriangleArea(slot, mesh, head) > 0f
+            )
+        }
     }
 
     @Test

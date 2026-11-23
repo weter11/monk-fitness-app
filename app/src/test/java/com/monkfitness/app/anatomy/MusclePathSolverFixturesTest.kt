@@ -13,8 +13,8 @@ import java.io.File
  * Every row is driven through the real pass loop on the bind pose's own segment frame, so the
  * geometry is stated in one frame and measured in it. A row that the RFC expects to clear declares
  * the curvature bound it needs and says why: the one-waypoint detour of §7.4.5 reaches its apex with
- * a turn several times 45°, and `theOneWaypointApexIsRefusedAtFortyFiveDegrees` measures that refusal
- * at the default bound rather than leaving it implicit.
+ * a turn several times 45°, and `theOneWaypointApexIsRepairedIntoAnArc` measures that repair at the
+ * default bound rather than leaving it implicit.
  */
 class MusclePathSolverFixturesTest {
 
@@ -156,17 +156,18 @@ class MusclePathSolverFixturesTest {
     }
 
     @Test
-    fun theOneWaypointApexIsRefusedAtFortyFiveDegrees() {
-        // Recorded rather than papered over: at the definition's 45° bound the §7.4.5 one-waypoint
-        // detour that clears this sphere on pass 3 folds by 59.4° at its apex, between two samples one
-        // declared spacing apart, so the loop refuses every pass and ends at the cap. The row above is
-        // the same geometry with a bound above that fold; the difference is the curvature row alone.
+    fun theOneWaypointApexIsRepairedIntoAnArc() {
+        // The §7.4.5 one-waypoint detour that clears this sphere on pass 3 folds by 59.4° at its apex,
+        // between two samples one declared spacing apart, at a 45° curvature bound. The apex is now
+        // repaired where it is: a window of samples is relaxed onto its own chords and pushed back out
+        // of the sphere, which turns the spike into the arc the detour was approximating. The row that
+        // used to be refused at every pass therefore solves at the bound that refused it, and the
+        // accepted polyline still passes the validator as an independent certificate.
         val solved = solve(singleObstacle(theta = 0.7853982f))
-        assertEquals(PathStatus.INVALID, solved.state.pathStatus)
-        assertEquals(PathReason.CURVATURE_VIOLATION, solved.state.reason)
-        assertEquals(SearchOutcome.PASS_CAP, solved.state.searchOutcome)
-        assertEquals("a refused head carries no path", 0, solved.state.pointCount)
-        assertEquals(8, solved.solver.lastPass)
+        assertEquals(PathStatus.VALID, solved.state.pathStatus)
+        assertEquals(SearchOutcome.CLEARED, solved.state.searchOutcome)
+        assertTrue("the accepted polyline must carry its own certificate", certifies(solved))
+        assertTrue("and publishes a path", solved.state.pointCount >= 8)
     }
 
     @Test

@@ -19,13 +19,15 @@ import java.nio.FloatBuffer
 import java.nio.IntBuffer
 
 /**
- * The debug tube layer, as one immutable primitive per shape.
+ * The debug tube layer, as one primitive for the life of the layer.
  *
- * A primitive is built only when a solved frame has geometry, and a shape change replaces it whole:
- * `IndexBuffer.setBuffer` or `RenderableManager.setGeometryAt` against a renderable the scene already
- * references faults inside Filament's render pass on this device (`CHARACTER_DEVICE_VALIDATION.md`
- * §7.7), while a primitive handed its geometry once does not. Nothing is built before the first
- * solved frame, so there is no placeholder renderable to redefine.
+ * The primitive is built once, on the first frame that has geometry, with every buffer sized to the
+ * mesh's whole capacity. A later frame only moves vertices, because the mesh below writes one quota
+ * per head of the definition whether or not the solver could solve it — a refused head collapses onto
+ * a point and its triangles have zero area. `IndexBuffer.setBuffer` and `RenderableManager.setGeometryAt`
+ * against a renderable the scene already references fault inside Filament's render pass on this device
+ * (`CHARACTER_DEVICE_VALIDATION.md` §7.7), so nothing here rewrites live geometry: the layer is hidden
+ * by its layer mask, never by shrinking the draw.
  *
  * Positions still move every frame through a [BufferObject] stream in a three-deep ring, because a
  * vertex upload against a live renderable is the one upload the device tolerates; the three slots
@@ -65,6 +67,10 @@ internal class TubeMesh(
 
     /** Which material candidate drew: 0 is the provider's own permutation, n>0 a donor instance. */
     var materialCandidate: Int = -1
+        private set
+
+    /** How many times a primitive was built. One per layer is the point of the fixed topology. */
+    var primitiveBuilds: Int = 0
         private set
 
     /** Why the layer could not be built, or null when it draws. */
@@ -123,8 +129,9 @@ internal class TubeMesh(
     }
 
     /**
-     * Uploads one solved frame. A shape change builds a whole new primitive; every other frame costs
-     * one position stream, so a pose change is one 12-byte-per-vertex copy and never a geometry call.
+     * Uploads one solved frame. The primitive is built once, sized to the layer's whole capacity, and
+     * every later frame costs one position stream: a refusal or a layer toggle moves vertices, never
+     * the topology, so nothing here tears a live primitive down mid-rep.
      */
     fun upload(geometry: DynamicGeometrySlot, rebuild: Boolean) {
         if (destroyed || failure != null) return
@@ -139,11 +146,7 @@ internal class TubeMesh(
         }
 
         val current = primitive
-        if (rebuild || current == null || count != current.vertexCount ||
-            geometry.indexCount != current.indexCount
-        ) {
-            // A head that refuses changes both counts without touching the selection, so the shape —
-            // not just the revision — decides whether the primitive still describes this frame.
+        if (rebuild || current == null) {
             releasePrimitive()
             primitive = buildPrimitive(geometry, built)
         } else {
@@ -160,26 +163,29 @@ internal class TubeMesh(
     }
 
     /**
-     * Builds one primitive for one shape: an index buffer sized to that shape's indices, a vertex
-     * buffer whose streams are the [BufferObject]s, and a renderable handed the geometry it keeps.
+     * Builds the primitive the layer keeps for its life: every buffer sized to the mesh's whole
+     * capacity — one quota per head of the definition — and the renderable handed the index run this
+     * frame wrote. Since that run is now a constant, the primitive is built once and only ever
+     * receives position uploads.
      */
     private fun buildPrimitive(geometry: DynamicGeometrySlot, built: TubeVertexLayout): Primitive {
+        primitiveBuilds++
         val declared = plan ?: error("a primitive needs a planned attribute set")
         val instance = material ?: error("a primitive needs a material instance")
         val count = geometry.vertexCount
         val indexCount = geometry.indexCount
-        // Sized to this shape rather than to the mesh's capacity: the primitive is never rewritten, so
-        // a buffer it cannot fill would only reserve memory the driver has to keep.
-        val streams = Ring(count, indexCount)
+        // Capacity, not this frame's counts: a buffer that cannot hold the next refusal would be the
+        // mid-rep reallocation this layer exists without.
+        val streams = Ring(vertexCapacity, indexCapacity)
 
         built.writePositions(geometry, streams.positions, bounds)
 
-        val vertexBuffer = buildVertexBuffer(declared, count)
+        val vertexBuffer = buildVertexBuffer(declared, vertexCapacity)
         val streamsByAttribute = LinkedHashMap<TubeAttribute, BufferObject>()
         for (slot in declared.slots) {
             val attribute = slot.attribute
             val buffer = BufferObject.Builder()
-                .size(count * attribute.bytesPerVertex)
+                .size(vertexCapacity * attribute.bytesPerVertex)
                 .bindingType(BufferObject.BindingType.VERTEX)
                 .build(engine)
             vertexBuffer.setBufferObjectAt(engine, slot.bufferIndex, buffer)

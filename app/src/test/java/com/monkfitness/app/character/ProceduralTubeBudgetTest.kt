@@ -99,18 +99,26 @@ class ProceduralTubeBudgetTest {
     }
 
     @Test
-    fun aHiddenLayerRemovesExactlyItsOwnHeads() {
+    fun aHiddenLayerKeepsEveryHeadQuotaAndCollapsesItsOwn() {
         val frame = solvedFrame()
         val slot = mesh.slot()
         val superficialOnly = MuscleSelection(showsTubes = true).withLayer(MuscleLayer.DEEP, false)
         // The M1 library is eight superficial muscles: the deep layer is a declared placeholder, so
-        // hiding it costs nothing and hiding the superficial one costs every head.
+        // hiding it costs nothing and hiding the superficial one collapses every head.
         assertEquals("no shipped muscle is deep", 0, mesh.trianglesPerLayer(MuscleLayer.DEEP))
         assertEquals(mesh.triangleCapacity, mesh.trianglesPerLayer(MuscleLayer.SUPERFICIAL))
-        assertEquals(mesh.trianglesPerLayer(MuscleLayer.SUPERFICIAL), mesh.write(frame, slot, superficialOnly))
+        assertEquals(mesh.triangleCapacity, mesh.write(frame, slot, superficialOnly))
 
         val nothing = superficialOnly.withLayer(MuscleLayer.SUPERFICIAL, false)
-        assertEquals("hiding both layers leaves no tube to draw", 0, mesh.write(frame, slot, nothing))
+        assertEquals(
+            "hiding a layer collapses its heads instead of resizing the mesh",
+            mesh.triangleCapacity,
+            mesh.write(frame, slot, nothing)
+        )
+        for (head in 0 until frame.headCount) {
+            assertTrue("head $head is collapsed", CollapsedHeads.isCollapsed(slot, mesh, head))
+            assertEquals(0f, CollapsedHeads.maxTriangleArea(slot, mesh, head), 0f)
+        }
     }
 
     @Test
@@ -124,7 +132,7 @@ class ProceduralTubeBudgetTest {
     }
 
     @Test
-    fun aHeadWithoutAPathIsSkippedRatherThanTessellated() {
+    fun aHeadWithoutAPathIsCollapsedRatherThanSkipped() {
         val frame = solvedFrame()
         val single = frame.heads.indexOfFirst { it.side == MuscleSide.A }
         val slot = mesh.slot()
@@ -144,7 +152,9 @@ class ProceduralTubeBudgetTest {
             }
         }
         val without = mesh.write(onlyOne, slot, MuscleSelection(showsTubes = true))
-        assertEquals("the refused head contributes no triangles", full - mesh.trianglesPerHead, without)
+        assertEquals("the refused head keeps its quota, so the topology does not move", full, without)
+        assertTrue("its triangles have no area", CollapsedHeads.isCollapsed(slot, mesh, single))
+        assertEquals(0f, CollapsedHeads.maxTriangleArea(slot, mesh, single), 0f)
     }
 
     @Test

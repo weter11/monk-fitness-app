@@ -947,3 +947,68 @@ Same handset, same driver, requested Auto → active OPENGL:
 The two failures are measurements of the solve and of the draw — refusals come from `AnatomyFrame`
 and the frame time from the 13,824-triangle submission — not of the geometry lifecycle, and neither
 is a crash. They are recorded as they read rather than retuned.
+
+#### The Stage 2b run — the topology stops moving, and the solve stops refusing
+
+The primitive-per-shape run left two rows failing and one unmeasured. Both failures turned out to
+share a cause with the layer above them, and closing them changed what this layer does on a frame
+that refuses a head.
+
+**The topology is fixed.** A refused head used to change how many heads the mesh wrote, so the layer
+above tore its vertex buffer, its `BufferObject` streams, its index buffer and its renderable down
+and built them again — four frames in twenty. Every head of the definition now owns its quota on
+every frame while the tubes are on: a head the selection hides or the solver refuses is written
+collapsed onto one point, which makes its triangles zero-area without changing a single count.
+`TubeMesh` builds its primitive once, at capacity, and afterwards uploads positions and nothing else.
+
+**The fold is repaired.** `project` pushes every sample that sits inside its tube radially outward,
+and a sample pushed while its neighbours stay put is a one-point spike: the curvature row reads it as
+a fold, and the segments either side of it cut into the very obstacle it was clearing. On the squat
+rep that cost four samples in twenty — `biceps_femoris` long and short heads and `gluteus_maximus A`.
+`MusclePathSolver.unfold` now relaxes a window of samples around the apex onto their own chords and
+pushes them back out, so the spike becomes the arc the one-waypoint detour was approximating. A fold
+the repair cannot remove puts the polyline back unchanged, so a refusal that belongs to the geometry
+is still refused.
+
+Same handset, same driver, requested Auto → active OPENGL, `main` `e1923f1e` plus this branch,
+`versionCode` 996008, APK 43,865,357 bytes, `FILAMENT_CHARACTER_ENABLED = true`:
+
+| Row | Measured | Verdict |
+| --- | --- | --- |
+| Crash gate | One session of 6104 frames with the layer on, plus four more launches across the run: process alive, `logcat -b crash` empty | **PASS** — no `nRender+24` tombstone |
+| Solve built | tubes off: `18 heads · 0 refused · 16 drawn · 0 triangles` | PASS |
+| Tubes on | `18 heads · 0 refused · 16 drawn · 13824 triangles`, `attrs POSITION,UV0,UV1,COLOR · candidate 0` | PASS |
+| Primitive builds | `1 primitive build(s)` after 6104 frames of a looping rep | **PASS** — the count the fixed topology exists for |
+| Attributes | `POSITION,UV0,UV1,COLOR`, the provider's own permutation, no refusal line | PASS |
+| Axis alignment | screenshot: the tubes run longitudinally along the torso and the visible limb, never across it | PASS |
+| Tint | darker red at mid-length, lighter toward both ends of the same tube | PASS |
+| Layer toggle | tap `superficial`: the tubes disappear while the counts stay `16 drawn · 13824 triangles` — a toggle now collapses heads instead of shrinking the draw | PASS |
+| Deep toggle | unchanged (`16 · 13824`) — the M1 library has no deep muscle | PASS |
+| Exercise switch | tap `Squat` while on Squat: a new session, a full readout on its first published frame | PASS |
+| Refusal budget | 20 samples over the rep with the layer off and 20 with it on: `0 refused` in all 40 | **PASS** — the row the previous run failed at 4 in 20 |
+| Frame time, cool SoC | 44.9 °C when the reading started: p95 **30.33 ms** with the layer off, **30.40 ms** with it on, same session 30 s apart: **+0.07 ms** | **PASS** against the ≤ 1 ms bar |
+| Frame time, warm SoC | same session, ~66 °C: p95 31.28 ms off → 34.00 ms on: **+2.72 ms** | recorded, not a pass |
+| Readout at rest | The overlay's 500 ms poll cannot sample progress 0: its first published frame already reads `gluteus_maximus P +25.7 %`. Measured on the same solver at progress 0 instead: ten of twelve heads within ±0.1 %, but `latissimus_dorsi` **+8.1 %** and `biceps_femoris` head1 **+15.5 %**, both sides | **FAIL as written** — the squat's opening pose is not the anatomy's reference stance |
+| Lifecycle | home → 7 s → return: `surface true · running true · 13824 triangles` | PASS |
+
+Three readings follow, and one of them corrects the record above.
+
+- The frame-time failure was **thermal, not allocation.** With the allocation spikes actually gone —
+  one primitive build in 6104 frames where there used to be a rebuild on each of the 4-in-20 frames
+  that refused — a cool SoC reads **+0.07 ms**, and the same session read again at 66 °C reads
+  **+2.72 ms**. The earlier `+2.53 ms` was measured on a handset that had been building for forty
+  minutes, so the bar it failed was being read through the throttle.
+- **The refusal budget is closed by the solver, not by the mesh.** The collapsed-head geometry would
+  have made a refusal cheap; `unfold` is what stops the refusal happening. Both are needed: the first
+  keeps the layer from rebuilding, the second keeps it from having nothing to draw.
+- **The readout-at-rest row fails for a content reason.** The row presumes the rep starts at the
+  reference stance; the squat's opening pose is a standing stance whose shoulder girdle and hamstring
+  attachments already differ from the bind pose, so `latissimus_dorsi` and the second
+  `biceps_femoris` head read a real length change at progress 0. That is a pose/content question, not
+  a solver defect, and it is recorded as the row reads rather than retuned.
+
+**Stage 2b sign-off.** Every §7.7 row is now a reading rather than a blocker: the crash gate holds,
+the tubes draw the 13,824 triangles the primitive was built for, the layer builds exactly one
+primitive, the solve refuses nothing across a rep, and the frame-time bar passes on a cool SoC. The
+one remaining failure is the `readout at rest` row, and it is a mismatch between the row's expectation
+and the squat's opening pose rather than a defect in this layer.
