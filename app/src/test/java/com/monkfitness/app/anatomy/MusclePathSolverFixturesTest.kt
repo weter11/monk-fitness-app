@@ -13,8 +13,8 @@ import java.io.File
  * Every row is driven through the real pass loop on the bind pose's own segment frame, so the
  * geometry is stated in one frame and measured in it. A row that the RFC expects to clear declares
  * the curvature bound it needs and says why: the one-waypoint detour of §7.4.5 reaches its apex with
- * a turn several times 45°, and `theOneWaypointApexIsRefusedAtFortyFiveDegrees` measures that refusal
- * at the default bound rather than leaving it implicit.
+ * a turn several times 45°, and `theOneWaypointApexIsRepairedIntoAnArc` measures that repair at the
+ * default bound rather than leaving it implicit.
  */
 class MusclePathSolverFixturesTest {
 
