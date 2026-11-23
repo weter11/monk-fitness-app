@@ -13,6 +13,12 @@ enum class FrameStage(val label: String) {
     /** `AnatomySolver.solve` — path solve for every muscle head. */
     ANATOMY_SOLVE("anatomy"),
 
+    /** `SegmentFrames.derive` inside the solve — the segment frames every head reads. */
+    ANATOMY_DERIVE("anatomyFrames"),
+
+    /** The per-head path loop inside the solve, resampling and detours included. */
+    ANATOMY_PATHS("anatomyPaths"),
+
     /** `ProceduralMuscleMesh.write` + `TubeMesh.upload` — tube geometry built and handed to the GPU. */
     TUBE_WRITE_UPLOAD("tube"),
 

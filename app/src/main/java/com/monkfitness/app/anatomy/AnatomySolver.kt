@@ -20,7 +20,8 @@ class AnatomySolver(
     private val definition: AnatomyDefinition,
     skeleton: SkeletonDefinition,
     private val attachmentScale: Double,
-    restPose: SkeletonPose
+    restPose: SkeletonPose,
+    val telemetry: AnatomyTelemetry = AnatomyTelemetry()
 ) {
 
     private val frames = SegmentFrames(skeleton)
@@ -61,8 +62,13 @@ class AnatomySolver(
      */
     fun solve(pose: SkeletonPose, out: AnatomyFrame): AnatomyFrame {
         out.clear()
-        frames.derive(pose, frameSet)
+        telemetry.beginFrame(out.headCount)
 
+        val deriveStart = System.nanoTime()
+        frames.derive(pose, frameSet)
+        telemetry.recordDerive(System.nanoTime() - deriveStart)
+
+        val pathsStart = System.nanoTime()
         for (slot in 0 until out.headCount) {
             val id = out.heads[slot]
             val muscle = definition.muscle(id.muscleId) ?: continue
@@ -77,10 +83,14 @@ class AnatomySolver(
                 out.failingSegments[slot] = NO_INDEX
                 out.failingObstacles[slot] = NO_INDEX
                 out.pointCounts[slot] = 0
+                telemetry.recordPass(0)
                 continue
             }
 
             loop.solve(muscle, id.side, pose, frameSet, out, slot)
+            // The pass the loop reports, not the pass this loop assumes: a refusal before the first
+            // candidate reports 0 and is kept apart from a search that ran and stopped.
+            telemetry.recordPass(loop.lastPass)
             if (out.statuses[slot] != PathStatus.VALID.ordinal) continue
 
             val modelled = out.modelledPathLengths[slot].toDouble()
@@ -88,6 +98,7 @@ class AnatomySolver(
                 ((muscle.tendon.originFraction + muscle.tendon.insertionFraction) * modelled).toFloat()
             out.relativePathLengthChanges[slot] = (modelled / rest - 1.0).toFloat()
         }
+        telemetry.recordPaths(System.nanoTime() - pathsStart)
 
         // Renderability is the conjunction over the instance's heads: one invalid head hides the
         // instance, because a muscle drawn with a head missing is a shape nobody reviewed.

@@ -191,6 +191,14 @@ private fun CharacterDiagnostics.describe(request: BackendRequest): String = bui
             append(String.format(Locale.US, "%.2f", reading.p95Ms))
         }
     }
+    if (!musclesSolved) {
+        append('\n').append("muscle layers hidden — solve skipped")
+    } else if (anatomyPassCounts.isNotEmpty()) {
+        append('\n').append("passes (cap ").append(anatomyPassCap).append("):")
+        anatomyPassCounts.forEachIndexed { pass, count ->
+            append(' ').append(pass).append(':').append(count)
+        }
+    }
     if (muscleTubeBuilds > 0) append(" · ").append(muscleTubeBuilds).append(" primitive build(s)")
     error?.let { append('\n').append("error: ").append(it) }
 }

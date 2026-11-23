@@ -236,6 +236,9 @@ data class MuscleSelection(
     fun shows(instance: MuscleInstanceId, layer: MuscleLayer): Boolean =
         showsTubes && layer in layers && instance !in hidden
 
+    /** True when at least one instance can draw: the tubes are on and some layer is selected. */
+    val showsAnyLayer: Boolean get() = showsTubes && layers.isNotEmpty()
+
     fun withLayer(layer: MuscleLayer, on: Boolean): MuscleSelection =
         copy(layers = if (on) layers + layer else layers - layer)
 
