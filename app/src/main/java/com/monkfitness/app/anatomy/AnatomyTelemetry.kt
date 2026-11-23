@@ -46,6 +46,15 @@ class AnatomyTelemetry(passCap: Int = DEFAULT_PASS_CAP) {
 
     fun passCount(pass: Int): Int = passes[pass.coerceIn(0, passCap)]
 
+    /**
+     * Adds one lane's tally in a single pass. A parallel solve merges its lanes here, after the
+     * barrier, so the cumulative histogram is summed by one thread instead of contended per head.
+     */
+    fun recordPassTally(tally: IntArray) {
+        val limit = minOf(tally.size, passes.size)
+        for (index in 0 until limit) passes[index] += tally[index]
+    }
+
     /** Clears the cumulative counts as well as this frame's durations. */
     fun reset() {
         passes.fill(0)
