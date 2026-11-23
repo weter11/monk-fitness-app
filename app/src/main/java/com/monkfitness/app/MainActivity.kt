@@ -78,9 +78,12 @@ class MainActivity : AppCompatActivity() {
 
         // At target 33+ the platform no longer prompts when the reminder channel is created, so a
         // scheduled reminder would be posted into nothing. Asked once onboarding is behind the user,
-        // where the request has context.
-        lifecycleScope.launch {
-            if (viewModel.isOnboardingCompleted.first { it }) requestNotificationPermissionIfNeeded()
+        // where the request has context — and only from a fresh start, because every recreation
+        // (rotation, a language change) would otherwise ask again while the grant is still missing.
+        if (savedInstanceState == null) {
+            lifecycleScope.launch {
+                if (viewModel.isOnboardingCompleted.first { it }) requestNotificationPermissionIfNeeded()
+            }
         }
 
         viewModel.handleNotificationIntent(intent)
