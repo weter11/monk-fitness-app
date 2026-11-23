@@ -1,11 +1,15 @@
 package com.monkfitness.app
 
+import android.Manifest
+import android.content.pm.PackageManager
 import android.os.Bundle
 import android.content.Intent
+import android.os.Build
 import android.view.WindowManager
 import androidx.appcompat.app.AppCompatActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.consumeWindowInsets
@@ -41,6 +45,8 @@ import com.monkfitness.app.validation.ValidationPoseScreen
 import com.monkfitness.app.ui.theme.MonkFitnessTheme
 import com.monkfitness.app.viewmodel.MainViewModel
 import androidx.lifecycle.lifecycleScope
+import androidx.core.content.ContextCompat
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 
 /**
@@ -50,6 +56,9 @@ import kotlinx.coroutines.launch
  */
 class MainActivity : AppCompatActivity() {
     private val viewModel: MainViewModel by viewModels()
+
+    private val notificationPermission =
+        registerForActivityResult(ActivityResultContracts.RequestPermission()) { }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         // Before super.onCreate: the window's decor must stop insetting the content for the scaffold to
@@ -67,6 +76,13 @@ class MainActivity : AppCompatActivity() {
             viewModel.migrateLanguageSelectionIfNeeded()
         }
 
+        // At target 33+ the platform no longer prompts when the reminder channel is created, so a
+        // scheduled reminder would be posted into nothing. Asked once onboarding is behind the user,
+        // where the request has context.
+        lifecycleScope.launch {
+            if (viewModel.isOnboardingCompleted.first { it }) requestNotificationPermissionIfNeeded()
+        }
+
         viewModel.handleNotificationIntent(intent)
         setContent {
             // Keeping the screen on belongs to the session screen — the only place that knows a workout
@@ -81,6 +97,13 @@ class MainActivity : AppCompatActivity() {
         super.onNewIntent(intent)
         setIntent(intent)
         viewModel.handleNotificationIntent(intent)
+    }
+
+    private fun requestNotificationPermissionIfNeeded() {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) return
+        val granted = ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) ==
+            PackageManager.PERMISSION_GRANTED
+        if (!granted) notificationPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
     }
 }
 
