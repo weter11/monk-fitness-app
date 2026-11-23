@@ -1,12 +1,18 @@
 package com.monkfitness.app
 
+import android.Manifest
+import android.content.pm.PackageManager
 import android.os.Bundle
 import android.content.Intent
+import android.os.Build
 import android.view.WindowManager
 import androidx.appcompat.app.AppCompatActivity
 import androidx.activity.compose.setContent
+import androidx.activity.enableEdgeToEdge
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
 import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.layout.consumeWindowInsets
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Favorite
@@ -39,6 +45,8 @@ import com.monkfitness.app.validation.ValidationPoseScreen
 import com.monkfitness.app.ui.theme.MonkFitnessTheme
 import com.monkfitness.app.viewmodel.MainViewModel
 import androidx.lifecycle.lifecycleScope
+import androidx.core.content.ContextCompat
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 
 /**
@@ -49,7 +57,13 @@ import kotlinx.coroutines.launch
 class MainActivity : AppCompatActivity() {
     private val viewModel: MainViewModel by viewModels()
 
+    private val notificationPermission =
+        registerForActivityResult(ActivityResultContracts.RequestPermission()) { }
+
     override fun onCreate(savedInstanceState: Bundle?) {
+        // Before super.onCreate: the window's decor must stop insetting the content for the scaffold to
+        // receive real insets instead of zeroes.
+        enableEdgeToEdge()
         super.onCreate(savedInstanceState)
 
         // Triggered here, not from the Application object: the app-locale API reaches the platform
@@ -60,6 +74,16 @@ class MainActivity : AppCompatActivity() {
         // blocking while a `viewModelScope` flow collects deadlocks the write.
         lifecycleScope.launch {
             viewModel.migrateLanguageSelectionIfNeeded()
+        }
+
+        // At target 33+ the platform no longer prompts when the reminder channel is created, so a
+        // scheduled reminder would be posted into nothing. Asked once onboarding is behind the user,
+        // where the request has context — and only from a fresh start, because every recreation
+        // (rotation, a language change) would otherwise ask again while the grant is still missing.
+        if (savedInstanceState == null) {
+            lifecycleScope.launch {
+                if (viewModel.isOnboardingCompleted.first { it }) requestNotificationPermissionIfNeeded()
+            }
         }
 
         viewModel.handleNotificationIntent(intent)
@@ -76,6 +100,13 @@ class MainActivity : AppCompatActivity() {
         super.onNewIntent(intent)
         setIntent(intent)
         viewModel.handleNotificationIntent(intent)
+    }
+
+    private fun requestNotificationPermissionIfNeeded() {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) return
+        val granted = ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) ==
+            PackageManager.PERMISSION_GRANTED
+        if (!granted) notificationPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
     }
 }
 
@@ -183,7 +214,11 @@ fun MainApp(viewModel: MainViewModel) {
         NavHost(
             navController = navController,
             startDestination = if (isOnboardingCompleted) Screen.Home.route else "onboarding",
-            modifier = Modifier.padding(innerPadding)
+            // The padding already keeps every destination clear of the bars; consuming it here is what
+            // stops a destination's own Scaffold from insetting for the same bars a second time.
+            modifier = Modifier
+                .padding(innerPadding)
+                .consumeWindowInsets(innerPadding)
         ) {
             composable("onboarding") {
                 OnboardingScreen(onFinish = {
