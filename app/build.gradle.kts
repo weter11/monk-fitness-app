@@ -20,8 +20,8 @@ android {
 
     defaultConfig {
         applicationId = "com.monkfitness.app"
-        minSdk = 24
-        targetSdk = 28
+        minSdk = 28
+        targetSdk = 36
         // Use minutes since a base date for unique version code across CI builds
         versionCode = ((System.currentTimeMillis() - 1735689600000L) / 60000).toInt()
         versionName = "1.0"
