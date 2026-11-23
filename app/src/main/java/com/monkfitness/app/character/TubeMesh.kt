@@ -69,6 +69,10 @@ internal class TubeMesh(
     var materialCandidate: Int = -1
         private set
 
+    /** How many times a primitive was built. One per layer is the point of the fixed topology. */
+    var primitiveBuilds: Int = 0
+        private set
+
     /** Why the layer could not be built, or null when it draws. */
     var failure: String? = null
         private set
@@ -165,6 +169,7 @@ internal class TubeMesh(
      * receives position uploads.
      */
     private fun buildPrimitive(geometry: DynamicGeometrySlot, built: TubeVertexLayout): Primitive {
+        primitiveBuilds++
         val declared = plan ?: error("a primitive needs a planned attribute set")
         val instance = material ?: error("a primitive needs a material instance")
         val count = geometry.vertexCount

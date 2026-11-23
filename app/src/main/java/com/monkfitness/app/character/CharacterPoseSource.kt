@@ -34,7 +34,9 @@ data class CharacterDiagnostics(
     /** Why the tube layer refused to build, or null when it drew. */
     val muscleMaterialError: String? = null,
     /** Which material candidate drew: 0 is the provider's permutation, n>0 a donor instance. */
-    val muscleMaterialCandidate: Int = -1
+    val muscleMaterialCandidate: Int = -1,
+    /** How many GPU primitives the tube layer has built: one per session while the topology is fixed. */
+    val muscleTubeBuilds: Int = 0
 )
 
 /**

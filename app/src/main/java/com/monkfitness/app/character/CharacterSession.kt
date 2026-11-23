@@ -455,7 +455,8 @@ class CharacterSession(
             muscleReadings = muscleReadings(),
             muscleAttributes = tubeMesh?.materialAttributes.orEmpty(),
             muscleMaterialError = tubeError,
-            muscleMaterialCandidate = tubeMesh?.materialCandidate ?: -1
+            muscleMaterialCandidate = tubeMesh?.materialCandidate ?: -1,
+            muscleTubeBuilds = tubeMesh?.primitiveBuilds ?: 0
         ).also { lastDiagnostics = it }
     }
 

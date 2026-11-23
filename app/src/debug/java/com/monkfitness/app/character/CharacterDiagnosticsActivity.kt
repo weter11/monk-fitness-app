@@ -183,5 +183,6 @@ private fun CharacterDiagnostics.describe(request: BackendRequest): String = bui
     append('\n').append(frames).append(" frames · ").append(fps.toInt()).append(" fps · p95 ")
     append(String.format(Locale.US, "%.2f", frameTimeP95Ms)).append(" ms")
     append(" · surface ").append(hasSurface).append(" · running ").append(running)
+    if (muscleTubeBuilds > 0) append(" · ").append(muscleTubeBuilds).append(" primitive build(s)")
     error?.let { append('\n').append("error: ").append(it) }
 }
