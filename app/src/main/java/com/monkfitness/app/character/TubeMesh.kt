@@ -125,7 +125,7 @@ internal class TubeMesh(
         if (destroyed) return
         destroyed = true
         if (inScene) {
-            scene.removeEntity(entity)
+            scene.remove(entity)
             inScene = false
         }
         // The entity owns the renderable, and the renderable is what keeps the material instance
@@ -394,7 +394,7 @@ internal class TubeMesh(
     private fun refuse(reason: String): String {
         failure = reason
         if (inScene) {
-            scene.removeEntity(entity)
+            scene.remove(entity)
             inScene = false
         }
         vertexBuffer?.let { engine.destroyVertexBuffer(it) }
