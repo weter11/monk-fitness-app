@@ -104,6 +104,7 @@ class CharacterSession(
     private val frameTimesNanos = LongArray(FRAME_SAMPLE_COUNT)
     private var frameTimeCursor = 0
     private var frameTimeSamples = 0
+    private val stageTimings = FrameStageTimings(FRAME_SAMPLE_COUNT)
     private var lastDiagnostics: CharacterDiagnostics? = null
 
     // Read once, while the engine is valid: the report must still be readable after destroy().
@@ -300,13 +301,21 @@ class CharacterSession(
      * own drawable rather than by the skinned body.
      */
     private fun solveMuscles(pose: SkeletonPose) {
-        if (!CharacterFeature.isEnabled) return
-        val solver = anatomySolver ?: return
-        val frame = anatomyFrame ?: return
-        val mesh = muscleMesh ?: return
-        val scene = sceneFrame ?: return
+        val solver = if (CharacterFeature.isEnabled) anatomySolver else null
+        val frame = anatomyFrame
+        val mesh = muscleMesh
+        val scene = sceneFrame
+        if (solver == null || frame == null || mesh == null || scene == null) {
+            // The 2D renderer never pays for the rest solve, so both stages read zero rather than missing.
+            stageTimings.record(FrameStage.ANATOMY_SOLVE, 0L)
+            stageTimings.record(FrameStage.TUBE_WRITE_UPLOAD, 0L)
+            return
+        }
 
+        val solveStart = System.nanoTime()
         solver.solve(pose, frame)
+        val solveNanos = System.nanoTime() - solveStart
+
         scene.select(layers.selection)
 
         var refused = 0
@@ -317,12 +326,17 @@ class CharacterSession(
         muscleInstancesDrawn = frame.renderable.count { it }
 
         val rebuild = scene.needsRebuild(layers.revision)
+        val writeStart = System.nanoTime()
         muscleTriangles = mesh.write(frame, scene.geometry, scene.selection)
         tubeMesh?.let { tubes ->
             tubes.upload(scene.geometry, rebuild)
             tubes.setVisible(scene.geometry.indexCount > 0)
         }
+        val writeNanos = System.nanoTime() - writeStart
         scene.markBuilt(layers.revision)
+
+        stageTimings.record(FrameStage.ANATOMY_SOLVE, solveNanos)
+        stageTimings.record(FrameStage.TUBE_WRITE_UPLOAD, writeNanos)
     }
 
     private fun configureScene() {
@@ -456,7 +470,8 @@ class CharacterSession(
             muscleAttributes = tubeMesh?.materialAttributes.orEmpty(),
             muscleMaterialError = tubeError,
             muscleMaterialCandidate = tubeMesh?.materialCandidate ?: -1,
-            muscleTubeBuilds = tubeMesh?.primitiveBuilds ?: 0
+            muscleTubeBuilds = tubeMesh?.primitiveBuilds ?: 0,
+            frameStages = stageTimings.readings()
         ).also { lastDiagnostics = it }
     }
 
@@ -481,8 +496,13 @@ class CharacterSession(
         val started = System.nanoTime()
         val mapper = retargeter ?: return
 
+        val poseStart = System.nanoTime()
         val pose = frameProducer.next()
+        stageTimings.record(FrameStage.POSE_BUILD, System.nanoTime() - poseStart)
+
         solveMuscles(pose)
+
+        val retargetStart = System.nanoTime()
         mapper.boneMatrices(pose, unitsPerMetre, out = boneMatrices)
         boneBuffer.clear()
         boneBuffer.put(boneMatrices)
@@ -494,12 +514,22 @@ class CharacterSession(
                 renderableManager.setBonesAsMatrices(renderable, boneBuffer, jointCount, 0)
             }
         }
+        stageTimings.record(FrameStage.RETARGET_UPLOAD, System.nanoTime() - retargetStart)
 
-        if (renderer.beginFrame(chain, frameTimeNanos)) {
+        // beginFrame blocks until the swapchain is free, so this window is the vsync wait and not our work.
+        val beginStart = System.nanoTime()
+        val began = renderer.beginFrame(chain, frameTimeNanos)
+        stageTimings.record(FrameStage.BEGIN_FRAME_WAIT, System.nanoTime() - beginStart)
+        if (began) {
+            val renderStart = System.nanoTime()
             renderer.render(view)
             renderer.endFrame()
+            stageTimings.record(FrameStage.RENDER_END_FRAME, System.nanoTime() - renderStart)
             recordFrameTime(System.nanoTime() - started)
             frames++
+        } else {
+            // A refused frame draws nothing, and a zero keeps its sample count aligned with the others.
+            stageTimings.record(FrameStage.RENDER_END_FRAME, 0L)
         }
     }
 

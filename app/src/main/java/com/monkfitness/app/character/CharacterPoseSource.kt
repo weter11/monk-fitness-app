@@ -36,7 +36,9 @@ data class CharacterDiagnostics(
     /** Which material candidate drew: 0 is the provider's permutation, n>0 a donor instance. */
     val muscleMaterialCandidate: Int = -1,
     /** How many GPU primitives the tube layer has built: one per session while the topology is fixed. */
-    val muscleTubeBuilds: Int = 0
+    val muscleTubeBuilds: Int = 0,
+    /** Per-stage p50/p95 over the same window as [frameTimeP95Ms]; empty until a frame ran. */
+    val frameStages: List<FrameStageReading> = emptyList()
 )
 
 /**
