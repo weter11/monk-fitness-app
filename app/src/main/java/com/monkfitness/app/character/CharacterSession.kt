@@ -96,6 +96,7 @@ class CharacterSession(
     private var muscleTriangles = 0
     private var muscleHeadsRefused = 0
     private var muscleInstancesDrawn = 0
+    private var musclesSolved = false
 
     private var destroyed = false
     private var lastFrameNanos = 0L
@@ -306,17 +307,28 @@ class CharacterSession(
         val mesh = muscleMesh
         val scene = sceneFrame
         if (solver == null || frame == null || mesh == null || scene == null) {
-            // The 2D renderer never pays for the rest solve, so both stages read zero rather than missing.
+            // The 2D renderer never pays for the rest solve, so these stages read zero rather than missing.
             stageTimings.record(FrameStage.ANATOMY_SOLVE, 0L)
+            stageTimings.record(FrameStage.ANATOMY_DERIVE, 0L)
+            stageTimings.record(FrameStage.ANATOMY_PATHS, 0L)
             stageTimings.record(FrameStage.TUBE_WRITE_UPLOAD, 0L)
+            return
+        }
+
+        val selection = layers.selection
+        if (!selection.showsAnyLayer) {
+            skipMuscles(frame, scene, selection)
             return
         }
 
         val solveStart = System.nanoTime()
         solver.solve(pose, frame)
         val solveNanos = System.nanoTime() - solveStart
+        stageTimings.record(FrameStage.ANATOMY_DERIVE, solver.telemetry.deriveNanos)
+        stageTimings.record(FrameStage.ANATOMY_PATHS, solver.telemetry.pathsNanos)
+        musclesSolved = true
 
-        scene.select(layers.selection)
+        scene.select(selection)
 
         var refused = 0
         for (slot in 0 until frame.headCount) {
@@ -337,6 +349,27 @@ class CharacterSession(
 
         stageTimings.record(FrameStage.ANATOMY_SOLVE, solveNanos)
         stageTimings.record(FrameStage.TUBE_WRITE_UPLOAD, writeNanos)
+    }
+
+    /**
+     * Nothing is drawn this frame, so nothing may be left solved: the carrier goes back to
+     * `NOT_PROCESSED`, the tube drawable is hidden before its stale vertices can reach a frame, and
+     * the counters follow the geometry to zero. The next visible frame rebuilds because the toggle
+     * that hid the layer also advanced the revision the scene frame is built against.
+     */
+    private fun skipMuscles(frame: AnatomyFrame, scene: CharacterSceneFrame, selection: MuscleSelection) {
+        frame.clear()
+        scene.select(selection)
+        scene.geometry.begin()
+        tubeMesh?.setVisible(false)
+        muscleTriangles = 0
+        muscleHeadsRefused = 0
+        muscleInstancesDrawn = 0
+        musclesSolved = false
+        stageTimings.record(FrameStage.ANATOMY_SOLVE, 0L)
+        stageTimings.record(FrameStage.ANATOMY_DERIVE, 0L)
+        stageTimings.record(FrameStage.ANATOMY_PATHS, 0L)
+        stageTimings.record(FrameStage.TUBE_WRITE_UPLOAD, 0L)
     }
 
     private fun configureScene() {
@@ -466,13 +499,27 @@ class CharacterSession(
             muscleHeadsRefused = muscleHeadsRefused,
             muscleInstancesDrawn = muscleInstancesDrawn,
             muscleTriangles = muscleTriangles,
-            muscleReadings = muscleReadings(),
+            musclesSolved = musclesSolved,
+            muscleReadings = if (musclesSolved) muscleReadings() else emptyList(),
+            anatomyPassCounts = anatomyPassCounts(),
+            anatomyPassCap = anatomySolver?.telemetry?.passCap ?: 0,
             muscleAttributes = tubeMesh?.materialAttributes.orEmpty(),
             muscleMaterialError = tubeError,
             muscleMaterialCandidate = tubeMesh?.materialCandidate ?: -1,
             muscleTubeBuilds = tubeMesh?.primitiveBuilds ?: 0,
             frameStages = stageTimings.readings()
         ).also { lastDiagnostics = it }
+    }
+
+    /**
+     * Head-solves by the pass that reported them, index `0` for a refusal before the loop ran.
+     * Cumulative for the session: a single frame of the bounded search is too noisy to read.
+     */
+    private fun anatomyPassCounts(): List<Int> {
+        val telemetry = anatomySolver?.telemetry ?: return emptyList()
+        val counts = ArrayList<Int>(telemetry.passCap + 1)
+        for (pass in 0..telemetry.passCap) counts += telemetry.passCount(pass)
+        return counts
     }
 
     private fun muscleReadings(): List<MuscleHeadReading> {

@@ -221,6 +221,10 @@ private fun describeMuscles(diagnostics: CharacterDiagnostics): String = buildSt
         append("anatomy solve not built")
         return@buildString
     }
+    if (!diagnostics.musclesSolved) {
+        append(diagnostics.muscleHeads).append(" heads · layers hidden — solve skipped")
+        return@buildString
+    }
     append(diagnostics.muscleHeads).append(" heads · ")
     append(diagnostics.muscleHeadsRefused).append(" refused · ")
     append(diagnostics.muscleInstancesDrawn).append(" drawn · ")

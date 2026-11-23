@@ -37,6 +37,12 @@ data class CharacterDiagnostics(
     val muscleMaterialCandidate: Int = -1,
     /** How many GPU primitives the tube layer has built: one per session while the topology is fixed. */
     val muscleTubeBuilds: Int = 0,
+    /** False when no muscle layer is drawn: the solve is skipped and the carrier is cleared. */
+    val musclesSolved: Boolean = false,
+    /** Head-solves by the pass the solver reported; index 0 is a refusal before the loop ran. */
+    val anatomyPassCounts: List<Int> = emptyList(),
+    /** The route search's pass budget, so a histogram row can be read against it. */
+    val anatomyPassCap: Int = 0,
     /** Per-stage p50/p95 over the same window as [frameTimeP95Ms]; empty until a frame ran. */
     val frameStages: List<FrameStageReading> = emptyList()
 )

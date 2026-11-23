@@ -131,7 +131,8 @@ internal class TubeMesh(
     /**
      * Uploads one solved frame. The primitive is built once, sized to the layer's whole capacity, and
      * every later frame costs one position stream: a refusal or a layer toggle moves vertices, never
-     * the topology, so nothing here tears a live primitive down mid-rep.
+     * the topology — the index run is a function of the head count and their layout, both fixed by the
+     * definition — so a rebuild is reserved for a primitive whose very size differs from this frame's.
      */
     fun upload(geometry: DynamicGeometrySlot, rebuild: Boolean) {
         if (destroyed || failure != null) return
@@ -146,7 +147,9 @@ internal class TubeMesh(
         }
 
         val current = primitive
-        if (rebuild || current == null) {
+        val sameShape = current != null && current.indexCount == geometry.indexCount &&
+            current.vertexCount == geometry.vertexCount
+        if ((rebuild && !sameShape) || current == null) {
             releasePrimitive()
             primitive = buildPrimitive(geometry, built)
         } else {
@@ -269,7 +272,10 @@ internal class TubeMesh(
         val current = primitive ?: return
         primitive = null
         scene.remove(entity)
-        engine.destroyEntity(entity)
+        // The id outlives the shape, so only its components go: freeing the entity here would leave
+        // the next build writing a renderable onto an id the pool has already reissued.
+        if (renderableManager.hasComponent(entity)) renderableManager.destroy(entity)
+        if (engine.transformManager.hasComponent(entity)) engine.transformManager.destroy(entity)
         current.uploads.values.forEach { engine.destroyBufferObject(it) }
         engine.destroyVertexBuffer(current.vertexBuffer)
         engine.destroyIndexBuffer(current.indexBuffer)

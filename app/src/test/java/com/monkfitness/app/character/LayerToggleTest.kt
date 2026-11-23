@@ -108,6 +108,26 @@ class LayerToggleTest {
     }
 
     @Test
+    fun theSolveGateFollowsWhatWouldActuallyBeDrawn() {
+        val controller = CharacterLayerController()
+        assertFalse(
+            "the shipped character draws no tube, so the per-frame solve must be skippable",
+            controller.selection.showsAnyLayer
+        )
+
+        controller.toggleTubes(true)
+        assertTrue("a visible tube layer needs a solve", controller.selection.showsAnyLayer)
+
+        controller.toggleLayer(CharacterLayerId.SUPERFICIAL_MUSCLE)
+        controller.toggleLayer(CharacterLayerId.DEEP_MUSCLE)
+        assertFalse("tubes on with every layer hidden still draws nothing", controller.selection.showsAnyLayer)
+
+        controller.toggleTubes(false)
+        controller.toggleLayer(CharacterLayerId.SUPERFICIAL_MUSCLE)
+        assertFalse("a layer restored under a hidden tube layer draws nothing either", controller.selection.showsAnyLayer)
+    }
+
+    @Test
     fun hidingOneInstanceCollapsesThatInstanceAlone() {
         val controller = CharacterLayerController()
         controller.toggleTubes(true)
