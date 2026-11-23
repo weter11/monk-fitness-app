@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Text
@@ -144,7 +145,13 @@ fun CharacterStage(
                 }
             )
             if (debugLayers && CharacterFeature.isEnabled) {
-                MuscleDebugOverlay(session = session, modifier = Modifier.align(Alignment.TopStart))
+                // The stage itself is full-bleed, so the readout owns the status bar inset it sits under.
+                MuscleDebugOverlay(
+                    session = session,
+                    modifier = Modifier
+                        .align(Alignment.TopStart)
+                        .statusBarsPadding()
+                )
             }
         }
     }
