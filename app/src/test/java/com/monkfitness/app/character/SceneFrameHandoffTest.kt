@@ -4,6 +4,8 @@ import com.monkfitness.app.anatomy.AnatomyDefinition
 import com.monkfitness.app.anatomy.AnatomyDefinitionLoader
 import com.monkfitness.app.anatomy.AnatomyFrame
 import com.monkfitness.app.anatomy.AnatomySolver
+import com.monkfitness.app.anatomy.MuscleInstanceId
+import com.monkfitness.app.anatomy.MuscleSide
 import com.monkfitness.app.animation.SkeletonDefinition
 import com.monkfitness.app.animation.SkeletonPose
 import com.monkfitness.app.animation.Vector3
@@ -11,6 +13,7 @@ import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotEquals
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertSame
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -103,6 +106,68 @@ class SceneFrameHandoffTest {
     }
 
     @Test
+    fun everyInstanceMapsToTheSectionTheAssetNamesForIt() {
+        val partition = sceneFrame().partition
+
+        assertEquals(
+            "the asset carries one section per instance, not one per head",
+            definition.instanceCount,
+            partition.size
+        )
+        assertEquals("the partition follows the frame's own instance order", AnatomyFrame.of(definition).instances, partition.instances)
+        assertEquals("two instances never share a section", partition.size, partition.keys.toSet().size)
+        assertEquals(
+            "a key is the authored section name",
+            partition.instances.map { "${it.muscleId}_${it.side.name}" },
+            partition.keys
+        )
+        for (section in 0 until partition.size) {
+            val instance = partition.instance(section)
+            assertEquals("section $section carries $instance", section, partition.indexOf(instance))
+            assertEquals(definition.muscle(instance.muscleId)?.layer, partition.layer(section))
+        }
+        assertEquals("an instance the frame does not carry has no section", -1, partition.indexOf(MuscleInstanceId("not_a_muscle", MuscleSide.A)))
+        assertEquals(
+            "the asset must publish exactly these sections",
+            partition.keys.toSet(),
+            assetSectionNames()
+        )
+    }
+
+    @Test
+    fun aSelectionCarriesTheOneInstanceAReviewerPicked() {
+        val controller = CharacterLayerController()
+        val first = MuscleInstanceId(definition.muscles.first().id, MuscleSide.A)
+        val second = MuscleInstanceId(definition.muscles.last().id, MuscleSide.P)
+
+        controller.selectInstance(first)
+        assertEquals(first, controller.selection.selected)
+
+        val revision = controller.revision
+        controller.selectInstance(first)
+        assertEquals("re-picking the same instance is not a change", revision, controller.revision)
+
+        controller.selectInstance(second)
+        assertEquals(second, controller.selection.selected)
+        controller.selectInstance(null)
+        assertNull("null clears the highlight", controller.selection.selected)
+    }
+
+    @Test
+    fun hidingTheSelectedInstanceDropsItsHighlight() {
+        val controller = CharacterLayerController()
+        val instance = MuscleInstanceId(definition.muscles.first().id, MuscleSide.P)
+        controller.selectInstance(instance)
+        controller.setInstanceVisible(instance, false)
+
+        assertNull("a hidden instance cannot stay highlighted", controller.selection.selected)
+        assertTrue(instance in controller.selection.hidden)
+
+        controller.setInstanceVisible(instance, true)
+        assertNull("showing it again does not restore a highlight nobody asked for", controller.selection.selected)
+    }
+
+    @Test
     fun theMorphologyPresetNeverOutgrowsTheAssetsTargets() {
         val three = MorphWeightSet(3)
         assertEquals("an asset with three targets accepts a prefix of the preset", 3, three.apply(MorphologyPreset.HEAVY))
@@ -115,7 +180,19 @@ class SceneFrameHandoffTest {
         assertEquals(5, MorphWeightSet(5).apply(MorphologyPreset.MUSCULAR))
     }
 
+    private fun assetSectionNames(): Set<String> {
+        val buffer = java.nio.ByteBuffer.wrap(File(MUSCLE_ASSET).readBytes())
+            .order(java.nio.ByteOrder.LITTLE_ENDIAN)
+        buffer.int; buffer.int; buffer.int
+        val jsonLength = buffer.int
+        buffer.int
+        val json = String(ByteArray(jsonLength).also { buffer.get(it) }, Charsets.UTF_8)
+        val meshes = org.json.JSONObject(json).getJSONArray("meshes")
+        return (0 until meshes.length()).map { meshes.getJSONObject(it).getString("name") }.toSet()
+    }
+
     private companion object {
         const val ASSET = "src/main/assets/anatomy/anatomy_v1.json"
+        const val MUSCLE_ASSET = "src/main/assets/characters/muscles_sup.glb"
     }
 }
