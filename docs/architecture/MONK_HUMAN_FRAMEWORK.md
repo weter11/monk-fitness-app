@@ -4623,7 +4623,7 @@ named.
 | 2 | Anatomy kernel + 8 muscles as procedural tubes | 4–5 | 1 anatomist week | L3/L4 green on fixtures | **shipped** (#407–#411) |
 | 2b | M1 role schema, four timelines, display gate, landmark taps, production readout | 1–2 | 1 review week | §8 validator green on the four pilots; tap-hint demo | **half** — the tube layer closed in #411; all **seven** package deliverables are not started (§15 Stage 2b) |
 | **M1** | **one character, 1 preset, the four pilot exercises, 8 muscles, 3 layers** | — | — | **demo + §12.5 gate + §12.4 record** | **not met** — four named gaps below |
-| 3 | Path-rigged authored muscle meshes | 4 | 6–8 muscle art | L5 + visual review | **not started**; blocked on the solver-profile decision (Stage 3, prerequisite) |
+| 3 | Path-rigged authored muscle meshes | 4 | 6–8 muscle art | L5 + visual review | **code and validation complete** (#419 plus this stage's L5 work); the authored art pass and its visual review are open (§15 Stage 3, *Status*) |
 | 4 | Role tables beyond the pilot + phase timelines + education panel | 2 | 1 review week | §8 validator + sign-off | not started |
 | 5 | Morphology v2: four body families (the first stage with more than one preset) | 3 | 6 art | L6 green per preset | not started |
 | 6 | Library expansion: ~35 superficial, ~12 deep | 6–8 | 12–16 art | L3/L4/L5 at scale | not started |
@@ -4636,7 +4636,9 @@ named.
    readout. Seven deliverables; the `MuscleRole` enum is the only fragment in the tree.
 2. **The L6 M1 subset** — `MorphPresetRangeTest` and `MorphRingPreservationTest` do not exist, so the gate §12.5 grants
    "automated" has no test behind it.
-3. **The §12.4 record** — `docs/anatomy/anatomy_review_v1.md` does not exist, and neither does the directory.
+3. **The §12.4 record** — `docs/anatomy/anatomy_review_v1.md` now exists, but it records the **Stage 3**
+   asset's RV2–RV4 programmatic baseline and names no anatomist. M1's tuple is the stage-2 tube asset, which
+   that file does not cover, so the gate's "record for the exact tuple" is still short of the M1 tuple.
 4. **The skeleton overlay** — there is no `SKELETON` layer in the code (§9.1), so the M1 device configuration named by
    §12.5 (skin + muscle layer + skeleton overlay) cannot be run as specified.
 
@@ -4951,6 +4953,27 @@ attachment-landmark hints of item 9), a muscle library beyond eight, and any cla
 - **Risks:** helper bone budget (R3); art time (R2).
 - **Effort:** 4 engineering weeks + 6–8 muscle-art weeks.
 - **Art/expertise:** yes, substantial.
+
+**Status.** The code and the automated acceptance are complete on `main`; the art pass and its visual
+review are not.
+
+| Item | State |
+| --- | --- |
+| Helper-bone export (`tools/anatomy-export`) | shipped — `anatomy_v1.json` + `helpers_v1.json` in, `muscles_sup.glb` out |
+| `MuscleLayerSkinner`, one skinned section per muscle and side (16) | shipped |
+| Binds equal the solver's rest path | green — worst residual **1.25e-07 m** against the 1e-3 budget |
+| Helper scale uniform, no cross-section response (§7.6) | green — every helper column scales by 1 within 1e-5 |
+| L5 mesh tooling (`HelperBindTest`) | green — 3,744 triangles, **none degenerate** (smallest 4.89e-07 m²); every section encloses a **positive volume**; **no two sections interpenetrate**; weights sum to 1 within **3.0e-08** |
+| Between-helper deviation, recorded in L5 | **0.020516 m (20.52 mm)** against a 0.024 m budget — the widest radius the definition authors (`biceps_femoris_A` head 0, distal span) |
+| Per-instance visibility and selection (§15 Stage 3 gate) | shipped in #419 — one authored instance hides and tints while its neighbours keep drawing; a forty-line JVM test covers the mask and the tint |
+| §12.4 record for the new asset | `docs/anatomy/anatomy_review_v1.md` — **programmatic baseline only**; RV4 is not read visually and no anatomist has signed it |
+| Device evidence for this layer | **blocked** — the layer loads (`16` sections) but records `mesh 0/16 sections · 0 palette uploads · muscleSkin 0.00/0.00` and the frame loop stops in the same window (`docs/CHARACTER_DEVICE_VALIDATION.md`, *The Stage 3 run*) |
+| Visual review of the eight muscles in three poses | **open** — needs the authored asset and a reviewer |
+| Authored muscle art | **not started** — 6–8 art weeks |
+
+The shipped surface is a deterministic swept ring, not muscle art: its silhouette reports the generator's
+radius profile, so a visual read of it would review the stand-in rather than the pipeline. The pipeline is
+what the gate measures, and every number above is a reading of it.
 
 ### Stage 4 — Roles beyond the pilot, phase timelines and the education panel
 
