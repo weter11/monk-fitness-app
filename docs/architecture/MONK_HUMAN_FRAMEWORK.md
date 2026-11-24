@@ -4965,7 +4965,7 @@ review are not.
 | Helper scale uniform, no cross-section response (§7.6) | green — every helper column scales by 1 within 1e-5 |
 | L5 mesh tooling (`HelperBindTest`) | green — 3,744 triangles, **none degenerate** (smallest 4.89e-07 m²); every section encloses a **positive volume**; **no two sections interpenetrate**; weights sum to 1 within **3.0e-08** |
 | Between-helper deviation, recorded in L5 | **0.020516 m (20.52 mm)** against a 0.024 m budget — the widest radius the definition authors (`biceps_femoris_A` head 0, distal span) |
-| Per-instance visibility and selection (§15 Stage 3 gate) | shipped in #419 — one authored instance hides and tints while its neighbours keep drawing; a forty-line JVM test covers the mask and the tint |
+| Per-instance visibility and selection (§15 Stage 3 gate) | shipped in #419 — one authored instance hides and tints while its neighbours keep drawing; `MuscleLayerStageTest` covers the mask, the tint and the refused-head return |
 | §12.4 record for the new asset | `docs/anatomy/anatomy_review_v1.md` — **programmatic baseline only**; RV4 is not read visually and no anatomist has signed it |
 | Device evidence for this layer | **blocked** — the layer loads (`16` sections) but records `mesh 0/16 sections · 0 palette uploads · muscleSkin 0.00/0.00` and the frame loop stops in the same window (`docs/CHARACTER_DEVICE_VALIDATION.md`, *The Stage 3 run*) |
 | Visual review of the eight muscles in three poses | **open** — needs the authored asset and a reviewer |
