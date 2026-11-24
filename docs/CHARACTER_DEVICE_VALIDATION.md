@@ -1012,3 +1012,63 @@ the tubes draw the 13,824 triangles the primitive was built for, the layer build
 primitive, the solve refuses nothing across a rep, and the frame-time bar passes on a cool SoC. The
 one remaining failure is the `readout at rest` row, and it is a mismatch between the row's expectation
 and the squat's opening pose rather than a defect in this layer.
+
+#### The Stage 3 run — the authored layer never uploads, and the frame loop stops
+
+PR #419 made the authored muscle asset addressable per instance. This run tried to measure that layer
+on the same handset and failed before it drew a section, so **no `showsMeshes` frame breakdown exists to
+record**; what follows is what the device actually read.
+
+Wireless debugging was reconnected inside the container (`adb connect 127.0.0.1:36027`, a listener on
+uid 2000 — the stored `~/.android/adbkey` still paired, so no pairing code was needed). The debug APK was
+built on the handset, `FILAMENT_CHARACTER_ENABLED = true` confirmed in the generated `BuildConfig`, and
+installed with `adb install -r -d`:
+
+| Property | Value |
+| --- | --- |
+| Device | motorola edge 50 ultra (`ctwo_geuw`), API 36, GLES 3.2, Vulkan 1.3.0, requested Auto → active **OPENGL** |
+| APK | 44,167,512 bytes, `sha256 23631109079da13ddbbf09cbdfc277b147854e905a527629e9837d58b3b9a8b6`, `versionCode` 997863 |
+| Launch | `am start -n com.monkfitness.app/.character.CharacterDiagnosticsActivity` |
+| SoC | battery **41 %, 31.0 °C** before and after the window — cool |
+| Crash | `logcat -b crash` empty; the activity stayed `topResumedActivity` |
+
+| Row | Measured | Verdict |
+| --- | --- | --- |
+| Readout reaches the layer switch | tapping `трубки` (tubes) gives `18 heads · 0 refused · 16 drawn · 13824 triangles`; tapping `сетки` (meshes) renders the per-instance chip row (`0 rectus_abdominis:A`, `1 rectus_abdominis:P`, …) | PASS — the control is live, not unreachable |
+| Authored layer draws | `mesh 0/16 sections · 0 palette uploads · not drawn 16`, `muscleSkin 0.00/0.00` in every sample; the counters do not move for the whole window | **FAIL — nothing drew** |
+| Per-instance hide and highlight | not reachable: a chip cannot hide or tint a section that never drew | **BLOCKED** by the row above |
+| Frame breakdown, `showsMeshes` | the readout's frame counter froze at **714 frames** partway through the window and reported the identical sample at every later read, so there is no 20 s window to average | **NOT RECORDED** |
+| Frame breakdown, last live sample | `pose 0.46/0.66 · anatomy 7.66/9.99 · anatomyFrames 0.09/0.13 · anatomyPaths 7.53/9.88 · tube 2.47/2.86 · retarget 0.19/0.28 · muscleSkin 0.00/0.00 · beginFrame 0.03/0.05 · render 0.12/0.17` ms; `714 frames · 59 fps · p95 13.39 ms`; `passes (cap 8): 1:2718 2:238 3:264 4:388 5:10` | recorded, **not** the mesh-layer reading |
+
+The overlay, verbatim, in the state the run ended in:
+
+```
+18 heads · 0 refused · 16 drawn · 13824 triangles
+… 18 modelled-length rows …
+mesh 0/16 sections · 0 palette uploads · not drawn 16
+attrs POSITION,UV0,UV1,COLOR · candidate 0
+34 bones · 5 morphs · neutral
+714 frames · 59 fps · p95 13.39 ms · surface true · running true
+stage p50/p95 ms: pose 0.46/0.66 anatomy 7.66/9.99 anatomyFrames 0.09/0.13 anatomyPaths 7.53/9.88
+  tube 2.47/2.86 retarget 0.19/0.28 muscleSkin 0.00/0.00 beginFrame 0.03/0.05 render 0.12/0.17
+```
+
+**What is established, and what is not.** Established: the layer's asset loads — `16` sections are
+reported by the stage, so `MuscleLayerStage.prepare()` succeeded and its renderables exist — the switch
+reaches the UI, and the solver runs (`0 refused`, `16 drawn` on the tube layer, `13,824` triangles).
+Not established: why `muscleSkin` never records a sample, which is the same frame on which the counter
+stops. Two observations narrow it without proving it — the `muscleSkin` stage is recorded only after the
+upload path's guard, and the frame loop stops posting in the same window — but this run does not
+separate "the upload guard refuses every frame" from "the surface detaches and the session stops". A
+build with one of the two instrumented would.
+
+**This row is not a regression.** It is the first time the authored layer has been asked to draw on a
+device: the Stage 2b run above measured the procedural tube layer only, and §12.5 records that the
+authored-mesh half of L5 was never exercised on hardware. Nothing in this run contradicts the #415
+numbers; it simply leaves that configuration unmeasured.
+
+**Consequences for the Stage 3 gate.** Stage 3's automated acceptance does not include a frame-rate
+number (§15: it is recorded as information, never gated), so this run blocks no acceptance criterion.
+It does mean the closing PR's device evidence is the tube layer's, and the per-instance visibility and
+highlight demonstration on real hardware is still owed — the JVM tests cover the mask and the tint, and
+a device run is what would show them on a surface.
