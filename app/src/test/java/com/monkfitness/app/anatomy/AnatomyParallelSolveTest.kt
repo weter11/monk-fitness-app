@@ -6,9 +6,11 @@ import com.monkfitness.app.animation.SkeletonPose
 import com.monkfitness.app.animation.Vector3
 import com.monkfitness.app.character.X1Bind
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.io.File
+import java.util.concurrent.atomic.AtomicBoolean
 
 /**
  * A head's path is a function of its own slot, so the lane count is a scheduling choice and never an
@@ -120,6 +122,59 @@ class AnatomyParallelSolveTest {
         // A corridor of zero leaves no room for the smallest detour, so this head stops before pass 1.
         loop.solve(muscle.copy(corridorMetres = 0f), MuscleSide.A, restPose, frameSet, frame, 0)
         assertEquals("a refusal before the pass loop reports 0", 0, loop.lastPass)
+    }
+
+    @Test
+    fun aWorkerFaultReleasesTheBarrierAndDegradesToTheCallerLane() {
+        // A lane that throws cannot be allowed to hold the barrier: the frame thread would park in
+        // the Choreographer callback forever. The slot that lane had claimed is solved again by the
+        // caller, so the fault costs the parallel path, not a head.
+        val slots = 64
+        val solved = IntArray(slots)
+        val workerThrew = AtomicBoolean(false)
+        val pool = HeadSolvePool(2, 8) {
+            MusclePathSolver(
+                definition,
+                MusclePathBuilder(definition, scale.toFloat()),
+                AnatomyValidator(definition, scale),
+                scale
+            )
+        }
+        pool.bind(object : HeadSolvePool.Body {
+            override fun solveSlot(lane: SolveLane, slot: Int) {
+                if (Thread.currentThread().name.startsWith("monk-anatomy-lane-")) {
+                    workerThrew.set(true)
+                    throw IllegalStateException("lane fault")
+                }
+                // Hold the caller until the worker has failed: 64 trivial slots would otherwise be
+                // claimed before the worker woke, and the fault path would never run.
+                val deadline = System.nanoTime() + 2_000_000_000L
+                while (!workerThrew.get() && System.nanoTime() < deadline) Thread.sleep(1)
+                solved[slot]++
+            }
+        })
+        try {
+            var elapsed = 0L
+            val caller = Thread {
+                val start = System.nanoTime()
+                pool.run(slots)
+                elapsed = System.nanoTime() - start
+            }
+            caller.isDaemon = true
+            caller.start()
+            caller.join(3_000)
+
+            assertFalse("run() must return after a lane fault, not park the frame thread", caller.isAlive)
+            assertTrue("the fault must be recorded: ${pool.failure}", pool.failure is IllegalStateException)
+            assertTrue("a faulted lane set must fall back to the caller's lane", pool.isDegraded)
+            assertEquals("every slot is solved exactly once, including the faulted lane's", slots, solved.count { it == 1 })
+            assertTrue("the faulted solve must not sit on the deadline: ${elapsed / 1_000_000} ms", elapsed < 1_000_000_000L)
+
+            pool.run(slots)
+            assertEquals("the degraded pool still publishes every slot", slots, solved.count { it == 2 })
+        } finally {
+            pool.close()
+        }
     }
 
     private fun laneThreads(): Int =

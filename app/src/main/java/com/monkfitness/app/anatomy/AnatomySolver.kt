@@ -54,7 +54,6 @@ class AnatomySolver(
         require(attachmentScale > 0.0 && attachmentScale.isFinite()) {
             "attachmentScale $attachmentScale must be finite and positive"
         }
-        pool.bind(this)
         // The rest stance is a one-off solve, serial on purpose: it runs before a session draws a
         // frame, so waking three workers to save 15 ms once would cost more than it saves.
         frames.derive(restPose, frameSet)
@@ -73,6 +72,9 @@ class AnatomySolver(
                 }
             }
         }
+        // Last, so the body a worker could ever reach already has its rest carrier: a dispatch during
+        // construction would otherwise read zeros and refuse every head as REST_LENGTH_INVALID.
+        pool.bind(this)
     }
 
     /**
@@ -133,14 +135,19 @@ class AnatomySolver(
 
         val loop = lane.loop
         loop.solve(muscle, id.side, pose, frameSet, out, slot)
-        // The pass the loop reports, not the pass this slot assumes: a refusal before the first
-        // candidate reports 0 and is kept apart from a search that ran and stopped.
-        lane.passes[loop.lastPass.coerceIn(0, telemetry.passCap)]++
-        if (out.statuses[slot] != PathStatus.VALID.ordinal) return
+        // Read before anything that can throw, so the head is counted by the pass it actually ran.
+        val pass = loop.lastPass.coerceIn(0, telemetry.passCap)
+        if (out.statuses[slot] != PathStatus.VALID.ordinal) {
+            lane.passes[pass]++
+            return
+        }
 
         val modelled = out.modelledPathLengths[slot].toDouble()
         out.visualTendonPortionLengths[slot] =
             ((muscle.tendon.originFraction + muscle.tendon.insertionFraction) * modelled).toFloat()
         out.relativePathLengthChanges[slot] = (modelled / rest - 1.0).toFloat()
+        // Counted last: a throw above leaves the head uncounted, so the pool's retry of this slot
+        // adds it exactly once instead of twice.
+        lane.passes[pass]++
     }
 }
