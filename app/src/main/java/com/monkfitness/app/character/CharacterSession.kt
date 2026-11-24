@@ -25,6 +25,7 @@ import com.monkfitness.app.anatomy.AnatomyDefinitionLoader
 import com.monkfitness.app.anatomy.AnatomyFrame
 import com.monkfitness.app.anatomy.AnatomySolver
 import com.monkfitness.app.anatomy.PathStatus
+import com.monkfitness.app.animation.Joint
 import com.monkfitness.app.animation.PoseBuilder
 import com.monkfitness.app.animation.SkeletonDefinition
 import com.monkfitness.app.animation.SkeletonPipeline
@@ -262,10 +263,13 @@ class CharacterSession(
         val anatomy: AnatomyDefinition = AnatomyDefinitionLoader.load(
             context.assets.open(CharacterFeature.ANATOMY_PATH).bufferedReader().use { it.readText() }
         )
-        val bind = SkeletonPose()
+        // The host builds the reference carrier through the constructor: the presenter consumes a
+        // pose, it never edits one, and the bind stance is the only carrier it creates.
+        val bindJoints = Array(Joint.entries.size) { Vector3() }
         for ((joint, position) in X1Bind.bindJoints(definition)) {
-            bind.setJoint(joint, Vector3(position.x, position.y, position.z))
+            bindJoints[joint.index].set(position)
         }
+        val bind = SkeletonPose(joints = bindJoints)
         // The rest stance the anatomy is measured against is the rig's own bind stance, so a muscle's
         // reference length and the character's reference pose cannot drift apart.
         val solver = AnatomySolver(anatomy, definition, unitsPerMetre.toDouble(), bind, lanes = SOLVE_LANES)
