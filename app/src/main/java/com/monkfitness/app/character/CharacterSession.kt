@@ -268,7 +268,7 @@ class CharacterSession(
         }
         // The rest stance the anatomy is measured against is the rig's own bind stance, so a muscle's
         // reference length and the character's reference pose cannot drift apart.
-        val solver = AnatomySolver(anatomy, definition, unitsPerMetre.toDouble(), bind)
+        val solver = AnatomySolver(anatomy, definition, unitsPerMetre.toDouble(), bind, lanes = SOLVE_LANES)
         val frame = AnatomyFrame.of(anatomy)
         val mesh = ProceduralMuscleMesh(anatomy, unitsPerMetre.toDouble())
         anatomySolver = solver
@@ -450,6 +450,10 @@ class CharacterSession(
         if (destroyed) return
         destroyed = true
         pause()
+        // After the frame loop stops, so no solve is in flight: the lanes are threads, and a session
+        // that leaves them parked holds four stacks per exercise switch.
+        anatomySolver?.close()
+        anatomySolver = null
         uiHelper.detach()
         swapChain?.let { engine.destroySwapChain(it) }
         swapChain = null
@@ -595,6 +599,13 @@ class CharacterSession(
 
     private companion object {
         const val FRAME_SAMPLE_COUNT = 120
+
+        /**
+         * Four lanes: the frame thread and three workers. The set is deliberately smaller than the
+         * cores a handset publishes, because the frame also needs one for the render thread's own work
+         * and the tubes' upload, and the solve splits into whole heads rather than finer tasks.
+         */
+        const val SOLVE_LANES = 4
 
         /** The square surface the camera is composed for until the first size arrives. */
         const val PLACEHOLDER_WIDTH = 1

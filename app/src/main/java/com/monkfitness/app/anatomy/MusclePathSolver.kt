@@ -68,6 +68,9 @@ class MusclePathSolver(
         frame: AnatomyFrame,
         slot: Int
     ): Int {
+        // A refusal before the first pass reports 0 rather than the previous head's pass: the tally
+        // this feeds is cumulative, and a stale pass would attribute the head to a search that never ran.
+        lastPass = 0
         val control = builder.resolveControl(head = muscle.heads[frame.heads[slot].headIndex], side, pose, frames, points)
         if (control < 2) return refuse(frame, slot, PathReason.DEGENERATE_SEGMENT, SearchOutcome.REJECTED_BEFORE_SEARCH)
         count = resample(control)

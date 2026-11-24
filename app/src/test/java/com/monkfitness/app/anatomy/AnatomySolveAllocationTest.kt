@@ -63,6 +63,27 @@ class AnatomySolveAllocationTest {
     }
 
     @Test
+    fun dispatchingLanesCostsTheFrameThreadNoAllocation() {
+        val counter = allocationCounter()
+        // The solver is built here rather than in a field: three worker threads per test instance
+        // would be three threads per test method.
+        val parallel = AnatomySolver(definition, skeleton, scale, bindPose, lanes = 4)
+        try {
+            repeat(WARMUP) { parallel.solve(bindPose, frame) }
+
+            val derive = steadyAllocation(counter) { frames.derive(bindPose, frameSet) }
+            val solve = steadyAllocation(counter) { parallel.solve(bindPose, frame) }
+
+            assertTrue(
+                "handing heads to three lanes must not allocate on the frame thread: derive=$derive solve=$solve bytes",
+                solve <= derive
+            )
+        } finally {
+            parallel.close()
+        }
+    }
+
+    @Test
     fun thePathLoopAllocatesNothingPerHead() {
         frames.derive(bindPose, frameSet)
         val counter = allocationCounter()
