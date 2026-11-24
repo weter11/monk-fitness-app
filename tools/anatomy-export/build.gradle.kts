@@ -19,6 +19,7 @@ sourceSets {
             "com/monkfitness/app/character/X1Bind.kt",
             "com/monkfitness/app/character/BoneMap.kt",
             "com/monkfitness/app/character/HelperBindManifest.kt",
+            "com/monkfitness/app/character/HelperBinds.kt",
             "com/monkfitness/app/character/Mat4.kt",
             "com/monkfitness/app/character/MonkJointResolver.kt",
             "com/monkfitness/app/character/GltfRig.kt",
@@ -44,4 +45,19 @@ dependencies {
 
 application {
     mainClass.set("com.monkfitness.app.anatomyexport.AnatomyExport")
+}
+
+// The two artefacts are separate steps: the manifest is the contract, the mesh binds to it.
+tasks.register<JavaExec>("exportHelpers") {
+    group = "export"
+    description = "Writes app/src/main/assets/anatomy/helpers_v1.json from the solver's rest path."
+    mainClass.set("com.monkfitness.app.anatomyexport.AnatomyExport")
+    classpath = sourceSets["main"].runtimeClasspath
+}
+
+tasks.register<JavaExec>("exportMuscles") {
+    group = "export"
+    description = "Writes app/src/main/assets/characters/muscles_sup.glb, skinned to the helper binds."
+    mainClass.set("com.monkfitness.app.anatomyexport.MuscleMeshExport")
+    classpath = sourceSets["main"].runtimeClasspath
 }
