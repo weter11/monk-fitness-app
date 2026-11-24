@@ -51,6 +51,10 @@ data class CharacterDiagnostics(
     val muscleAssetUploads: Long = 0,
     /** Why the skinned muscle asset refused to load, or null when it loaded. */
     val muscleAssetError: String? = null,
+    /** The section carrying the selection highlight, or `-1` when nothing is selected. */
+    val muscleAssetSelected: Int = -1,
+    /** Why a selection cannot tint its section, or null when the highlight is live. */
+    val muscleHighlightError: String? = null,
     /** Per-stage p50/p95 over the same window as [frameTimeP95Ms]; empty until a frame ran. */
     val frameStages: List<FrameStageReading> = emptyList()
 )

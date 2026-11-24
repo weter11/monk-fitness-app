@@ -232,7 +232,9 @@ data class MuscleSelection(
     /** The procedural tubes are a diagnostic view, not part of the shipped character. */
     val showsTubes: Boolean = false,
     /** The helper-bound muscle asset, which is the layer Stage 3 replaces the tubes with. */
-    val showsMeshes: Boolean = false
+    val showsMeshes: Boolean = false,
+    /** The one instance a reviewer picked; a highlight is a tint, never a geometry change. */
+    val selected: MuscleInstanceId? = null
 ) {
 
     fun shows(instance: MuscleInstanceId, layer: MuscleLayer): Boolean =
@@ -250,6 +252,115 @@ data class MuscleSelection(
 
     fun withInstance(instance: MuscleInstanceId, on: Boolean): MuscleSelection =
         copy(hidden = if (on) hidden - instance else hidden + instance)
+
+    /** Moves the highlight to [instance], or clears it with null. */
+    fun withSelected(instance: MuscleInstanceId?): MuscleSelection = copy(selected = instance)
+
+    /**
+     * Whether the authored layer draws [section] of [partition]: the reviewer's selection, and the
+     * solve's own verdict — an instance the solver refused must not draw at its bind pose.
+     */
+    fun showsSection(partition: MuscleSectionPartition, section: Int, reached: BooleanArray): Boolean =
+        reached[section] && showsMesh(partition.instance(section), partition.layer(section))
+}
+
+/**
+ * The authored section that carries each instance, in the order the frame solves them.
+ *
+ * The renderer is handed a key and an index and nothing else: no muscle identity, no side and no
+ * solve verdict crosses that seam. A key is the exporter's own section name — `muscleId` + `_` +
+ * side — so the asset may be re-authored as long as it keeps publishing the names it ships with.
+ */
+class MuscleSectionPartition private constructor(
+    val instances: List<MuscleInstanceId>,
+    val keys: List<String>,
+    val layers: List<MuscleLayer>
+) {
+
+    init {
+        require(keys.size == instances.size) { "$keys names ${instances.size} instances" }
+        require(layers.size == instances.size) { "$layers carries ${instances.size} layers" }
+        // Two instances under one key would tie one instance's mask to another's draw.
+        require(keys.toSet().size == keys.size) { "two instances share a section: $keys" }
+    }
+
+    val size: Int get() = instances.size
+
+    fun instance(section: Int): MuscleInstanceId = instances[section]
+
+    fun layer(section: Int): MuscleLayer = layers[section]
+
+    /** Where [instance] sits in this partition, or `-1` when it carries no section. */
+    fun indexOf(instance: MuscleInstanceId): Int = instances.indexOf(instance)
+
+    companion object {
+
+        /** The partition of a frame: one key per instance, in that frame's own instance order. */
+        fun of(anatomy: AnatomyFrame): MuscleSectionPartition {
+            val layersByMuscle = HashMap<String, MuscleLayer>(anatomy.muscleStates.size)
+            for (state in anatomy.muscleStates) layersByMuscle[state.id] = state.layer
+            val instances = anatomy.instances
+            val keys = ArrayList<String>(instances.size)
+            val layers = ArrayList<MuscleLayer>(instances.size)
+            for (instance in instances) {
+                keys += "${instance.muscleId}_${instance.side.name}"
+                layers += layersByMuscle[instance.muscleId]
+                    ?: throw IllegalArgumentException("$instance names no muscle")
+            }
+            return MuscleSectionPartition(instances, keys, layers)
+        }
+    }
+}
+
+/**
+ * One mask bit and at most one highlight per section: what the authored layer shows this frame.
+ *
+ * Kept free of Filament so a hide, a selection and a restore are values a test can read, and so a
+ * selection is provably a tint — no path here reaches a vertex. Every mutator reports whether it
+ * moved, which is how the stage skips a renderable that did not change.
+ */
+class MuscleSectionState(sectionCount: Int) {
+
+    private val shown = BooleanArray(sectionCount)
+
+    /** The section carrying the highlight, or [NO_SECTION]. */
+    var selected: Int = NO_SECTION
+        private set
+
+    var shownCount: Int = 0
+        private set
+
+    fun draws(section: Int): Boolean = shown[section]
+
+    /** Shows or hides one section; true when the mask moved. */
+    fun show(section: Int, on: Boolean): Boolean {
+        require(section in shown.indices) { "section $section outside ${shown.size}" }
+        if (shown[section] == on) return false
+        shown[section] = on
+        shownCount += if (on) 1 else -1
+        return true
+    }
+
+    /** Moves the highlight to [section] or clears it with [NO_SECTION]; true when it moved. */
+    fun select(section: Int): Boolean {
+        require(section == NO_SECTION || section in shown.indices) {
+            "selected $section outside ${shown.size}"
+        }
+        if (selected == section) return false
+        selected = section
+        return true
+    }
+
+    /** Hides every section and drops the highlight: nothing solved, so nothing may keep drawing. */
+    fun hideAll() {
+        for (section in shown.indices) show(section, false)
+        select(NO_SECTION)
+    }
+
+    companion object {
+        /** No section is highlighted. */
+        const val NO_SECTION = -1
+    }
 }
 
 /**
@@ -303,9 +414,18 @@ class CharacterLayerController(
         return on
     }
 
-    /** Hides or shows one instance without touching its layer. */
+    /** Hides or shows one instance without touching its layer; hiding the selected one drops the highlight. */
     fun setInstanceVisible(instance: MuscleInstanceId, visible: Boolean) {
         val next = current.withInstance(instance, visible)
+        val cleared = if (visible || next.selected != instance) next else next.withSelected(null)
+        if (cleared == current) return
+        current = cleared
+        publish()
+    }
+
+    /** Highlights one instance, or clears the highlight with null. */
+    fun selectInstance(instance: MuscleInstanceId?) {
+        val next = current.withSelected(instance)
         if (next == current) return
         current = next
         publish()
@@ -347,6 +467,9 @@ class CharacterSceneFrame(
     /** What the geometry is built for; [select] is the only way it changes. */
     var selection: MuscleSelection = selection
         private set
+
+    /** Which authored section carries each instance of [anatomy], in its own instance order. */
+    val partition: MuscleSectionPartition = MuscleSectionPartition.of(anatomy)
 
     /** The selection revision [geometry] was last built for; `-1` until the first build. */
     var builtRevision: Int = -1

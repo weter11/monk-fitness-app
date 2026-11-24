@@ -82,4 +82,33 @@ class CharacterBoundaryTest {
         assertTrue("the runtime must ship the asset it names: $path", asset.isFile)
         assertTrue("a compressed GLB cannot be memory-mapped by gltfio", asset.length() > 1_000_000)
     }
+
+    /**
+     * The authored layer's renderer is addressed by section key and index. A muscle identity, a side
+     * or a solve verdict reaching it would put a decision the presenter owns inside the draw call.
+     */
+    @Test
+    fun theAuthoredLayerRendererReadsNoMuscleIdentityAndNoSolveVerdict() {
+        val stage = File(characterRoot, "MuscleLayerStage.kt")
+        val allowed = setOf("AnatomyFrame")
+        val offendingImports = stage.readLines()
+            .map { it.trim() }
+            .filter { it.startsWith("import com.monkfitness.app.anatomy.") }
+            .filter { it.removePrefix("import com.monkfitness.app.anatomy.") !in allowed }
+        assertTrue(
+            "MuscleLayerStage.kt must not import a muscle identity, a side or a path status: $offendingImports",
+            offendingImports.isEmpty()
+        )
+
+        val forbidden = listOf("MuscleInstanceId", "MuscleHeadId", "MuscleSide", "PathStatus", "PathReason", "SearchOutcome")
+        val offenders = stage.readLines().withIndex().flatMap { (index, line) ->
+            val trimmed = line.trimStart()
+            if (trimmed.startsWith("//") || trimmed.startsWith("*") || trimmed.startsWith("/*")) {
+                return@flatMap emptyList()
+            }
+            val hit = forbidden.firstOrNull { line.contains(it) }
+            if (hit == null) emptyList() else listOf("${stage.name}:${index + 1}: ${line.trim()} names $hit")
+        }
+        assertTrue(offenders.joinToString("\n"), offenders.isEmpty())
+    }
 }

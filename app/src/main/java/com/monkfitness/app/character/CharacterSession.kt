@@ -24,7 +24,7 @@ import com.monkfitness.app.anatomy.AnatomyDefinition
 import com.monkfitness.app.anatomy.AnatomyDefinitionLoader
 import com.monkfitness.app.anatomy.AnatomyFrame
 import com.monkfitness.app.anatomy.AnatomySolver
-import com.monkfitness.app.anatomy.MuscleLayer
+import com.monkfitness.app.anatomy.MuscleInstanceId
 import com.monkfitness.app.anatomy.PathStatus
 import com.monkfitness.app.animation.Joint
 import com.monkfitness.app.animation.PoseBuilder
@@ -95,7 +95,6 @@ class CharacterSession(
     private var tubeError: String? = null
     private var muscleStage: MuscleLayerStage? = null
     private var muscleError: String? = null
-    private var layerByInstance: Array<MuscleLayer> = emptyArray()
     private var morphWeights: MorphWeightSet? = null
     private var anatomyError: String? = null
     private var muscleTriangles = 0
@@ -284,12 +283,13 @@ class CharacterSession(
         anatomyFrame = frame
         muscleMesh = mesh
         val geometry = mesh.slot()
-        sceneFrame = CharacterSceneFrame(
+        val sectionFrame = CharacterSceneFrame(
             anatomy = frame,
             morph = morphWeights ?: MorphWeightSet(0),
             geometry = geometry,
             selection = layers.selection
         )
+        sceneFrame = sectionFrame
         // The GPU layer is built here, where the engine and the asset both exist and the buffers can be
         // sized from the definition once instead of per frame.
         val tubes = TubeMesh(
@@ -303,14 +303,14 @@ class CharacterSession(
         )
         tubeMesh = tubes
         tubeError = tubes.prepare()
-        prepareMuscleLayer(anatomy, frame)
+        prepareMuscleLayer(frame, sectionFrame.partition)
     }
 
     /**
      * Loads the helper-bound muscle asset and the skinner that drives it. A failure is reported and
      * the body still draws: the layer is an overlay, and its absence is not a character failure.
      */
-    private fun prepareMuscleLayer(anatomy: AnatomyDefinition, frame: AnatomyFrame) {
+    private fun prepareMuscleLayer(frame: AnatomyFrame, partition: MuscleSectionPartition) {
         try {
             val binds = HelperBinds.read(
                 context.assets.open(HelperBinds.ASSET_PATH).bufferedReader().use { it.readText() }
@@ -322,12 +322,10 @@ class CharacterSession(
                 binds = binds,
                 heads = frame.heads,
                 unitsPerMetre = unitsPerMetre,
-                pointCapacity = anatomy.sampling.maxPointsPerHead
+                pointCapacity = frame.pointCapacity
             )
-            layerByInstance = Array(frame.instanceCount) { index ->
-                anatomy.muscle(frame.instances[index].muscleId)?.layer ?: MuscleLayer.SUPERFICIAL
-            }
-            val stage = MuscleLayerStage(engine, scene, materialProvider, skinner, frame.instances)
+            // The renderer is handed the section keys and an index, never a muscle or a side.
+            val stage = MuscleLayerStage(engine, scene, materialProvider, skinner, partition.keys)
             muscleError = stage.prepare(bytes)
             muscleStage = stage
         } catch (error: Throwable) {
@@ -500,6 +498,9 @@ class CharacterSession(
         choreographer.removeFrameCallback(frameCallback)
     }
 
+    /** The authored layer's instances in solve order; empty until the anatomy is built. */
+    val muscleInstances: List<MuscleInstanceId> get() = sceneFrame?.partition?.instances.orEmpty()
+
     fun destroy() {
         if (destroyed) return
         destroyed = true
@@ -572,6 +573,8 @@ class CharacterSession(
             muscleAssetDrawn = muscleStage?.visibleCount ?: 0,
             muscleAssetUploads = muscleStage?.skinUploads ?: 0,
             muscleAssetError = muscleError,
+            muscleAssetSelected = muscleStage?.selected ?: MuscleSectionState.NO_SECTION,
+            muscleHighlightError = muscleStage?.highlightError,
             frameStages = stageTimings.readings()
         ).also { lastDiagnostics = it }
     }
@@ -648,23 +651,26 @@ class CharacterSession(
     }
 
     /**
-     * Uploads the skinned layer's palette and hides or shows each instance. The solved frame is read
-     * here and never written: the skinner owns the matrices, the anatomy owns the paths.
+     * Uploads the skinned layer's palette and pushes this frame's per-section decisions. The solved
+     * frame is read here and never written: the skinner owns the matrices, the anatomy owns the paths.
      */
     private fun uploadMuscleLayer(selection: MuscleSelection) {
         val stage = muscleStage ?: return
         val frame = anatomyFrame
-        if (frame == null || !selection.showsMeshes || !musclesSolved) {
+        val scene = sceneFrame
+        if (frame == null || scene == null || !selection.showsMeshes || !musclesSolved) {
             stage.hideAll()
             return
         }
         val start = System.nanoTime()
         if (!stage.skin(frame, boneMatrices)) return
-        for (index in 0 until frame.instanceCount) {
-            val instance = frame.instances[index]
-            val layer = layerByInstance[index]
-            stage.setVisible(index, selection.showsMesh(instance, layer))
+        val partition = scene.partition
+        for (section in 0 until partition.size) {
+            // A head the solve refused leaves its instance hidden rather than drawing its bind pose
+            // over the body; the mask returns on the frame that head solves again.
+            stage.setShown(section, selection.showsSection(partition, section, frame.renderable))
         }
+        stage.setSelected(selection.selected?.let(partition::indexOf) ?: MuscleSectionState.NO_SECTION)
         stageTimings.record(FrameStage.MUSCLE_SKIN, System.nanoTime() - start)
     }
 

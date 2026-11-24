@@ -4,6 +4,7 @@ import android.content.Context
 import android.view.TextureView
 import android.view.View
 import androidx.compose.foundation.background
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -11,6 +12,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Text
@@ -209,6 +211,36 @@ private fun MuscleDebugOverlay(session: CharacterSession, modifier: Modifier = M
                 )
             }
         }
+        val instances = session.muscleInstances
+        if (selection.showsMeshes && instances.isNotEmpty()) {
+            androidx.compose.foundation.layout.Row(
+                modifier = Modifier.horizontalScroll(rememberScrollState()),
+                horizontalArrangement = Arrangement.spacedBy(4.dp)
+            ) {
+                instances.forEachIndexed { section, instance ->
+                    val hidden = instance in selection.hidden
+                    val picked = instance == selection.selected
+                    FilterChip(
+                        selected = picked,
+                        // One control, three states: select, then hide, then back to plain.
+                        onClick = {
+                            when {
+                                picked -> controller.setInstanceVisible(instance, false)
+                                hidden -> controller.setInstanceVisible(instance, true)
+                                else -> controller.selectInstance(instance)
+                            }
+                            selection = controller.selection
+                        },
+                        label = {
+                            Text(
+                                text = "$section ${instance.muscleId}·${instance.side.name}",
+                                fontSize = 10.sp
+                            )
+                        }
+                    )
+                }
+            }
+        }
         SelectionContainer {
             Text(
                 text = describeMuscles(diagnostics),
@@ -246,8 +278,14 @@ private fun describeMuscles(diagnostics: CharacterDiagnostics): String = buildSt
         append("\nmesh ").append(diagnostics.muscleAssetDrawn).append('/')
         append(diagnostics.muscleAssetSections).append(" sections · ")
         append(diagnostics.muscleAssetUploads).append(" palette uploads")
+        if (diagnostics.muscleAssetSelected >= 0) {
+            append(" · selected ").append(diagnostics.muscleAssetSelected)
+        }
+        val undrawn = diagnostics.muscleAssetSections - diagnostics.muscleAssetDrawn
+        if (undrawn > 0) append(" · not drawn ").append(undrawn)
     }
     diagnostics.muscleAssetError?.let { append("\nmesh: ").append(it) }
+    diagnostics.muscleHighlightError?.let { append("\nhighlight: ").append(it) }
     if (diagnostics.muscleAttributes.isNotBlank()) {
         append("\nattrs ").append(diagnostics.muscleAttributes)
         if (diagnostics.muscleMaterialCandidate >= 0) {
