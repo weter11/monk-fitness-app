@@ -7,6 +7,7 @@ import com.monkfitness.app.character.X1Bind
 import org.json.JSONArray
 import org.json.JSONObject
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertThrows
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.io.File
@@ -112,7 +113,7 @@ class HelperBindTest {
     }
 
     @Test
-    fun thePaletteIsTheWritersOwnCount() {
+    fun thePaletteIsTheWritersOwnCountAndTheGateRefusesOneOver() {
         val manifest = manifest()
         val skin = manifest.getInt("skinJoints")
         val helpers = manifest.getInt("helperCount")
@@ -122,6 +123,29 @@ class HelperBindTest {
             manifest.getInt("palette"),
             HelperBindManifest.requireWithinPalette(skin, helpers)
         )
+
+        // The budget exactly is bindable and one joint over is not, so an off-by-one gate cannot ship.
+        val budget = HelperBindManifest.PALETTE_LIMIT
+        assertEquals(budget, HelperBindManifest.requireWithinPalette(skin, budget - skin))
+        assertThrows(IllegalArgumentException::class.java) {
+            HelperBindManifest.requireWithinPalette(skin, budget - skin + 1)
+        }
+    }
+
+    @Test
+    fun aNonFiniteRestLengthIsRefusedBeforeItReachesTheJson() {
+        for (bad in doubleArrayOf(Double.POSITIVE_INFINITY, Double.NEGATIVE_INFINITY, Double.NaN)) {
+            assertThrows("$bad passes a bare `> 0` rest length", IllegalArgumentException::class.java) {
+                HelperBindManifest.requireRestLength("rectus_abdominis_A_0", bad)
+            }
+            assertThrows("$bad would be written as JSON no reader accepts", IllegalArgumentException::class.java) {
+                HelperBindManifest.number(bad)
+            }
+        }
+        val zero = assertThrows(IllegalArgumentException::class.java) {
+            HelperBindManifest.requireRestLength("rectus_abdominis_A_0", 0.0)
+        }
+        assertTrue("a zero-length head must be refused, not sampled: ${zero.message}", zero.message?.contains("zero-length") == true)
     }
 
     private fun restFrame(): AnatomyFrame {
