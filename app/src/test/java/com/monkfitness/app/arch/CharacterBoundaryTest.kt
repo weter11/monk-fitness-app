@@ -17,6 +17,45 @@ class CharacterBoundaryTest {
         File("src/main/java/com/monkfitness/app/poses")
     )
 
+    private val characterRoot = File("src/main/java/com/monkfitness/app/character")
+
+    /**
+     * The other half of the dependency rule: the presenter consumes the frame the engine published.
+     * A second solver here would share root authority with the engine, and editing a carrier after
+     * the pipeline returned it would publish a reading nobody validated.
+     */
+    @Test
+    fun theCharacterPresenterNeverDrivesAnEngineStageOrEditsAPose() {
+        val forbidden = listOf(
+            "ConstraintSolver" to "constraint solving owns the root; a second caller splits it",
+            "IkStage" to "IK is an engine stage, not a presenter concern",
+            "SkeletonPoseFinalizer" to "finalization publishes the frame; the presenter must not republish it",
+            "bakeIkLimb" to "limb authoring belongs to the pose, not the presenter",
+            ".setJoint(" to "the presenter builds a carrier through its constructor, never edits one",
+            ".setJointRotation(" to "the presenter builds a carrier through its constructor, never edits one",
+            ".copyFrom(" to "copying one pose over another is pose mutation"
+        )
+        val offenders = characterRoot.walkTopDown()
+            .filter { it.isFile && it.extension == "kt" }
+            .flatMap { file ->
+                file.readLines().withIndex().flatMap { (index, line) ->
+                    val trimmed = line.trimStart()
+                    if (trimmed.startsWith("//") || trimmed.startsWith("*") || trimmed.startsWith("/*")) {
+                        return@flatMap emptyList()
+                    }
+                    val hit = forbidden.firstOrNull { (token, _) -> line.contains(token) }
+                    if (hit == null) emptyList()
+                    else listOf("${file.name}:${index + 1}: ${line.trim()} — ${hit.second}")
+                }
+            }
+            .toList()
+
+        assertTrue(
+            "character/ must consume the engine's frame, not drive or edit it:\n" + offenders.joinToString("\n"),
+            offenders.isEmpty()
+        )
+    }
+
     @Test
     fun theMotionEngineDoesNotReferenceFilamentOrTheCharacterPresenter() {
         val forbidden = listOf("filament", "com.monkfitness.app.character")
