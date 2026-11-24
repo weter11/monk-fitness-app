@@ -18,6 +18,7 @@ sourceSets {
             "com/monkfitness/app/poses/**",
             "com/monkfitness/app/character/X1Bind.kt",
             "com/monkfitness/app/character/BoneMap.kt",
+            "com/monkfitness/app/character/HelperBindManifest.kt",
             "com/monkfitness/app/character/Mat4.kt",
             "com/monkfitness/app/character/MonkJointResolver.kt",
             "com/monkfitness/app/character/GltfRig.kt",

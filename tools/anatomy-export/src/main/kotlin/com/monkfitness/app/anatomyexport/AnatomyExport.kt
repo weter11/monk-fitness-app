@@ -11,6 +11,7 @@ import com.monkfitness.app.animation.SkeletonDefinition
 import com.monkfitness.app.animation.SkeletonPose
 import com.monkfitness.app.animation.Vector3
 import com.monkfitness.app.character.GltfRig
+import com.monkfitness.app.character.HelperBindManifest
 import com.monkfitness.app.character.X1Bind
 import java.io.File
 import kotlin.math.abs
@@ -18,7 +19,9 @@ import kotlin.math.sqrt
 
 /**
  * Emits each muscle head's four helper binds from the solver's own rest path at the X1 A-pose, so an
- * exported layer cannot bind to rest geometry the runtime does not report.
+ * exported layer cannot bind to rest geometry the runtime does not report. Positions and bases leave in
+ * the rig's asset space — `B⁻¹ · p / unitsPerMetre`, the retargeter's own conversion — because a
+ * helper consumed next to the 34-joint GLB skeleton has to sit in that skeleton's metres and axes.
  */
 object AnatomyExport {
 
@@ -52,20 +55,16 @@ object AnatomyExport {
             solver.close()
         }
 
-        val helpers = place(definition, frame)
+        val helpers = place(definition, frame, unitsPerMetre)
         val rig = GltfRig.parse(rigFile.readBytes())
-        val palette = rig.jointNodes.size + helpers.size
-        require(palette <= PALETTE_LIMIT) {
-            "the layer needs $palette joints (${rig.jointNodes.size} body + ${helpers.size} helpers), " +
-                "over the $PALETTE_LIMIT the renderable accepts"
-        }
+        val palette = HelperBindManifest.requireWithinPalette(rig.jointNodes.size, helpers.size)
 
         outFile.parentFile?.mkdirs()
-        outFile.writeText(manifest(definition, rig.jointNodes.size, helpers))
-        println("wrote ${outFile.path}: ${helpers.size} helpers, palette $palette/$PALETTE_LIMIT")
+        outFile.writeText(manifest(definition, rig.jointNodes.size, palette, helpers))
+        println("wrote ${outFile.path}: ${helpers.size} helpers, palette $palette/${HelperBindManifest.PALETTE_LIMIT}")
     }
 
-    private fun place(definition: AnatomyDefinition, frame: AnatomyFrame): List<Helper> {
+    private fun place(definition: AnatomyDefinition, frame: AnatomyFrame, unitsPerMetre: Float): List<Helper> {
         val helpers = ArrayList<Helper>(definition.headCount * STATIONS.size)
         for (slot in 0 until frame.headCount) {
             val id = frame.heads[slot]
@@ -76,21 +75,41 @@ object AnatomyExport {
             val cumulative = DoubleArray(count)
             for (index in 1 until count) cumulative[index] = cumulative[index - 1] + distance(frame, slot, index - 1, index)
             val total = cumulative[count - 1]
-            require(total > 0.0) { "head $id has a zero-length rest path" }
+            HelperBindManifest.requireRestLength(id.toString(), total)
 
             for ((stationIndex, station) in STATIONS.withIndex()) {
                 val (point, tangent) = sample(frame, slot, station, cumulative, total)
-                val basis = basis(tangent)
                 helpers += Helper(
                     name = "${id.muscleId}_${id.side.name}_${id.headIndex}_$stationIndex",
                     id = id,
                     station = station,
-                    point = point,
-                    basis = basis
+                    point = toAsset(point, unitsPerMetre),
+                    basis = toAssetBasis(basis(tangent))
                 )
             }
         }
         return helpers
+    }
+
+    /** The solver's engine units → the rig's asset metres, `B⁻¹ · p / unitsPerMetre`. */
+    private fun toAsset(engine: DoubleArray, unitsPerMetre: Float): DoubleArray {
+        val out = FloatArray(3)
+        X1Bind.toAssetInto(Vector3(engine[0].toFloat(), engine[1].toFloat(), engine[2].toFloat()), unitsPerMetre, out)
+        return doubleArrayOf(out[0].toDouble(), out[1].toDouble(), out[2].toDouble())
+    }
+
+    /** An axis is a direction, so it takes `B⁻¹` with no scale: a rotation stays orthonormal. */
+    private fun toAssetBasis(engineAxes: DoubleArray): DoubleArray {
+        val out = DoubleArray(engineAxes.size)
+        for (row in 0 until 3) {
+            val axis = X1Bind.toAssetDirection(
+                Vector3(engineAxes[row * 3].toFloat(), engineAxes[row * 3 + 1].toFloat(), engineAxes[row * 3 + 2].toFloat())
+            )
+            out[row * 3] = axis.x.toDouble()
+            out[row * 3 + 1] = axis.y.toDouble()
+            out[row * 3 + 2] = axis.z.toDouble()
+        }
+        return out
     }
 
     /** Interpolates the polyline at [station] by arc length and returns the point and its segment direction. */
@@ -133,7 +152,8 @@ object AnatomyExport {
 
     /**
      * `+Y` along the tangent, `+Z` perpendicular to it and the world up, `+X` completing an
-     * orthonormal triad: the helper carries rotation only, so its scale is exactly 1.
+     * orthonormal triad: the helper carries rotation only, so its scale is exactly 1. The axes are
+     * engine-space here and are re-expressed in the rig's axes by [toAssetBasis].
      */
     private fun basis(tangent: DoubleArray): DoubleArray {
         val up = if (abs(tangent[1]) < 0.9) doubleArrayOf(0.0, 1.0, 0.0) else doubleArrayOf(1.0, 0.0, 0.0)
@@ -145,6 +165,7 @@ object AnatomyExport {
     private fun manifest(
         definition: AnatomyDefinition,
         skinJoints: Int,
+        palette: Int,
         helpers: List<Helper>
     ): String {
         val text = StringBuilder(helpers.size * 220)
@@ -152,13 +173,13 @@ object AnatomyExport {
         text.append("  \"schema\": 1,\n")
         text.append("  \"anatomyId\": \"${definition.id}\",\n")
         text.append("  \"anatomyVersion\": ${definition.version},\n")
-        text.append("  \"units\": \"engine\",\n")
+        text.append("  \"units\": \"${HelperBindManifest.UNITS}\",\n")
         text.append("  \"stations\": [${STATIONS.joinToString(", ")}],\n")
         text.append("  \"skinJoints\": $skinJoints,\n")
         text.append("  \"helpersPerHead\": ${STATIONS.size},\n")
         text.append("  \"helperCount\": ${helpers.size},\n")
-        text.append("  \"palette\": ${skinJoints + helpers.size},\n")
-        text.append("  \"paletteLimit\": $PALETTE_LIMIT,\n")
+        text.append("  \"palette\": $palette,\n")
+        text.append("  \"paletteLimit\": ${HelperBindManifest.PALETTE_LIMIT},\n")
         text.append("  \"helpers\": [\n")
         for ((index, helper) in helpers.withIndex()) {
             text.append("    {")
@@ -167,7 +188,12 @@ object AnatomyExport {
             text.append("\"side\": \"${helper.id.side.name}\", ")
             text.append("\"headIndex\": ${helper.id.headIndex}, ")
             text.append("\"station\": ${helper.station}, ")
-            text.append("\"position\": [${number(helper.point[0])}, ${number(helper.point[1])}, ${number(helper.point[2])}], ")
+            text.append("\"position\": [")
+            for (component in 0..2) {
+                if (component > 0) text.append(", ")
+                text.append(number(helper.point[component]))
+            }
+            text.append("], ")
             text.append("\"basis\": [")
             for (row in 0 until 3) {
                 if (row > 0) text.append(", ")
@@ -181,8 +207,7 @@ object AnatomyExport {
         return text.toString()
     }
 
-    private fun number(value: Double): String =
-        if (value == 0.0) "0.0" else java.lang.Double.toString(value)
+    private fun number(value: Double): String = HelperBindManifest.number(value)
 
     private fun distance(frame: AnatomyFrame, slot: Int, from: Int, to: Int): Double {
         var sum = 0.0
@@ -212,9 +237,7 @@ object AnatomyExport {
         return if (index >= 0 && index + 1 < args.size) args[index + 1] else null
     }
 
-    private const val PALETTE_LIMIT = 255
-
-    /** One helper's bind frame, in engine units: position plus a column-major 3x3 rotation. */
+    /** One helper's bind frame in the rig's asset space: a position in metres and a rotation-only basis. */
     private class Helper(
         val name: String,
         val id: MuscleHeadId,
