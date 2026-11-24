@@ -33,7 +33,7 @@ object AnatomyExport {
         val root = File(option(args, "--root") ?: "../..")
         val anatomyFile = File(root, option(args, "--anatomy") ?: "app/src/main/assets/anatomy/anatomy_v1.json")
         val rigFile = File(root, option(args, "--rig") ?: "app/src/main/assets/characters/humanoid_v2.glb")
-        val outFile = File(root, option(args, "--out") ?: "app/src/test/resources/anatomy/helpers_v1.json")
+        val outFile = File(root, option(args, "--out") ?: "app/src/main/assets/anatomy/helpers_v1.json")
 
         val definition = AnatomyDefinitionLoader.load(anatomyFile.readText())
         val skeleton = SkeletonDefinition.DEFAULT_ADULT

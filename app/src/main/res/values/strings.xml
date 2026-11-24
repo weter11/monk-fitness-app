@@ -1265,4 +1265,5 @@
     <string name="library_counts_foods">Foods</string>
     <string name="library_counts_dishes">Dishes</string>
     <string name="character_debug_layer_tubes">tubes</string>
+    <string name="character_debug_layer_meshes">meshes</string>
 </resources>

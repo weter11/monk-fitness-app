@@ -11,16 +11,18 @@ not report.
 
 ## Run
 
-From the repository root:
+From the repository root, in this order — the mesh binds to the manifest, so the manifest is written
+first:
 
 ```bash
-./gradlew :tools:anatomy-export:run
+./gradlew :tools:anatomy-export:exportHelpers     # app/src/main/assets/anatomy/helpers_v1.json
+./gradlew :tools:anatomy-export:exportMuscles     # app/src/main/assets/characters/muscles_sup.glb
 ```
 
 or with explicit paths:
 
 ```bash
-./gradlew :tools:anatomy-export:run --args="--root ../.. --out app/src/test/resources/anatomy/helpers_v1.json"
+./gradlew :tools:anatomy-export:run --args="--root ../.. --out app/src/main/assets/anatomy/helpers_v1.json"
 ```
 
 | Option | Default |
@@ -28,11 +30,14 @@ or with explicit paths:
 | `--root` | `../..` (repository root) |
 | `--anatomy` | `<root>/app/src/main/assets/anatomy/anatomy_v1.json` |
 | `--rig` | `<root>/app/src/main/assets/characters/humanoid_v2.glb` |
-| `--out` | `<root>/app/src/test/resources/anatomy/helpers_v1.json` |
+| `--out` | `<root>/app/src/main/assets/anatomy/helpers_v1.json` |
+
+`MuscleMeshExport` takes `--root`, `--anatomy`, `--rig`, `--helpers` and `--out`
+(`<root>/app/src/main/assets/characters/muscles_sup.glb`).
 
 ## Output
 
-`app/src/test/resources/anatomy/helpers_v1.json` is checked in, because it is the contract
+`app/src/main/assets/anatomy/helpers_v1.json` is checked in, because it is the contract
 `HelperBindTest` validates: every helper must sit on a fresh rest solve's path within `1e-3` m,
 carry a rotation-only (unit, orthogonal, right-handed) basis whose `+Y` follows the path, land
 inside `humanoid_v2.glb`'s own body envelope, and keep the skin's palette (`rig joints + helpers`)
@@ -49,6 +54,23 @@ silently binding off the body.
 The tool refuses to write a manifest it cannot place: a head the rest stance refused has no bind, a
 non-finite rest length is refused before it can be serialised as invalid JSON, and a palette over
 255 fails before the file is written.
+
+## The muscle asset
+
+`muscles_sup.glb` is one skinned section per muscle and side — sixteen meshes named
+`<muscleId>_<side>`, one primitive each — over a 106-joint skin: the rig's own 34 joints, whose
+inverse binds are copied from `humanoid_v2.glb`, followed by the 72 helpers in manifest order. A
+vertex carries at most two influences; every ring between two stations is weighted between the two
+helpers that own that arc fraction.
+
+It is a deterministic stand-in, not art. The rings sit on the solver's rest path and their frames are
+slerped between the two helpers' bind frames, which is the same blend linear-blend skinning applies,
+so the surface is where the skin will put it. `HelperBindTest` gates it: inverse binds equal the
+manifest within `1e-3 m`, uniform scale 1 on every helper, at most four influences per vertex,
+finite unit normals and tangents, and no triangle facing into the surface. The one exception is
+gluteus maximus, whose rest path doubles back through 125° between two stations: a tube of the
+muscle's own radius cannot follow that without folding, so its fold is held to a measured area and
+disappears when authored geometry replaces this mesh.
 
 ## Why a JVM module
 

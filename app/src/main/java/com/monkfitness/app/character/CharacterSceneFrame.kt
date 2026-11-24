@@ -230,14 +230,20 @@ data class MuscleSelection(
     val layers: Set<MuscleLayer> = MuscleLayer.entries.toSet(),
     val hidden: Set<MuscleInstanceId> = emptySet(),
     /** The procedural tubes are a diagnostic view, not part of the shipped character. */
-    val showsTubes: Boolean = false
+    val showsTubes: Boolean = false,
+    /** The helper-bound muscle asset, which is the layer Stage 3 replaces the tubes with. */
+    val showsMeshes: Boolean = false
 ) {
 
     fun shows(instance: MuscleInstanceId, layer: MuscleLayer): Boolean =
         showsTubes && layer in layers && instance !in hidden
 
-    /** True when at least one instance can draw: the tubes are on and some layer is selected. */
-    val showsAnyLayer: Boolean get() = showsTubes && layers.isNotEmpty()
+    /** Whether the skinned asset draws [instance]; the tubes have their own predicate. */
+    fun showsMesh(instance: MuscleInstanceId, layer: MuscleLayer): Boolean =
+        showsMeshes && layer in layers && instance !in hidden
+
+    /** True when at least one instance can draw: either view is on and some layer is selected. */
+    val showsAnyLayer: Boolean get() = (showsTubes || showsMeshes) && layers.isNotEmpty()
 
     fun withLayer(layer: MuscleLayer, on: Boolean): MuscleSelection =
         copy(layers = if (on) layers + layer else layers - layer)
@@ -289,6 +295,14 @@ class CharacterLayerController(
         return on
     }
 
+    /** Switches the helper-bound muscle asset, the layer the tubes are the diagnostic stand-in for. */
+    fun toggleMeshes(on: Boolean = !current.showsMeshes): Boolean {
+        if (on == current.showsMeshes) return on
+        current = current.copy(showsMeshes = on)
+        publish()
+        return on
+    }
+
     /** Hides or shows one instance without touching its layer. */
     fun setInstanceVisible(instance: MuscleInstanceId, visible: Boolean) {
         val next = current.withInstance(instance, visible)
@@ -299,7 +313,7 @@ class CharacterLayerController(
 
     /** True when [layer]'s instances are shown at all this frame. */
     fun showsLayer(layer: MuscleLayer): Boolean =
-        layer(idOf(layer))?.visible == true && current.showsTubes
+        layer(idOf(layer))?.visible == true && (current.showsTubes || current.showsMeshes)
 
     private fun publish() {
         for (layer in layers) {

@@ -43,6 +43,14 @@ data class CharacterDiagnostics(
     val anatomyPassCounts: List<Int> = emptyList(),
     /** The route search's pass budget, so a histogram row can be read against it. */
     val anatomyPassCap: Int = 0,
+    /** Sections the skinned muscle asset carries a renderable for; zero until it loads. */
+    val muscleAssetSections: Int = 0,
+    /** Instances the skinned asset drew on the last frame. */
+    val muscleAssetDrawn: Int = 0,
+    /** Palette uploads the skinned layer has made; frozen while the layer is off. */
+    val muscleAssetUploads: Long = 0,
+    /** Why the skinned muscle asset refused to load, or null when it loaded. */
+    val muscleAssetError: String? = null,
     /** Per-stage p50/p95 over the same window as [frameTimeP95Ms]; empty until a frame ran. */
     val frameStages: List<FrameStageReading> = emptyList()
 )

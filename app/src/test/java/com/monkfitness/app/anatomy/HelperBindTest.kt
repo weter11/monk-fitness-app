@@ -3,6 +3,7 @@ package com.monkfitness.app.anatomy
 import com.monkfitness.app.animation.SkeletonDefinition
 import com.monkfitness.app.animation.Vector3
 import com.monkfitness.app.character.HelperBindManifest
+import com.monkfitness.app.character.HelperBinds
 import com.monkfitness.app.character.X1Bind
 import org.json.JSONArray
 import org.json.JSONObject
@@ -110,6 +111,230 @@ class HelperBindTest {
             )
         }
         println("helper y bounds = $lowest..$highest m, inside the rig's envelope")
+    }
+
+    @Test
+    fun theMuscleAssetCarriesTheWholePaletteAndOneSectionPerInstance() {
+        val asset = MuscleAsset(File(MUSCLES))
+        val manifest = manifest()
+        assertEquals(
+            "the layer's palette is the manifest's, not a second count",
+            manifest.getInt("palette"),
+            asset.joints.size
+        )
+        assertEquals("one inverse bind per palette joint", asset.joints.size, asset.inverseBinds.size)
+
+        val expected = ArrayList<String>()
+        for (muscle in definition.muscles) {
+            for (side in MuscleSide.entries) expected += "${muscle.id}_${side.name}"
+        }
+        assertEquals("one section per muscle instance", expected, asset.sectionNames.toList())
+        val skinJoints = manifest.getInt("skinJoints")
+        assertEquals(
+            "the rig's own range is the first $skinJoints joints",
+            skinJoints,
+            asset.joints.take(skinJoints).size
+        )
+    }
+
+    @Test
+    fun everyMuscleSectionBindsItsHelpersWhereTheManifestSays() {
+        val asset = MuscleAsset(File(MUSCLES))
+        val skinJoints = manifest().getInt("skinJoints")
+        val helpers = manifest().getJSONArray("helpers")
+        var worstPosition = 0.0
+        var worstAxis = 0.0
+        for (index in 0 until helpers.length()) {
+            val helper = helpers.getJSONObject(index)
+            val matrix = asset.inverseBinds[skinJoints + index]
+            val bind = asset.bindOf(matrix)
+            val expectedPosition = helper.getJSONArray("position")
+            val residual = sqrt(
+                (0 until 3).sumOf { component ->
+                    val delta = bind[component] - expectedPosition.getDouble(component)
+                    delta * delta
+                }
+            )
+            worstPosition = maxOf(worstPosition, residual)
+            assertTrue(
+                "${helper.getString("name")} binds $residual m off the manifest",
+                residual <= TOLERANCE_METRES
+            )
+            val basis = helper.getJSONArray("basis")
+            for (row in 0 until 3) {
+                for (column in 0 until 3) {
+                    val expected = basis.getJSONArray(row).getDouble(column)
+                    // The asset's bind rotation is the manifest basis' transpose, by construction.
+                    val actual = matrix[column * 4 + row]
+                    worstAxis = maxOf(worstAxis, abs(actual - expected))
+                }
+            }
+        }
+        assertTrue("a helper's bind rotation is $worstAxis off the manifest", worstAxis <= TOLERANCE_METRES)
+        println("worst helper bind residual in muscles_sup.glb = $worstPosition m")
+    }
+
+    @Test
+    fun everyMuscleVertexCarriesAtMostFourFiniteInfluences() {
+        val asset = MuscleAsset(File(MUSCLES))
+        var vertices = 0
+        var worstWeight = 0.0
+        val skinJoints = manifest().getInt("skinJoints")
+        for (primitive in asset.primitives) {
+            for (vertex in primitive.joints.indices) {
+                vertices++
+                val weights = primitive.weights[vertex]
+                var influences = 0
+                for (slot in 0 until 4) {
+                    val joint = primitive.joints[vertex][slot]
+                    assertTrue("vertex $vertex names joint $joint", joint in asset.joints.indices)
+                    if (weights[slot] == 0f) continue
+                    influences++
+                    // A vertex weighted to the body would not follow the path, which is the whole layer.
+                    assertTrue("vertex $vertex is weighted to body joint $joint", joint >= skinJoints)
+                }
+                assertTrue("a vertex carries $influences influences, over the 4 a JOINTS_0 holds", influences <= 4)
+                worstWeight = maxOf(worstWeight, abs(weights.sumOf { it.toDouble() } - 1.0))
+                for (component in 0 until 3) {
+                    assertTrue("positions must be finite", primitive.positions[vertex][component].isFinite())
+                    assertTrue("normals must be finite", primitive.normals[vertex][component].isFinite())
+                    assertEquals(
+                        "a normal is a unit vector",
+                        1.0,
+                        sqrt(primitive.normals[vertex].sumOf { (it * it).toDouble() }),
+                        1e-4
+                    )
+                }
+                for (component in 0 until 4) {
+                    assertTrue("tangents must be finite", primitive.tangents[vertex][component].isFinite())
+                }
+            }
+        }
+        assertEquals(
+            "13 ring vertices of 8 plus two cap centres for each of the ${definition.headCount} heads",
+            definition.headCount * (13 * 8 + 2),
+            vertices
+        )
+        assertTrue("a vertex's weights must sum to 1, worst $worstWeight", worstWeight <= 1e-4)
+    }
+
+    @Test
+    fun everyHelperInTheMuscleAssetScalesByExactlyOne() {
+        val asset = MuscleAsset(File(MUSCLES))
+        val skinJoints = manifest().getInt("skinJoints")
+        for (index in skinJoints until asset.inverseBinds.size) {
+            val matrix = asset.inverseBinds[index]
+            for (column in 0 until 3) {
+                val length = sqrt(
+                    (0 until 3).sumOf { row -> (matrix[column * 4 + row] * matrix[column * 4 + row]).toDouble() }
+                )
+                // §7.6: path following only. A helper that carried scale would stretch its muscle.
+                assertEquals("helper ${index - skinJoints} column $column", 1.0, length, 1e-5)
+            }
+        }
+    }
+
+    @Test
+    fun theMuscleSurfaceFacesTheWayItsNormalsClaim() {
+        val asset = MuscleAsset(File(MUSCLES))
+        val binds = HelperBinds.read(File(MANIFEST).readText())
+        val hairpins = hairpinIntervals()
+        val intervals = hairpins.bySection.mapValues { (section, ranges) ->
+            val helperOffset = binds.binds.indexOfFirst { "${it.head.muscleId}_${it.head.side.name}" == section }
+            require(helperOffset >= 0) { "$section has no helpers" }
+            ranges.map { range ->
+                val start = hairpins.stationIndexOf(range.start)
+                val end = hairpins.stationIndexOf(range.endInclusive)
+                (helperOffset + start..helperOffset + end).toSet()
+            }
+        }
+        var triangles = 0
+        var folded = 0
+        var foldedArea = 0.0
+        for (primitive in asset.primitives) {
+            var triangle = 0
+            while (triangle < primitive.indices.size) {
+                val a = primitive.indices[triangle]
+                val b = primitive.indices[triangle + 1]
+                val c = primitive.indices[triangle + 2]
+                val normal = cross(primitive.positions[a], primitive.positions[b], primitive.positions[c])
+                val area = 0.5 * sqrt(normal.sumOf { (it * it).toDouble() })
+                val facing = normal.indices.sumOf { component ->
+                    (normal[component] * (primitive.normals[a][component] +
+                        primitive.normals[b][component] + primitive.normals[c][component]) / 3.0).toDouble()
+                }
+                triangles++
+                if (facing < 0.0) {
+                    folded++
+                    foldedArea += area
+                    // A rest path that doubles back inside one ring step cannot carry a tube of the
+                    // muscle's own radius: only a vertex influenced by that interval may fold.
+                    val exempt = intervals[primitive.name].orEmpty().any { helpers ->
+                        influenced(primitive, a, helpers, binds.skinJoints) ||
+                            influenced(primitive, b, helpers, binds.skinJoints) ||
+                            influenced(primitive, c, helpers, binds.skinJoints)
+                    }
+                    assertTrue(
+                        "${primitive.name} folds a ${area} m2 triangle outside a hairpin station interval",
+                        exempt
+                    )
+                }
+                triangle += 3
+            }
+        }
+        assertTrue("the layer has no triangles", triangles > 0)
+        println("muscle surface: $triangles triangles, $folded folded in ${hairpins.bySection}, $foldedArea m2")
+        assertTrue(
+            "the folded area $foldedArea m2 is over the $FOLDED_AREA_SQUARE_METRES m2 a hairpin may cost",
+            foldedArea <= FOLDED_AREA_SQUARE_METRES
+        )
+    }
+
+    /** Whether at least one vertex in the triangle has an influence from a helper in [indices]. */
+    private fun influenced(
+        primitive: MuscleAsset.Primitive,
+        vertex: Int,
+        indices: Set<Int>,
+        skinJoints: Int
+    ): Boolean = primitive.joints[vertex].indices.any { slot ->
+        primitive.weights[vertex][slot] > 0f && primitive.joints[vertex][slot] - skinJoints in indices
+    }
+
+    private data class HairpinIntervals(
+        val bySection: Map<String, List<ClosedFloatingPointRange<Double>>>,
+        val stations: JSONArray
+    ) {
+        fun stationIndexOf(station: Double): Int =
+            (0 until stations.length()).first { stations.getDouble(it) == station }
+    }
+
+    /**
+     * The section and helper-station intervals whose rest path turns by more than a right angle — the
+     * only places a swept tube can fold. Read from the manifest's own basis, so the exemption is a
+     * property of the anatomy and not a list of names.
+     */
+    private fun hairpinIntervals(): HairpinIntervals {
+        val document = manifest()
+        val helpers = document.getJSONArray("helpers")
+        val groups = LinkedHashMap<String, MutableList<JSONObject>>()
+        for (index in 0 until helpers.length()) {
+            val helper = helpers.getJSONObject(index)
+            val key = helper.getString("muscleId") + "_" + helper.getString("side")
+            groups.getOrPut(key) { ArrayList() } += helper
+        }
+        val out = LinkedHashMap<String, MutableList<ClosedFloatingPointRange<Double>>>()
+        for ((key, list) in groups) {
+            for (index in 0 until list.size - 1) {
+                val first = list[index].getJSONArray("basis").getJSONArray(1)
+                val second = list[index + 1].getJSONArray("basis").getJSONArray(1)
+                val dot = (0 until 3).sumOf { component -> first.getDouble(component) * second.getDouble(component) }
+                if (Math.toDegrees(Math.acos(dot.coerceIn(-1.0, 1.0))) > HAIRPIN_DEGREES) {
+                    out.getOrPut(key) { ArrayList() } +=
+                        list[index].getDouble("station")..list[index + 1].getDouble("station")
+                }
+            }
+        }
+        return HairpinIntervals(out, document.getJSONArray("stations"))
     }
 
     @Test
@@ -271,15 +496,147 @@ class HelperBindTest {
             m[0][1] * (m[1][0] * m[2][2] - m[1][2] * m[2][0]) +
             m[0][2] * (m[1][0] * m[2][1] - m[1][1] * m[2][0])
 
-    private fun manifest(): JSONObject {
-        val stream = javaClass.getResourceAsStream("/anatomy/helpers_v1.json")
-            ?: error("the exported helper manifest is missing from test resources")
-        return stream.use { JSONObject(it.readBytes().toString(Charsets.UTF_8)) }
+    private fun manifest(): JSONObject = JSONObject(File(MANIFEST).readText())
+
+    /** `cross(b - a, c - a)`: twice the area normal of a triangle, in the winding order given. */
+    private fun cross(a: FloatArray, b: FloatArray, c: FloatArray): FloatArray = floatArrayOf(
+        (b[1] - a[1]) * (c[2] - a[2]) - (b[2] - a[2]) * (c[1] - a[1]),
+        (b[2] - a[2]) * (c[0] - a[0]) - (b[0] - a[0]) * (c[2] - a[2]),
+        (b[0] - a[0]) * (c[1] - a[1]) - (b[1] - a[1]) * (c[0] - a[0])
+    )
+
+    /**
+     * The skinned muscle asset read straight from its GLB chunks: joint order, inverse binds, and one
+     * primitive's attributes per section. Nothing here trusts the generator's own claims.
+     */
+    private class MuscleAsset(file: File) {
+
+        private val root: JSONObject
+        private val bin: ByteBuffer
+        private val accessors: JSONArray
+        private val views: JSONArray
+
+        val joints: List<Int>
+        val inverseBinds: List<FloatArray>
+        val primitives: List<Primitive>
+
+        init {
+            val buffer = ByteBuffer.wrap(file.readBytes()).order(ByteOrder.LITTLE_ENDIAN)
+            buffer.int // magic
+            buffer.int // version
+            buffer.int // total length
+            val jsonLength = buffer.int
+            buffer.int // chunk type: JSON
+            root = JSONObject(String(ByteArray(jsonLength).also { buffer.get(it) }, Charsets.UTF_8))
+            var binChunk = ByteBuffer.allocate(0)
+            while (buffer.remaining() >= 8) {
+                val length = buffer.int
+                val type = buffer.int
+                if (length < 0 || length > buffer.remaining()) break
+                val chunk = ByteArray(length).also { buffer.get(it) }
+                if (type == 0x004E4942) binChunk = ByteBuffer.wrap(chunk).order(ByteOrder.LITTLE_ENDIAN)
+            }
+            bin = binChunk
+            accessors = root.getJSONArray("accessors")
+            views = root.getJSONArray("bufferViews")
+            val skin = root.getJSONArray("skins").getJSONObject(0)
+            joints = skin.getJSONArray("joints").let { array -> (0 until array.length()).map { array.getInt(it) } }
+            inverseBinds = matrices(skin.getInt("inverseBindMatrices"))
+
+            val meshes = root.getJSONArray("meshes")
+            primitives = (0 until meshes.length()).map { index ->
+                val mesh = meshes.getJSONObject(index)
+                val attributes = mesh.getJSONArray("primitives").getJSONObject(0).getJSONObject("attributes")
+                Primitive(
+                    name = mesh.getString("name"),
+                    positions = vectors(attributes.getInt("POSITION"), 3),
+                    normals = vectors(attributes.getInt("NORMAL"), 3),
+                    tangents = vectors(attributes.getInt("TANGENT"), 4),
+                    joints = shorts(attributes.getInt("JOINTS_0"), 4),
+                    weights = vectors(attributes.getInt("WEIGHTS_0"), 4),
+                    indices = ints(mesh.getJSONArray("primitives").getJSONObject(0).getInt("indices"))
+                )
+            }
+        }
+
+        val sectionNames: List<String> get() = primitives.map { it.name }
+
+        /** A helper's bind position, recovered from its inverse bind rather than from the file's claims. */
+        fun bindOf(inverseBind: FloatArray): DoubleArray = doubleArrayOf(
+            -(inverseBind[0] * inverseBind[12] + inverseBind[1] * inverseBind[13] + inverseBind[2] * inverseBind[14]).toDouble(),
+            -(inverseBind[4] * inverseBind[12] + inverseBind[5] * inverseBind[13] + inverseBind[6] * inverseBind[14]).toDouble(),
+            -(inverseBind[8] * inverseBind[12] + inverseBind[9] * inverseBind[13] + inverseBind[10] * inverseBind[14]).toDouble()
+        )
+
+        private fun layout(accessorIndex: Int): Triple<Int, Int, Int> {
+            val accessor = accessors.getJSONObject(accessorIndex)
+            val view = views.getJSONObject(accessor.getInt("bufferView"))
+            val components = when (accessor.getString("type")) {
+                "SCALAR" -> 1
+                "VEC2" -> 2
+                "VEC3" -> 3
+                "VEC4" -> 4
+                "MAT4" -> 16
+                else -> error("unexpected accessor type")
+            }
+            val width = when (accessor.getInt("componentType")) {
+                5126 -> 4
+                5123 -> 2
+                5125 -> 4
+                else -> error("unexpected component type")
+            }
+            val base = view.optInt("byteOffset", 0) + accessor.optInt("byteOffset", 0)
+            return Triple(base, accessor.getInt("count"), components * width)
+        }
+
+        private fun matrices(accessorIndex: Int): List<FloatArray> {
+            val (base, count, stride) = layout(accessorIndex)
+            return (0 until count).map { index ->
+                FloatArray(16) { entry -> bin.getFloat(base + index * stride + entry * 4) }
+            }
+        }
+
+        private fun vectors(accessorIndex: Int, components: Int): List<FloatArray> {
+            val (base, count, stride) = layout(accessorIndex)
+            return (0 until count).map { index ->
+                FloatArray(components) { entry -> bin.getFloat(base + index * stride + entry * 4) }
+            }
+        }
+
+        private fun shorts(accessorIndex: Int, components: Int): List<IntArray> {
+            val (base, count, stride) = layout(accessorIndex)
+            return (0 until count).map { index ->
+                IntArray(components) { entry -> bin.getShort(base + index * stride + entry * 2).toInt() and 0xFFFF }
+            }
+        }
+
+        private fun ints(accessorIndex: Int): IntArray {
+            val (base, count, stride) = layout(accessorIndex)
+            return IntArray(count) { index -> bin.getInt(base + index * stride) }
+        }
+
+        class Primitive(
+            val name: String,
+            val positions: List<FloatArray>,
+            val normals: List<FloatArray>,
+            val tangents: List<FloatArray>,
+            val joints: List<IntArray>,
+            val weights: List<FloatArray>,
+            val indices: IntArray
+        )
     }
 
     private companion object {
         const val ASSET = "src/main/assets/anatomy/anatomy_v1.json"
+        const val MANIFEST = "src/main/assets/anatomy/helpers_v1.json"
+        const val MUSCLES = "src/main/assets/characters/muscles_sup.glb"
         const val RIG = "src/main/assets/characters/humanoid_v2.glb"
+
+        /** A turn this sharp between two helper stations folds any tube of the muscle's own radius. */
+        const val HAIRPIN_DEGREES = 90.0
+
+        /** Total folded area the stand-in's hairpin may cost: it disappears with the authored asset. */
+        const val FOLDED_AREA_SQUARE_METRES = 5e-5
         const val TOLERANCE_METRES = 1e-3
         const val STATIONS = 4
     }

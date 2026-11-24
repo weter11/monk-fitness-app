@@ -110,12 +110,17 @@ object X1Bind {
 
     /** A direction on the same axes as [toAsset], unscaled: camera bases are unit vectors already. */
     fun toAssetDirection(engine: Vector3): Vector3 {
+        val out = FloatArray(3)
+        toAssetDirectionInto(engine, out)
+        return Vector3(out[0], out[1], out[2])
+    }
+
+    /** [toAssetDirection] into a reusable buffer: the skinner converts three axes per helper per frame. */
+    fun toAssetDirectionInto(engine: Vector3, out: FloatArray) {
         val m = ENGINE_TO_ASSET
-        return Vector3(
-            m[0] * engine.x + m[3] * engine.y + m[6] * engine.z,
-            m[1] * engine.x + m[4] * engine.y + m[7] * engine.z,
-            m[2] * engine.x + m[5] * engine.y + m[8] * engine.z
-        )
+        out[0] = m[0] * engine.x + m[3] * engine.y + m[6] * engine.z
+        out[1] = m[1] * engine.x + m[4] * engine.y + m[7] * engine.z
+        out[2] = m[2] * engine.x + m[5] * engine.y + m[8] * engine.z
     }
 
     /** Asset metres → engine units: `unitsPerMetre · B · p_asset`, the inverse of [toAsset]. */
