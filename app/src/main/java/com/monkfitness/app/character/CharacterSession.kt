@@ -102,6 +102,7 @@ class CharacterSession(
     private var muscleHeadsRefused = 0
     private var muscleInstancesDrawn = 0
     private var musclesSolved = false
+    private var tubeSlotCleared = false
 
     private var destroyed = false
     private var lastFrameNanos = 0L
@@ -376,17 +377,31 @@ class CharacterSession(
         muscleInstancesDrawn = frame.renderable.count { it }
 
         val rebuild = scene.needsRebuild(layers.revision)
-        val writeStart = System.nanoTime()
-        muscleTriangles = mesh.write(frame, scene.geometry, scene.selection)
-        tubeMesh?.let { tubes ->
-            tubes.upload(scene.geometry, rebuild)
-            tubes.setVisible(scene.geometry.indexCount > 0)
+        if (selection.showsTubes) {
+            val writeStart = System.nanoTime()
+            muscleTriangles = mesh.write(frame, scene.geometry, scene.selection)
+            tubeMesh?.let { tubes ->
+                tubes.upload(scene.geometry, rebuild)
+                tubes.setVisible(scene.geometry.indexCount > 0)
+            }
+            tubeSlotCleared = false
+            scene.markBuilt(layers.revision)
+            stageTimings.record(FrameStage.TUBE_WRITE_UPLOAD, System.nanoTime() - writeStart)
+        } else if (!tubeSlotCleared) {
+            // The path still feeds the skinned layer, but a hidden tube must not leave stale vertices
+            // uploaded or hold a drawable that only a layer mask keeps invisible.
+            val writeStart = System.nanoTime()
+            scene.geometry.begin()
+            tubeMesh?.setVisible(false)
+            tubeMesh?.upload(scene.geometry, rebuild)
+            tubeSlotCleared = true
+            muscleTriangles = 0
+            stageTimings.record(FrameStage.TUBE_WRITE_UPLOAD, System.nanoTime() - writeStart)
+        } else {
+            stageTimings.record(FrameStage.TUBE_WRITE_UPLOAD, 0L)
         }
-        val writeNanos = System.nanoTime() - writeStart
-        scene.markBuilt(layers.revision)
 
         stageTimings.record(FrameStage.ANATOMY_SOLVE, solveNanos)
-        stageTimings.record(FrameStage.TUBE_WRITE_UPLOAD, writeNanos)
     }
 
     /**
@@ -404,6 +419,7 @@ class CharacterSession(
         muscleHeadsRefused = 0
         muscleInstancesDrawn = 0
         musclesSolved = false
+        tubeSlotCleared = false
         stageTimings.record(FrameStage.ANATOMY_SOLVE, 0L)
         stageTimings.record(FrameStage.ANATOMY_DERIVE, 0L)
         stageTimings.record(FrameStage.ANATOMY_PATHS, 0L)

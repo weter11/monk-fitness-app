@@ -38,6 +38,7 @@ internal class MuscleLayerStage(
     private var jointCount = 0
 
     private var entities = IntArray(0)
+    private var prepared = false
     private val matrices = FloatArray(skinner.paletteCount * 16)
     private var buffer: FloatBuffer = ByteBuffer.allocateDirect(16).order(ByteOrder.nativeOrder()).asFloatBuffer()
     private val visible = BooleanArray(instances.size)
@@ -59,64 +60,82 @@ internal class MuscleLayerStage(
         private set
 
     fun prepare(bytes: ByteArray): String? {
+        if (prepared) return failure
+        prepared = true
         val materialProvider = provider ?: return refuse("the layer has no material provider")
         val direct = ByteBuffer.allocateDirect(bytes.size).order(ByteOrder.nativeOrder())
         direct.put(bytes)
         direct.rewind()
         val loader = AssetLoader(engine, materialProvider, EntityManager.get())
-        val loaded = loader.createAsset(direct) ?: run {
-            loader.destroy()
-            return refuse("gltfio could not load ${HelperBinds.ASSET_PATH}")
-        }
-        val resources = ResourceLoader(engine)
-        try {
-            resources.loadResources(loaded)
-        } finally {
-            resources.destroy()
-        }
-
-        jointCount = if (loaded.instance.skinCount > 0) loaded.instance.getJointCountAt(0) else 0
-        if (jointCount != skinner.paletteCount) {
-            scene.removeEntities(loaded.entities)
-            loader.destroyAsset(loaded)
-            loader.destroy()
-            return refuse("the layer skins $jointCount joints, its palette has ${skinner.paletteCount}")
-        }
-
-        val byName = HashMap<String, Int>(instances.size * 2)
-        for (entity in loaded.renderableEntities) {
-            val name = loaded.getName(entity) ?: continue
-            // Two renderables under one name would tie an instance's visibility to the wrong draw.
-            if (byName.put(name, entity) != null) {
-                scene.removeEntities(loaded.entities)
-                loader.destroyAsset(loaded)
-                loader.destroy()
-                return refuse("two renderables are named $name")
-            }
-        }
-        val resolved = IntArray(instances.size) { index ->
-            val instance = instances[index]
-            byName[nameOf(instance)] ?: run {
-                scene.removeEntities(loaded.entities)
-                loader.destroyAsset(loaded)
-                loader.destroy()
-                return refuse("the asset has no section for $instance")
-            }
-        }
-
-        scene.addEntities(loaded.entities)
         assetLoader = loader
-        asset = loaded
-        entities = resolved
-        renderableCount = resolved.size
-        buffer = ByteBuffer.allocateDirect(skinner.paletteCount * 16 * 4)
-            .order(ByteOrder.nativeOrder()).asFloatBuffer()
-        // Nothing draws until a frame says an instance is visible: a stale mask would show last
-        // session's muscles over a body that has already moved.
-        for (entity in entities) renderableManager.setLayerMask(entity, LAYER_BIT, 0)
-        visible.fill(false)
-        visibleCount = 0
-        return null
+        var loaded: FilamentAsset? = null
+        try {
+            loaded = loader.createAsset(direct) ?: return refuse("gltfio could not load ${HelperBinds.ASSET_PATH}")
+            asset = loaded
+            val resources = ResourceLoader(engine)
+            try {
+                resources.loadResources(loaded)
+            } finally {
+                resources.destroy()
+            }
+
+            jointCount = if (loaded.instance.skinCount > 0) loaded.instance.getJointCountAt(0) else 0
+            if (jointCount != skinner.paletteCount) {
+                return refuse("the layer skins $jointCount joints, its palette has ${skinner.paletteCount}")
+            }
+
+            val byName = HashMap<String, Int>(instances.size * 2)
+            for (entity in loaded.renderableEntities) {
+                val name = loaded.getName(entity) ?: continue
+                // Two renderables under one name would tie an instance's visibility to the wrong draw.
+                if (byName.put(name, entity) != null) {
+                    return refuse("two renderables are named $name")
+                }
+            }
+            val resolved = IntArray(instances.size) { index ->
+                val instance = instances[index]
+                byName[nameOf(instance)] ?: return refuse("the asset has no section for $instance")
+            }
+            for (entity in resolved) {
+                if (renderableManager.getInstance(entity) == 0) {
+                    return refuse("section ${loaded.getName(entity)} has no renderable instance")
+                }
+            }
+
+            scene.addEntities(loaded.entities)
+            entities = resolved
+            renderableCount = resolved.size
+            buffer = ByteBuffer.allocateDirect(skinner.paletteCount * 16 * 4)
+                .order(ByteOrder.nativeOrder()).asFloatBuffer()
+            // Nothing draws until a frame says an instance is visible: a stale mask would show last
+            // session's muscles over a body that has already moved.
+            for (entity in entities) renderableManager.setLayerMask(entity, LAYER_BIT, 0)
+            visible.fill(false)
+            visibleCount = 0
+            return null
+        } catch (error: Throwable) {
+            val reason = "${error.javaClass.simpleName}: ${error.message.orEmpty()}".trim()
+            refuse(reason)
+            throw IllegalStateException(reason, error)
+        } finally {
+            if (asset == null) {
+                try {
+                    scene.removeEntities(loaded?.entities ?: IntArray(0))
+                } finally {
+                    try {
+                        loaded?.let { loader.destroyAsset(it) }
+                    } finally {
+                        loader.destroy()
+                    }
+                }
+                assetLoader = null
+                entities = IntArray(0)
+                renderableCount = 0
+                visible.fill(false)
+                visibleCount = 0
+                jointCount = 0
+            }
+        }
     }
 
     /**
@@ -154,10 +173,12 @@ internal class MuscleLayerStage(
 
     /** Releases the asset before the provider that owns its materials. */
     fun destroy() {
-        val loaded = asset ?: return
+        val loaded = asset
         asset = null
-        scene.removeEntities(loaded.entities)
-        assetLoader?.destroyAsset(loaded)
+        loaded?.let {
+            scene.removeEntities(it.entities)
+            assetLoader?.destroyAsset(it)
+        }
         assetLoader?.destroy()
         assetLoader = null
         entities = IntArray(0)

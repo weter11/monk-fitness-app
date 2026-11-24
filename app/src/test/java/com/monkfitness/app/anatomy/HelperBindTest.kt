@@ -3,6 +3,7 @@ package com.monkfitness.app.anatomy
 import com.monkfitness.app.animation.SkeletonDefinition
 import com.monkfitness.app.animation.Vector3
 import com.monkfitness.app.character.HelperBindManifest
+import com.monkfitness.app.character.HelperBinds
 import com.monkfitness.app.character.X1Bind
 import org.json.JSONArray
 import org.json.JSONObject
@@ -236,7 +237,17 @@ class HelperBindTest {
     @Test
     fun theMuscleSurfaceFacesTheWayItsNormalsClaim() {
         val asset = MuscleAsset(File(MUSCLES))
-        val hairpins = hairpinSections()
+        val binds = HelperBinds.read(File(MANIFEST).readText())
+        val hairpins = hairpinIntervals()
+        val intervals = hairpins.bySection.mapValues { (section, ranges) ->
+            val helperOffset = binds.binds.indexOfFirst { "${it.head.muscleId}_${it.head.side.name}" == section }
+            require(helperOffset >= 0) { "$section has no helpers" }
+            ranges.map { range ->
+                val start = hairpins.stationIndexOf(range.start)
+                val end = hairpins.stationIndexOf(range.endInclusive)
+                (helperOffset + start..helperOffset + end).toSet()
+            }
+        }
         var triangles = 0
         var folded = 0
         var foldedArea = 0.0
@@ -257,46 +268,73 @@ class HelperBindTest {
                     folded++
                     foldedArea += area
                     // A rest path that doubles back inside one ring step cannot carry a tube of the
-                    // muscle's own radius: the surface folds there whatever the frame rule, and the
-                    // mesh is a stand-in until muscle art arrives. Everywhere else the winding must hold.
+                    // muscle's own radius: only a vertex influenced by that interval may fold.
+                    val exempt = intervals[primitive.name].orEmpty().any { helpers ->
+                        influenced(primitive, a, helpers, binds.skinJoints) ||
+                            influenced(primitive, b, helpers, binds.skinJoints) ||
+                            influenced(primitive, c, helpers, binds.skinJoints)
+                    }
                     assertTrue(
-                        "${primitive.name} folds a ${area} m2 triangle, and its path does not double back",
-                        primitive.name in hairpins
+                        "${primitive.name} folds a ${area} m2 triangle outside a hairpin station interval",
+                        exempt
                     )
                 }
                 triangle += 3
             }
         }
         assertTrue("the layer has no triangles", triangles > 0)
-        println("muscle surface: $triangles triangles, $folded folded in $hairpins, $foldedArea m2")
+        println("muscle surface: $triangles triangles, $folded folded in ${hairpins.bySection}, $foldedArea m2")
         assertTrue(
             "the folded area $foldedArea m2 is over the $FOLDED_AREA_SQUARE_METRES m2 a hairpin may cost",
             foldedArea <= FOLDED_AREA_SQUARE_METRES
         )
     }
 
+    /** Whether at least one vertex in the triangle has an influence from a helper in [indices]. */
+    private fun influenced(
+        primitive: MuscleAsset.Primitive,
+        vertex: Int,
+        indices: Set<Int>,
+        skinJoints: Int
+    ): Boolean = primitive.joints[vertex].indices.any { slot ->
+        primitive.weights[vertex][slot] > 0f && primitive.joints[vertex][slot] - skinJoints in indices
+    }
+
+    private data class HairpinIntervals(
+        val bySection: Map<String, List<ClosedFloatingPointRange<Double>>>,
+        val stations: JSONArray
+    ) {
+        fun stationIndexOf(station: Double): Int =
+            (0 until stations.length()).first { stations.getDouble(it) == station }
+    }
+
     /**
-     * The sections whose rest path turns by more than a right angle inside one helper interval — the
+     * The section and helper-station intervals whose rest path turns by more than a right angle — the
      * only places a swept tube can fold. Read from the manifest's own basis, so the exemption is a
      * property of the anatomy and not a list of names.
      */
-    private fun hairpinSections(): Set<String> {
-        val helpers = manifest().getJSONArray("helpers")
-        val axes = LinkedHashMap<String, MutableList<DoubleArray>>()
+    private fun hairpinIntervals(): HairpinIntervals {
+        val document = manifest()
+        val helpers = document.getJSONArray("helpers")
+        val groups = LinkedHashMap<String, MutableList<JSONObject>>()
         for (index in 0 until helpers.length()) {
             val helper = helpers.getJSONObject(index)
             val key = helper.getString("muscleId") + "_" + helper.getString("side")
-            val y = helper.getJSONArray("basis").getJSONArray(1)
-            axes.getOrPut(key) { ArrayList() } += doubleArrayOf(y.getDouble(0), y.getDouble(1), y.getDouble(2))
+            groups.getOrPut(key) { ArrayList() } += helper
         }
-        val out = LinkedHashSet<String>()
-        for ((key, list) in axes) {
+        val out = LinkedHashMap<String, MutableList<ClosedFloatingPointRange<Double>>>()
+        for ((key, list) in groups) {
             for (index in 0 until list.size - 1) {
-                val dot = list[index].indices.sumOf { component -> list[index][component] * list[index + 1][component] }
-                if (Math.toDegrees(Math.acos(dot.coerceIn(-1.0, 1.0))) > HAIRPIN_DEGREES) out += key
+                val first = list[index].getJSONArray("basis").getJSONArray(1)
+                val second = list[index + 1].getJSONArray("basis").getJSONArray(1)
+                val dot = (0 until 3).sumOf { component -> first.getDouble(component) * second.getDouble(component) }
+                if (Math.toDegrees(Math.acos(dot.coerceIn(-1.0, 1.0))) > HAIRPIN_DEGREES) {
+                    out.getOrPut(key) { ArrayList() } +=
+                        list[index].getDouble("station")..list[index + 1].getDouble("station")
+                }
             }
         }
-        return out
+        return HairpinIntervals(out, document.getJSONArray("stations"))
     }
 
     @Test
@@ -593,8 +631,6 @@ class HelperBindTest {
         const val MANIFEST = "src/main/assets/anatomy/helpers_v1.json"
         const val MUSCLES = "src/main/assets/characters/muscles_sup.glb"
         const val RIG = "src/main/assets/characters/humanoid_v2.glb"
-        /** A triangle under a square millimetre has no readable facing. */
-        const val SLIVER_SQUARE_METRES = 1e-6
 
         /** A turn this sharp between two helper stations folds any tube of the muscle's own radius. */
         const val HAIRPIN_DEGREES = 90.0
