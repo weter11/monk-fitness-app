@@ -1258,4 +1258,5 @@
     <string name="library_counts_foods">Продукти</string>
     <string name="library_counts_dishes">Страви</string>
     <string name="character_debug_layer_tubes">трубки</string>
+    <string name="character_debug_layer_meshes">сітки</string>
 </resources>

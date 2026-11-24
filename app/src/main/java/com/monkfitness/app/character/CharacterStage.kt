@@ -190,6 +190,14 @@ private fun MuscleDebugOverlay(session: CharacterSession, modifier: Modifier = M
                 },
                 label = { Text(stringResource(R.string.character_debug_layer_tubes), fontSize = 11.sp) }
             )
+            FilterChip(
+                selected = selection.showsMeshes,
+                onClick = {
+                    controller.toggleMeshes()
+                    selection = controller.selection
+                },
+                label = { Text(stringResource(R.string.character_debug_layer_meshes), fontSize = 11.sp) }
+            )
             MuscleLayer.entries.forEach { layer ->
                 FilterChip(
                     selected = selection.showsTubes && layer in selection.layers,
@@ -234,6 +242,12 @@ private fun describeMuscles(diagnostics: CharacterDiagnostics): String = buildSt
         append(String.format(Locale.US, "%+.1f%%", reading.relativePathLengthChange * 100f))
         if (!reading.drawn) append(" · not drawn")
     }
+    if (diagnostics.muscleAssetSections > 0 || diagnostics.muscleAssetError != null) {
+        append("\nmesh ").append(diagnostics.muscleAssetDrawn).append('/')
+        append(diagnostics.muscleAssetSections).append(" sections · ")
+        append(diagnostics.muscleAssetUploads).append(" palette uploads")
+    }
+    diagnostics.muscleAssetError?.let { append("\nmesh: ").append(it) }
     if (diagnostics.muscleAttributes.isNotBlank()) {
         append("\nattrs ").append(diagnostics.muscleAttributes)
         if (diagnostics.muscleMaterialCandidate >= 0) {
