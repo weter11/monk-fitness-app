@@ -1,0 +1,49 @@
+# anatomy-export
+
+Offline helper-bind export for path-rigged muscle layers. It runs the runtime's own
+`AnatomySolver` against the X1 canonical A-pose and writes the bind frame of the four helper bones
+that each muscle head carries — origin, belly proximal, belly distal, insertion, at 0/30/70/100 % of
+the head's rest path by arc length.
+
+Nothing here re-derives anatomy: the attachments, the wrap detours and the rest lengths come from
+the same solver the app draws with, so an exported layer cannot bind to geometry the runtime does
+not report.
+
+## Run
+
+From the repository root:
+
+```bash
+./gradlew :tools:anatomy-export:run
+```
+
+or with explicit paths:
+
+```bash
+./gradlew :tools:anatomy-export:run --args="--root ../.. --out app/src/test/resources/anatomy/helpers_v1.json"
+```
+
+| Option | Default |
+| --- | --- |
+| `--root` | `../..` (repository root) |
+| `--anatomy` | `<root>/app/src/main/assets/anatomy/anatomy_v1.json` |
+| `--rig` | `<root>/app/src/main/assets/characters/humanoid_v2.glb` |
+| `--out` | `<root>/app/src/test/resources/anatomy/helpers_v1.json` |
+
+## Output
+
+`app/src/test/resources/anatomy/helpers_v1.json` is checked in, because it is the contract
+`HelperBindTest` validates: every helper must sit on a fresh rest solve's path within `1e-3` engine
+units, carry a rotation-only (unit, orthogonal, right-handed) basis, and keep the skin's palette
+(`rig joints + helpers`) inside the 255 the renderable accepts. **Regenerate it whenever the solver,
+the anatomy asset or the rig changes** — the test fails on a stale manifest.
+
+The tool refuses to write a manifest it cannot place: a head the rest stance refused has no bind,
+and a palette over 255 fails before the file is written.
+
+## Why a JVM module
+
+The exporter compiles the pure-Kotlin packages (`anatomy`, `animation`, `poses`, and the character
+bind/rig readers) straight out of the app module — see `build.gradle.kts`. It does not depend on
+`:app`, so the Android plugin and Filament stay out of the tool, and there is no second
+implementation of the path maths to drift.
