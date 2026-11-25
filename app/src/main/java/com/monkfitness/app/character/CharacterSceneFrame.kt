@@ -260,8 +260,11 @@ data class MuscleSelection(
      * Whether the authored layer draws [section] of [partition]: the reviewer's selection, and the
      * solve's own verdict — an instance the solver refused must not draw at its bind pose.
      */
-    fun showsSection(partition: MuscleSectionPartition, section: Int, reached: BooleanArray): Boolean =
-        reached[section] && showsMesh(partition.instance(section), partition.layer(section))
+    fun showsSection(partition: MuscleSectionPartition, section: Int, anatomy: AnatomyFrame): Boolean {
+        val instance = partition.instance(section)
+        return anatomy.renderable.getOrElse(anatomy.instances.indexOf(instance)) { false } &&
+            showsMesh(instance, partition.layer(section))
+    }
 }
 
 /**
@@ -357,6 +360,13 @@ class MuscleSectionState(sectionCount: Int) {
         select(NO_SECTION)
     }
 
+    /** Publishes the freshly loaded mask, which starts with every section enabled. */
+    fun showAll(count: Int = shown.size) {
+        require(count == shown.size) { "mask has $count sections, expected ${shown.size}" }
+        for (section in shown.indices) show(section, true)
+        select(NO_SECTION)
+    }
+
     companion object {
         /** No section is highlighted. */
         const val NO_SECTION = -1
@@ -378,8 +388,16 @@ class CharacterLayerController(
 ) {
 
     private var current = MuscleSelection()
+    private val diagnosticsListeners: MutableSet<() -> Unit> = linkedSetOf()
 
     val selection: MuscleSelection get() = current
+
+    /** Registers a selection callback; the returned lambda unregisters it. */
+    fun observeSelection(listener: () -> Unit): () -> Unit {
+        diagnosticsListeners.add(listener)
+        listener()
+        return { diagnosticsListeners.remove(listener) }
+    }
 
     /** Advances only when the selection actually changed. */
     var revision: Int = 0
@@ -394,6 +412,7 @@ class CharacterLayerController(
     fun toggleLayer(id: CharacterLayerId): Boolean {
         val muscleLayer = layer(id)?.muscleLayer ?: return true
         val on = muscleLayer !in current.layers
+        if (!on && current.showsMeshes) current = current.copy(showsMeshes = false)
         current = current.withLayer(muscleLayer, on)
         publish()
         return on
@@ -441,6 +460,7 @@ class CharacterLayerController(
             layer.visible = muscleLayer == null || muscleLayer in current.layers
         }
         revision++
+        diagnosticsListeners.forEach { listener -> listener() }
     }
 
     private fun idOf(layer: MuscleLayer): CharacterLayerId = when (layer) {

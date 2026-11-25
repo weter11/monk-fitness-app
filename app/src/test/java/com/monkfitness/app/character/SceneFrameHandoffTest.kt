@@ -154,6 +154,16 @@ class SceneFrameHandoffTest {
     }
 
     @Test
+    fun hidingTheOnlySelectedLayerTurnsOffTheMeshView() {
+        val controller = CharacterLayerController()
+        controller.toggleMeshes(true)
+        controller.toggleLayer(CharacterLayerId.SUPERFICIAL_MUSCLE)
+
+        assertFalse(controller.selection.showsMeshes)
+        assertFalse(controller.selection.showsAnyLayer)
+    }
+
+    @Test
     fun hidingTheSelectedInstanceDropsItsHighlight() {
         val controller = CharacterLayerController()
         val instance = MuscleInstanceId(definition.muscles.first().id, MuscleSide.P)
