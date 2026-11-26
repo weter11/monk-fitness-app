@@ -505,6 +505,9 @@ class CharacterSession(
         if (destroyed) return
         destroyed = true
         pause()
+        // The render thread drains before anything a queued frame could still reference is freed: the
+        // one native crash this layer produced on hardware was in FEngine::loop during a session swap.
+        engine.flushAndWait()
         // After the frame loop stops, so no solve is in flight: the lanes are threads, and a session
         // that leaves them parked holds four stacks per exercise switch.
         anatomySolver?.close()
@@ -542,7 +545,8 @@ class CharacterSession(
 
     fun diagnostics(): CharacterDiagnostics {
         lastDiagnostics?.takeIf { destroyed }?.let { return it }
-        return CharacterDiagnostics(
+        val selectionGate = layers.selection
+        val diagnostics = CharacterDiagnostics(
             requested = request,
             activeBackend = backend,
             attempts = selection.attempts,
@@ -573,10 +577,15 @@ class CharacterSession(
             muscleAssetDrawn = muscleStage?.visibleCount ?: 0,
             muscleAssetUploads = muscleStage?.skinUploads ?: 0,
             muscleAssetError = muscleError,
-            muscleAssetSelected = muscleStage?.selected ?: MuscleSectionState.NO_SECTION,
+            muscleAssetSelected = muscleStage?.state?.selected ?: MuscleSectionState.NO_SECTION,
             muscleHighlightError = muscleStage?.highlightError,
+            muscleHighlightApplied = muscleStage?.highlightApplied == true,
+            muscleHiddenInstances = selectionGate.hidden.map { "${it.muscleId}:${it.side.name}" },
+            muscleSelectedInstance = selectionGate.selected?.let { "${it.muscleId}:${it.side.name}" },
             frameStages = stageTimings.readings()
-        ).also { lastDiagnostics = it }
+        )
+        lastDiagnostics = diagnostics
+        return diagnostics
     }
 
     /**
@@ -668,9 +677,9 @@ class CharacterSession(
         for (section in 0 until partition.size) {
             // A head the solve refused leaves its instance hidden rather than drawing its bind pose
             // over the body; the mask returns on the frame that head solves again.
-            stage.setShown(section, selection.showsSection(partition, section, frame.renderable))
+            stage.setShown(section, selection.showsSection(partition, section, frame))
         }
-        stage.setSelected(selection.selected?.let(partition::indexOf) ?: MuscleSectionState.NO_SECTION)
+        stage.select(selection.selected?.let(partition::indexOf) ?: MuscleSectionState.NO_SECTION)
         stageTimings.record(FrameStage.MUSCLE_SKIN, System.nanoTime() - start)
     }
 

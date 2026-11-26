@@ -290,6 +290,211 @@ class HelperBindTest {
         )
     }
 
+    // ---- L5: the mesh itself, read from the GLB rather than from the exporter's claims ----------
+
+    @Test
+    fun noMuscleSectionCarriesADegenerateTriangle() {
+        val asset = MuscleAsset(File(MUSCLES))
+        var triangles = 0
+        var smallest = Double.MAX_VALUE
+        var smallestWhere = ""
+        for (primitive in asset.primitives) {
+            var triangle = 0
+            while (triangle < primitive.indices.size) {
+                val a = primitive.positions[primitive.indices[triangle]]
+                val b = primitive.positions[primitive.indices[triangle + 1]]
+                val c = primitive.positions[primitive.indices[triangle + 2]]
+                val area = 0.5 * magnitude(cross(a, b, c))
+                assertTrue(
+                    "${primitive.name} triangle ${triangle / 3} has an area of $area m2, which no draw can shade",
+                    area.isFinite() && area > 0.0
+                )
+                if (area < smallest) {
+                    smallest = area
+                    smallestWhere = "${primitive.name} triangle ${triangle / 3}"
+                }
+                triangles++
+                triangle += 3
+            }
+        }
+        assertEquals(
+            "every head is ${RING_COUNT - 1} bands of $RING_SEGMENTS quads plus two capped ends",
+            definition.headCount * ((RING_COUNT - 1) * RING_SEGMENTS * 2 + 2 * RING_SEGMENTS),
+            triangles
+        )
+        println("L5 degenerate triangles: none of $triangles; smallest area $smallest m2 at $smallestWhere")
+    }
+
+    @Test
+    fun everyMuscleSectionEnclosesAPositiveVolume() {
+        val asset = MuscleAsset(File(MUSCLES))
+        var smallest = Double.MAX_VALUE
+        var smallestWhere = ""
+        val volumes = LinkedHashMap<String, Double>()
+        for (primitive in asset.primitives) {
+            var section = 0.0
+            for (head in 0 until headsIn(primitive)) {
+                val volume = volumeOf(primitive, head)
+                val where = if (headsIn(primitive) > 1) "${primitive.name} head $head" else primitive.name
+                // A negative volume is outward winding reversed: the section would draw inside out.
+                assertTrue("$where encloses $volume m3, so its surface faces inward or is open", volume > 0.0)
+                if (volume < smallest) {
+                    smallest = volume
+                    smallestWhere = where
+                }
+                section += volume
+            }
+            volumes[primitive.name] = section
+        }
+        assertEquals("every superficial muscle is a section on both sides", 16, volumes.size)
+        println(
+            "L5 section volumes (m3): " + volumes.entries.joinToString(", ") { "${it.key} ${"%.3e".format(it.value)}" } +
+                "; smallest $smallest at $smallestWhere"
+        )
+    }
+
+    @Test
+    fun everyMuscleSectionNormalisesItsSkinWeights() {
+        val asset = MuscleAsset(File(MUSCLES))
+        var worst = 0.0
+        var worstWhere = ""
+        for (primitive in asset.primitives) {
+            for (vertex in primitive.weights.indices) {
+                val sum = primitive.weights[vertex].sumOf { it.toDouble() }
+                val residual = abs(sum - 1.0)
+                assertTrue(
+                    "${primitive.name} vertex $vertex weighs $sum, which drifts the surface it skins",
+                    residual <= WEIGHT_SUM_TOLERANCE
+                )
+                if (residual > worst) {
+                    worst = residual
+                    worstWhere = "${primitive.name} vertex $vertex"
+                }
+            }
+        }
+        println("L5 weight sum: worst residual $worst at $worstWhere")
+    }
+
+    /**
+     * Two muscles must never occupy one space. Inside one section the stand-in's uniform cylinder may
+     * cross itself only where its own path doubles back, or where two heads of that muscle share a
+     * tendon — the two conditions the geometry itself declares.
+     */
+    @Test
+    fun noMuscleSectionCrossesAnotherAndFoldsOnlyWhereItsGeometryAllowsIt() {
+        val asset = MuscleAsset(File(MUSCLES))
+        val binds = HelperBinds.read(File(MANIFEST).readText())
+        val hairpins = hairpinIntervals()
+        val geometry = asset.primitives.map { it to trianglesOf(it) }
+
+        var acrossSections = 0
+        var acrossSectionsWhere = ""
+        for (first in geometry.indices) {
+            for (second in first + 1 until geometry.size) {
+                val left = geometry[first]
+                val right = geometry[second]
+                for (a in left.second) {
+                    for (b in right.second) {
+                        if (!a.overlaps(b) || !crosses(a, b)) continue
+                        acrossSections++
+                        acrossSectionsWhere = "${left.first.name} x ${right.first.name}"
+                    }
+                }
+            }
+        }
+        assertEquals(
+            "two muscle sections interpenetrate at $acrossSectionsWhere; no pose can separate geometry that already overlaps",
+            0,
+            acrossSections
+        )
+
+        var withinOneHead = 0
+        var betweenHeads = 0
+        var sectionCount = 0
+        for ((primitive, triangles) in geometry) {
+            val exempt = hairpinHelperIndices(primitive.name, binds, hairpins)
+            var folds = 0
+            var merges = 0
+            for (i in triangles.indices) {
+                for (j in i + 1 until triangles.size) {
+                    val left = triangles[i]
+                    val right = triangles[j]
+                    if (left.sharesVertexWith(right) || !left.overlaps(right) || !crosses(left, right)) continue
+                    if (left.indices[0] / VERTICES_PER_HEAD != right.indices[0] / VERTICES_PER_HEAD) {
+                        merges++
+                        continue
+                    }
+                    folds++
+                    // A fold away from a hairpin means the surface passes through the belly it draws.
+                    assertTrue(
+                        "${primitive.name} crosses itself at ${left.indices.joinToString()} x ${right.indices.joinToString()}, " +
+                            "away from any station interval whose path turns through a right angle",
+                        left.indices.any { influenced(primitive, it, exempt, binds.skinJoints) }
+                    )
+                }
+            }
+            if (folds > 0) sectionCount++
+            withinOneHead += folds
+            betweenHeads += merges
+            if (folds > 0 || merges > 0) println("L5 ${primitive.name}: $folds fold(s) inside a head, $merges between its heads")
+        }
+        println(
+            "L5 self-intersection: 0 across sections; $withinOneHead inside a head on $sectionCount section(s), " +
+                "all at a hairpin; $betweenHeads between the heads of one muscle"
+        )
+    }
+
+    /**
+     * Between two adjacent helper stations the skinning interpolates two rigid frames, so it reproduces
+     * the straight chord and not the path. This measures how far the authored surface leaves that chord.
+     */
+    @Test
+    fun theSurfaceStaysWithinOneMuscleRadiusOfTheHelperChord() {
+        val asset = MuscleAsset(File(MUSCLES))
+        val binds = HelperBinds.read(File(MANIFEST).readText())
+        val frame = restFrame()
+        // The budget is the widest radius the definition authors: a chord that cuts deeper than a belly
+        // is wide would put the skinning's error outside the muscle it draws.
+        val budget = definition.muscles.maxOf { muscle -> muscle.radiusKnots.maxOf { knot -> knot.second.toDouble() } }
+        var worst = 0.0
+        var worstWhere = ""
+        for (primitive in asset.primitives) {
+            val side = MuscleSide.entries.first { primitive.name.endsWith("_${it.name}") }
+            val muscleId = primitive.name.removeSuffix("_${side.name}")
+            for (head in 0 until headsIn(primitive)) {
+                val slot = frame.heads.indexOf(MuscleHeadId(muscleId, side, head))
+                require(slot >= 0) { "${primitive.name} head $head is not a slot of this definition" }
+                val stations = binds.stations.map { station -> toAsset(stationFrame(frame, slot, station.toDouble()).first) }
+                for (index in 0 until stations.size - 1) {
+                    val from = binds.stations[index].toDouble()
+                    val to = binds.stations[index + 1].toDouble()
+                    for (ring in 0 until RING_COUNT) {
+                        val u = ring.toDouble() / (RING_COUNT - 1)
+                        if (u < from - 1e-9 || u > to + 1e-9) continue
+                        val centre = centreOf(primitive, head, ring)
+                        for (segment in 0 until RING_SEGMENTS) {
+                            val vertex = primitive.positions[vertexOf(head, ring, segment)]
+                            val radius = distanceTo(vertex, centre)
+                            val deviation = abs(distanceToSegment(vertex, stations[index], stations[index + 1]) - radius)
+                            if (deviation > worst) {
+                                worst = deviation
+                                worstWhere = "${primitive.name} head $head, stations $from..$to, ring $ring"
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        println(
+            "L5 between-helper surface deviation = ${"%.6f".format(worst)} m " +
+                "(${"%.2f".format(worst * 1000)} mm), budget ${"%.2f".format(budget * 1000)} mm, at $worstWhere"
+        )
+        assertTrue(
+            "the surface leaves the straight line between adjacent helper stations by $worst m, over the $budget m budget",
+            worst <= budget
+        )
+    }
+
     /** Whether at least one vertex in the triangle has an influence from a helper in [indices]. */
     private fun influenced(
         primitive: MuscleAsset.Primitive,
@@ -298,6 +503,185 @@ class HelperBindTest {
         skinJoints: Int
     ): Boolean = primitive.joints[vertex].indices.any { slot ->
         primitive.weights[vertex][slot] > 0f && primitive.joints[vertex][slot] - skinJoints in indices
+    }
+
+    /** The helpers whose station interval is a hairpin, as indices within the section's own group. */
+    private fun hairpinHelperIndices(section: String, binds: HelperBinds, hairpins: HairpinIntervals): Set<Int> {
+        val offset = binds.binds.indexOfFirst { "${it.head.muscleId}_${it.head.side.name}" == section }
+        require(offset >= 0) { "$section has no helpers" }
+        val out = HashSet<Int>()
+        for (range in hairpins.bySection[section].orEmpty()) {
+            for (station in hairpins.stationIndexOf(range.start)..hairpins.stationIndexOf(range.endInclusive)) {
+                out += offset + station
+            }
+        }
+        return out
+    }
+
+    /** How many heads the section's vertices are divided into, each a closed surface of its own. */
+    private fun headsIn(primitive: MuscleAsset.Primitive): Int {
+        require(primitive.positions.size % VERTICES_PER_HEAD == 0) {
+            "${primitive.name} carries ${primitive.positions.size} vertices, not a whole number of heads"
+        }
+        return primitive.positions.size / VERTICES_PER_HEAD
+    }
+
+    private fun vertexOf(head: Int, ring: Int, segment: Int): Int =
+        head * VERTICES_PER_HEAD + ring * RING_SEGMENTS + segment
+
+    /** A ring's centre recovered from its own vertices: the eight radial directions cancel. */
+    private fun centreOf(primitive: MuscleAsset.Primitive, head: Int, ring: Int): DoubleArray {
+        val out = DoubleArray(3)
+        for (segment in 0 until RING_SEGMENTS) {
+            val vertex = primitive.positions[vertexOf(head, ring, segment)]
+            for (component in 0..2) out[component] += vertex[component] / RING_SEGMENTS
+        }
+        return out
+    }
+
+    /** Signed volume by the divergence theorem, over one head's closed surface. */
+    private fun volumeOf(primitive: MuscleAsset.Primitive, head: Int): Double {
+        val first = head * VERTICES_PER_HEAD
+        val last = first + VERTICES_PER_HEAD - 1
+        var volume = 0.0
+        var triangle = 0
+        while (triangle < primitive.indices.size) {
+            val a = primitive.indices[triangle]
+            if (a !in first..last) {
+                triangle += 3
+                continue
+            }
+            val p = primitive.positions[a]
+            val q = primitive.positions[primitive.indices[triangle + 1]]
+            val r = primitive.positions[primitive.indices[triangle + 2]]
+            volume += (
+                p[0].toDouble() * (q[1].toDouble() * r[2] - q[2].toDouble() * r[1]) -
+                    p[1].toDouble() * (q[0].toDouble() * r[2] - q[2].toDouble() * r[0]) +
+                    p[2].toDouble() * (q[0].toDouble() * r[1] - q[1].toDouble() * r[0])
+                ) / 6.0
+            triangle += 3
+        }
+        return volume
+    }
+
+    private fun trianglesOf(primitive: MuscleAsset.Primitive): List<Triangle> {
+        val out = ArrayList<Triangle>(primitive.indices.size / 3)
+        var triangle = 0
+        while (triangle < primitive.indices.size) {
+            val indices = intArrayOf(
+                primitive.indices[triangle],
+                primitive.indices[triangle + 1],
+                primitive.indices[triangle + 2]
+            )
+            out += Triangle(indices, indices.map { primitive.positions[it] })
+            triangle += 3
+        }
+        return out
+    }
+
+    private fun distanceTo(point: FloatArray, centre: DoubleArray): Double {
+        var sum = 0.0
+        for (component in 0..2) {
+            val delta = point[component] - centre[component]
+            sum += delta * delta
+        }
+        return sqrt(sum)
+    }
+
+    private fun distanceToSegment(point: FloatArray, from: DoubleArray, to: DoubleArray): Double {
+        var lengthSquared = 0.0
+        var along = 0.0
+        for (component in 0..2) {
+            val edge = to[component] - from[component]
+            lengthSquared += edge * edge
+            along += (point[component] - from[component]) * edge
+        }
+        val t = if (lengthSquared > 0.0) (along / lengthSquared).coerceIn(0.0, 1.0) else 0.0
+        var sum = 0.0
+        for (component in 0..2) {
+            val delta = point[component] - (from[component] + (to[component] - from[component]) * t)
+            sum += delta * delta
+        }
+        return sqrt(sum)
+    }
+
+    private fun magnitude(v: FloatArray): Double = sqrt(v[0].toDouble() * v[0] + v[1].toDouble() * v[1] + v[2].toDouble() * v[2])
+
+    private fun crosses(first: Triangle, second: Triangle): Boolean = first.crosses(second)
+
+    /**
+     * One triangle of a section's surface, with the box and the plane-interval test the overlap check
+     * needs. Two triangles that only touch along a face or a corner are not a crossing, which is why
+     * the shared chord must be longer than [INTERSECTION_EPSILON].
+     */
+    private class Triangle(val indices: IntArray, val corners: List<FloatArray>) {
+
+        private val lo = DoubleArray(3) { axis -> corners.minOf { it[axis].toDouble() } }
+        private val hi = DoubleArray(3) { axis -> corners.maxOf { it[axis].toDouble() } }
+
+        fun overlaps(other: Triangle): Boolean {
+            for (axis in 0..2) if (lo[axis] > other.hi[axis] || other.lo[axis] > hi[axis]) return false
+            return true
+        }
+
+        fun sharesVertexWith(other: Triangle): Boolean = indices.any { other.indices.contains(it) }
+
+        /** Möller's plane interval: both planes are straddled and the two chords on their line overlap. */
+        fun crosses(other: Triangle): Boolean {
+            val normalOfOther = unitNormalOf(other) ?: return false
+            val firstSide = side(corners, other.corners[0], normalOfOther)
+            if (firstSide.all { it > INTERSECTION_EPSILON } || firstSide.all { it < -INTERSECTION_EPSILON }) return false
+            val normalOfThis = unitNormalOf(this) ?: return false
+            val secondSide = side(other.corners, corners[0], normalOfThis)
+            if (secondSide.all { it > INTERSECTION_EPSILON } || secondSide.all { it < -INTERSECTION_EPSILON }) return false
+            val axis = normalOfThis cross normalOfOther ?: return false
+            val mine = chordOn(corners, firstSide, axis) ?: return false
+            val theirs = chordOn(other.corners, secondSide, axis) ?: return false
+            return minOf(mine[1], theirs[1]) - maxOf(mine[0], theirs[0]) > INTERSECTION_EPSILON
+        }
+
+        private fun unitNormalOf(triangle: Triangle): DoubleArray? {
+            val a = triangle.corners[0]
+            val b = triangle.corners[1]
+            val c = triangle.corners[2]
+            val u = DoubleArray(3) { b[it].toDouble() - a[it] }
+            val v = DoubleArray(3) { c[it].toDouble() - a[it] }
+            val normal = u cross v ?: return null
+            val length = sqrt(normal[0] * normal[0] + normal[1] * normal[1] + normal[2] * normal[2])
+            if (!(length > INTERSECTION_EPSILON)) return null
+            return DoubleArray(3) { normal[it] / length }
+        }
+
+        private fun side(points: List<FloatArray>, origin: FloatArray, normal: DoubleArray): DoubleArray =
+            DoubleArray(3) { index ->
+                (0..2).sumOf { (points[index][it] - origin[it]) * normal[it] }
+            }
+
+        /** Where the plane cuts the triangle, projected on the line both planes share. */
+        private fun chordOn(points: List<FloatArray>, distances: DoubleArray, axis: DoubleArray): DoubleArray? {
+            val crossings = ArrayList<Double>(2)
+            for (index in 0..2) {
+                val next = (index + 1) % 3
+                if (distances[index] * distances[next] >= 0.0) continue
+                val t = distances[index] / (distances[index] - distances[next])
+                crossings += (0..2).sumOf { component ->
+                    (points[index][component] + (points[next][component] - points[index][component]) * t) * axis[component]
+                }
+            }
+            if (crossings.size < 2) return null
+            return doubleArrayOf(crossings.minOrNull()!!, crossings.maxOrNull()!!)
+        }
+
+        private infix fun DoubleArray.cross(other: DoubleArray): DoubleArray? {
+            val out = doubleArrayOf(
+                this[1] * other[2] - this[2] * other[1],
+                this[2] * other[0] - this[0] * other[2],
+                this[0] * other[1] - this[1] * other[0]
+            )
+            val length = sqrt(out[0] * out[0] + out[1] * out[1] + out[2] * out[2])
+            if (!(length > INTERSECTION_EPSILON)) return null
+            return DoubleArray(3) { out[it] / length }
+        }
     }
 
     private data class HairpinIntervals(
@@ -639,5 +1023,20 @@ class HelperBindTest {
         const val FOLDED_AREA_SQUARE_METRES = 5e-5
         const val TOLERANCE_METRES = 1e-3
         const val STATIONS = 4
+
+        /** Vertices around the path; the exporter's own ring, mirrored here as the section's contract. */
+        const val RING_SEGMENTS = 8
+
+        /** Rings per head, so a bend between two helper stations is interpolated rather than cut. */
+        const val RING_COUNT = 13
+
+        /** The two capped ends a head adds to its rings. */
+        const val VERTICES_PER_HEAD = RING_COUNT * RING_SEGMENTS + 2
+
+        /** A weight sum may drift by this much before the skin starts pulling the surface. */
+        const val WEIGHT_SUM_TOLERANCE = 1e-4
+
+        /** Two triangles must share this much chord before they count as crossing, not touching. */
+        const val INTERSECTION_EPSILON = 1e-9
     }
 }

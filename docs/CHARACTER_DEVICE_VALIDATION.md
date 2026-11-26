@@ -4,8 +4,9 @@ Stage 1 — the generated `humanoid_v2` rig, the position-driven retarget and th
 merged, and §0 records what it measured. The procedure in §1–§6 is the **Stage 2** checklist: there
 the presenter ships behind a disabled-by-default flag, and none of those checks have been executed.
 There is no GPU device in the build environment, so everything in §1–§6 that needs pixels, a driver
-or a lifecycle transition is for a physical device and must be recorded, not assumed. (§7.7 is the one
-executed device run: the muscle-tube layer on an Adreno 735 handset.) The automated
+or a lifecycle transition is for a physical device and must be recorded, not assumed. (§7.7–§7.8 are the
+executed device runs: the muscle-tube layer and the authored layer's per-instance path on an Adreno 735
+handset.) The automated
 tests cover pose retargeting, backend fallback policy, single-owner lifecycle and the flag default.
 
 ## 0. Stage 1 evidence (P1–P7)
@@ -1012,3 +1013,150 @@ the tubes draw the 13,824 triangles the primitive was built for, the layer build
 primitive, the solve refuses nothing across a rep, and the frame-time bar passes on a cool SoC. The
 one remaining failure is the `readout at rest` row, and it is a mismatch between the row's expectation
 and the squat's opening pose rather than a defect in this layer.
+
+#### The Stage 3 run — the authored layer never uploads, and the frame loop stops
+
+PR #419 made the authored muscle asset addressable per instance. This run tried to measure that layer
+on the same handset and failed before it drew a section, so **no `showsMeshes` frame breakdown exists to
+record**; what follows is what the device actually read.
+
+Wireless debugging was reconnected inside the container (`adb connect 127.0.0.1:36027`, a listener on
+uid 2000 — the stored `~/.android/adbkey` still paired, so no pairing code was needed). The debug APK was
+built on the handset, `FILAMENT_CHARACTER_ENABLED = true` confirmed in the generated `BuildConfig`, and
+installed with `adb install -r -d`:
+
+| Property | Value |
+| --- | --- |
+| Device | motorola edge 50 ultra (`ctwo_geuw`), API 36, GLES 3.2, Vulkan 1.3.0, requested Auto → active **OPENGL** |
+| APK | 44,167,512 bytes, `sha256 23631109079da13ddbbf09cbdfc277b147854e905a527629e9837d58b3b9a8b6`, `versionCode` 997863 |
+| Launch | `am start -n com.monkfitness.app/.character.CharacterDiagnosticsActivity` |
+| SoC | battery **41 %, 31.0 °C** before and after the window — cool |
+| Crash | `logcat -b crash` empty; the activity stayed `topResumedActivity` |
+
+| Row | Measured | Verdict |
+| --- | --- | --- |
+| Readout reaches the layer switch | tapping `трубки` (tubes) gives `18 heads · 0 refused · 16 drawn · 13824 triangles`; tapping `сетки` (meshes) renders the per-instance chip row (`0 rectus_abdominis:A`, `1 rectus_abdominis:P`, …) | PASS — the control is live, not unreachable |
+| Authored layer draws | `mesh 0/16 sections · 0 palette uploads · not drawn 16`, `muscleSkin 0.00/0.00` in every sample; the counters do not move for the whole window | **FAIL — nothing drew** |
+| Per-instance hide and highlight | not reachable: a chip cannot hide or tint a section that never drew | **BLOCKED** by the row above |
+| Frame breakdown, `showsMeshes` | the readout's frame counter froze at **714 frames** partway through the window and reported the identical sample at every later read, so there is no 20 s window to average | **NOT RECORDED** |
+| Frame breakdown, last live sample | `pose 0.46/0.66 · anatomy 7.66/9.99 · anatomyFrames 0.09/0.13 · anatomyPaths 7.53/9.88 · tube 2.47/2.86 · retarget 0.19/0.28 · muscleSkin 0.00/0.00 · beginFrame 0.03/0.05 · render 0.12/0.17` ms; `714 frames · 59 fps · p95 13.39 ms`; `passes (cap 8): 1:2718 2:238 3:264 4:388 5:10` | recorded, **not** the mesh-layer reading |
+
+The overlay, verbatim, in the state the run ended in:
+
+```
+18 heads · 0 refused · 16 drawn · 13824 triangles
+… 18 modelled-length rows …
+mesh 0/16 sections · 0 palette uploads · not drawn 16
+attrs POSITION,UV0,UV1,COLOR · candidate 0
+34 bones · 5 morphs · neutral
+714 frames · 59 fps · p95 13.39 ms · surface true · running true
+stage p50/p95 ms: pose 0.46/0.66 anatomy 7.66/9.99 anatomyFrames 0.09/0.13 anatomyPaths 7.53/9.88
+  tube 2.47/2.86 retarget 0.19/0.28 muscleSkin 0.00/0.00 beginFrame 0.03/0.05 render 0.12/0.17
+```
+
+**What is established, and what is not.** Established: the layer's asset loads — `16` sections are
+reported by the stage, so `MuscleLayerStage.prepare()` succeeded and its renderables exist — the switch
+reaches the UI, and the solver runs (`0 refused`, `16 drawn` on the tube layer, `13,824` triangles).
+Not established: why `muscleSkin` never records a sample, which is the same frame on which the counter
+stops. Two observations narrow it without proving it — the `muscleSkin` stage is recorded only after the
+upload path's guard, and the frame loop stops posting in the same window — but this run does not
+separate "the upload guard refuses every frame" from "the surface detaches and the session stops". A
+build with one of the two instrumented would.
+
+**This row is not a regression.** It is the first time the authored layer has been asked to draw on a
+device: the Stage 2b run above measured the procedural tube layer only, and §12.5 records that the
+authored-mesh half of L5 was never exercised on hardware. Nothing in this run contradicts the #415
+numbers; it simply leaves that configuration unmeasured.
+
+**Consequences for the Stage 3 gate.** Stage 3's automated acceptance does not include a frame-rate
+number (§15: it is recorded as information, never gated), so this run blocks no acceptance criterion.
+It does mean the closing PR's device evidence is the tube layer's, and the per-instance visibility and
+highlight demonstration on real hardware is still owed — the JVM tests cover the mask and the tint, and
+a device run is what would show them on a surface.
+
+### 7.8 Device run — the authored layer's per-instance path
+
+§7.7 ended with one demonstration still owed: per-instance visibility and a per-instance highlight on
+real hardware. This section records that run, and the render-path change that makes the highlight safe
+to ask for.
+
+#### What changed on the render path
+
+| Before | After |
+| --- | --- |
+| A selection called `RenderableManager.setMaterialInstanceAt` while frames were being drawn | A selection writes `baseColorFactor` and `emissiveFactor` on that section's own instance — a uniform write; no renderable state is touched |
+| Per-section instances came from `MaterialInstance.duplicate()` on gltfio's instances | Each instance is built in `MuscleLayerStage.prepare()` with `Material.createInstance()`, given `muscles_sup.glb`'s authored `baseColorFactor`/`metallicFactor`/`roughnessFactor`, and assigned to its renderable once, before the entity enters the scene |
+| Teardown freed the instances as soon as the frame loop stopped | `Engine.flushAndWait()` drains the render thread, `destroyAsset()` runs, and only then does `releaseMaterials()` free the instances |
+
+The debug host drives the layer without dumping the UI: `am start --activity-single-top -n
+com.monkfitness.app/.character.CharacterDiagnosticsActivity --es action <verb> --es instance
+<muscle:side>` (`meshes`, `hide`, `show`, `select`, `exercise`, `pause`, `resume`, `step`, `overlay`),
+and one `CharacterDevice` log line per 500 ms carries the frame count, the smoothed fps, the frame p95,
+every stage's p50/p95 and the layer's own state. No `uiautomator dump` is involved.
+
+#### Build and device
+
+| Property | Value |
+| --- | --- |
+| Build | `assembleDebug -Pmonk.filamentCharacter=true`, `BuildConfig.FILAMENT_CHARACTER_ENABLED = true` |
+| APK | 44,200,280 bytes, `sha256 8606439f1dc97b8e2ae453dfea0a8725183459b83e7b61e613c11594460f72d7` |
+| Install | `pm install -r -d` over `rish` (Shizuku): `Success` |
+| Device | motorola edge 50 ultra (`ctwo_geuw`), Android 16 / API 36 |
+| SoC + GPU | Qualcomm (QTI) · Adreno 735 |
+| Backend | requested Auto → active **OpenGL** |
+| Display | 1220 × 2712 |
+
+#### The 20-second window
+
+Squat, meshes on, one sequential run. The readings are the 40 telemetry lines inside the window (one
+per 500 ms), read back with `logcat -d -v time -s CharacterDevice:I`.
+
+| Reading | Value |
+| --- | --- |
+| Window | 19.7 s, 40 samples |
+| Sections drawn | **16 / 16 on every sample** |
+| Frames | 863 → 2,029: **1,166 frames, 59.3 fps** over the window |
+| Smoothed fps (session counter) | median **59**, min 54, max 59 |
+| Frame p95 | median **11.79 ms** (10.68 … 13.53) |
+| `anatomyFrames` p50/p95 | **0.04 / 0.06 ms** (max 0.10 / 0.13) |
+| `anatomyPaths` p50/p95 | **8.14 / 10.59 ms** (max 8.76 / 12.65) |
+| `muscleSkin` p50/p95 | **0.17 / 0.23 ms** (max 0.27 / 0.40) |
+| PID | 24821 at launch, **24821** at the end |
+| `logcat -b crash` | **0 bytes** |
+
+The smoothed counter and the frame delta agree here (59 against 59.3 fps). An earlier run of this code,
+taken while the handset was warm from an hour of 59 fps sessions, measured 53.5 fps average and a
+smoothed median of 56 with the same 16/16; both readings are recorded rather than only the cool one.
+
+#### Per-instance hide, show and select
+
+Verbatim from the run, in order (`…` elides the head of each line):
+
+```
+… hide    frames=2392 fps=59 p95=11.26 mesh=15/16 solved=true selected=- highlight=false hidden=rectus_abdominis:A
+… show    frames=2781 fps=59 p95=12.13 mesh=16/16 solved=true selected=- highlight=false hidden=-
+… select  frames=3138 fps=59 p95=11.09 mesh=16/16 solved=true selected=rectus_abdominis:A highlight=true hidden=-
+```
+
+Hiding one instance drops the drawn count to 15 and names it; showing it restores 16/16; selecting it
+reports the selected instance and `highlight=true`. The PID does not change across the three and the
+crash buffer stays empty.
+
+#### What this run does not establish
+
+The tint is confirmed at the material level, not as pixels. With all sixteen instances carrying
+`emissiveFactor (1, 0.4, 0.05)` at `emissiveStrength 3` in a probe build, a frame whose telemetry reads
+`mesh=16/16` contains **no** pixel with R > 80 and R − B > 30; hiding all sixteen sections moved 1.5 %
+of the sampled cells (3,135 of 206,790 — the order the debug text moves), while toggling meshes moves
+11.6 % only because the overlay grows a line when the mesh row appears. The sections do draw: Filament
+names all sixteen `muscleSection` instances in its own sampler warnings. The likeliest reading is that
+the authored sections sit inside the opaque body mesh, so no per-instance colour reaches the frame. A
+pixel-level highlight needs the body hidden or the sections drawn over it; that is a separate change,
+and this run does not claim it.
+
+One native crash was observed in this session: a switch from squat to plank with the layer live died
+with SIGSEGV in `FEngine::loop` (`libfilament-jni`, fault address `0xb4000078d067ceaf`, 50 s into the
+process). Four further switches on the same build did not reproduce it, and the recorded run above does
+not switch exercises. `Engine.flushAndWait()` was added at teardown after that observation, so the
+render thread is drained before the asset and its instances are freed; one clean run is not proof that
+it is what keeps the switch safe.

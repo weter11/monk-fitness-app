@@ -3,8 +3,18 @@ package com.monkfitness.app.character
 import com.monkfitness.app.anatomy.AnatomyDefinition
 import com.monkfitness.app.anatomy.AnatomyDefinitionLoader
 import com.monkfitness.app.anatomy.AnatomyFrame
+import com.monkfitness.app.anatomy.AnatomyPoseFixture
 import com.monkfitness.app.anatomy.AnatomySolver
+import com.monkfitness.app.anatomy.Attachment
+import com.monkfitness.app.anatomy.MuscleDefinition
+import com.monkfitness.app.anatomy.MuscleHead
+import com.monkfitness.app.anatomy.MuscleHeadId
+import com.monkfitness.app.anatomy.MuscleInstanceId
+import com.monkfitness.app.anatomy.MuscleLayer
+import com.monkfitness.app.anatomy.MuscleSide
 import com.monkfitness.app.anatomy.PathStatus
+import com.monkfitness.app.anatomy.Segment
+import com.monkfitness.app.anatomy.TendonSpec
 import com.monkfitness.app.animation.SkeletonDefinition
 import com.monkfitness.app.animation.SkeletonPose
 import com.monkfitness.app.animation.Vector3
@@ -17,8 +27,9 @@ import java.io.File
 
 /**
  * The authored layer's per-instance behaviour, on the objects the stage drives: the section state it
- * applies, the partition it is addressed by, and the palette it uploads. The Filament calls that carry
- * these decisions onto renderables need a GPU and are covered by the device run, not here.
+ * applies, the highlight it writes as a uniform, the partition it is addressed by, and the palette it
+ * uploads. The Filament calls that carry these decisions onto renderables need a GPU and are covered
+ * by the device run, not here.
  */
 class MuscleLayerStageTest {
 
@@ -50,7 +61,7 @@ class MuscleLayerStageTest {
     /** What `CharacterSession.uploadMuscleLayer` does with one frame's decisions. */
     private fun follow(selection: MuscleSelection) {
         for (section in 0 until partition.size) {
-            state.show(section, selection.showsSection(partition, section, frame.renderable))
+            state.show(section, selection.showsSection(partition, section, frame))
         }
         state.select(selection.selected?.let(partition::indexOf) ?: MuscleSectionState.NO_SECTION)
     }
@@ -70,6 +81,94 @@ class MuscleLayerStageTest {
         return offsets.toIntArray()
     }
 
+    private fun maskFixture(): Pair<AnatomyFrame, MuscleSectionPartition> {
+        val headIds = listOf(
+            MuscleHeadId("probe", MuscleSide.A, 0),
+            MuscleHeadId("probe", MuscleSide.P, 0),
+            MuscleHeadId("pair", MuscleSide.A, 0),
+            MuscleHeadId("pair", MuscleSide.A, 1),
+            MuscleHeadId("pair", MuscleSide.P, 0),
+            MuscleHeadId("pair", MuscleSide.P, 1)
+        )
+        val attachment = Attachment(Segment.THORAX, 0f, 0f, 0f)
+        val muscles = mapOf(
+            "probe" to MuscleDefinition(
+                id = "probe",
+                name = "probe",
+                layer = MuscleLayer.SUPERFICIAL,
+                widthMetres = 0.1f,
+                thicknessMetres = 0.1f,
+                tendon = TendonSpec(0f, 0f),
+                heads = listOf(MuscleHead(attachment, attachment.copy(y = 1f)))
+            ),
+            "pair" to MuscleDefinition(
+                id = "pair",
+                name = "pair",
+                layer = MuscleLayer.SUPERFICIAL,
+                widthMetres = 0.1f,
+                thicknessMetres = 0.1f,
+                tendon = TendonSpec(0f, 0f),
+                heads = listOf(
+                    MuscleHead(attachment, attachment.copy(y = 1f)),
+                    MuscleHead(attachment.copy(y = 0.25f), attachment.copy(y = 0.75f))
+                )
+            )
+        )
+        val anatomy = AnatomyFrame(headIds, muscles, pointCapacity = 2, landmarkCount = 0)
+        val constructor = MuscleSectionPartition::class.java.getDeclaredConstructor(
+            List::class.java,
+            List::class.java,
+            List::class.java
+        )
+        constructor.isAccessible = true
+        val instances = listOf(
+            MuscleInstanceId("probe", MuscleSide.A),
+            MuscleInstanceId("pair", MuscleSide.A),
+            MuscleInstanceId("probe", MuscleSide.P),
+            MuscleInstanceId("pair", MuscleSide.P)
+        )
+        val partition = constructor.newInstance(
+            instances,
+            instances.map { "${it.muscleId}_${it.side.name}" },
+            List(instances.size) { MuscleLayer.SUPERFICIAL }
+        ) as MuscleSectionPartition
+        return anatomy to partition
+    }
+
+    @Test
+    fun aSectionReadsTheMaskByItsOwnInstanceAddress() {
+        val (anatomy, partition) = maskFixture()
+        val all = MuscleSelection(showsMeshes = true)
+        anatomy.renderable.fill(true)
+        for (section in 0 until partition.size) {
+            assertTrue(
+                "section $section reads its own instance bit",
+                all.showsSection(partition, section, anatomy)
+            )
+        }
+
+        val refusedInstance = partition.instance(2)
+        anatomy.renderable[anatomy.instances.indexOf(refusedInstance)] = false
+        for (section in 0 until partition.size) {
+            assertEquals(
+                "only ${refusedInstance}'s section follows its refusal",
+                partition.instance(section) != refusedInstance,
+                all.showsSection(partition, section, anatomy)
+            )
+        }
+    }
+
+    @Test
+    fun aSolvedFrameOpensEveryAuthoredSection() {
+        val live = AnatomyPoseFixture.livePose("squat_standard", 0.5f)
+        solver().use { it.solve(live, frame) }
+        val all = MuscleSelection(showsMeshes = true)
+
+        follow(all)
+
+        assertEquals("a solved frame shows every section", partition.size, state.shownCount)
+    }
+
     @Test
     fun hidingOneSectionLeavesEveryNeighbourShown() {
         solver().use { it.solve(bindPose(), frame) }
@@ -85,7 +184,7 @@ class MuscleLayerStageTest {
         assertFalse("only the hidden section stops drawing", state.draws(0))
         for (section in 1 until partition.size) {
             assertTrue("section $section still draws", state.draws(section))
-            assertTrue(selection.showsSection(partition, section, frame.renderable))
+            assertTrue(selection.showsSection(partition, section, frame))
         }
         assertEquals("the neighbour count is what the mask leaves on", partition.size - 1, state.shownCount)
         assertFalse("re-hiding an already hidden section writes no mask", state.show(0, false))
@@ -96,7 +195,22 @@ class MuscleLayerStageTest {
     }
 
     @Test
-    fun selectingOneSectionTintsItAndMovesNoVertex() {
+    fun aFreshSectionMaskPublishesEverySection() {
+        val state = MuscleSectionState(3)
+        state.select(2)
+        state.show(1, false)
+
+        state.showAll()
+
+        assertTrue(state.draws(0))
+        assertTrue(state.draws(1))
+        assertTrue(state.draws(2))
+        assertEquals(3, state.shownCount)
+        assertEquals(MuscleSectionState.NO_SECTION, state.selected)
+    }
+
+    @Test
+    fun selectingOneSectionRecordsItAndMovesNoVertex() {
         solver().use { it.solve(bindPose(), frame) }
         val slot = mesh.slot()
         mesh.write(frame, slot, MuscleSelection(showsTubes = true))
@@ -120,6 +234,34 @@ class MuscleLayerStageTest {
         assertArrayEquals("a selection moves no vertex", positions, slot.positions.copyOf(positions.size), 0f)
         assertArrayEquals("a selection rewrites no index", indices, slot.indices.copyOf(indices.size))
         assertEquals("a selection keeps the topology", topology, slot.topologyRevision)
+    }
+
+    @Test
+    fun aSelectionTintsOnlyThePickedSectionsUniformAndClearsThePreviousOne() {
+        val tinted = BooleanArray(partition.size)
+        var writes = 0
+        val selection = MuscleHighlightSelection(object : MuscleHighlightTarget {
+            override fun setHighlight(section: Int, on: Boolean) {
+                tinted[section] = on
+                writes++
+            }
+        })
+
+        selection.select(2)
+        assertTrue("the picked section carries the highlight", tinted[2])
+        assertEquals("one section is tinted", 1, tinted.count { it })
+        assertEquals("one uniform write per selection", 1, writes)
+
+        selection.select(2)
+        assertEquals("re-selecting the same section writes no uniform", 1, writes)
+
+        selection.select(7)
+        assertFalse("the section that lost the selection returns to its authored look", tinted[2])
+        assertTrue("the newly picked section carries the highlight", tinted[7])
+        assertEquals("still one section tinted", 1, tinted.count { it })
+
+        selection.select(MuscleSectionState.NO_SECTION)
+        assertEquals("clearing the selection leaves no tinted section", 0, tinted.count { it })
     }
 
     @Test

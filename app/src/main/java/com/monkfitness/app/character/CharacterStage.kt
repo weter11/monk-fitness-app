@@ -164,10 +164,20 @@ fun CharacterStage(
  * each head's modelled length change against the rest stance.
  */
 @Composable
-private fun MuscleDebugOverlay(session: CharacterSession, modifier: Modifier = Modifier) {
+private fun MuscleDebugOverlay(
+    session: CharacterSession,
+    modifier: Modifier = Modifier
+) {
     val controller = session.layers
     var diagnostics by remember(session) { mutableStateOf(session.diagnostics()) }
     var selection by remember(session) { mutableStateOf(controller.selection) }
+    DisposableEffect(session) {
+        val remove = controller.observeSelection {
+            diagnostics = session.diagnostics()
+            selection = controller.selection
+        }
+        onDispose(remove)
+    }
     LaunchedEffect(session) {
         while (true) {
             diagnostics = session.diagnostics()
@@ -280,11 +290,18 @@ private fun describeMuscles(diagnostics: CharacterDiagnostics): String = buildSt
         append(diagnostics.muscleAssetUploads).append(" palette uploads")
         if (diagnostics.muscleAssetSelected >= 0) {
             append(" · selected ").append(diagnostics.muscleAssetSelected)
+            if (diagnostics.muscleHighlightApplied) append(" · material applied")
         }
         val undrawn = diagnostics.muscleAssetSections - diagnostics.muscleAssetDrawn
         if (undrawn > 0) append(" · not drawn ").append(undrawn)
     }
     diagnostics.muscleAssetError?.let { append("\nmesh: ").append(it) }
+    if (diagnostics.muscleSelectedInstance != null) {
+        append("\nselected ").append(diagnostics.muscleSelectedInstance)
+    }
+    if (diagnostics.muscleHiddenInstances.isNotEmpty()) {
+        append("\nhidden ").append(diagnostics.muscleHiddenInstances.joinToString(","))
+    }
     diagnostics.muscleHighlightError?.let { append("\nhighlight: ").append(it) }
     if (diagnostics.muscleAttributes.isNotBlank()) {
         append("\nattrs ").append(diagnostics.muscleAttributes)

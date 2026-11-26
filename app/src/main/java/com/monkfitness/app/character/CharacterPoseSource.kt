@@ -55,6 +55,10 @@ data class CharacterDiagnostics(
     val muscleAssetSelected: Int = -1,
     /** Why a selection cannot tint its section, or null when the highlight is live. */
     val muscleHighlightError: String? = null,
+    /** True while the selected section's own instance carries the highlight uniform. */
+    val muscleHighlightApplied: Boolean = false,
+    val muscleHiddenInstances: List<String> = emptyList(),
+    val muscleSelectedInstance: String? = null,
     /** Per-stage p50/p95 over the same window as [frameTimeP95Ms]; empty until a frame ran. */
     val frameStages: List<FrameStageReading> = emptyList()
 )
