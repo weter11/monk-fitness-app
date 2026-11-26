@@ -42,10 +42,14 @@ class ProceduralTubeBudgetTest {
         assertEquals("2 · R · (N − 1) band triangles per head", 2 * segments * (samples - 1), mesh.bandTrianglesPerHead)
         assertEquals("one R-triangle fan per end", 2 * segments, mesh.capTrianglesPerHead)
         assertEquals("a head is its bands plus its caps", 768, mesh.trianglesPerHead)
-        assertEquals("the shipped definition's caps-on budget", 13_824, mesh.triangleCapacity)
         assertEquals(
-            "the band-only budget the handoff was specified with",
-            13_536,
+            "the caps-on budget is one head's cost for every head the library draws",
+            definition.headCount * mesh.trianglesPerHead,
+            mesh.triangleCapacity
+        )
+        assertEquals(
+            "the band-only budget drops the two capped fans per head",
+            definition.headCount * 2 * segments * (samples - 1),
             ProceduralMuscleMesh(definition, unitsPerMetre, caps = false).triangleCapacity
         )
         assertEquals("rings plus two cap centres per head", 48 * segments + 2, mesh.verticesPerHead)
@@ -103,11 +107,31 @@ class ProceduralTubeBudgetTest {
         val frame = solvedFrame()
         val slot = mesh.slot()
         val superficialOnly = MuscleSelection(showsTubes = true).withLayer(MuscleLayer.DEEP, false)
-        // The M1 library is eight superficial muscles: the deep layer is a declared placeholder, so
-        // hiding it costs nothing and hiding the superficial one collapses every head.
-        assertEquals("no shipped muscle is deep", 0, mesh.trianglesPerLayer(MuscleLayer.DEEP))
-        assertEquals(mesh.triangleCapacity, mesh.trianglesPerLayer(MuscleLayer.SUPERFICIAL))
+        // Each layer owns exactly the heads of its own muscles, so the two budgets partition the slot.
+        val deep = definition.muscles.filter { it.layer == MuscleLayer.DEEP }
+            .sumOf { it.heads.size * MuscleSide.entries.size }
+        val superficial = definition.muscles.filter { it.layer == MuscleLayer.SUPERFICIAL }
+            .sumOf { it.heads.size * MuscleSide.entries.size }
+        assertEquals("the deep layer's own heads", deep * mesh.trianglesPerHead, mesh.trianglesPerLayer(MuscleLayer.DEEP))
+        assertEquals(
+            "the superficial layer's own heads",
+            superficial * mesh.trianglesPerHead,
+            mesh.trianglesPerLayer(MuscleLayer.SUPERFICIAL)
+        )
+        assertEquals(mesh.triangleCapacity, mesh.trianglesPerLayer(MuscleLayer.DEEP) + mesh.trianglesPerLayer(MuscleLayer.SUPERFICIAL))
         assertEquals(mesh.triangleCapacity, mesh.write(frame, slot, superficialOnly))
+        // A hidden layer collapses its own heads and leaves its neighbours' triangles untouched.
+        for (slotIndex in 0 until frame.headCount) {
+            val layer = definition.muscle(frame.heads[slotIndex].muscleId)!!.layer
+            if (layer == MuscleLayer.DEEP) {
+                assertTrue("deep head $slotIndex is collapsed", CollapsedHeads.isCollapsed(slot, mesh, slotIndex))
+            } else {
+                assertTrue(
+                    "superficial head $slotIndex still draws",
+                    CollapsedHeads.maxTriangleArea(slot, mesh, slotIndex) > 0f
+                )
+            }
+        }
 
         val nothing = superficialOnly.withLayer(MuscleLayer.SUPERFICIAL, false)
         assertEquals(

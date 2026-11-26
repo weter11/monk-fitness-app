@@ -41,15 +41,52 @@ class AnatomyDefinitionTest {
     }
 
     @Test
-    fun theShippedLibraryDeclaresTheCanonicalInstances() {
-        // Behaviour, not inventory: 8 muscles × 2 sides = 16 instances, and biceps femoris is the only
-        // two-head muscle, so the frame carries 18 paths rather than 16.
-        assertEquals(16, definition.instanceCount)
-        assertEquals(18, definition.headCount)
+    fun theShippedLibraryDeclaresEveryHeadAndInstanceTwiceOver() {
+        // Behaviour, not inventory: one instance per muscle per side, one path per head per side,
+        // and a multi-head muscle is the only way headCount exceeds instanceCount.
+        assertEquals(definition.muscles.size * MuscleSide.entries.size, definition.instanceCount)
+        assertEquals(definition.muscles.sumOf { it.heads.size } * MuscleSide.entries.size, definition.headCount)
         assertEquals(
             "a multi-head muscle is the only way headCount exceeds instanceCount",
             definition.headCount - definition.instanceCount,
             definition.muscles.sumOf { (it.heads.size - 1) * MuscleSide.entries.size }
+        )
+    }
+
+    @Test
+    fun theTwoLayersPartitionTheLibraryAndItsPaths() {
+        // The renderer toggles a layer, so a muscle in neither layer is a tube nothing can hide and a
+        // head counted in both would be drawn twice: the split has to account for every path.
+        val layerHeads = MuscleLayer.entries.associateWith { layer ->
+            definition.muscles.filter { it.layer == layer }.sumOf { it.heads.size } * MuscleSide.entries.size
+        }
+        assertEquals("every muscle is in exactly one layer", definition.muscles.size,
+            MuscleLayer.entries.sumOf { layer -> definition.muscles.count { it.layer == layer } })
+        assertEquals("the layers account for every path", definition.headCount, layerHeads.values.sum())
+        for (layer in MuscleLayer.entries) {
+            assertTrue(
+                "the $layer layer carries no muscle, so its toggle is a control with nothing behind it",
+                layerHeads.getValue(layer) > 0
+            )
+        }
+    }
+
+    @Test
+    fun theAtlasReachesEveryFrameTheRigCanAnchorTo() {
+        // A path cannot pin to a row with no origin joint, and SKULL and TOES are those rows. Every
+        // other row is a region the library is meant to carry, so an unused one is a library that
+        // stopped short of the body it draws.
+        val anchorable = Segment.entries
+            .filter { segment -> SegmentId.of(segment).any { SegmentSpec.of(it).node != null } }
+            .toSet()
+        val anchored = definition.muscles
+            .flatMap { muscle -> muscle.heads.flatMap { head -> head.attachments } }
+            .map { it.segment }
+            .toSet()
+        assertEquals(anchorable, anchored)
+        assertFalse(
+            "the terminal rows have no origin joint, so an attachment there could not resolve",
+            anchored.any { it == Segment.SKULL || it == Segment.TOES }
         )
     }
 
