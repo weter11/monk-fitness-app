@@ -30,11 +30,33 @@ class HelperBindTest {
     private val scale: Float = X1Bind.unitsPerMetre(skeleton)
     private val restPose = AnatomyPoseFixture.bindPose(skeleton)
 
+    /**
+     * The heads the exported asset actually carries. The library is now larger than the Stage-3
+     * export, so the count these gates measure is the manifest's own coverage — read from the
+     * manifest, never a list of names — and [theExportCoversTheFirstHeadsOfTheShippedFrame] pins
+     * that coverage to the frame's head order.
+     */
+    private val binds: HelperBinds = HelperBinds.read(File(MANIFEST).readText())
+    private val exportedHeads: List<MuscleHeadId> = binds.binds.map { it.head }.distinct()
+
+    @Test
+    fun theExportCoversTheFirstHeadsOfTheShippedFrame() {
+        // The skinner maps a frame slot to a helper group by slot order, so an export that dropped or
+        // reordered a head would skin one muscle with another's path while every count still agreed.
+        val frame = restFrame()
+        assertTrue("the export covers no head", exportedHeads.isNotEmpty())
+        assertEquals(
+            "the exported heads are the frame's first slots, in frame order",
+            frame.heads.take(exportedHeads.size),
+            exportedHeads
+        )
+    }
+
     @Test
     fun everyHelperBindsOnTheSolverRestPathAtItsStation() {
         val frame = restFrame()
         val helpers = manifest().getJSONArray("helpers")
-        assertEquals("four helpers per head-side instance", definition.headCount * STATIONS, helpers.length())
+        assertEquals("four helpers per head-side instance", exportedHeads.size * STATIONS, helpers.length())
 
         var worstPosition = 0.0
         var worstAxis = 0.0
@@ -124,11 +146,14 @@ class HelperBindTest {
         )
         assertEquals("one inverse bind per palette joint", asset.joints.size, asset.inverseBinds.size)
 
+        // One section per exported instance, in the manifest's own head order: the asset carries the
+        // Stage-3 export, not the whole library, so the expected list is derived from its coverage.
         val expected = ArrayList<String>()
-        for (muscle in definition.muscles) {
-            for (side in MuscleSide.entries) expected += "${muscle.id}_${side.name}"
+        for (head in exportedHeads) {
+            val section = "${head.muscleId}_${head.side.name}"
+            if (expected.isEmpty() || expected.last() != section) expected += section
         }
-        assertEquals("one section per muscle instance", expected, asset.sectionNames.toList())
+        assertEquals("one section per exported muscle instance", expected, asset.sectionNames.toList())
         val skinJoints = manifest.getInt("skinJoints")
         assertEquals(
             "the rig's own range is the first $skinJoints joints",
@@ -211,8 +236,8 @@ class HelperBindTest {
             }
         }
         assertEquals(
-            "13 ring vertices of 8 plus two cap centres for each of the ${definition.headCount} heads",
-            definition.headCount * (13 * 8 + 2),
+            "13 ring vertices of 8 plus two cap centres for each of the ${exportedHeads.size} exported heads",
+            exportedHeads.size * (13 * 8 + 2),
             vertices
         )
         assertTrue("a vertex's weights must sum to 1, worst $worstWeight", worstWeight <= 1e-4)
@@ -319,7 +344,7 @@ class HelperBindTest {
         }
         assertEquals(
             "every head is ${RING_COUNT - 1} bands of $RING_SEGMENTS quads plus two capped ends",
-            definition.headCount * ((RING_COUNT - 1) * RING_SEGMENTS * 2 + 2 * RING_SEGMENTS),
+            exportedHeads.size * ((RING_COUNT - 1) * RING_SEGMENTS * 2 + 2 * RING_SEGMENTS),
             triangles
         )
         println("L5 degenerate triangles: none of $triangles; smallest area $smallest m2 at $smallestWhere")
@@ -346,7 +371,7 @@ class HelperBindTest {
             }
             volumes[primitive.name] = section
         }
-        assertEquals("every superficial muscle is a section on both sides", 16, volumes.size)
+        assertEquals("every exported muscle is a section on both sides", exportedHeads.map { it.muscleId }.distinct().size * 2, volumes.size)
         println(
             "L5 section volumes (m3): " + volumes.entries.joinToString(", ") { "${it.key} ${"%.3e".format(it.value)}" } +
                 "; smallest $smallest at $smallestWhere"
@@ -726,7 +751,7 @@ class HelperBindTest {
         val manifest = manifest()
         val skin = manifest.getInt("skinJoints")
         val helpers = manifest.getInt("helperCount")
-        assertEquals("one helper per head and station", definition.headCount * STATIONS, helpers)
+        assertEquals("one helper per head and station", exportedHeads.size * STATIONS, helpers)
         assertEquals(
             "the manifest's palette is the writer's own count",
             manifest.getInt("palette"),

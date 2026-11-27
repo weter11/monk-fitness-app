@@ -1,7 +1,6 @@
 package com.monkfitness.app.character
 
 import com.monkfitness.app.anatomy.AnatomyDefinition
-import com.monkfitness.app.anatomy.AnatomyDefinitionLoader
 import com.monkfitness.app.anatomy.AnatomyFrame
 import com.monkfitness.app.anatomy.AnatomyPoseFixture
 import com.monkfitness.app.anatomy.AnatomySolver
@@ -33,11 +32,12 @@ import java.io.File
  */
 class MuscleLayerStageTest {
 
-    private val definition: AnatomyDefinition = AnatomyDefinitionLoader.load(File(ASSET).readText())
+    private val binds: HelperBinds = MuscleExportFixture.binds()
+    private val definition: AnatomyDefinition = MuscleExportFixture.definition(binds = binds)
+
     private val skeleton = SkeletonDefinition.DEFAULT_ADULT
     private val unitsPerMetre = X1Bind.unitsPerMetre(skeleton).toDouble()
     private val mesh = ProceduralMuscleMesh(definition, unitsPerMetre)
-    private val binds = HelperBinds.read(File(BINDS).readText())
     private val frame = AnatomyFrame.of(definition)
     private val partition = MuscleSectionPartition.of(frame)
     private val skinner = MuscleLayerSkinner(
@@ -324,7 +324,6 @@ class MuscleLayerStageTest {
     }
 
     private companion object {
-        const val ASSET = "src/main/assets/anatomy/anatomy_v1.json"
         const val BINDS = "src/main/assets/anatomy/helpers_v1.json"
         const val MUSCLE_ASSET = "src/main/assets/characters/muscles_sup.glb"
     }

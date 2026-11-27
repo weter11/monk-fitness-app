@@ -93,11 +93,28 @@ class LayerToggleTest {
             mesh.write(frame, slot, controller.selection)
         )
         for (head in drawn) {
-            assertEquals("head $head is collapsed now", 0f, CollapsedHeads.maxTriangleArea(slot, mesh, head), 0f)
+            val layer = frame.muscleStates[head].layer
+            // Each layer is its own draw, so hiding one collapses that layer's heads and leaves the
+            // neighbour's tubes exactly where they were.
+            if (layer == MuscleLayer.SUPERFICIAL) {
+                assertEquals("superficial head $head is collapsed now", 0f, CollapsedHeads.maxTriangleArea(slot, mesh, head), 0f)
+            } else {
+                assertTrue(
+                    "deep head $head must still draw under a superficial-only toggle",
+                    CollapsedHeads.maxTriangleArea(slot, mesh, head) > 0f
+                )
+            }
         }
         assertTrue("the deeper layer is untouched", controller.showsLayer(MuscleLayer.DEEP))
         assertFalse(controller.showsLayer(MuscleLayer.SUPERFICIAL))
         assertTrue("the body is still the thing the tubes are read against", controller.layer(CharacterLayerId.BODY)?.visible == true)
+
+        // With both layers off every head collapses, and the topology is still the definition's.
+        assertFalse("the deep layer now toggles off", controller.toggleLayer(CharacterLayerId.DEEP_MUSCLE))
+        assertEquals(all, mesh.write(frame, slot, controller.selection))
+        for (head in 0 until frame.headCount) {
+            assertEquals("head $head is collapsed with both layers off", 0f, CollapsedHeads.maxTriangleArea(slot, mesh, head), 0f)
+        }
     }
 
     @Test

@@ -127,10 +127,18 @@ class SceneFrameHandoffTest {
             assertEquals(definition.muscle(instance.muscleId)?.layer, partition.layer(section))
         }
         assertEquals("an instance the frame does not carry has no section", -1, partition.indexOf(MuscleInstanceId("not_a_muscle", MuscleSide.A)))
+        // The GLB is the Stage-3 export, so it names the exported instances and no others: every
+        // section it publishes must be a section this frame has, and it must carry all of them.
         assertEquals(
-            "the asset must publish exactly these sections",
-            partition.keys.toSet(),
+            "the asset must publish exactly the instances the export binds",
+            MuscleExportFixture.definition()
+                .let { exported -> AnatomyFrame.of(exported).instances.map { "${it.muscleId}_${it.side.name}" } }
+                .toSet(),
             assetSectionNames()
+        )
+        assertTrue(
+            "a section the asset names must be one the frame carries: ${assetSectionNames() - partition.keys.toSet()}",
+            partition.keys.toSet().containsAll(assetSectionNames())
         )
     }
 

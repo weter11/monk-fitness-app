@@ -43,6 +43,13 @@ class AnatomyParallelSolveTest {
                 serial.solve(poses[index], one)
                 parallel.solve(poses[index], four)
                 assertSameFrame("pose $index", one, four)
+                // A lane that claimed no slot leaves its heads unpublished: the paths are the
+                // evidence the whole atlas crossed the dispatch, not only the heads it printed.
+                assertEquals(
+                    "pose $index: every head of the atlas published a path",
+                    definition.headCount,
+                    (0 until four.headCount).count { four.pointCounts[it] > 0 }
+                )
             }
         } finally {
             parallel.close()

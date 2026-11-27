@@ -59,7 +59,11 @@ class AnatomySolveAllocationTest {
             solve <= derive
         )
         val solved = (0 until frame.headCount).count { frame.statuses[it] == PathStatus.VALID.ordinal }
-        assertTrue("the measured solve must have produced paths, not a skipped body", solved > 0)
+        assertEquals(
+            "the measured solve must have solved every head of the atlas, not a skipped body",
+            frame.headCount,
+            solved
+        )
     }
 
     @Test
@@ -98,7 +102,11 @@ class AnatomySolveAllocationTest {
             measured
         )
         val solved = (0 until frame.headCount).count { frame.statuses[it] == PathStatus.VALID.ordinal }
-        assertTrue("the measured loop must have produced paths, not a skipped body", solved > 0)
+        assertEquals(
+            "the measured loop must have solved every head of the atlas, not a skipped body",
+            frame.headCount,
+            solved
+        )
     }
 
     private fun solveEveryHeadWithTheLoop() {

@@ -205,6 +205,493 @@
       "radiusKnots": [[0.0, 0.006], [0.10, 0.024], [0.84, 0.024], [1.0, 0.004]],
       "passCap": 8,
       "corridorMetres": 0.18
+    },
+    {
+      "id": "sternocleidomastoid",
+      "name": "Sternocleidomastoid",
+      "layer": "SUPERFICIAL",
+      "heads": [
+        {
+          "origin": { "segment": "THORAX", "x": 0.045, "y": 0.010, "z": 0.020 },
+          "insertion": { "segment": "NECK", "x": 0.010, "y": 0.058, "z": 0.032 }
+        }
+      ],
+      "widthMetres": 0.045,
+      "thicknessMetres": 0.018,
+      "tendon": { "originFraction": 0.10, "insertionFraction": 0.14 },
+      "wraps": [],
+      "profile": 0.50,
+      "radiusKnots": [[0.0, 0.004], [0.15, 0.013], [0.85, 0.013], [1.0, 0.004]],
+      "passCap": 8,
+      "corridorMetres": 0.12
+    },
+    {
+      "id": "splenius_capitis",
+      "name": "Splenius capitis",
+      "layer": "DEEP",
+      "heads": [
+        {
+          "origin": { "segment": "THORAX", "x": -0.040, "y": -0.020, "z": 0.030 },
+          "insertion": { "segment": "NECK", "x": -0.015, "y": 0.060, "z": 0.028 }
+        }
+      ],
+      "widthMetres": 0.040,
+      "thicknessMetres": 0.020,
+      "tendon": { "originFraction": 0.10, "insertionFraction": 0.12 },
+      "wraps": [],
+      "profile": 0.50,
+      "radiusKnots": [[0.0, 0.003], [0.15, 0.012], [0.85, 0.012], [1.0, 0.004]],
+      "passCap": 8,
+      "corridorMetres": 0.12
+    },
+    {
+      "id": "trapezius",
+      "name": "Trapezius",
+      "layer": "SUPERFICIAL",
+      "heads": [
+        {
+          "origin": { "segment": "NECK", "x": -0.025, "y": 0.062, "z": 0.028 },
+          "insertion": { "segment": "SCAPULA", "x": 0.000, "y": 0.030, "z": 0.170 }
+        }
+      ],
+      "widthMetres": 0.075,
+      "thicknessMetres": 0.014,
+      "tendon": { "originFraction": 0.10, "insertionFraction": 0.12 },
+      "wraps": [],
+      "profile": 0.50,
+      "radiusKnots": [[0.0, 0.005], [0.15, 0.018], [0.85, 0.018], [1.0, 0.004]],
+      "passCap": 8,
+      "corridorMetres": 0.14
+    },
+    {
+      "id": "levator_scapulae",
+      "name": "Levator scapulae",
+      "layer": "DEEP",
+      "heads": [
+        {
+          "origin": { "segment": "NECK", "x": -0.012, "y": 0.040, "z": 0.030 },
+          "insertion": { "segment": "SCAPULA", "x": -0.020, "y": 0.045, "z": 0.115 }
+        }
+      ],
+      "widthMetres": 0.045,
+      "thicknessMetres": 0.016,
+      "tendon": { "originFraction": 0.10, "insertionFraction": 0.12 },
+      "wraps": [],
+      "profile": 0.50,
+      "radiusKnots": [[0.0, 0.003], [0.15, 0.012], [0.85, 0.012], [1.0, 0.004]],
+      "passCap": 8,
+      "corridorMetres": 0.12
+    },
+    {
+      "id": "rhomboid_major",
+      "name": "Rhomboid major",
+      "layer": "DEEP",
+      "heads": [
+        {
+          "origin": { "segment": "THORAX", "x": -0.040, "y": -0.060, "z": 0.025 },
+          "insertion": { "segment": "SCAPULA", "x": -0.030, "y": 0.005, "z": 0.105 }
+        }
+      ],
+      "widthMetres": 0.055,
+      "thicknessMetres": 0.014,
+      "tendon": { "originFraction": 0.10, "insertionFraction": 0.12 },
+      "wraps": [],
+      "profile": 0.50,
+      "radiusKnots": [[0.0, 0.004], [0.15, 0.014], [0.85, 0.014], [1.0, 0.004]],
+      "passCap": 8,
+      "corridorMetres": 0.12
+    },
+    {
+      "id": "serratus_anterior",
+      "name": "Serratus anterior",
+      "layer": "SUPERFICIAL",
+      "heads": [
+        {
+          "origin": { "segment": "THORAX", "x": 0.010, "y": -0.150, "z": 0.055 },
+          "insertion": { "segment": "SCAPULA", "x": -0.020, "y": -0.055, "z": 0.110 }
+        }
+      ],
+      "widthMetres": 0.070,
+      "thicknessMetres": 0.012,
+      "tendon": { "originFraction": 0.12, "insertionFraction": 0.10 },
+      "wraps": [],
+      "profile": 0.50,
+      "radiusKnots": [[0.0, 0.004], [0.15, 0.015], [0.85, 0.015], [1.0, 0.004]],
+      "passCap": 8,
+      "corridorMetres": 0.14
+    },
+    {
+      "id": "pectoralis_major",
+      "name": "Pectoralis major",
+      "layer": "SUPERFICIAL",
+      "heads": [
+        {
+          "label": "clavicular",
+          "origin": { "segment": "CLAVICLE", "x": 0.020, "y": 0.005, "z": 0.030 },
+          "insertion": { "segment": "HUMERUS", "x": 0.005, "y": -0.010, "z": -0.020 }
+        },
+        {
+          "label": "sternocostal",
+          "origin": { "segment": "THORAX", "x": 0.045, "y": -0.070, "z": 0.025 },
+          "insertion": { "segment": "HUMERUS", "x": 0.000, "y": -0.018, "z": -0.005 }
+        }
+      ],
+      "widthMetres": 0.085,
+      "thicknessMetres": 0.016,
+      "tendon": { "originFraction": 0.10, "insertionFraction": 0.14 },
+      "wraps": [],
+      "profile": 0.50,
+      "radiusKnots": [[0.0, 0.006], [0.15, 0.020], [0.85, 0.020], [1.0, 0.004]],
+      "passCap": 8,
+      "corridorMetres": 0.16
+    },
+    {
+      "id": "infraspinatus",
+      "name": "Infraspinatus",
+      "layer": "DEEP",
+      "heads": [
+        {
+          "origin": { "segment": "SCAPULA", "x": -0.020, "y": -0.010, "z": 0.105 },
+          "insertion": { "segment": "HUMERUS", "x": 0.000, "y": 0.008, "z": -0.010 }
+        }
+      ],
+      "widthMetres": 0.050,
+      "thicknessMetres": 0.020,
+      "tendon": { "originFraction": 0.10, "insertionFraction": 0.12 },
+      "wraps": [],
+      "profile": 0.50,
+      "radiusKnots": [[0.0, 0.004], [0.15, 0.014], [0.85, 0.014], [1.0, 0.004]],
+      "passCap": 8,
+      "corridorMetres": 0.12
+    },
+    {
+      "id": "teres_major",
+      "name": "Teres major",
+      "layer": "SUPERFICIAL",
+      "heads": [
+        {
+          "origin": { "segment": "SCAPULA", "x": -0.020, "y": -0.070, "z": 0.115 },
+          "insertion": { "segment": "HUMERUS", "x": 0.000, "y": -0.030, "z": -0.006 }
+        }
+      ],
+      "widthMetres": 0.045,
+      "thicknessMetres": 0.018,
+      "tendon": { "originFraction": 0.10, "insertionFraction": 0.12 },
+      "wraps": [],
+      "profile": 0.50,
+      "radiusKnots": [[0.0, 0.004], [0.15, 0.013], [0.85, 0.013], [1.0, 0.004]],
+      "passCap": 8,
+      "corridorMetres": 0.12
+    },
+    {
+      "id": "deltoid",
+      "name": "Deltoid",
+      "layer": "SUPERFICIAL",
+      "heads": [
+        {
+          "origin": { "segment": "SCAPULA", "x": 0.000, "y": 0.035, "z": 0.160 },
+          "insertion": { "segment": "HUMERUS", "x": 0.000, "y": -0.070, "z": 0.006 }
+        }
+      ],
+      "widthMetres": 0.065,
+      "thicknessMetres": 0.024,
+      "tendon": { "originFraction": 0.10, "insertionFraction": 0.16 },
+      "wraps": [],
+      "profile": 0.50,
+      "radiusKnots": [[0.0, 0.005], [0.15, 0.018], [0.85, 0.018], [1.0, 0.004]],
+      "passCap": 8,
+      "corridorMetres": 0.14
+    },
+    {
+      "id": "biceps_brachii",
+      "name": "Biceps brachii",
+      "layer": "SUPERFICIAL",
+      "heads": [
+        {
+          "origin": { "segment": "SCAPULA", "x": 0.008, "y": 0.038, "z": 0.155 },
+          "insertion": { "segment": "FOREARM", "x": 0.022, "y": -0.026, "z": 0.004 }
+        }
+      ],
+      "widthMetres": 0.048,
+      "thicknessMetres": 0.024,
+      "tendon": { "originFraction": 0.10, "insertionFraction": 0.14 },
+      "wraps": [],
+      "profile": 0.50,
+      "radiusKnots": [[0.0, 0.004], [0.15, 0.016], [0.85, 0.016], [1.0, 0.004]],
+      "passCap": 8,
+      "corridorMetres": 0.14
+    },
+    {
+      "id": "triceps_brachii",
+      "name": "Triceps brachii",
+      "layer": "SUPERFICIAL",
+      "heads": [
+        {
+          "origin": { "segment": "HUMERUS", "x": -0.020, "y": 0.020, "z": 0.000 },
+          "insertion": { "segment": "FOREARM", "x": -0.018, "y": -0.022, "z": 0.000 }
+        }
+      ],
+      "widthMetres": 0.052,
+      "thicknessMetres": 0.022,
+      "tendon": { "originFraction": 0.10, "insertionFraction": 0.14 },
+      "wraps": [],
+      "profile": 0.50,
+      "radiusKnots": [[0.0, 0.004], [0.15, 0.016], [0.85, 0.016], [1.0, 0.004]],
+      "passCap": 8,
+      "corridorMetres": 0.14
+    },
+    {
+      "id": "brachialis",
+      "name": "Brachialis",
+      "layer": "DEEP",
+      "heads": [
+        {
+          "origin": { "segment": "HUMERUS", "x": 0.020, "y": -0.088, "z": 0.000 },
+          "insertion": { "segment": "FOREARM", "x": 0.020, "y": -0.030, "z": 0.000 }
+        }
+      ],
+      "widthMetres": 0.040,
+      "thicknessMetres": 0.020,
+      "tendon": { "originFraction": 0.10, "insertionFraction": 0.12 },
+      "wraps": [],
+      "profile": 0.50,
+      "radiusKnots": [[0.0, 0.004], [0.15, 0.013], [0.85, 0.013], [1.0, 0.004]],
+      "passCap": 8,
+      "corridorMetres": 0.12
+    },
+    {
+      "id": "brachioradialis",
+      "name": "Brachioradialis",
+      "layer": "SUPERFICIAL",
+      "heads": [
+        {
+          "origin": { "segment": "HUMERUS", "x": 0.014, "y": -0.114, "z": 0.010 },
+          "insertion": { "segment": "FOREARM", "x": 0.020, "y": -0.190, "z": 0.000 }
+        }
+      ],
+      "widthMetres": 0.040,
+      "thicknessMetres": 0.016,
+      "tendon": { "originFraction": 0.10, "insertionFraction": 0.12 },
+      "wraps": [],
+      "profile": 0.50,
+      "radiusKnots": [[0.0, 0.003], [0.15, 0.012], [0.85, 0.012], [1.0, 0.004]],
+      "passCap": 8,
+      "corridorMetres": 0.12
+    },
+    {
+      "id": "flexor_carpi_radialis",
+      "name": "Flexor carpi radialis",
+      "layer": "SUPERFICIAL",
+      "heads": [
+        {
+          "origin": { "segment": "FOREARM", "x": 0.020, "y": -0.012, "z": 0.008 },
+          "insertion": { "segment": "HAND", "x": 0.010, "y": -0.040, "z": 0.000 }
+        }
+      ],
+      "widthMetres": 0.030,
+      "thicknessMetres": 0.014,
+      "tendon": { "originFraction": 0.10, "insertionFraction": 0.12 },
+      "wraps": [],
+      "profile": 0.50,
+      "radiusKnots": [[0.0, 0.003], [0.15, 0.010], [0.85, 0.010], [1.0, 0.004]],
+      "passCap": 8,
+      "corridorMetres": 0.10
+    },
+    {
+      "id": "transversus_abdominis",
+      "name": "Transversus abdominis",
+      "layer": "DEEP",
+      "heads": [
+        {
+          "origin": { "segment": "PELVIS", "x": 0.010, "y": -0.030, "z": 0.050 },
+          "insertion": { "segment": "THORAX", "x": 0.020, "y": -0.150, "z": 0.045 }
+        }
+      ],
+      "widthMetres": 0.070,
+      "thicknessMetres": 0.012,
+      "tendon": { "originFraction": 0.10, "insertionFraction": 0.12 },
+      "wraps": [],
+      "profile": 0.50,
+      "radiusKnots": [[0.0, 0.004], [0.15, 0.014], [0.85, 0.014], [1.0, 0.004]],
+      "passCap": 8,
+      "corridorMetres": 0.12
+    },
+    {
+      "id": "internal_oblique",
+      "name": "Internal oblique",
+      "layer": "DEEP",
+      "heads": [
+        {
+          "origin": { "segment": "PELVIS", "x": 0.025, "y": -0.035, "z": 0.055 },
+          "insertion": { "segment": "THORAX", "x": 0.040, "y": -0.130, "z": 0.055 }
+        }
+      ],
+      "widthMetres": 0.060,
+      "thicknessMetres": 0.014,
+      "tendon": { "originFraction": 0.10, "insertionFraction": 0.12 },
+      "wraps": [],
+      "profile": 0.50,
+      "radiusKnots": [[0.0, 0.004], [0.15, 0.015], [0.85, 0.015], [1.0, 0.004]],
+      "passCap": 8,
+      "corridorMetres": 0.12
+    },
+    {
+      "id": "psoas_major",
+      "name": "Psoas major",
+      "layer": "DEEP",
+      "heads": [
+        {
+          "origin": { "segment": "LUMBAR", "x": 0.015, "y": 0.090, "z": 0.018 },
+          "insertion": { "segment": "FEMUR", "x": -0.010, "y": -0.055, "z": -0.015 }
+        }
+      ],
+      "widthMetres": 0.040,
+      "thicknessMetres": 0.020,
+      "tendon": { "originFraction": 0.10, "insertionFraction": 0.12 },
+      "wraps": [],
+      "profile": 0.50,
+      "radiusKnots": [[0.0, 0.004], [0.15, 0.014], [0.85, 0.014], [1.0, 0.004]],
+      "passCap": 8,
+      "corridorMetres": 0.12
+    },
+    {
+      "id": "iliacus",
+      "name": "Iliacus",
+      "layer": "DEEP",
+      "heads": [
+        {
+          "origin": { "segment": "PELVIS", "x": 0.010, "y": 0.000, "z": 0.045 },
+          "insertion": { "segment": "FEMUR", "x": -0.010, "y": -0.050, "z": -0.010 }
+        }
+      ],
+      "widthMetres": 0.045,
+      "thicknessMetres": 0.018,
+      "tendon": { "originFraction": 0.10, "insertionFraction": 0.12 },
+      "wraps": [],
+      "profile": 0.50,
+      "radiusKnots": [[0.0, 0.004], [0.15, 0.014], [0.85, 0.014], [1.0, 0.004]],
+      "passCap": 8,
+      "corridorMetres": 0.12
+    },
+    {
+      "id": "piriformis",
+      "name": "Piriformis",
+      "layer": "DEEP",
+      "heads": [
+        {
+          "origin": { "segment": "PELVIS", "x": -0.040, "y": -0.010, "z": 0.030 },
+          "insertion": { "segment": "FEMUR", "x": -0.020, "y": -0.035, "z": 0.025 }
+        }
+      ],
+      "widthMetres": 0.035,
+      "thicknessMetres": 0.016,
+      "tendon": { "originFraction": 0.10, "insertionFraction": 0.12 },
+      "wraps": [],
+      "profile": 0.50,
+      "radiusKnots": [[0.0, 0.003], [0.15, 0.011], [0.85, 0.011], [1.0, 0.004]],
+      "passCap": 8,
+      "corridorMetres": 0.12
+    },
+    {
+      "id": "tensor_fasciae_latae",
+      "name": "Tensor fasciae latae",
+      "layer": "SUPERFICIAL",
+      "heads": [
+        {
+          "origin": { "segment": "PELVIS", "x": 0.010, "y": -0.010, "z": 0.060 },
+          "insertion": { "segment": "FEMUR", "x": 0.020, "y": -0.090, "z": 0.020 }
+        }
+      ],
+      "widthMetres": 0.035,
+      "thicknessMetres": 0.016,
+      "tendon": { "originFraction": 0.10, "insertionFraction": 0.12 },
+      "wraps": [],
+      "profile": 0.50,
+      "radiusKnots": [[0.0, 0.003], [0.15, 0.011], [0.85, 0.011], [1.0, 0.004]],
+      "passCap": 8,
+      "corridorMetres": 0.12
+    },
+    {
+      "id": "vastus_lateralis",
+      "name": "Vastus lateralis",
+      "layer": "SUPERFICIAL",
+      "heads": [
+        {
+          "origin": { "segment": "FEMUR", "x": 0.015, "y": -0.100, "z": 0.022 },
+          "insertion": { "segment": "TIBIA", "x": 0.030, "y": -0.062, "z": 0.022 }
+        }
+      ],
+      "widthMetres": 0.060,
+      "thicknessMetres": 0.024,
+      "tendon": { "originFraction": 0.10, "insertionFraction": 0.14 },
+      "wraps": [],
+      "profile": 0.50,
+      "radiusKnots": [[0.0, 0.006], [0.15, 0.020], [0.85, 0.020], [1.0, 0.004]],
+      "passCap": 8,
+      "corridorMetres": 0.14
+    },
+    {
+      "id": "semitendinosus",
+      "name": "Semitendinosus",
+      "layer": "SUPERFICIAL",
+      "heads": [
+        {
+          "origin": { "segment": "PELVIS", "x": -0.035, "y": -0.075, "z": 0.035 },
+          "insertion": { "segment": "TIBIA", "x": -0.030, "y": -0.070, "z": 0.030 }
+        }
+      ],
+      "widthMetres": 0.045,
+      "thicknessMetres": 0.018,
+      "tendon": { "originFraction": 0.10, "insertionFraction": 0.14 },
+      "wraps": [],
+      "profile": 0.50,
+      "radiusKnots": [[0.0, 0.004], [0.15, 0.014], [0.85, 0.014], [1.0, 0.004]],
+      "passCap": 8,
+      "corridorMetres": 0.14
+    },
+    {
+      "id": "gastrocnemius",
+      "name": "Gastrocnemius",
+      "layer": "SUPERFICIAL",
+      "heads": [
+        {
+          "label": "medial head",
+          "origin": { "segment": "FEMUR", "x": -0.030, "y": -0.080, "z": -0.020 },
+          "insertion": { "segment": "FOOT", "x": 0.045, "y": -0.045, "z": 0.000 }
+        },
+        {
+          "label": "lateral head",
+          "origin": { "segment": "FEMUR", "x": -0.030, "y": -0.080, "z": 0.020 },
+          "insertion": { "segment": "FOOT", "x": 0.045, "y": -0.045, "z": 0.006 }
+        }
+      ],
+      "widthMetres": 0.055,
+      "thicknessMetres": 0.024,
+      "tendon": { "originFraction": 0.10, "insertionFraction": 0.16 },
+      "wraps": [],
+      "profile": 0.50,
+      "radiusKnots": [[0.0, 0.005], [0.15, 0.017], [0.85, 0.017], [1.0, 0.004]],
+      "passCap": 8,
+      "corridorMetres": 0.16
+    },
+    {
+      "id": "tibialis_anterior",
+      "name": "Tibialis anterior",
+      "layer": "SUPERFICIAL",
+      "heads": [
+        {
+          "origin": { "segment": "TIBIA", "x": 0.020, "y": -0.120, "z": 0.020 },
+          "insertion": { "segment": "FOOT", "x": 0.000, "y": -0.018, "z": -0.010 }
+        }
+      ],
+      "widthMetres": 0.035,
+      "thicknessMetres": 0.016,
+      "tendon": { "originFraction": 0.10, "insertionFraction": 0.12 },
+      "wraps": [],
+      "profile": 0.50,
+      "radiusKnots": [[0.0, 0.003], [0.15, 0.012], [0.85, 0.012], [1.0, 0.004]],
+      "passCap": 8,
+      "corridorMetres": 0.12
     }
   ]
 }

@@ -124,6 +124,13 @@ class MusclePathDeterminismTest {
     fun theReferenceStanceIsItsOwnFixedPoint() {
         val solver = solver()
         solver.solve(restPose, frame)
+        val refused = (0 until frame.headCount).filter { frame.statuses[it] != PathStatus.VALID.ordinal }
+        assertEquals(
+            "every head of the atlas must solve at the stance its reference length was taken at: " +
+                refused.joinToString { "${frame.heads[it]} ${PathReason.entries[frame.reasonCodes[it]]}" },
+            0,
+            refused.size
+        )
         for (slot in 0 until frame.headCount) {
             if (frame.statuses[slot] != PathStatus.VALID.ordinal) continue
             assertEquals(

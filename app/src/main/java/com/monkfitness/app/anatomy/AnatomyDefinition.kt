@@ -151,10 +151,10 @@ data class AnatomyDefinition(
     private val musclesById: Map<String, MuscleDefinition> = muscles.associateBy { it.id }
     private val wrapsById: Map<String, WrapSurface> = wrapSurfaces.associateBy { it.id }
 
-    /** Paths the frame carries: one per head per side (`18` for the M1 library). */
+    /** Paths the frame carries: one per head per side, so twice the library's heads. */
     val headCount: Int get() = muscles.sumOf { it.headSideCount }
 
-    /** Renderable identities: one per `(muscleId, side)` (`16` for the M1 library). */
+    /** Renderable identities: one per `(muscleId, side)`, so twice the library's muscles. */
     val instanceCount: Int get() = muscles.size * MuscleSide.entries.size
 
     fun muscle(id: String): MuscleDefinition? = musclesById[id]

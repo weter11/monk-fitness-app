@@ -1,7 +1,6 @@
 package com.monkfitness.app.character
 
 import com.monkfitness.app.anatomy.AnatomyDefinition
-import com.monkfitness.app.anatomy.AnatomyDefinitionLoader
 import com.monkfitness.app.anatomy.AnatomyFrame
 import com.monkfitness.app.anatomy.AnatomyPoseFixture
 import com.monkfitness.app.anatomy.AnatomySolver
@@ -11,7 +10,6 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Assume.assumeTrue
 import org.junit.Test
-import java.io.File
 import java.lang.reflect.Method
 
 /**
@@ -23,8 +21,10 @@ import java.lang.reflect.Method
  */
 class MuscleLayerSkinnerAllocationTest {
 
-    private val definition: AnatomyDefinition = AnatomyDefinitionLoader.load(File(ASSET).readText())
-    private val binds = HelperBinds.read(File(MANIFEST).readText())
+    // The skinned mesh can only draw sections its own GLB declares, so the fixture is the exported
+    // subset of the library rather than the whole atlas; see MuscleExportFixture.
+    private val binds = MuscleExportFixture.binds()
+    private val definition: AnatomyDefinition = MuscleExportFixture.definition(binds = binds)
     private val skeleton = SkeletonDefinition.DEFAULT_ADULT
     private val unitsPerMetre = X1Bind.unitsPerMetre(skeleton)
     private val frame = AnatomyFrame.of(definition)
@@ -146,7 +146,6 @@ class MuscleLayerSkinnerAllocationTest {
     }
 
     private companion object {
-        const val ASSET = "src/main/assets/anatomy/anatomy_v1.json"
         const val MANIFEST = "src/main/assets/anatomy/helpers_v1.json"
         const val WARMUP = 200
         const val MEASURED = 500
