@@ -1365,6 +1365,24 @@ deep asset (114 joints each) do not. Drawn count, joints per renderable, total b
 vertices and total triangles therefore all fail to explain the pair: 24 × 242 is far larger than
 14 × 114 by every one of those measures, and it survives.
 
+The control that makes this readable came from running the *same* gating mechanism against the
+other asset: a build that loads only `muscles_sup.glb` and adds its first `K` renderables to the
+scene draws **K = 14 and K = 24 with 0 crashes** (`frames 147 → 3,460` and `133 → 3,509`, activity
+resumed throughout). Same code path, same per-section data (106 vertices, 208 triangles), same
+gate, and 24 sections of the 242-joint asset survive where 14 sections of the 114-joint asset do
+not. Every structural check on both files comes back clean — geometry, weights, joint ranges,
+inverse binds (|det| ≈ 1), node translations/rotations/scales, `POSITION` extents — so the trigger
+is not a malformed section; it lives in what differs between the two assets, and the only thing
+that differs is the skin's joint set (114 vs 242) and which joints each section binds.
+
+One caveat worth stating because it misled an earlier pass: a run that reports `frames=1` has
+either died on its first drawn frame *or* been paused before the muscles were ever added (the
+first frame is body-only). Only the `dumpsys activity exit-info` delta separates them, and in the
+13/14 sweep above the crashing rows all carry a non-zero delta while the K=14 run with `crashes=0`
+simply never reached a muscle draw. A separate control bounced focus four times (chat app → our
+activity) with 8 sections drawn and stayed clean (`frames 158 → 2,163`), so pause/resume on its own
+is not the trigger either.
+
 What the sweep does establish is the shape of the bug: it arrives with the **first** drawn frame
 (`frames=1`, nothing after), it needs entities in the scene, and for `muscles_deep.glb` the number
 of drawn sections crosses it between 13 and 14. It is not a steady-state limit, so no amount of
