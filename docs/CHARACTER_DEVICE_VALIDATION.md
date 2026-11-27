@@ -1335,7 +1335,51 @@ What remains unexplained, and unchanged from 8.4: the fault is inside `libfilame
 drawn on a visible surface at 20–66 sections, and does not reproduce with the 16-section/106-joint
 export of the same material that Stage 3 ran for 20 s.
 
-### 8.7 What this run does not establish
+### 8.7 The drawn-renderable sweep (deep asset, one build, focus held)
+
+A probe build gated `scene.addEntities` on `muscles_deep.glb` to its first `K` sections, with the
+layer live from frame 1, and each run re-asserted the task as the resumed activity (`am start
+--activity-single-top` with no extras) so the loop was demonstrably drawing: every clean row below
+advanced frame counts into the thousands.
+
+| `K` drawn (of 20) | crashes | frames | note |
+| --- | --- | --- | --- |
+| 1 | 0 | 137 → 2,954 | resumed = our activity |
+| 2 | 0 | 139 → 3,308 | |
+| 4 | 0 | 137 → 3,346 | |
+| 8 | 0 | 125 → 3,292 | also 141 → 642 in a second run |
+| 10 | 0 | 123 → 3,340 | |
+| 12 | 0 | 135 → 3,396 | also 128 → 3,890 |
+| 13 | 0 | 127 → 4,009 | and 142 → 3,882 (two runs) |
+| **14** | **6** | 1 → 1 | p95 67.15 ms; diag shows `frames=1` from the first sample |
+| **16** | **7** | 2 → 2 | p95 36.63 ms |
+| **20** | **6** | 1 → 1 | p95 69.32 ms |
+
+The boundary is exactly 13 → 14, and it reproduces. But it is not a section and not a count the
+renderer can act on: all twenty deep sections are structurally identical (106 vertices, 208
+triangles, `u32` indices, one primitive, six attributes each), and both skins' inverse bind
+matrices are well-formed (|det| between 1.0 and 1.0000004, no non-finite entry), so there is no
+"bad section" to point at. The same sweep on `muscles_sup.glb` (242 joints per renderable) draws
+24 sections cleanly — three runs, 0 crashes, `frames 518 → 3,258` — while 14 sections of the
+deep asset (114 joints each) do not. Drawn count, joints per renderable, total bones, total
+vertices and total triangles therefore all fail to explain the pair: 24 × 242 is far larger than
+14 × 114 by every one of those measures, and it survives.
+
+What the sweep does establish is the shape of the bug: it arrives with the **first** drawn frame
+(`frames=1`, nothing after), it needs entities in the scene, and for `muscles_deep.glb` the number
+of drawn sections crosses it between 13 and 14. It is not a steady-state limit, so no amount of
+capture-time mitigation reaches it.
+
+### 8.8 What this run does not establish
+
+**The crashing function.** `dumpsys dropbox --print data_app_native_crash` yields 73 entries, all
+`signal 11 (SIGSEGV), code 2 (SEGV_ACCERR)`, all with the same nine frames and the same fault
+address shape (`0xb40000784655be4f`), in `libfilament-jni.so` BuildId
+`831f673f590c30fce635baf49cd029339febce3c` at `#00 pc 0x210b80`, then `0x1f86a8`, `0x1ea770`,
+`0x1e9fd4`, `0x1a5530`, `0x1a18ac`, `0x1a868c`. The shipped `.so` is stripped: it carries
+`.dynsym` only (1,913 exported symbols) and no `.symtab`, so nearest-symbol lookup over those
+offsets lands hundreds of kilobytes inside unrelated exported functions and names nothing. Naming
+those frames needs a Filament 1.81.0 build with symbols, not more probes.
 
 - **A 20 s window with `66/66`, the toggles and an unchanged PID.** Short windows are clean and the
   readings above are real, but the window the brief asks for ends in the native fault more often than
