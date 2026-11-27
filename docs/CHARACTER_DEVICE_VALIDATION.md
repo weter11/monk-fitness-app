@@ -1160,3 +1160,119 @@ process). Four further switches on the same build did not reproduce it, and the 
 not switch exercises. `Engine.flushAndWait()` was added at teardown after that observation, so the
 render thread is drained before the asset and its instances are freed; one clean run is not proof that
 it is what keeps the switch safe.
+
+## 8. Stage 4 — multi-layer skinned rendering (both partitions)
+
+### 8.1 What landed
+
+The atlas is exported as two skins — 46 superficial sections over 242 joints and 20 deep sections
+over 114, 288 helpers between them — and the runtime draws both from one solved frame.
+
+| Before | After |
+| --- | --- |
+| `MuscleLayerSkinner` bound every head of the frame to one manifest, so a partition's helper count had to equal the whole frame's | The skinner maps the frame's heads onto *its* partition and skips the heads another skin binds (`groupBySlot` carries `-1`), so one 72-head frame feeds a 242-joint palette and a 114-joint one |
+| `MuscleLayerStage` loaded `muscles_sup.glb` and refused the whole layer when a section of the other partition was missing | The stage loads, validates, skins and tears down one asset per partition, transactionally: a refusal is reported per partition and leaves the other drawing |
+| Section addressing covered one asset | Section addressing is global over all 66 sections; each section names its asset and its renderable inside it, and each asset keeps its own palette buffer |
+| Toggling a layer off turned the mesh view off | The partitions toggle independently; only the last one out drops the view flag, because a scene with no muscle has nothing to solve |
+| The stage's selection tint lived on one asset's instances | One `Material.createInstance()` per section across both assets, assigned before `scene.addEntities`; a selection is still two uniform writes |
+
+Unit suite over the change: `classes=437 tests=4018 failed=0 errors=0 skipped=0`
+(`:app:testDebugUnitTest`, JUnit XML summed). The archive's frozen seams are untouched:
+`animation/**`, `poses/**`, `CharacterFrameProducer.kt`, `ExerciseCameraFramer3D.kt` and the nine
+`UNAFFECTED_CORPUS_DIGEST` guards do not appear in the diff.
+
+### 8.2 The device run — build and device
+
+| Property | Value |
+| --- | --- |
+| Build | `assembleDebug -Pmonk.filamentCharacter=true`, `FILAMENT_CHARACTER_ENABLED = true` |
+| APK | 44,870,508 bytes, `sha256 735ae1e37ea4298754e06408d10118e02b05a17e1f7ba3baaa024889361d6382` |
+| Install | `pm install -r -d` over `rish` (Shizuku): `Success`, `versionCode` 1001346, `lastUpdateTime 2026-11-27 11:00:30` |
+| Device | motorola edge 50 ultra (`ctwo_geuw`), Android 16 / API 36 |
+| SoC + GPU | Qualcomm (QTI) · Adreno 735 |
+| Filament | 1.81.0, `libfilament-jni.so` BuildId `831f673f590c30fce635baf49cd029339febce3c` |
+| Display | 1220 × 2712, `presDeadline 16666666` (60 Hz) |
+| Backend | requested Auto |
+
+### 8.3 What the layer does when it draws
+
+The two skins do load, validate and draw together. Verbatim from the run, the reveal and two
+samples while both partitions are live:
+
+```
+… action=meshes instance=- applied=true
+11-27 11:06:55.909 I/CharacterDevice(19874): frames=283 fps=55 p95=2.64 mesh=66/66 layers=superficial,deep solved=true …
+11-27 11:20:31.055 I/CharacterDevice(29071): frames=3111 fps=59 p95=4.31 mesh=66/66 layers=superficial,deep solved=true selected=rectus_abdominis:A highlight=true …
+```
+
+`mesh=66/66` with `layers=superficial,deep` is the whole atlas drawing — 46 superficial plus 20 deep
+sections, both palettes written from the same frame. Independent toggling is visible in the same
+stream: `layers=superficial` with `mesh=46/66`, then `layers=deep` with `mesh=20/66`, then back to
+`layers=superficial,deep` with `mesh=66/66`.
+
+Short windows (12 s) at `66/66` were obtained repeatedly — six consecutive runs with an unchanged
+PID at 55–59 fps and a frame p95 of 2.5–4.7 ms — and one 20 s steady window at `66/66` was measured
+at `frames 1 → 306` before the app died (see 8.4).
+
+### 8.4 The blocker: an intermittent SIGSEGV in `FEngine::loop` at the reveal
+
+**The 20-second acceptance in the brief is not met.** The full window — 20 s with both partitions
+live and the layer toggles, per-section hide and select inside it — could not be completed with an
+unchanged PID and an empty crash buffer. Every attempt that died did so the same way:
+
+```
+Fatal signal 11 (SIGSEGV), code 2 (SEGV_ACCERR), fault addr 0xb4000077fb8a48cf in tid … (FEngine::loop), pid … (monkfitness.app)
+#00 pc 0000000000210b80  base.apk!libfilament-jni.so (BuildId: 831f673f590c30fce635baf49cd029339febce3c)
+#01 pc 00000000001f86a8  …   #05 pc 00000000001a18ac
+```
+
+The fault occurs 0.08–0.3 s after `action=meshes applied=true`, on the frame the skinned sections are
+revealed; `logcat -b crash` stays **0 bytes** (the tombstone goes to DropBox, and
+`dumpsys activity exit-info` records `reason=5 (APP CRASH(NATIVE)) status=11`).
+
+Attempt ledger, one build, one device, in order:
+
+| Sequence | Result |
+| --- | --- |
+| 3 × "meshes after settle" (A/B) | survived, `66/66`, PID unchanged |
+| 6 × full 20 s window with toggles | **6 of 6 died** at the reveal |
+| 3 × 12 s window, tubes first | survived |
+| 2 × 12 s window with a continuous `logcat -f` watcher | survived |
+| 3 × 12 s window, polling dumps only | survived |
+| 1 × 20 s steady window, 6 s settle | **died** at the reveal |
+| 1 × 20 s window with toggles | **died** mid-window (PID 9278 → 9947) |
+
+What the bisect established:
+
+| Probe | Result |
+| --- | --- |
+| `tubes` alone, 22 s | clean (`anatomyPaths` p50/p95 7.4–9.7 ms — the tessellation cost the skinned layer is meant to replace) |
+| mesh layer, 1 section drawn | clean for 12 s |
+| mesh layer, 4 / 8 / 16 / 24 / 32 / 40 / 46 sections drawn (5 s windows, probe build) | clean in every window |
+| superficial asset alone (46 sections, 242 joints) | died at the reveal |
+| deep asset alone (20 sections, 114 joints) | died at the reveal |
+| main @ `19f880e8` (single asset, same export) | clean, but `mesh=0/0`: the shipped stage refuses the 66-section partition because its keys name sections `muscles_sup.glb` does not carry — the defect this change fixes |
+| bones not uploaded at all (probe) | died at the reveal |
+
+So the crash is not the dual wiring, not one partition's palette (114 and 242 both die), and not the
+bone upload itself: drawing this exported skin at all, for long enough, kills the render thread
+intermittently. A 16-section/106-joint export of the same material and geometry drew for 20 s in the
+Stage 3 run recorded above, so the trigger scales with the export, not with the new stage code.
+`libfilament-jni` has no symbols for these frames, and the same signature was already recorded once
+in Stage 3 (`FEngine::loop`, unexplained) — this run reproduces it at will and adds the scale
+evidence, but does not explain it.
+
+### 8.5 What this run does not establish
+
+- **A 20 s window with `66/66`, the toggles and an unchanged PID.** Short windows are clean and the
+  readings above are real, but the window the brief asks for ends in the native fault more often than
+  not. Nothing here should be read as "the full-atlas pipeline is stable on this hardware".
+- **~59 fps as a sustained figure for the skinned path.** `fps=59` appears in the surviving samples
+  and in the smoothed counter, while `frames` advanced at 50 fps over the same 6 s window, so the
+  counter and the frame count disagree by ~15 % here exactly as they did in the Stage 3 note. The
+  honest reading is "the layer draws at the display rate while the solve is ~8 ms", not "59 fps".
+- **The selection tint as pixels.** Unchanged from 8.4 of the previous section: the sections sit
+  inside the opaque body, and this run did not capture pixels.
+- **Any of the numbers under a clean build.** Every reading above comes from the APK whose hash is in
+  8.2; the probe builds used to bisect the crash (sup-only, deep-only, 1-section, limits) are not
+  part of the shipped tree.
