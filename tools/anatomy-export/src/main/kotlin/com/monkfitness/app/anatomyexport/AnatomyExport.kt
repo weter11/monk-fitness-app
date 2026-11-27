@@ -5,6 +5,7 @@ import com.monkfitness.app.anatomy.AnatomyDefinitionLoader
 import com.monkfitness.app.anatomy.AnatomyFrame
 import com.monkfitness.app.anatomy.AnatomySolver
 import com.monkfitness.app.anatomy.MuscleHeadId
+import com.monkfitness.app.anatomy.MuscleLayer
 import com.monkfitness.app.anatomy.MuscleSide
 import com.monkfitness.app.animation.Joint
 import com.monkfitness.app.animation.SkeletonDefinition
@@ -57,35 +58,60 @@ object AnatomyExport {
 
         val helpers = place(definition, frame, unitsPerMetre)
         val rig = GltfRig.parse(rigFile.readBytes())
-        val palette = HelperBindManifest.requireWithinPalette(rig.jointNodes.size, helpers.size)
+        // One skin per layer: the atlas as a whole is over the palette limit, so the budget is
+        // checked on the partition that will be bound, never on the sum.
+        val partitions = MuscleLayer.entries.map { layer ->
+            val layerHelpers = helpers.filter { it.layer == layer }
+            require(layerHelpers.isNotEmpty()) { "$layer has no head with a rest path, so it has no skin" }
+            Partition(
+                layer = layer,
+                helpers = layerHelpers,
+                palette = HelperBindManifest.requireWithinPalette(rig.jointNodes.size, layerHelpers.size, layer)
+            )
+        }
 
         outFile.parentFile?.mkdirs()
-        outFile.writeText(manifest(definition, rig.jointNodes.size, palette, helpers))
-        println("wrote ${outFile.path}: ${helpers.size} helpers, palette $palette/${HelperBindManifest.PALETTE_LIMIT}")
+        outFile.writeText(manifest(definition, rig.jointNodes.size, partitions))
+        for (partition in partitions) {
+            println(
+                "wrote ${outFile.path}: ${partition.layer} ${partition.helpers.size} helpers " +
+                    "(${partition.helpers.size / STATIONS.size} heads), " +
+                    "palette ${partition.palette}/${HelperBindManifest.PALETTE_LIMIT}"
+            )
+        }
     }
 
     private fun place(definition: AnatomyDefinition, frame: AnatomyFrame, unitsPerMetre: Float): List<Helper> {
+        val layerOf = definition.muscles.associate { it.id to it.layer }
         val helpers = ArrayList<Helper>(definition.headCount * STATIONS.size)
-        for (slot in 0 until frame.headCount) {
-            val id = frame.heads[slot]
-            val count = frame.pointCounts[slot]
-            require(count >= 2) {
-                "head $id has no rest path ($count points): the rest stance refused it, so it has no bind"
-            }
-            val cumulative = DoubleArray(count)
-            for (index in 1 until count) cumulative[index] = cumulative[index - 1] + distance(frame, slot, index - 1, index)
-            val total = cumulative[count - 1]
-            HelperBindManifest.requireRestLength(id.toString(), total)
+        // Layer-major, then the frame's own head order: each partition is a contiguous run of the
+        // manifest, which is what lets one layer's mesh address its helpers as `skinJoints + i`.
+        for (layer in MuscleLayer.entries) {
+            for (slot in 0 until frame.headCount) {
+                val id = frame.heads[slot]
+                val muscleLayer = layerOf[id.muscleId]
+                require(muscleLayer != null) { "head $id has no muscle in the definition" }
+                if (muscleLayer != layer) continue
+                val count = frame.pointCounts[slot]
+                require(count >= 2) {
+                    "head $id has no rest path ($count points): the rest stance refused it, so it has no bind"
+                }
+                val cumulative = DoubleArray(count)
+                for (index in 1 until count) cumulative[index] = cumulative[index - 1] + distance(frame, slot, index - 1, index)
+                val total = cumulative[count - 1]
+                HelperBindManifest.requireRestLength(id.toString(), total)
 
-            for ((stationIndex, station) in STATIONS.withIndex()) {
-                val (point, tangent) = sample(frame, slot, station, cumulative, total)
-                helpers += Helper(
-                    name = "${id.muscleId}_${id.side.name}_${id.headIndex}_$stationIndex",
-                    id = id,
-                    station = station,
-                    point = toAsset(point, unitsPerMetre),
-                    basis = toAssetBasis(basis(tangent))
-                )
+                for ((stationIndex, station) in STATIONS.withIndex()) {
+                    val (point, tangent) = sample(frame, slot, station, cumulative, total)
+                    helpers += Helper(
+                        name = "${id.muscleId}_${id.side.name}_${id.headIndex}_$stationIndex",
+                        id = id,
+                        layer = layer,
+                        station = station,
+                        point = toAsset(point, unitsPerMetre),
+                        basis = toAssetBasis(basis(tangent))
+                    )
+                }
             }
         }
         return helpers
@@ -165,12 +191,12 @@ object AnatomyExport {
     private fun manifest(
         definition: AnatomyDefinition,
         skinJoints: Int,
-        palette: Int,
-        helpers: List<Helper>
+        partitions: List<Partition>
     ): String {
+        val helpers = partitions.flatMap { it.helpers }
         val text = StringBuilder(helpers.size * 220)
         text.append("{\n")
-        text.append("  \"schema\": 1,\n")
+        text.append("  \"schema\": 2,\n")
         text.append("  \"anatomyId\": \"${definition.id}\",\n")
         text.append("  \"anatomyVersion\": ${definition.version},\n")
         text.append("  \"units\": \"${HelperBindManifest.UNITS}\",\n")
@@ -178,8 +204,17 @@ object AnatomyExport {
         text.append("  \"skinJoints\": $skinJoints,\n")
         text.append("  \"helpersPerHead\": ${STATIONS.size},\n")
         text.append("  \"helperCount\": ${helpers.size},\n")
-        text.append("  \"palette\": $palette,\n")
         text.append("  \"paletteLimit\": ${HelperBindManifest.PALETTE_LIMIT},\n")
+        text.append("  \"partitions\": [\n")
+        var first = 0
+        for ((index, partition) in partitions.withIndex()) {
+            text.append("    {\"layer\": \"${partition.layer}\", \"firstHelper\": $first, ")
+            text.append("\"helperCount\": ${partition.helpers.size}, \"palette\": ${partition.palette}}")
+            if (index != partitions.lastIndex) text.append(',')
+            text.append('\n')
+            first += partition.helpers.size
+        }
+        text.append("  ],\n")
         text.append("  \"helpers\": [\n")
         for ((index, helper) in helpers.withIndex()) {
             text.append("    {")
@@ -187,6 +222,7 @@ object AnatomyExport {
             text.append("\"muscleId\": \"${helper.id.muscleId}\", ")
             text.append("\"side\": \"${helper.id.side.name}\", ")
             text.append("\"headIndex\": ${helper.id.headIndex}, ")
+            text.append("\"layer\": \"${helper.layer}\", ")
             text.append("\"station\": ${helper.station}, ")
             text.append("\"position\": [")
             for (component in 0..2) {
@@ -241,8 +277,16 @@ object AnatomyExport {
     private class Helper(
         val name: String,
         val id: MuscleHeadId,
+        val layer: MuscleLayer,
         val station: Double,
         val point: DoubleArray,
         val basis: DoubleArray
+    )
+
+    /** One layer's slice of the atlas: its helpers, and the palette a single skin needs to bind them. */
+    private class Partition(
+        val layer: MuscleLayer,
+        val helpers: List<Helper>,
+        val palette: Int
     )
 }

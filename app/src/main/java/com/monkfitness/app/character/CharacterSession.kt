@@ -25,6 +25,7 @@ import com.monkfitness.app.anatomy.AnatomyDefinitionLoader
 import com.monkfitness.app.anatomy.AnatomyFrame
 import com.monkfitness.app.anatomy.AnatomySolver
 import com.monkfitness.app.anatomy.MuscleInstanceId
+import com.monkfitness.app.anatomy.MuscleLayer
 import com.monkfitness.app.anatomy.PathStatus
 import com.monkfitness.app.animation.Joint
 import com.monkfitness.app.animation.PoseBuilder
@@ -312,9 +313,9 @@ class CharacterSession(
      */
     private fun prepareMuscleLayer(frame: AnatomyFrame, partition: MuscleSectionPartition) {
         try {
-            val binds = HelperBinds.read(
-                context.assets.open(HelperBinds.ASSET_PATH).bufferedReader().use { it.readText() }
-            )
+            val binds = HelperBindSet.read(
+                context.assets.open(HelperBindSet.ASSET_PATH).bufferedReader().use { it.readText() }
+            ).partition(MuscleLayer.SUPERFICIAL)
             val bytes = context.assets.open(CharacterFeature.MUSCLE_ASSET_PATH).use { it.readBytes() }
             val rig = GltfRig.parse(bytes)
             val skinner = MuscleLayerSkinner(

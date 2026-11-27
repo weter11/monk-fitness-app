@@ -106,7 +106,7 @@ internal class MuscleLayerStage(
         assetLoader = loader
         var loaded: FilamentAsset? = null
         try {
-            loaded = loader.createAsset(direct) ?: return refuse("gltfio could not load ${HelperBinds.ASSET_PATH}")
+            loaded = loader.createAsset(direct) ?: return refuse("gltfio could not load ${HelperBindSet.ASSET_PATH}")
             val resources = ResourceLoader(engine)
             try {
                 resources.loadResources(loaded)

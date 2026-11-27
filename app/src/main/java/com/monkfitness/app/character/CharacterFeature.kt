@@ -11,7 +11,7 @@ object CharacterFeature {
     const val ASSET_PATH = "characters/humanoid_v2.glb"
     const val ANATOMY_PATH = "anatomy/anatomy_v1.json"
 
-    /** The helper-bound muscle asset the layer draws; its binds come from [HelperBinds.ASSET_PATH]. */
+    /** The helper-bound muscle asset the layer draws; its binds come from [HelperBindSet.ASSET_PATH]. */
     const val MUSCLE_ASSET_PATH = "characters/muscles_sup.glb"
     const val CHARACTER_ID = "humanoid_v2"
 
