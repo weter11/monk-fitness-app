@@ -3,6 +3,14 @@
 The §12.4 record for the muscle asset Stage 3 ships. It states what was **measured**, on which exact
 artefacts, and what was **not** judged — a limitation is not a failure, hiding one is (§12.4).
 
+> **Superseded by the Stage 4 re-export.** The atlas now ships the whole superficial and deep library as
+> one asset per layer, so the tuple in §1 no longer names the shipped artefacts and the measurements in
+> §3–§4 no longer apply to them. The shipped tuple is `anatomy_v1.json` `sha256 e4f4345d…`,
+> `helpers_v1.json` `sha256 18c894f4…` (schema 2, 288 helpers in two partitions), `humanoid_v2.glb`
+> `a4b2c226…`, `muscles_sup.glb` `a1a064b0…` (46 sections, 242-joint palette) and `muscles_deep.glb`
+> `e6adacb4…` (20 sections, 114-joint palette). The full atlas' own record is owed with the runtime
+> wiring that draws the deep layer.
+
 ## 1. The tuple this record covers
 
 A record is valid only for the tuple it names (§12.4, *Renewal*). Any change to one member re-opens the
