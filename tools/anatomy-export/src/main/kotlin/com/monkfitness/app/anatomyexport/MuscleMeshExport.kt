@@ -13,6 +13,7 @@ import com.monkfitness.app.animation.Joint
 import com.monkfitness.app.animation.SkeletonDefinition
 import com.monkfitness.app.animation.SkeletonPose
 import com.monkfitness.app.animation.Vector3
+import com.monkfitness.app.character.HelperBindSet
 import com.monkfitness.app.character.HelperBinds
 import com.monkfitness.app.character.X1Bind
 import java.io.ByteArrayOutputStream
@@ -24,11 +25,14 @@ import kotlin.math.sin
 import kotlin.math.sqrt
 
 /**
- * Emits `muscles_sup.glb`: one skinned section per muscle and side, bound to the exported helper bones.
+ * Emits one skinned GLB per muscle layer — `muscles_sup.glb` and `muscles_deep.glb` — each carrying
+ * one section per muscle and side of that layer, bound to that layer's exported helper bones.
  *
- * Every ring is carried by the blended bind frames of the two helpers that own it — the same blend
- * linear-blend skinning applies once the layer is posed — so the authored surface sits where the skin
- * will put it and no ring is derived by a rule the skinning step does not repeat.
+ * A layer is its own asset because the whole atlas' helpers do not fit one skin: the superficial
+ * palette is 34 + 208 joints and the deep one 34 + 80, where the sum would be 322. Every ring is
+ * carried by the blended bind frames of the two helpers that own it — the same blend linear-blend
+ * skinning applies once the layer is posed — so the authored surface sits where the skin will put it
+ * and no ring is derived by a rule the skinning step does not repeat.
  *
  * This is a deterministic stand-in, not muscle art: it exists so the helper-bound pipeline can be
  * built, validated and measured, and it is the section contract a later authored asset is checked
@@ -55,27 +59,38 @@ object MuscleMeshExport {
         val anatomyFile = File(root, option(args, "--anatomy") ?: "app/src/main/assets/anatomy/anatomy_v1.json")
         val rigFile = File(root, option(args, "--rig") ?: "app/src/main/assets/characters/humanoid_v2.glb")
         val manifestFile = File(root, option(args, "--helpers") ?: "app/src/main/assets/anatomy/helpers_v1.json")
-        val outFile = File(root, option(args, "--out") ?: "app/src/main/assets/characters/muscles_sup.glb")
 
         val definition = AnatomyDefinitionLoader.load(anatomyFile.readText())
-        val binds = HelperBinds.read(manifestFile.readText())
+        val atlas = HelperBindSet.read(manifestFile.readText())
         val body = GltfRig.parse(rigFile.readBytes())
-        require(body.jointNodes.size == binds.skinJoints) {
-            "the rig skins ${body.jointNodes.size} joints, the binds assume ${binds.skinJoints}"
+        require(body.jointNodes.size == atlas.skinJoints) {
+            "the rig skins ${body.jointNodes.size} joints, the binds assume ${atlas.skinJoints}"
         }
 
         val unitsPerMetre = X1Bind.unitsPerMetre(SkeletonDefinition.DEFAULT_ADULT)
         val frame = restFrame(definition, unitsPerMetre)
-        val sections = sections(definition, frame, binds, unitsPerMetre)
-        val bytes = Glb(binds, body, sections).write()
+        for (layer in MuscleLayer.entries) {
+            val binds = atlas.partition(layer)
+            val sections = sections(definition, frame, binds, unitsPerMetre, layer)
+            val bytes = Glb(binds, body, sections).write()
 
-        outFile.parentFile?.mkdirs()
-        outFile.writeBytes(bytes)
-        println(
-            "wrote ${outFile.path}: ${sections.size} sections, " +
-                "${sections.sumOf { it.vertexCount }} vertices, ${sections.sumOf { it.indices.size / 3 }} triangles, " +
-                "palette ${binds.palette}"
-        )
+            val outFile = File(root, output(args, layer))
+            outFile.parentFile?.mkdirs()
+            outFile.writeBytes(bytes)
+            println(
+                "wrote ${outFile.path}: $layer ${sections.size} sections, " +
+                    "${sections.sumOf { it.vertexCount }} vertices, " +
+                    "${sections.sumOf { it.indices.size / 3 }} triangles, palette ${binds.palette}"
+            )
+        }
+    }
+
+    /** Where a layer's asset lands; the superficial path keeps the `--out` the Stage-3 exporter had. */
+    private fun output(args: Array<String>, layer: MuscleLayer): String = when (layer) {
+        MuscleLayer.SUPERFICIAL ->
+            option(args, "--sup-out") ?: option(args, "--out") ?: "app/src/main/assets/characters/muscles_sup.glb"
+        MuscleLayer.DEEP ->
+            option(args, "--deep-out") ?: "app/src/main/assets/characters/muscles_deep.glb"
     }
 
     /** The bind stance the helper manifest was exported from; the mesh's rings sit on its paths. */
@@ -135,11 +150,12 @@ object MuscleMeshExport {
         definition: AnatomyDefinition,
         frame: AnatomyFrame,
         binds: HelperBinds,
-        unitsPerMetre: Float
+        unitsPerMetre: Float,
+        layer: MuscleLayer
     ): List<Section> {
         val out = ArrayList<Section>()
         for (muscle in definition.muscles) {
-            if (muscle.layer != MuscleLayer.SUPERFICIAL) continue
+            if (muscle.layer != layer) continue
             for (side in MuscleSide.entries) {
                 val section = Section("${muscle.id}_${side.name}")
                 for (headIndex in muscle.heads.indices) {

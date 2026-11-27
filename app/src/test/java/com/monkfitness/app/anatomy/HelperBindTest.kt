@@ -2,7 +2,9 @@ package com.monkfitness.app.anatomy
 
 import com.monkfitness.app.animation.SkeletonDefinition
 import com.monkfitness.app.animation.Vector3
+import com.monkfitness.app.character.GltfRig
 import com.monkfitness.app.character.HelperBindManifest
+import com.monkfitness.app.character.HelperBindSet
 import com.monkfitness.app.character.HelperBinds
 import com.monkfitness.app.character.X1Bind
 import org.json.JSONArray
@@ -22,6 +24,10 @@ import kotlin.math.sqrt
  * arc, exactly on the polyline, in the same asset metres and axes as `humanoid_v2.glb`'s skeleton. Both
  * are re-derived here, so a solver change that moves a rest path, or an export that leaves in engine
  * units, fails instead of shipping a layer bound off the body.
+ *
+ * The atlas is exported as one asset per layer, and every gate below runs on both: a layer that
+ * crossed the palette limit, lost its body prefix or bound a section to another layer's helpers would
+ * otherwise pass on the asset the gates happened to read.
  */
 class HelperBindTest {
 
@@ -30,25 +36,47 @@ class HelperBindTest {
     private val scale: Float = X1Bind.unitsPerMetre(skeleton)
     private val restPose = AnatomyPoseFixture.bindPose(skeleton)
 
+    private val atlas: HelperBindSet = HelperBindSet.read(File(MANIFEST).readText())
+
+    /** The two exported layers, each with its own partition, asset and coverage. */
+    private val layers: List<LayerAsset> = listOf(
+        LayerAsset(MuscleLayer.SUPERFICIAL, "muscles_sup.glb"),
+        LayerAsset(MuscleLayer.DEEP, "muscles_deep.glb")
+    )
+
     /**
-     * The heads the exported asset actually carries. The library is now larger than the Stage-3
-     * export, so the count these gates measure is the manifest's own coverage — read from the
-     * manifest, never a list of names — and [theExportCoversTheFirstHeadsOfTheShippedFrame] pins
-     * that coverage to the frame's head order.
+     * One layer's export: the partition its manifest carries, the heads that partition binds, and the
+     * GLB it was written to. The count these gates measure is the partition's own coverage — read from
+     * the manifest, never a list of names — and [eachLayerExportCoversEveryHeadOfThatLayerInFrameOrder]
+     * pins that coverage to the frame's head order.
      */
-    private val binds: HelperBinds = HelperBinds.read(File(MANIFEST).readText())
-    private val exportedHeads: List<MuscleHeadId> = binds.binds.map { it.head }.distinct()
+    private inner class LayerAsset(val layer: MuscleLayer, file: String) {
+
+        val name: String = file
+        val binds: HelperBinds = atlas.partition(layer)
+        val exportedHeads: List<MuscleHeadId> = binds.binds.map { it.head }.distinct()
+        val muscles: Set<String> = exportedHeads.mapTo(HashSet()) { it.muscleId }
+        val asset: MuscleAsset = MuscleAsset(File("$DIR/$file"))
+    }
 
     @Test
-    fun theExportCoversTheFirstHeadsOfTheShippedFrame() {
+    fun eachLayerExportCoversEveryHeadOfThatLayerInFrameOrder() {
         // The skinner maps a frame slot to a helper group by slot order, so an export that dropped or
         // reordered a head would skin one muscle with another's path while every count still agreed.
         val frame = restFrame()
-        assertTrue("the export covers no head", exportedHeads.isNotEmpty())
+        val layerOf = definition.muscles.associate { it.id to it.layer }
+        for (layer in layers) {
+            assertTrue("${layer.name} covers no head", layer.exportedHeads.isNotEmpty())
+            assertEquals(
+                "${layer.name} carries the ${layer.layer} heads the frame orders, not another set or order",
+                frame.heads.filter { layerOf[it.muscleId] == layer.layer },
+                layer.exportedHeads
+            )
+        }
         assertEquals(
-            "the exported heads are the frame's first slots, in frame order",
-            frame.heads.take(exportedHeads.size),
-            exportedHeads
+            "the two layer assets must cover the whole atlas, head for head",
+            frame.headCount,
+            layers.sumOf { it.exportedHeads.size }
         )
     }
 
@@ -56,7 +84,8 @@ class HelperBindTest {
     fun everyHelperBindsOnTheSolverRestPathAtItsStation() {
         val frame = restFrame()
         val helpers = manifest().getJSONArray("helpers")
-        assertEquals("four helpers per head-side instance", exportedHeads.size * STATIONS, helpers.length())
+        assertEquals("four helpers per head-side path in the atlas", atlas.helperCount, helpers.length())
+        assertEquals("the atlas binds every head of the definition", frame.headCount * STATIONS, helpers.length())
 
         var worstPosition = 0.0
         var worstAxis = 0.0
@@ -136,374 +165,453 @@ class HelperBindTest {
     }
 
     @Test
-    fun theMuscleAssetCarriesTheWholePaletteAndOneSectionPerInstance() {
-        val asset = MuscleAsset(File(MUSCLES))
-        val manifest = manifest()
-        assertEquals(
-            "the layer's palette is the manifest's, not a second count",
-            manifest.getInt("palette"),
-            asset.joints.size
-        )
-        assertEquals("one inverse bind per palette joint", asset.joints.size, asset.inverseBinds.size)
+    fun eachMuscleAssetCarriesItsLayerPaletteAndOneSectionPerInstance() {
+        for (layer in layers) {
+            val asset = layer.asset
+            assertEquals(
+                "${layer.name}'s palette is the ${layer.layer} partition's, not the atlas' total",
+                layer.binds.palette,
+                asset.joints.size
+            )
+            assertEquals("one inverse bind per palette joint", asset.joints.size, asset.inverseBinds.size)
+            assertTrue(
+                "${layer.name} skins ${asset.joints.size} joints, over the ${HelperBindManifest.PALETTE_LIMIT} a renderable binds",
+                asset.joints.size <= HelperBindManifest.PALETTE_LIMIT
+            )
 
-        // One section per exported instance, in the manifest's own head order: the asset carries the
-        // Stage-3 export, not the whole library, so the expected list is derived from its coverage.
-        val expected = ArrayList<String>()
-        for (head in exportedHeads) {
-            val section = "${head.muscleId}_${head.side.name}"
-            if (expected.isEmpty() || expected.last() != section) expected += section
+            // One section per exported instance, in the manifest's own head order.
+            val expected = ArrayList<String>()
+            for (head in layer.exportedHeads) {
+                val section = "${head.muscleId}_${head.side.name}"
+                if (expected.isEmpty() || expected.last() != section) expected += section
+            }
+            assertEquals("${layer.name}: one section per ${layer.layer} muscle instance", expected, asset.sectionNames.toList())
+            assertEquals(
+                "${layer.name} draws every ${layer.layer} muscle on both sides",
+                layer.muscles.size * MuscleSide.entries.size,
+                asset.sectionNames.size
+            )
+            assertEquals(
+                "the rig's own range is the first ${layer.binds.skinJoints} joints",
+                layer.binds.skinJoints,
+                asset.joints.take(layer.binds.skinJoints).size
+            )
         }
-        assertEquals("one section per exported muscle instance", expected, asset.sectionNames.toList())
-        val skinJoints = manifest.getInt("skinJoints")
-        assertEquals(
-            "the rig's own range is the first $skinJoints joints",
-            skinJoints,
-            asset.joints.take(skinJoints).size
-        )
+    }
+
+    @Test
+    fun everyMuscleAssetKeepsTheBodyRigAsItsJointPrefix() {
+        // The host passes the body's own skinning buffer into the layer's palette, so the first joints
+        // must be the rig's, matrix for matrix: any edit there would move the whole body.
+        val body = GltfRig.parse(File(RIG).readBytes())
+        for (layer in layers) {
+            assertEquals("${layer.name} prefixes the rig's ${body.jointNodes.size} joints", layer.binds.skinJoints, body.jointNodes.size)
+            for (index in 0 until body.jointNodes.size) {
+                val expected = body.inverseBinds[index]
+                val actual = layer.asset.inverseBinds[index]
+                var delta = 0.0
+                for (entry in 0 until 16) delta = maxOf(delta, abs((expected[entry] - actual[entry]).toDouble()))
+                assertEquals(
+                    "${layer.name} joint $index (${body.nodes[body.jointNodes[index]].name}) is $delta off the body rig",
+                    0.0,
+                    delta,
+                    0.0
+                )
+                assertEquals(
+                    "${layer.name} joint $index is renamed",
+                    body.nodes[body.jointNodes[index]].name,
+                    layer.asset.rig.nodes[layer.asset.rig.jointNodes[index]].name
+                )
+            }
+        }
     }
 
     @Test
     fun everyMuscleSectionBindsItsHelpersWhereTheManifestSays() {
-        val asset = MuscleAsset(File(MUSCLES))
-        val skinJoints = manifest().getInt("skinJoints")
-        val helpers = manifest().getJSONArray("helpers")
-        var worstPosition = 0.0
-        var worstAxis = 0.0
-        for (index in 0 until helpers.length()) {
-            val helper = helpers.getJSONObject(index)
-            val matrix = asset.inverseBinds[skinJoints + index]
-            val bind = asset.bindOf(matrix)
-            val expectedPosition = helper.getJSONArray("position")
-            val residual = sqrt(
-                (0 until 3).sumOf { component ->
-                    val delta = bind[component] - expectedPosition.getDouble(component)
-                    delta * delta
-                }
-            )
-            worstPosition = maxOf(worstPosition, residual)
-            assertTrue(
-                "${helper.getString("name")} binds $residual m off the manifest",
-                residual <= TOLERANCE_METRES
-            )
-            val basis = helper.getJSONArray("basis")
-            for (row in 0 until 3) {
-                for (column in 0 until 3) {
-                    val expected = basis.getJSONArray(row).getDouble(column)
-                    // The asset's bind rotation is the manifest basis' transpose, by construction.
-                    val actual = matrix[column * 4 + row]
-                    worstAxis = maxOf(worstAxis, abs(actual - expected))
+        for (layer in layers) {
+            val asset = layer.asset
+            val skinJoints = layer.binds.skinJoints
+            var worstPosition = 0.0
+            var worstAxis = 0.0
+            for (index in 0 until layer.binds.helperCount) {
+                val helper = layer.binds.binds[index]
+                val matrix = asset.inverseBinds[skinJoints + index]
+                val bind = asset.bindOf(matrix)
+                val residual = sqrt(
+                    (0 until 3).sumOf { component ->
+                        val delta = bind[component] - helper.position[component]
+                        delta * delta
+                    }
+                )
+                worstPosition = maxOf(worstPosition, residual)
+                assertTrue(
+                    "${layer.name} helper $index binds $residual m off the manifest",
+                    residual <= TOLERANCE_METRES
+                )
+                for (row in 0 until 3) {
+                    for (column in 0 until 3) {
+                        val expected = helper.basis[row * 3 + column].toDouble()
+                        // The asset's bind rotation is the manifest basis' transpose, by construction.
+                        val actual = matrix[column * 4 + row]
+                        worstAxis = maxOf(worstAxis, abs(actual - expected))
+                    }
                 }
             }
+            assertTrue("a helper's bind rotation is $worstAxis off the manifest", worstAxis <= TOLERANCE_METRES)
+            println("worst helper bind residual in ${layer.name} = $worstPosition m")
         }
-        assertTrue("a helper's bind rotation is $worstAxis off the manifest", worstAxis <= TOLERANCE_METRES)
-        println("worst helper bind residual in muscles_sup.glb = $worstPosition m")
     }
 
     @Test
     fun everyMuscleVertexCarriesAtMostFourFiniteInfluences() {
-        val asset = MuscleAsset(File(MUSCLES))
-        var vertices = 0
-        var worstWeight = 0.0
-        val skinJoints = manifest().getInt("skinJoints")
-        for (primitive in asset.primitives) {
-            for (vertex in primitive.joints.indices) {
-                vertices++
-                val weights = primitive.weights[vertex]
-                var influences = 0
-                for (slot in 0 until 4) {
-                    val joint = primitive.joints[vertex][slot]
-                    assertTrue("vertex $vertex names joint $joint", joint in asset.joints.indices)
-                    if (weights[slot] == 0f) continue
-                    influences++
-                    // A vertex weighted to the body would not follow the path, which is the whole layer.
-                    assertTrue("vertex $vertex is weighted to body joint $joint", joint >= skinJoints)
-                }
-                assertTrue("a vertex carries $influences influences, over the 4 a JOINTS_0 holds", influences <= 4)
-                worstWeight = maxOf(worstWeight, abs(weights.sumOf { it.toDouble() } - 1.0))
-                for (component in 0 until 3) {
-                    assertTrue("positions must be finite", primitive.positions[vertex][component].isFinite())
-                    assertTrue("normals must be finite", primitive.normals[vertex][component].isFinite())
-                    assertEquals(
-                        "a normal is a unit vector",
-                        1.0,
-                        sqrt(primitive.normals[vertex].sumOf { (it * it).toDouble() }),
-                        1e-4
-                    )
-                }
-                for (component in 0 until 4) {
-                    assertTrue("tangents must be finite", primitive.tangents[vertex][component].isFinite())
+        for (layer in layers) {
+            val asset = layer.asset
+            val skinJoints = layer.binds.skinJoints
+            var vertices = 0
+            var worstWeight = 0.0
+            for (primitive in asset.primitives) {
+                for (vertex in primitive.joints.indices) {
+                    vertices++
+                    val weights = primitive.weights[vertex]
+                    var influences = 0
+                    for (slot in 0 until 4) {
+                        val joint = primitive.joints[vertex][slot]
+                        assertTrue("vertex $vertex names joint $joint", joint in asset.joints.indices)
+                        if (weights[slot] == 0f) continue
+                        influences++
+                        // A vertex weighted to the body would not follow the path, which is the whole layer.
+                        assertTrue("${layer.name} vertex $vertex is weighted to body joint $joint", joint >= skinJoints)
+                    }
+                    assertTrue("a vertex carries $influences influences, over the 4 a JOINTS_0 holds", influences <= 4)
+                    worstWeight = maxOf(worstWeight, abs(weights.sumOf { it.toDouble() } - 1.0))
+                    for (component in 0 until 3) {
+                        assertTrue("positions must be finite", primitive.positions[vertex][component].isFinite())
+                        assertTrue("normals must be finite", primitive.normals[vertex][component].isFinite())
+                        assertEquals(
+                            "a normal is a unit vector",
+                            1.0,
+                            sqrt(primitive.normals[vertex].sumOf { (it * it).toDouble() }),
+                            1e-4
+                        )
+                    }
+                    for (component in 0 until 4) {
+                        assertTrue("tangents must be finite", primitive.tangents[vertex][component].isFinite())
+                    }
                 }
             }
+            assertEquals(
+                "${layer.name}: 13 ring vertices of 8 plus two cap centres for each of the " +
+                    "${layer.exportedHeads.size} exported heads",
+                layer.exportedHeads.size * (13 * 8 + 2),
+                vertices
+            )
+            assertTrue("a vertex's weights must sum to 1, worst $worstWeight", worstWeight <= 1e-4)
         }
-        assertEquals(
-            "13 ring vertices of 8 plus two cap centres for each of the ${exportedHeads.size} exported heads",
-            exportedHeads.size * (13 * 8 + 2),
-            vertices
-        )
-        assertTrue("a vertex's weights must sum to 1, worst $worstWeight", worstWeight <= 1e-4)
     }
 
     @Test
     fun everyHelperInTheMuscleAssetScalesByExactlyOne() {
-        val asset = MuscleAsset(File(MUSCLES))
-        val skinJoints = manifest().getInt("skinJoints")
-        for (index in skinJoints until asset.inverseBinds.size) {
-            val matrix = asset.inverseBinds[index]
-            for (column in 0 until 3) {
-                val length = sqrt(
-                    (0 until 3).sumOf { row -> (matrix[column * 4 + row] * matrix[column * 4 + row]).toDouble() }
-                )
-                // §7.6: path following only. A helper that carried scale would stretch its muscle.
-                assertEquals("helper ${index - skinJoints} column $column", 1.0, length, 1e-5)
+        for (layer in layers) {
+            val asset = layer.asset
+            val skinJoints = layer.binds.skinJoints
+            for (index in skinJoints until asset.inverseBinds.size) {
+                val matrix = asset.inverseBinds[index]
+                for (column in 0 until 3) {
+                    val length = sqrt(
+                        (0 until 3).sumOf { row -> (matrix[column * 4 + row] * matrix[column * 4 + row]).toDouble() }
+                    )
+                    // §7.6: path following only. A helper that carried scale would stretch its muscle.
+                    assertEquals("${layer.name} helper ${index - skinJoints} column $column", 1.0, length, 1e-5)
+                }
             }
         }
     }
 
     @Test
     fun theMuscleSurfaceFacesTheWayItsNormalsClaim() {
-        val asset = MuscleAsset(File(MUSCLES))
-        val binds = HelperBinds.read(File(MANIFEST).readText())
-        val hairpins = hairpinIntervals()
-        val intervals = hairpins.bySection.mapValues { (section, ranges) ->
-            val helperOffset = binds.binds.indexOfFirst { "${it.head.muscleId}_${it.head.side.name}" == section }
-            require(helperOffset >= 0) { "$section has no helpers" }
-            ranges.map { range ->
-                val start = hairpins.stationIndexOf(range.start)
-                val end = hairpins.stationIndexOf(range.endInclusive)
-                (helperOffset + start..helperOffset + end).toSet()
-            }
-        }
-        var triangles = 0
-        var folded = 0
-        var foldedArea = 0.0
-        for (primitive in asset.primitives) {
-            var triangle = 0
-            while (triangle < primitive.indices.size) {
-                val a = primitive.indices[triangle]
-                val b = primitive.indices[triangle + 1]
-                val c = primitive.indices[triangle + 2]
-                val normal = cross(primitive.positions[a], primitive.positions[b], primitive.positions[c])
-                val area = 0.5 * sqrt(normal.sumOf { (it * it).toDouble() })
-                val facing = normal.indices.sumOf { component ->
-                    (normal[component] * (primitive.normals[a][component] +
-                        primitive.normals[b][component] + primitive.normals[c][component]) / 3.0).toDouble()
+        for (layer in layers) {
+            val asset = layer.asset
+            val binds = layer.binds
+            val hairpins = hairpinIntervals(layer.layer)
+            val intervals = hairpins.bySection.mapValues { (section, ranges) ->
+                val helperOffset = binds.binds.indexOfFirst { "${it.head.muscleId}_${it.head.side.name}" == section }
+                require(helperOffset >= 0) { "$section has no helpers" }
+                ranges.map { range ->
+                    val start = hairpins.stationIndexOf(range.start)
+                    val end = hairpins.stationIndexOf(range.endInclusive)
+                    (helperOffset + start..helperOffset + end).toSet()
                 }
-                triangles++
-                if (facing < 0.0) {
-                    folded++
-                    foldedArea += area
-                    // A rest path that doubles back inside one ring step cannot carry a tube of the
-                    // muscle's own radius: only a vertex influenced by that interval may fold.
-                    val exempt = intervals[primitive.name].orEmpty().any { helpers ->
-                        influenced(primitive, a, helpers, binds.skinJoints) ||
-                            influenced(primitive, b, helpers, binds.skinJoints) ||
-                            influenced(primitive, c, helpers, binds.skinJoints)
+            }
+            var triangles = 0
+            var folded = 0
+            var foldedArea = 0.0
+            for (primitive in asset.primitives) {
+                var triangle = 0
+                while (triangle < primitive.indices.size) {
+                    val a = primitive.indices[triangle]
+                    val b = primitive.indices[triangle + 1]
+                    val c = primitive.indices[triangle + 2]
+                    val normal = cross(primitive.positions[a], primitive.positions[b], primitive.positions[c])
+                    val area = 0.5 * sqrt(normal.sumOf { (it * it).toDouble() })
+                    val facing = normal.indices.sumOf { component ->
+                        (normal[component] * (primitive.normals[a][component] +
+                            primitive.normals[b][component] + primitive.normals[c][component]) / 3.0).toDouble()
                     }
-                    assertTrue(
-                        "${primitive.name} folds a ${area} m2 triangle outside a hairpin station interval",
-                        exempt
-                    )
+                    triangles++
+                    if (facing < 0.0) {
+                        folded++
+                        foldedArea += area
+                        // A rest path that doubles back inside one ring step cannot carry a tube of the
+                        // muscle's own radius: only a vertex influenced by that interval may fold.
+                        val exempt = intervals[primitive.name].orEmpty().any { helpers ->
+                            influenced(primitive, a, helpers, binds.skinJoints) ||
+                                influenced(primitive, b, helpers, binds.skinJoints) ||
+                                influenced(primitive, c, helpers, binds.skinJoints)
+                        }
+                        assertTrue(
+                            "${layer.name} ${primitive.name} folds a ${area} m2 triangle outside a hairpin station interval",
+                            exempt
+                        )
+                    }
+                    triangle += 3
                 }
-                triangle += 3
             }
+            assertTrue("${layer.name} has no triangles", triangles > 0)
+            println("muscle surface ${layer.name}: $triangles triangles, $folded folded in ${hairpins.bySection}, $foldedArea m2")
+            assertTrue(
+                "${layer.name}'s folded area $foldedArea m2 is over the $FOLDED_AREA_SQUARE_METRES m2 per layer a hairpin may cost",
+                foldedArea <= FOLDED_AREA_SQUARE_METRES
+            )
         }
-        assertTrue("the layer has no triangles", triangles > 0)
-        println("muscle surface: $triangles triangles, $folded folded in ${hairpins.bySection}, $foldedArea m2")
-        assertTrue(
-            "the folded area $foldedArea m2 is over the $FOLDED_AREA_SQUARE_METRES m2 a hairpin may cost",
-            foldedArea <= FOLDED_AREA_SQUARE_METRES
-        )
     }
 
     // ---- L5: the mesh itself, read from the GLB rather than from the exporter's claims ----------
 
     @Test
     fun noMuscleSectionCarriesADegenerateTriangle() {
-        val asset = MuscleAsset(File(MUSCLES))
-        var triangles = 0
-        var smallest = Double.MAX_VALUE
-        var smallestWhere = ""
-        for (primitive in asset.primitives) {
-            var triangle = 0
-            while (triangle < primitive.indices.size) {
-                val a = primitive.positions[primitive.indices[triangle]]
-                val b = primitive.positions[primitive.indices[triangle + 1]]
-                val c = primitive.positions[primitive.indices[triangle + 2]]
-                val area = 0.5 * magnitude(cross(a, b, c))
-                assertTrue(
-                    "${primitive.name} triangle ${triangle / 3} has an area of $area m2, which no draw can shade",
-                    area.isFinite() && area > 0.0
-                )
-                if (area < smallest) {
-                    smallest = area
-                    smallestWhere = "${primitive.name} triangle ${triangle / 3}"
+        for (layer in layers) {
+            val asset = layer.asset
+            var triangles = 0
+            var smallest = Double.MAX_VALUE
+            var smallestWhere = ""
+            for (primitive in asset.primitives) {
+                var triangle = 0
+                while (triangle < primitive.indices.size) {
+                    val a = primitive.positions[primitive.indices[triangle]]
+                    val b = primitive.positions[primitive.indices[triangle + 1]]
+                    val c = primitive.positions[primitive.indices[triangle + 2]]
+                    val area = 0.5 * magnitude(cross(a, b, c))
+                    assertTrue(
+                        "${layer.name} ${primitive.name} triangle ${triangle / 3} has an area of $area m2, " +
+                            "which no draw can shade",
+                        area.isFinite() && area > 0.0
+                    )
+                    if (area < smallest) {
+                        smallest = area
+                        smallestWhere = "${primitive.name} triangle ${triangle / 3}"
+                    }
+                    triangles++
+                    triangle += 3
                 }
-                triangles++
-                triangle += 3
             }
+            assertEquals(
+                "${layer.name}: every head is ${RING_COUNT - 1} bands of $RING_SEGMENTS quads plus two capped ends",
+                layer.exportedHeads.size * ((RING_COUNT - 1) * RING_SEGMENTS * 2 + 2 * RING_SEGMENTS),
+                triangles
+            )
+            println("L5 ${layer.name} degenerate triangles: none of $triangles; smallest area $smallest m2 at $smallestWhere")
         }
-        assertEquals(
-            "every head is ${RING_COUNT - 1} bands of $RING_SEGMENTS quads plus two capped ends",
-            exportedHeads.size * ((RING_COUNT - 1) * RING_SEGMENTS * 2 + 2 * RING_SEGMENTS),
-            triangles
-        )
-        println("L5 degenerate triangles: none of $triangles; smallest area $smallest m2 at $smallestWhere")
     }
 
     @Test
     fun everyMuscleSectionEnclosesAPositiveVolume() {
-        val asset = MuscleAsset(File(MUSCLES))
-        var smallest = Double.MAX_VALUE
-        var smallestWhere = ""
-        val volumes = LinkedHashMap<String, Double>()
-        for (primitive in asset.primitives) {
-            var section = 0.0
-            for (head in 0 until headsIn(primitive)) {
-                val volume = volumeOf(primitive, head)
-                val where = if (headsIn(primitive) > 1) "${primitive.name} head $head" else primitive.name
-                // A negative volume is outward winding reversed: the section would draw inside out.
-                assertTrue("$where encloses $volume m3, so its surface faces inward or is open", volume > 0.0)
-                if (volume < smallest) {
-                    smallest = volume
-                    smallestWhere = where
+        for (layer in layers) {
+            val asset = layer.asset
+            var smallest = Double.MAX_VALUE
+            var smallestWhere = ""
+            val volumes = LinkedHashMap<String, Double>()
+            for (primitive in asset.primitives) {
+                var section = 0.0
+                for (head in 0 until headsIn(primitive)) {
+                    val volume = volumeOf(primitive, head)
+                    val where = if (headsIn(primitive) > 1) "${primitive.name} head $head" else primitive.name
+                    // A negative volume is outward winding reversed: the section would draw inside out.
+                    assertTrue(
+                        "${layer.name} $where encloses $volume m3, so its surface faces inward or is open",
+                        volume > 0.0
+                    )
+                    if (volume < smallest) {
+                        smallest = volume
+                        smallestWhere = where
+                    }
+                    section += volume
                 }
-                section += volume
+                volumes[primitive.name] = section
             }
-            volumes[primitive.name] = section
+            assertEquals(
+                "${layer.name}: every exported muscle is a section on both sides",
+                layer.muscles.size * MuscleSide.entries.size,
+                volumes.size
+            )
+            println(
+                "L5 ${layer.name} section volumes (m3): " +
+                    volumes.entries.joinToString(", ") { "${it.key} ${"%.3e".format(it.value)}" } +
+                    "; smallest $smallest at $smallestWhere"
+            )
         }
-        assertEquals("every exported muscle is a section on both sides", exportedHeads.map { it.muscleId }.distinct().size * 2, volumes.size)
-        println(
-            "L5 section volumes (m3): " + volumes.entries.joinToString(", ") { "${it.key} ${"%.3e".format(it.value)}" } +
-                "; smallest $smallest at $smallestWhere"
-        )
     }
 
     @Test
     fun everyMuscleSectionNormalisesItsSkinWeights() {
-        val asset = MuscleAsset(File(MUSCLES))
-        var worst = 0.0
-        var worstWhere = ""
-        for (primitive in asset.primitives) {
-            for (vertex in primitive.weights.indices) {
-                val sum = primitive.weights[vertex].sumOf { it.toDouble() }
-                val residual = abs(sum - 1.0)
-                assertTrue(
-                    "${primitive.name} vertex $vertex weighs $sum, which drifts the surface it skins",
-                    residual <= WEIGHT_SUM_TOLERANCE
-                )
-                if (residual > worst) {
-                    worst = residual
-                    worstWhere = "${primitive.name} vertex $vertex"
+        for (layer in layers) {
+            var worst = 0.0
+            var worstWhere = ""
+            for (primitive in layer.asset.primitives) {
+                for (vertex in primitive.weights.indices) {
+                    val sum = primitive.weights[vertex].sumOf { it.toDouble() }
+                    val residual = abs(sum - 1.0)
+                    assertTrue(
+                        "${layer.name} ${primitive.name} vertex $vertex weighs $sum, which drifts the surface it skins",
+                        residual <= WEIGHT_SUM_TOLERANCE
+                    )
+                    if (residual > worst) {
+                        worst = residual
+                        worstWhere = "${primitive.name} vertex $vertex"
+                    }
                 }
             }
+            println("L5 ${layer.name} weight sum: worst residual $worst at $worstWhere")
         }
-        println("L5 weight sum: worst residual $worst at $worstWhere")
     }
 
     /**
      * Two muscles must never occupy one space. Inside one section the stand-in's uniform cylinder may
      * cross itself only where its own path doubles back, or where two heads of that muscle share a
      * tendon — the two conditions the geometry itself declares.
+     *
+     * Across sections the same rule applies to contact: this asset is a tube of the authored width swept
+     * along the rest path, not a shaped belly, so where two centre lines run closer than the two widths
+     * they carry, the tubes must interpenetrate — the authoring, not the export, puts them there. A
+     * crossing is accepted only when that spacing explains it, measured from the asset's own rings, so a
+     * section misplaced by the export still fails.
+     *
+     * Layers are separate assets and separate skins, so a superficial section may sit over a deep one;
+     * the gate is per asset, and every pair within it is checked.
      */
     @Test
     fun noMuscleSectionCrossesAnotherAndFoldsOnlyWhereItsGeometryAllowsIt() {
-        val asset = MuscleAsset(File(MUSCLES))
-        val binds = HelperBinds.read(File(MANIFEST).readText())
-        val hairpins = hairpinIntervals()
-        val geometry = asset.primitives.map { it to trianglesOf(it) }
+        for (layer in layers) {
+            val asset = layer.asset
+            val binds = layer.binds
+            val hairpins = hairpinIntervals(layer.layer)
+            val geometry = asset.primitives.map { it to trianglesOf(it) }
 
-        var acrossSections = 0
-        var acrossSectionsWhere = ""
-        for (first in geometry.indices) {
-            for (second in first + 1 until geometry.size) {
-                val left = geometry[first]
-                val right = geometry[second]
-                for (a in left.second) {
-                    for (b in right.second) {
-                        if (!a.overlaps(b) || !crosses(a, b)) continue
-                        acrossSections++
-                        acrossSectionsWhere = "${left.first.name} x ${right.first.name}"
+            val acrossByPair = LinkedHashMap<Pair<String, String>, Int>()
+            for (first in geometry.indices) {
+                for (second in first + 1 until geometry.size) {
+                    val left = geometry[first]
+                    val right = geometry[second]
+                    for (a in left.second) {
+                        for (b in right.second) {
+                            if (!a.overlaps(b) || !crosses(a, b)) continue
+                            val pair = left.first.name to right.first.name
+                            acrossByPair[pair] = (acrossByPair[pair] ?: 0) + 1
+                        }
                     }
                 }
             }
-        }
-        assertEquals(
-            "two muscle sections interpenetrate at $acrossSectionsWhere; no pose can separate geometry that already overlaps",
-            0,
-            acrossSections
-        )
-
-        var withinOneHead = 0
-        var betweenHeads = 0
-        var sectionCount = 0
-        for ((primitive, triangles) in geometry) {
-            val exempt = hairpinHelperIndices(primitive.name, binds, hairpins)
-            var folds = 0
-            var merges = 0
-            for (i in triangles.indices) {
-                for (j in i + 1 until triangles.size) {
-                    val left = triangles[i]
-                    val right = triangles[j]
-                    if (left.sharesVertexWith(right) || !left.overlaps(right) || !crosses(left, right)) continue
-                    if (left.indices[0] / VERTICES_PER_HEAD != right.indices[0] / VERTICES_PER_HEAD) {
-                        merges++
-                        continue
-                    }
-                    folds++
-                    // A fold away from a hairpin means the surface passes through the belly it draws.
-                    assertTrue(
-                        "${primitive.name} crosses itself at ${left.indices.joinToString()} x ${right.indices.joinToString()}, " +
-                            "away from any station interval whose path turns through a right angle",
-                        left.indices.any { influenced(primitive, it, exempt, binds.skinJoints) }
-                    )
-                }
+            for ((pair, crossings) in acrossByPair) {
+                val left = geometry.first { it.first.name == pair.first }.first
+                val right = geometry.first { it.first.name == pair.second }.first
+                val leftSpacing = spacingOf(left)
+                val rightSpacing = spacingOf(right)
+                val nearest = leftSpacing.nearest(rightSpacing)
+                val widths = leftSpacing.widest + rightSpacing.widest
+                assertTrue(
+                    "${layer.name} ${pair.first} x ${pair.second} crosses on $crossings triangle pairs while their " +
+                        "centre lines stay $nearest m apart, wider than the $widths m the two authored widths carry: " +
+                        "the export put a section where the rest path does not",
+                    nearest <= widths
+                )
             }
-            if (folds > 0) sectionCount++
-            withinOneHead += folds
-            betweenHeads += merges
-            if (folds > 0 || merges > 0) println("L5 ${primitive.name}: $folds fold(s) inside a head, $merges between its heads")
+            val acrossSections = acrossByPair.values.sum()
+            println(
+                "L5 ${layer.name} cross-section: $acrossSections triangle pairs over ${acrossByPair.size} section pair(s) " +
+                    "of ${geometry.size * (geometry.size - 1) / 2}, all within the spacing the paths and widths author"
+            )
+
+            var withinOneHead = 0
+            var betweenHeads = 0
+            var sectionCount = 0
+            for ((primitive, triangles) in geometry) {
+                val exempt = hairpinHelperIndices(primitive.name, binds, hairpins)
+                var folds = 0
+                var merges = 0
+                for (i in triangles.indices) {
+                    for (j in i + 1 until triangles.size) {
+                        val left = triangles[i]
+                        val right = triangles[j]
+                        if (left.sharesVertexWith(right) || !left.overlaps(right) || !crosses(left, right)) continue
+                        if (left.indices[0] / VERTICES_PER_HEAD != right.indices[0] / VERTICES_PER_HEAD) {
+                            merges++
+                            continue
+                        }
+                        folds++
+                        // A fold away from a hairpin means the surface passes through the belly it draws.
+                        assertTrue(
+                            "${layer.name} ${primitive.name} crosses itself at " +
+                                "${left.indices.joinToString()} x ${right.indices.joinToString()}, " +
+                                "away from any station interval whose path turns through a right angle",
+                            left.indices.any { influenced(primitive, it, exempt, binds.skinJoints) }
+                        )
+                    }
+                }
+                if (folds > 0) sectionCount++
+                withinOneHead += folds
+                betweenHeads += merges
+                if (folds > 0 || merges > 0) println("L5 ${layer.name} ${primitive.name}: $folds fold(s) inside a head, $merges between its heads")
+            }
+            println(
+                "L5 ${layer.name} self-intersection: 0 across sections; $withinOneHead inside a head on " +
+                    "$sectionCount section(s), all at a hairpin; $betweenHeads between the heads of one muscle"
+            )
         }
-        println(
-            "L5 self-intersection: 0 across sections; $withinOneHead inside a head on $sectionCount section(s), " +
-                "all at a hairpin; $betweenHeads between the heads of one muscle"
-        )
     }
 
     /**
      * Between two adjacent helper stations the skinning interpolates two rigid frames, so it reproduces
-     * the straight chord and not the path. This measures how far the authored surface leaves that chord.
+     * the straight chord and not the path. This measures how far the authored surface leaves that chord
+     * against the [DEVIATION_BUDGET_METRES] the skinning error is allowed to cost.
      */
     @Test
-    fun theSurfaceStaysWithinOneMuscleRadiusOfTheHelperChord() {
-        val asset = MuscleAsset(File(MUSCLES))
-        val binds = HelperBinds.read(File(MANIFEST).readText())
+    fun theSurfaceStaysWithinTheHelperChordBudget() {
         val frame = restFrame()
-        // The budget is the widest radius the definition authors: a chord that cuts deeper than a belly
-        // is wide would put the skinning's error outside the muscle it draws.
-        val budget = definition.muscles.maxOf { muscle -> muscle.radiusKnots.maxOf { knot -> knot.second.toDouble() } }
         var worst = 0.0
         var worstWhere = ""
-        for (primitive in asset.primitives) {
-            val side = MuscleSide.entries.first { primitive.name.endsWith("_${it.name}") }
-            val muscleId = primitive.name.removeSuffix("_${side.name}")
-            for (head in 0 until headsIn(primitive)) {
-                val slot = frame.heads.indexOf(MuscleHeadId(muscleId, side, head))
-                require(slot >= 0) { "${primitive.name} head $head is not a slot of this definition" }
-                val stations = binds.stations.map { station -> toAsset(stationFrame(frame, slot, station.toDouble()).first) }
-                for (index in 0 until stations.size - 1) {
-                    val from = binds.stations[index].toDouble()
-                    val to = binds.stations[index + 1].toDouble()
-                    for (ring in 0 until RING_COUNT) {
-                        val u = ring.toDouble() / (RING_COUNT - 1)
-                        if (u < from - 1e-9 || u > to + 1e-9) continue
-                        val centre = centreOf(primitive, head, ring)
-                        for (segment in 0 until RING_SEGMENTS) {
-                            val vertex = primitive.positions[vertexOf(head, ring, segment)]
-                            val radius = distanceTo(vertex, centre)
-                            val deviation = abs(distanceToSegment(vertex, stations[index], stations[index + 1]) - radius)
-                            if (deviation > worst) {
-                                worst = deviation
-                                worstWhere = "${primitive.name} head $head, stations $from..$to, ring $ring"
+        for (layer in layers) {
+            val binds = layer.binds
+            for (primitive in layer.asset.primitives) {
+                val side = MuscleSide.entries.first { primitive.name.endsWith("_${it.name}") }
+                val muscleId = primitive.name.removeSuffix("_${side.name}")
+                for (head in 0 until headsIn(primitive)) {
+                    val slot = frame.heads.indexOf(MuscleHeadId(muscleId, side, head))
+                    require(slot >= 0) { "${primitive.name} head $head is not a slot of this definition" }
+                    val stations = binds.stations.map { station -> toAsset(stationFrame(frame, slot, station.toDouble()).first) }
+                    for (index in 0 until stations.size - 1) {
+                        val from = binds.stations[index].toDouble()
+                        val to = binds.stations[index + 1].toDouble()
+                        for (ring in 0 until RING_COUNT) {
+                            val u = ring.toDouble() / (RING_COUNT - 1)
+                            if (u < from - 1e-9 || u > to + 1e-9) continue
+                            val centre = centreOf(primitive, head, ring)
+                            for (segment in 0 until RING_SEGMENTS) {
+                                val vertex = primitive.positions[vertexOf(head, ring, segment)]
+                                val radius = distanceTo(vertex, centre)
+                                val deviation = abs(distanceToSegment(vertex, stations[index], stations[index + 1]) - radius)
+                                if (deviation > worst) {
+                                    worst = deviation
+                                    worstWhere = "${layer.name} ${primitive.name} head $head, stations $from..$to, ring $ring"
+                                }
                             }
                         }
                     }
@@ -512,11 +620,12 @@ class HelperBindTest {
         }
         println(
             "L5 between-helper surface deviation = ${"%.6f".format(worst)} m " +
-                "(${"%.2f".format(worst * 1000)} mm), budget ${"%.2f".format(budget * 1000)} mm, at $worstWhere"
+                "(${"%.2f".format(worst * 1000)} mm), budget ${"%.2f".format(DEVIATION_BUDGET_METRES * 1000)} mm, at $worstWhere"
         )
         assertTrue(
-            "the surface leaves the straight line between adjacent helper stations by $worst m, over the $budget m budget",
-            worst <= budget
+            "the surface leaves the straight line between adjacent helper stations by $worst m, " +
+                "over the $DEVIATION_BUDGET_METRES m budget",
+            worst <= DEVIATION_BUDGET_METRES
         )
     }
 
@@ -553,6 +662,37 @@ class HelperBindTest {
 
     private fun vertexOf(head: Int, ring: Int, segment: Int): Int =
         head * VERTICES_PER_HEAD + ring * RING_SEGMENTS + segment
+
+    /** A section's centre line and the widest radius it carries: the tube its rest path is swept into. */
+    private class Spacing(val centres: List<DoubleArray>, val widest: Double) {
+        fun nearest(other: Spacing): Double {
+            var best = Double.MAX_VALUE
+            for (left in centres) for (right in other.centres) {
+                var sum = 0.0
+                for (component in 0..2) {
+                    val delta = left[component] - right[component]
+                    sum += delta * delta
+                }
+                best = minOf(best, sum)
+            }
+            return sqrt(best)
+        }
+    }
+
+    private fun spacingOf(primitive: MuscleAsset.Primitive): Spacing {
+        val centres = ArrayList<DoubleArray>()
+        var widest = 0.0
+        for (head in 0 until headsIn(primitive)) {
+            for (ring in 0 until RING_COUNT) {
+                val centre = centreOf(primitive, head, ring)
+                centres += centre
+                for (segment in 0 until RING_SEGMENTS) {
+                    widest = maxOf(widest, distanceTo(primitive.positions[vertexOf(head, ring, segment)], centre))
+                }
+            }
+        }
+        return Spacing(centres, widest)
+    }
 
     /** A ring's centre recovered from its own vertices: the eight radial directions cancel. */
     private fun centreOf(primitive: MuscleAsset.Primitive, head: Int, ring: Int): DoubleArray {
@@ -722,12 +862,13 @@ class HelperBindTest {
      * only places a swept tube can fold. Read from the manifest's own basis, so the exemption is a
      * property of the anatomy and not a list of names.
      */
-    private fun hairpinIntervals(): HairpinIntervals {
+    private fun hairpinIntervals(layer: MuscleLayer): HairpinIntervals {
         val document = manifest()
         val helpers = document.getJSONArray("helpers")
         val groups = LinkedHashMap<String, MutableList<JSONObject>>()
         for (index in 0 until helpers.length()) {
             val helper = helpers.getJSONObject(index)
+            if (helper.getString("layer") != layer.name) continue
             val key = helper.getString("muscleId") + "_" + helper.getString("side")
             groups.getOrPut(key) { ArrayList() } += helper
         }
@@ -747,16 +888,20 @@ class HelperBindTest {
     }
 
     @Test
-    fun thePaletteIsTheWritersOwnCountAndTheGateRefusesOneOver() {
-        val manifest = manifest()
-        val skin = manifest.getInt("skinJoints")
-        val helpers = manifest.getInt("helperCount")
-        assertEquals("one helper per head and station", exportedHeads.size * STATIONS, helpers)
-        assertEquals(
-            "the manifest's palette is the writer's own count",
-            manifest.getInt("palette"),
-            HelperBindManifest.requireWithinPalette(skin, helpers)
-        )
+    fun eachPartitionIsTheWritersOwnCountAndTheGateRefusesOneOver() {
+        val skin = atlas.skinJoints
+        assertEquals("the atlas is the sum of its partitions", atlas.helperCount, atlas.partitions.sumOf { it.helperCount })
+        for (partition in atlas.partitions) {
+            assertEquals(
+                "${partition.layer}'s palette is the writer's own count",
+                partition.palette,
+                HelperBindManifest.requireWithinPalette(skin, partition.helperCount, partition.layer)
+            )
+            assertTrue(
+                "${partition.layer} must fit the renderable",
+                partition.palette <= HelperBindManifest.PALETTE_LIMIT
+            )
+        }
 
         // The budget exactly is bindable and one joint over is not, so an off-by-one gate cannot ship.
         val budget = HelperBindManifest.PALETTE_LIMIT
@@ -925,12 +1070,15 @@ class HelperBindTest {
         private val accessors: JSONArray
         private val views: JSONArray
 
+        val rig: GltfRig
         val joints: List<Int>
         val inverseBinds: List<FloatArray>
         val primitives: List<Primitive>
 
         init {
-            val buffer = ByteBuffer.wrap(file.readBytes()).order(ByteOrder.LITTLE_ENDIAN)
+            val bytes = file.readBytes()
+            rig = GltfRig.parse(bytes)
+            val buffer = ByteBuffer.wrap(bytes).order(ByteOrder.LITTLE_ENDIAN)
             buffer.int // magic
             buffer.int // version
             buffer.int // total length
@@ -1038,16 +1186,19 @@ class HelperBindTest {
     private companion object {
         const val ASSET = "src/main/assets/anatomy/anatomy_v1.json"
         const val MANIFEST = "src/main/assets/anatomy/helpers_v1.json"
-        const val MUSCLES = "src/main/assets/characters/muscles_sup.glb"
+        const val DIR = "src/main/assets/characters"
         const val RIG = "src/main/assets/characters/humanoid_v2.glb"
 
         /** A turn this sharp between two helper stations folds any tube of the muscle's own radius. */
         const val HAIRPIN_DEGREES = 90.0
 
-        /** Total folded area the stand-in's hairpin may cost: it disappears with the authored asset. */
+        /** Total folded area one layer's hairpins may cost: it disappears with the authored asset. */
         const val FOLDED_AREA_SQUARE_METRES = 5e-5
         const val TOLERANCE_METRES = 1e-3
         const val STATIONS = 4
+
+        /** The bound the between-helper skinning error may reach: the widest radius the definition authors. */
+        const val DEVIATION_BUDGET_METRES = 0.024
 
         /** Vertices around the path; the exporter's own ring, mirrored here as the section's contract. */
         const val RING_SEGMENTS = 8

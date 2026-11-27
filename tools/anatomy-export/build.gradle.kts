@@ -57,7 +57,7 @@ tasks.register<JavaExec>("exportHelpers") {
 
 tasks.register<JavaExec>("exportMuscles") {
     group = "export"
-    description = "Writes app/src/main/assets/characters/muscles_sup.glb, skinned to the helper binds."
+    description = "Writes muscles_sup.glb and muscles_deep.glb, each skinned to its layer's helper binds."
     mainClass.set("com.monkfitness.app.anatomyexport.MuscleMeshExport")
     classpath = sourceSets["main"].runtimeClasspath
 }

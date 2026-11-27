@@ -2,16 +2,16 @@ package com.monkfitness.app.character
 
 import com.monkfitness.app.anatomy.AnatomyDefinition
 import com.monkfitness.app.anatomy.AnatomyDefinitionLoader
+import com.monkfitness.app.anatomy.MuscleLayer
 import java.io.File
 
 /**
- * The anatomy as the exported muscle asset sees it.
+ * The anatomy as the exported muscle assets see it.
  *
- * The library now carries the whole superficial and deep atlas while `muscles_sup.glb` is still the
- * regional exporter's Stage-3 output, so a mesh or skinner fixture is built over the muscles the
- * manifest itself binds. Deriving the subset from the manifest rather than naming it is what lets a
- * re-export widen these fixtures with no edit — and keeps a section the asset does not carry from
- * passing as one it does.
+ * The atlas is split into one asset per layer, and the runtime draws the superficial one; a mesh or
+ * skinner fixture is therefore built over that layer's helpers, derived from the manifest rather
+ * than named, so a re-export widens these fixtures with no edit — and keeps a section the asset does
+ * not carry from passing as one it does.
  */
 object MuscleExportFixture {
 
@@ -19,7 +19,12 @@ object MuscleExportFixture {
     const val MANIFEST = "src/main/assets/anatomy/helpers_v1.json"
     const val MUSCLES = "src/main/assets/characters/muscles_sup.glb"
 
-    fun binds(): HelperBinds = HelperBinds.read(File(MANIFEST).readText())
+    /** The layer `MUSCLES` draws; the deep layer's asset is exported beside it. */
+    val LAYER = MuscleLayer.SUPERFICIAL
+
+    fun atlas(): HelperBindSet = HelperBindSet.read(File(MANIFEST).readText())
+
+    fun binds(): HelperBinds = atlas().partition(LAYER)
 
     /** The shipped definition reduced to the muscles [binds] carries at least one helper for. */
     fun definition(

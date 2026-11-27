@@ -1,7 +1,9 @@
 package com.monkfitness.app.character
 
 import com.monkfitness.app.anatomy.MuscleHeadId
+import com.monkfitness.app.anatomy.MuscleLayer
 import com.monkfitness.app.anatomy.MuscleSide
+import org.json.JSONArray
 import org.json.JSONObject
 import kotlin.math.abs
 import kotlin.math.sqrt
@@ -46,16 +48,15 @@ class HelperBind(
 }
 
 /**
- * The exported helper binds ([HelperBinds.ASSET_PATH]) read once: the palette the muscle layer
- * binds into, the stations every head carries, and each helper's bind frame.
- *
- * Order is the contract — helpers are head-major and station-minor, so helper `i` owns palette slot
- * `skinJoints + i`. The mesh and the skinner both rely on it rather than on joint names.
+ * One layer's exported helper binds: the palette it binds into, the stations every head carries, and each
+ * helper's frame. Helpers are head-major and station-minor, so helper `i` owns palette slot `skinJoints + i`.
  */
 class HelperBinds(
     val skinJoints: Int,
     val stations: FloatArray,
-    val binds: List<HelperBind>
+    val binds: List<HelperBind>,
+    /** The layer this palette skins; null for a schema-1 manifest, which carried a single one. */
+    val layer: MuscleLayer? = null
 ) {
 
     init {
@@ -65,7 +66,7 @@ class HelperBinds(
         require(binds.size % stations.size == 0) {
             "${binds.size} helpers do not divide into groups of ${stations.size}"
         }
-        HelperBindManifest.requireWithinPalette(skinJoints, binds.size)
+        HelperBindManifest.requireWithinPalette(skinJoints, binds.size, layer)
         for (index in binds.indices) {
             val bind = binds[index]
             require(bind.station == stations[index % stations.size]) {
@@ -100,22 +101,62 @@ class HelperBinds(
 
     /** Registers a group's helper indices are contiguous, so a group is `group * stationCount + s`. */
     fun helperIndexOf(group: Int, stationIndex: Int): Int = group * stationCount + stationIndex
+}
+
+/**
+ * Every layer's helper binds, read once: one [HelperBinds] per layer, each with its own palette.
+ * The atlas is one asset per skin, so no palette has to hold more than one layer's helpers.
+ */
+class HelperBindSet(
+    val skinJoints: Int,
+    val stations: FloatArray,
+    val partitions: List<HelperBinds>
+) {
+
+    init {
+        require(partitions.isNotEmpty()) { "the manifest carries no helpers" }
+        require(partitions.map { it.layer }.distinct().size == partitions.size) {
+            "two partitions claim the same layer: ${partitions.map { it.layer }}"
+        }
+        require(partitions.all { it.skinJoints == skinJoints && it.stations.contentEquals(stations) }) {
+            "every partition must bind the same rig, at the same stations"
+        }
+    }
+
+    /** Every helper in the atlas, across every layer. */
+    val helperCount: Int get() = partitions.sumOf { it.helperCount }
+
+    /**
+     * The layer's own palette and helpers. A layer the manifest does not carry is a refusal rather
+     * than an empty skin, because a layer with no helpers draws nothing an author asked for.
+     */
+    fun partition(layer: MuscleLayer): HelperBinds =
+        partitions.firstOrNull { it.layer == layer } ?: throw IllegalArgumentException(
+            "the manifest carries no $layer helpers; it has ${partitions.map { it.layer }}"
+        )
+
+    /** The single unlabelled partition of a schema-1 manifest, or null when the atlas is split. */
+    val unpartitioned: HelperBinds?
+        get() = partitions.singleOrNull()?.takeIf { it.layer == null }
 
     companion object {
 
         const val ASSET_PATH = "anatomy/helpers_v1.json"
 
-        private const val SCHEMA = 1
+        private const val SCHEMA_SINGLE = 1
+        private const val SCHEMA_PARTITIONED = 2
 
         /**
          * Reads the manifest, refusing anything a skin cannot use: a palette over the bindable
          * limit, a non-finite number, or a basis that is not a rotation would all deform a muscle
          * silently rather than fail on screen.
          */
-        fun read(text: String): HelperBinds {
+        fun read(text: String): HelperBindSet {
             val root = JSONObject(text)
             val schema = root.getInt("schema")
-            require(schema == SCHEMA) { "helper manifest schema $schema is not $SCHEMA" }
+            require(schema == SCHEMA_SINGLE || schema == SCHEMA_PARTITIONED) {
+                "helper manifest schema $schema is not $SCHEMA_SINGLE or $SCHEMA_PARTITIONED"
+            }
             require(root.getString("units") == HelperBindManifest.UNITS) {
                 "helper binds must be in ${HelperBindManifest.UNITS}, not ${root.getString("units")}"
             }
@@ -140,7 +181,23 @@ class HelperBinds(
                 "the manifest says ${root.getInt("helperCount")} helpers and carries ${array.length()}"
             }
 
-            val binds = ArrayList<HelperBind>(array.length())
+            val entries = entries(array, schema)
+            val partitions = when (schema) {
+                SCHEMA_SINGLE -> listOf(HelperBinds(skinJoints, stationValues, entries.map { it.bind }, null))
+                else -> partitioned(root, skinJoints, stationValues, entries)
+            }
+            if (schema == SCHEMA_SINGLE) {
+                require(root.getInt("palette") == partitions.single().palette) {
+                    "the manifest claims palette ${root.getInt("palette")}, " +
+                        "the binds need ${partitions.single().palette}"
+                }
+            }
+            return HelperBindSet(skinJoints, stationValues, partitions)
+        }
+
+        /** Each helper in manifest order, tagged with the layer its partition declares. */
+        private fun entries(array: JSONArray, schema: Int): List<Entry> {
+            val out = ArrayList<Entry>(array.length())
             for (index in 0 until array.length()) {
                 val entry = array.getJSONObject(index)
                 val head = MuscleHeadId(
@@ -157,19 +214,62 @@ class HelperBinds(
                 }
                 val name = entry.optString("name", head.toString())
                 requireRotation(name, basis)
-                binds += HelperBind(
-                    head = head,
-                    station = entry.getDouble("station").toFloat(),
-                    position = position,
-                    basis = basis
+                val layer = if (schema == SCHEMA_SINGLE) null else MuscleLayer.valueOf(entry.getString("layer"))
+                out += Entry(
+                    HelperBind(
+                        head = head,
+                        station = entry.getDouble("station").toFloat(),
+                        position = position,
+                        basis = basis
+                    ),
+                    layer
                 )
             }
+            return out
+        }
 
-            val manifest = HelperBinds(skinJoints, stationValues, binds)
-            require(root.getInt("palette") == manifest.palette) {
-                "the manifest claims palette ${root.getInt("palette")}, the binds need ${manifest.palette}"
+        /**
+         * The declared partitions, cut out of the manifest's own helper order: a helper tagged one
+         * layer inside another layer's range would skin a muscle with a palette that does not hold it.
+         */
+        private fun partitioned(
+            root: JSONObject,
+            skinJoints: Int,
+            stations: FloatArray,
+            entries: List<Entry>
+        ): List<HelperBinds> {
+            val declared = root.getJSONArray("partitions")
+            require(declared.length() > 0) { "a partitioned manifest needs at least one partition" }
+            val out = ArrayList<HelperBinds>(declared.length())
+            var first = 0
+            for (slot in 0 until declared.length()) {
+                val partition = declared.getJSONObject(slot)
+                val layer = MuscleLayer.valueOf(partition.getString("layer"))
+                require(partition.optInt("firstHelper", first) == first) {
+                    "the $layer partition starts at ${partition.optInt("firstHelper", first)}, " +
+                        "not where the previous one ends ($first)"
+                }
+                val count = partition.getInt("helperCount")
+                require(count > 0 && first + count <= entries.size) {
+                    "the $layer partition claims $count helpers at $first of ${entries.size}"
+                }
+                val slice = entries.subList(first, first + count)
+                val foreign = slice.indexOfFirst { it.layer != layer }
+                require(foreign < 0) {
+                    "the $layer partition carries a helper tagged ${slice.getOrNull(foreign)?.layer}"
+                }
+                val binds = HelperBinds(skinJoints, stations, slice.map { it.bind }, layer)
+                require(partition.getInt("palette") == binds.palette) {
+                    "the $layer partition claims palette ${partition.getInt("palette")}, " +
+                        "the binds need ${binds.palette}"
+                }
+                out += binds
+                first += count
             }
-            return manifest
+            require(first == entries.size) {
+                "the partitions cover $first of ${entries.size} helpers"
+            }
+            return out
         }
 
         private fun components(array: org.json.JSONArray, label: String): FloatArray {
@@ -208,4 +308,6 @@ class HelperBinds(
 
         private const val ROTATION_TOLERANCE = 1e-5f
     }
+
+    private class Entry(val bind: HelperBind, val layer: MuscleLayer?)
 }

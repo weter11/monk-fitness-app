@@ -1,5 +1,7 @@
 package com.monkfitness.app.character
 
+import com.monkfitness.app.anatomy.MuscleLayer
+
 /**
  * The contract an exported helper-bind manifest obeys, shared by the exporter that writes it and the
  * gate that reads it back, so the palette, the rest length and every emitted number are one rule.
@@ -13,16 +15,18 @@ object HelperBindManifest {
     const val UNITS = "metres"
 
     /**
-     * The layer's whole joint count — the rig's own plus one per helper — refusing a palette the
-     * renderable cannot bind. Returns the palette, so a caller writes and checks the same number.
+     * The palette's own joint count — the rig's own plus one per helper — refusing a palette the
+     * renderable cannot bind. The budget is per partition: each layer is its own skin, so the atlas
+     * is valid while every layer fits even though the sum of all layers never could.
+     * Returns the palette, so a caller writes and checks the same number.
      */
-    fun requireWithinPalette(skinJoints: Int, helperCount: Int): Int {
+    fun requireWithinPalette(skinJoints: Int, helperCount: Int, layer: MuscleLayer? = null): Int {
         require(skinJoints > 0) { "the layer needs the rig's joints, got $skinJoints" }
         require(helperCount > 0) { "the layer needs helpers of its own, got $helperCount" }
         val palette = skinJoints + helperCount
         require(palette <= PALETTE_LIMIT) {
-            "the layer needs $palette joints ($skinJoints body + $helperCount helpers), " +
-                "over the $PALETTE_LIMIT the renderable accepts"
+            "${layer?.let { "$it " } ?: ""}the layer needs $palette joints " +
+                "($skinJoints body + $helperCount helpers), over the $PALETTE_LIMIT the renderable accepts"
         }
         return palette
     }

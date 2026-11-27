@@ -1,6 +1,7 @@
 package com.monkfitness.app.character
 
-import com.monkfitness.app.character.HelperBinds
+import com.monkfitness.app.anatomy.MuscleLayer
+import com.monkfitness.app.character.HelperBindSet
 import org.json.JSONArray
 import org.json.JSONObject
 import org.junit.Assert.assertEquals
@@ -13,7 +14,7 @@ class MuscleLayerAssetTest {
 
     @Test
     fun theSkinUsesTheAuthoredPaletteInManifestOrder() {
-        val binds = HelperBinds.read(File(MANIFEST).readText())
+        val binds = HelperBindSet.read(File(MANIFEST).readText()).partition(MuscleLayer.SUPERFICIAL)
         val asset = MuscleAsset(File(MUSCLES))
         assertEquals(binds.palette, asset.rig.jointNodes.size)
         assertEquals(binds.palette, asset.rig.inverseBinds.size)
