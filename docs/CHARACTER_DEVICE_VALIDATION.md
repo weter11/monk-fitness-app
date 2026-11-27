@@ -1262,7 +1262,46 @@ Stage 3 run recorded above, so the trigger scales with the export, not with the 
 in Stage 3 (`FEngine::loop`, unexplained) — this run reproduces it at will and adds the scale
 evidence, but does not explain it.
 
-### 8.5 What this run does not establish
+### 8.5 The isolation run — A and B are both disproven
+
+Three probes, each one build, run on the same handset with the crash live:
+
+| Probe | Change under test | Result |
+| --- | --- | --- |
+| **A** | `Material.createInstance()` and `setMaterialInstanceAt()` removed entirely: every section keeps the `gltfio` instance the asset shipped, and the selection writes no tint | **still died at the reveal**, 3 of 3 runs (`action=meshes` at 15:52:59.800, process replaced 19 s later, `reason=5`) |
+| **B** | the authored layer live from the first frame (`showsMeshes = true`), so nothing flips 66 masks at the reveal | **died at the first drawn frame**, 3 of 3 (`frames=1`, `p95 76.98 ms`, then the process is gone) |
+| **C** | sections cast no shadow (`setCastShadows(false)`) before the mask write | still died at the reveal, 2 of 2 |
+| **D** | half the sections' palettes uploaded per frame (`local % 2 == parity`), i.e. half the per-frame bone traffic | no change in the crash; the 20 s background dwell stayed clean as before |
+
+So neither candidate is the trigger on its own: the render thread dies with no material cloning, with
+no mask flip at all, and with the shadow pass excluded. What the runs do separate is the *surface*:
+
+| Configuration | Result |
+| --- | --- |
+| 66/66 live, app **in the background** (no visible surface of its own), 20–25 s dwell, no interaction | clean, `0` crashes, `mesh=66/66`, smoothed 59, p95 2.3–2.4 ms |
+| 66/66 live, app **in the foreground**, revealed by intent | dies 0.03–0.6 s after the first 66/66 telemetry line (`frames=423 … mesh=66/66` then no further sample from that PID) |
+| 66/66 live, foreground, seven separate `am start` toggles across the window | died at the reveal, 2 of 2 |
+| 16 sections drawn (limit probe), foreground, 30 s | clean |
+| 8 / 24 / 32 / 40 / 46 sections (limit probe), 30 s | clean in this pass; the same 46-section code died at the reveal in an earlier pass, so this is state, not threshold |
+
+A 20-second foreground window that reveals the layer, toggles both partitions, hides, shows and selects
+one section therefore **was not obtained**: it ends in the same `FEngine::loop` fault within a second
+of the reveal, on every attempt in which the app owns the visible surface. A drain of the render thread
+on the frame a mask moves (`Engine.flushAndWait()` after a mask change) was built and tested as a
+mitigation and did not help; it is not in the tree.
+
+The `sequence` debug action (`--es action sequence --es instance <muscle:side>`) was added by this run:
+one intent drives both layer toggles, the hide, the show and the select from inside the app, so a
+window can contain the whole interaction with a single foreground transition. With the layer in the
+background it runs all seven steps; with the layer drawn on the visible surface the process is gone
+before the second step.
+
+What remains unexplained, and unchanged from 8.4: the fault is inside `libfilament-jni` (BuildId
+`831f673f590c30fce635baf49cd029339febce3c`) with no symbols, appears only when these exported skins are
+drawn on a visible surface at 20–66 sections, and does not reproduce with the 16-section/106-joint
+export of the same material that Stage 3 ran for 20 s.
+
+### 8.6 What this run does not establish
 
 - **A 20 s window with `66/66`, the toggles and an unchanged PID.** Short windows are clean and the
   readings above are real, but the window the brief asks for ends in the native fault more often than

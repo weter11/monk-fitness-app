@@ -111,6 +111,33 @@ private data class ExerciseOption(val animationId: String, val label: String)
 private fun muscleLayer(name: String?): MuscleLayer? =
     MuscleLayer.entries.firstOrNull { it.name.equals(name, ignoreCase = true) }
 
+/**
+ * The toggle, hide and select sequence a device window has to contain, driven from inside the app:
+ * one intent and one foreground transition instead of seven across the window, so the measurement
+ * is of the layer rather than of the activity being started under it.
+ */
+private fun runSequence(session: CharacterSession, token: String?) {
+    val instance = token?.let { wanted ->
+        session.muscleInstances.firstOrNull { "${it.muscleId}:${it.side.name}" == wanted }
+    } ?: session.muscleInstances.firstOrNull()
+    val steps: List<Pair<String, () -> Unit>> = listOf(
+        "layer DEEP off" to { session.layers.toggleLayer(CharacterLayerId.DEEP_MUSCLE) },
+        "layer DEEP on" to { session.layers.toggleLayer(CharacterLayerId.DEEP_MUSCLE) },
+        "layer SUPERFICIAL off" to { session.layers.toggleLayer(CharacterLayerId.SUPERFICIAL_MUSCLE) },
+        "layer SUPERFICIAL on" to { session.layers.toggleLayer(CharacterLayerId.SUPERFICIAL_MUSCLE) },
+        "hide" to { instance?.let { session.layers.setInstanceVisible(it, false) } },
+        "show" to { instance?.let { session.layers.setInstanceVisible(it, true) } },
+        "select" to { instance?.let { session.layers.selectInstance(it) } }
+    )
+    val handler = Handler(Looper.getMainLooper())
+    steps.forEachIndexed { index, (label, step) ->
+        handler.postDelayed({
+            step()
+            Log.i(TAG, "sequence step=" + label + " instance=" + (instance?.muscleId ?: "-"))
+        }, SEQUENCE_STEP_MILLIS * (index + 1))
+    }
+}
+
 private val exercises = listOf(
     ExerciseOption("squat_standard", "Squat"),
     ExerciseOption("pushup_standard", "Push-up"),
@@ -151,6 +178,7 @@ private fun DiagnosticsScreen(request: BackendRequest, command: State<DebugComma
             "show" -> instance != null
             "exercise" -> exercises.any { it.animationId == instruction.instance }
             "layer" -> muscleLayer(instruction.instance) != null
+            "sequence" -> true
             "meshes", "tubes", "pause", "resume", "step", "overlay" -> true
             else -> false
         }
@@ -163,6 +191,7 @@ private fun DiagnosticsScreen(request: BackendRequest, command: State<DebugComma
             // Each partition has its own toggle, so a run can prove one skin draws without the other.
             "layer" -> muscleLayer(instruction.instance)
                 ?.let { target.layers.toggleLayer(CharacterLayerId.of(it)) }
+            "sequence" -> runSequence(target, instruction.instance)
             "meshes" -> target.layers.toggleMeshes()
             "tubes" -> target.layers.toggleTubes()
             "overlay" -> overlay = !overlay
@@ -310,5 +339,8 @@ private val TRACKED_STAGES = listOf("anatomyFrames", "anatomyPaths", "muscleSkin
 
 /** One screenshot pair advances the pose by this window, so both frames of the pair share it. */
 private const val STEP_MILLIS = 120L
+
+/** Gap between the sequence's steps: wide enough that every phase lands in a telemetry sample. */
+private const val SEQUENCE_STEP_MILLIS = 1600L
 
 private const val TAG = "CharacterDevice"
