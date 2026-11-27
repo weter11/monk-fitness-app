@@ -46,7 +46,7 @@ class MuscleLayerSkinnerTest {
         assertEquals(binds.palette, skinner.paletteCount)
         assertEquals(binds.helperCount, skinner.helperCount)
         assertEquals(binds.skinJoints, skinner.skinJoints)
-        assertEquals(34 + 72, skinner.paletteCount)
+        assertEquals(34 + 208, skinner.paletteCount)
         assertTrue("the palette must fit the renderable", skinner.paletteCount <= HelperBindManifest.PALETTE_LIMIT)
     }
 
