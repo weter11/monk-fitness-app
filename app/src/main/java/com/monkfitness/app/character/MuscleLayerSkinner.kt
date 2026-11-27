@@ -8,11 +8,13 @@ import kotlin.math.abs
 import kotlin.math.sqrt
 
 /**
- * Derives the muscle layer's whole skin palette each frame: the rig's own joint matrices as the base
+ * Derives one partition's whole skin palette each frame: the rig's own joint matrices as the base
  * range, then one matrix per helper bone re-sampled from the solved path.
  *
  * A helper's matrix is `world · inverseBind` in the rig's asset space — the same convention
- * [PoseRetargeter] uploads for the body — so both ranges reach one renderable unmodified.
+ * [PoseRetargeter] uploads for the body — so both ranges reach one renderable unmodified. Both
+ * partitions are skinned from the same solved frame, so a head another partition binds is skipped
+ * here rather than refused: one frame, two skins.
  */
 class MuscleLayerSkinner(
     private val rig: GltfRig,
@@ -22,6 +24,7 @@ class MuscleLayerSkinner(
     pointCapacity: Int
 ) {
 
+    /** The partition's bind group per frame slot, or -1 for a head this partition does not carry. */
     private val groupBySlot: IntArray
 
     init {
@@ -33,18 +36,23 @@ class MuscleLayerSkinner(
         require(rig.inverseBinds.size >= binds.palette) {
             "the rig carries ${rig.inverseBinds.size} inverse binds for ${binds.palette} joints"
         }
-        require(heads.size * binds.stationCount == binds.helperCount) {
-            "${heads.size} heads carry ${heads.size * binds.stationCount} helpers, " +
+        groupBySlot = IntArray(heads.size) { slot -> binds.groupOf(heads[slot]) }
+        var bound = 0
+        for (slot in groupBySlot.indices) if (groupBySlot[slot] >= 0) bound++
+        require(bound * binds.stationCount == binds.helperCount) {
+            "$bound of ${heads.size} frame heads carry ${bound * binds.stationCount} helpers, " +
                 "the manifest ${binds.helperCount}: some helper would never be written"
         }
-        groupBySlot = IntArray(heads.size) { slot ->
-            val group = binds.groupOf(heads[slot])
-            require(group >= 0) { "${heads[slot]} has no helper binds" }
-            group
+        val seen = BooleanArray(bound)
+        for (slot in groupBySlot.indices) {
+            val group = groupBySlot[slot]
+            if (group < 0) continue
+            require(!seen[group]) { "frame slot $slot repeats the ${heads[slot]} helper group" }
+            seen[group] = true
         }
     }
 
-    /** Every joint the layer's renderable must accept: the rig's own plus one per helper. */
+    /** Every joint the partition's renderable must accept: the rig's own plus one per helper. */
     val paletteCount: Int get() = binds.palette
 
     val helperCount: Int get() = binds.helperCount
@@ -64,7 +72,11 @@ class MuscleLayerSkinner(
             "the frame carries ${frame.headCount} heads, the skinner ${groupBySlot.size}"
         }
         System.arraycopy(body, 0, out, 0, base)
-        for (slot in 0 until frame.headCount) writeHead(frame, slot, groupBySlot[slot], out)
+        for (slot in 0 until frame.headCount) {
+            val group = groupBySlot[slot]
+            if (group < 0) continue
+            writeHead(frame, slot, group, out)
+        }
     }
 
     private fun writeHead(frame: AnatomyFrame, slot: Int, group: Int, out: FloatArray) {

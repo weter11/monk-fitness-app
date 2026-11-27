@@ -171,9 +171,39 @@ class LayerToggleTest {
     }
 
     @Test
+    fun eachMeshPartitionTogglesOnItsOwn() {
+        val controller = CharacterLayerController()
+        controller.toggleMeshes(true)
+        val frame = solvedFrame()
+        val partition = MuscleSectionPartition.of(frame)
+        fun shownNow(): Int =
+            (0 until partition.size).count { controller.selection.showsSection(partition, it, frame) }
+
+        assertEquals("both partitions draw at the reference stance", partition.size, shownNow())
+        assertEquals(46 + 20, partition.size)
+
+        controller.toggleLayer(CharacterLayerId.SUPERFICIAL_MUSCLE)
+        assertEquals(
+            "the deep sections keep drawing while the superficial layer is off",
+            partition.layers.count { it == MuscleLayer.DEEP },
+            shownNow()
+        )
+        assertTrue("the mesh view is still on", controller.selection.showsMeshes)
+
+        controller.toggleLayer(CharacterLayerId.SUPERFICIAL_MUSCLE)
+        assertFalse("the superficial layer alone now toggles off", controller.toggleLayer(CharacterLayerId.DEEP_MUSCLE))
+        assertEquals(
+            "the superficial sections keep drawing while the deep layer is off",
+            partition.layers.count { it == MuscleLayer.SUPERFICIAL },
+            shownNow()
+        )
+        assertTrue("the mesh view is still on with one partition left", controller.selection.showsMeshes)
+    }
+
+    @Test
     fun theReferenceStanceSolvesEveryHeadSoTheWholeLayerDraws() {
         // The ruling on the placeholder geometry: the tuned corridors and capsules leave no head
-        // refused at the bind stance, so a debug build shows sixteen instances rather than two.
+        // refused at the bind stance, so a debug build shows every section of both partitions.
         val frame = solvedFrame()
         val refused = (0 until frame.headCount).filter { frame.statuses[it] != PathStatus.VALID.ordinal }
         assertEquals("no head is refused at the reference stance: $refused", emptyList<Int>(), refused)

@@ -25,28 +25,32 @@ import org.junit.Test
 import java.io.File
 
 /**
- * The authored layer's per-instance behaviour, on the objects the stage drives: the section state it
+ * The authored layers' per-instance behaviour, on the objects the stage drives: the section state it
  * applies, the highlight it writes as a uniform, the partition it is addressed by, and the palette it
- * uploads. The Filament calls that carry these decisions onto renderables need a GPU and are covered
- * by the device run, not here.
+ * uploads. Both partitions are exercised, because one frame feeds two skins. The Filament calls that
+ * carry these decisions onto renderables need a GPU and are covered by the device run, not here.
  */
 class MuscleLayerStageTest {
 
-    private val binds: HelperBinds = MuscleExportFixture.binds()
-    private val definition: AnatomyDefinition = MuscleExportFixture.definition(binds = binds)
+    private val binds: Map<MuscleLayer, HelperBinds> = MuscleExportFixture.LAYERS.associateWith {
+        MuscleExportFixture.binds(it)
+    }
+    private val definition: AnatomyDefinition = MuscleExportFixture.definition()
 
     private val skeleton = SkeletonDefinition.DEFAULT_ADULT
     private val unitsPerMetre = X1Bind.unitsPerMetre(skeleton).toDouble()
     private val mesh = ProceduralMuscleMesh(definition, unitsPerMetre)
     private val frame = AnatomyFrame.of(definition)
     private val partition = MuscleSectionPartition.of(frame)
-    private val skinner = MuscleLayerSkinner(
-        rig = GltfRig.parse(File(MUSCLE_ASSET).readBytes()),
-        binds = binds,
-        heads = frame.heads,
-        unitsPerMetre = X1Bind.unitsPerMetre(skeleton),
-        pointCapacity = frame.pointCapacity
-    )
+    private val skinners: Map<MuscleLayer, MuscleLayerSkinner> = MuscleExportFixture.LAYERS.associateWith { layer ->
+        MuscleLayerSkinner(
+            rig = GltfRig.parse(File(MuscleExportFixture.assetPath(layer)).readBytes()),
+            binds = binds.getValue(layer),
+            heads = frame.heads,
+            unitsPerMetre = X1Bind.unitsPerMetre(skeleton),
+            pointCapacity = frame.pointCapacity
+        )
+    }
     private val state = MuscleSectionState(partition.size)
 
     private fun bindPose(): SkeletonPose {
@@ -68,14 +72,17 @@ class MuscleLayerStageTest {
 
     /** The palette entries the heads of [section] skin with: one matrix per station per head. */
     private fun helperMatrices(section: Int): IntArray {
+        val layer = partition.layer(section)
+        val own = binds.getValue(layer)
         val instance = partition.instance(section)
         val offsets = ArrayList<Int>()
         for (slot in 0 until frame.headCount) {
             val head = frame.heads[slot]
             if (head.muscleId != instance.muscleId || head.side != instance.side) continue
-            val group = binds.groupOf(head)
-            for (station in 0 until binds.stationCount) {
-                offsets += binds.paletteIndex(binds.helperIndexOf(group, station)) * 16
+            val group = own.groupOf(head)
+            if (group < 0) continue
+            for (station in 0 until own.stationCount) {
+                offsets += own.paletteIndex(own.helperIndexOf(group, station)) * 16
             }
         }
         return offsets.toIntArray()
@@ -136,6 +143,21 @@ class MuscleLayerStageTest {
     }
 
     @Test
+    fun theTwoPartitionsShareOneSectionOrderAndNoKey() {
+        assertEquals("every instance of the atlas is a section", definition.instanceCount, partition.size)
+        assertEquals(46 + 20, partition.size)
+        assertEquals(
+            "each partition's sections are counted per layer",
+            mapOf(MuscleLayer.SUPERFICIAL to 46, MuscleLayer.DEEP to 20),
+            partition.layers.groupingBy { it }.eachCount()
+        )
+        for (section in 0 until partition.size) {
+            assertEquals(definition.muscle(partition.instance(section).muscleId)?.layer, partition.layer(section))
+        }
+        assertEquals("two sections never share a key", partition.size, partition.keys.toSet().size)
+    }
+
+    @Test
     fun aSectionReadsTheMaskByItsOwnInstanceAddress() {
         val (anatomy, partition) = maskFixture()
         val all = MuscleSelection(showsMeshes = true)
@@ -159,7 +181,7 @@ class MuscleLayerStageTest {
     }
 
     @Test
-    fun aSolvedFrameOpensEveryAuthoredSection() {
+    fun aSolvedFrameOpensEveryAuthoredSectionOfBothPartitions() {
         val live = AnatomyPoseFixture.livePose("squat_standard", 0.5f)
         solver().use { it.solve(live, frame) }
         val all = MuscleSelection(showsMeshes = true)
@@ -167,6 +189,38 @@ class MuscleLayerStageTest {
         follow(all)
 
         assertEquals("a solved frame shows every section", partition.size, state.shownCount)
+        for (section in 0 until partition.size) {
+            assertTrue("section $section of ${partition.layer(section)} draws", state.draws(section))
+        }
+    }
+
+    @Test
+    fun togglingOnePartitionLeavesTheOtherLayersSectionsDrawn() {
+        val live = AnatomyPoseFixture.livePose("squat_standard", 0.5f)
+        solver().use { it.solve(live, frame) }
+        val all = MuscleSelection(showsMeshes = true)
+        follow(all)
+        assertEquals(partition.size, state.shownCount)
+
+        for (layer in MuscleExportFixture.LAYERS) {
+            val without = all.withLayer(layer, false)
+            follow(without)
+            for (section in 0 until partition.size) {
+                assertEquals(
+                    "section $section follows its own layer, not $layer's toggle",
+                    partition.layer(section) != layer,
+                    state.draws(section)
+                )
+            }
+            assertEquals(
+                "${layer} leaving leaves the other partition's sections on",
+                partition.size - partition.layers.count { it == layer },
+                state.shownCount
+            )
+        }
+
+        follow(all)
+        assertEquals("both layers back on restores every section", partition.size, state.shownCount)
     }
 
     @Test
@@ -255,9 +309,15 @@ class MuscleLayerStageTest {
         selection.select(2)
         assertEquals("re-selecting the same section writes no uniform", 1, writes)
 
+        // Across the partition boundary: the last superficial section to the first deep one.
         selection.select(7)
         assertFalse("the section that lost the selection returns to its authored look", tinted[2])
         assertTrue("the newly picked section carries the highlight", tinted[7])
+        assertEquals("still one section tinted", 1, tinted.count { it })
+
+        selection.select(partition.size - 1)
+        assertFalse("the previous section is cleared whatever its layer", tinted[7])
+        assertTrue("the deep section can carry the highlight", tinted[partition.size - 1])
         assertEquals("still one section tinted", 1, tinted.count { it })
 
         selection.select(MuscleSectionState.NO_SECTION)
@@ -265,51 +325,60 @@ class MuscleLayerStageTest {
     }
 
     @Test
-    fun aRefusedSectionHidesAndComesBackWhenItsHeadSolvesAgain() {
+    fun aRefusedSectionOfEitherLayerHidesAndComesBackWhenItsHeadSolvesAgain() {
         val all = MuscleSelection(showsMeshes = true)
-        val body = FloatArray(binds.skinJoints * 16)
-        val palette = FloatArray(skinner.paletteCount * 16)
+        val body = FloatArray(binds.getValue(MuscleLayer.SUPERFICIAL).skinJoints * 16)
 
         solver().use { solver ->
-            solver.solve(bindPose(), frame)
-            follow(all)
-            skinner.write(frame, body, palette)
-            val solved = palette.copyOf()
+            for (layer in MuscleExportFixture.LAYERS) {
+                val skinner = skinners.getValue(layer)
+                val palette = FloatArray(skinner.paletteCount * 16)
+                solver.solve(bindPose(), frame)
+                follow(all)
+                skinner.write(frame, body, palette)
+                val solved = palette.copyOf()
 
-            val section = 0
-            val instance = partition.instance(section)
-            val starts = helperMatrices(section)
-            val owned = starts.flatMap { base -> (0 until 16).map { base + it } }
-            val ownedSet = owned.toSet()
-            val neighbours = (0 until palette.size).filter { it !in ownedSet }
+                val section = (0 until partition.size).first { partition.layer(it) == layer }
+                val instance = partition.instance(section)
+                val starts = helperMatrices(section)
+                assertTrue("section $section of $layer skins its own helpers", starts.isNotEmpty())
+                val owned = starts.flatMap { base -> (0 until 16).map { base + it } }
+                val ownedSet = owned.toSet()
+                val neighbours = (0 until palette.size).filter { it !in ownedSet }
 
-            // The pair a refused head publishes: its status leaves VALID, and the instance's
-            // renderable flag goes with it. The skinner then writes the helper's bind identity rather
-            // than last frame's pose, which is what the hidden section would show if it kept drawing.
-            for (slot in 0 until frame.headCount) {
-                if (frame.heads[slot].muscleId == instance.muscleId && frame.heads[slot].side == instance.side) {
-                    frame.statuses[slot] = PathStatus.INVALID.ordinal
+                // The pair a refused head publishes: its status leaves VALID, and the instance's
+                // renderable flag goes with it. The skinner then writes the helper's bind identity
+                // rather than last frame's pose, which is what the hidden section would show if it
+                // kept drawing.
+                for (slot in 0 until frame.headCount) {
+                    if (frame.heads[slot].muscleId == instance.muscleId && frame.heads[slot].side == instance.side) {
+                        frame.statuses[slot] = PathStatus.INVALID.ordinal
+                    }
                 }
+                frame.renderable[section] = false
+
+                follow(all)
+                assertFalse("the refused $layer section is hidden", state.draws(section))
+                assertEquals("its neighbours are untouched", partition.size - 1, state.shownCount)
+                for (other in 0 until partition.size) {
+                    if (other != section) assertTrue("section $other still draws", state.draws(other))
+                }
+
+                skinner.write(frame, body, palette)
+                for (base in starts) assertIdentity("helper $base holds the bind, not the last path", palette, base)
+                for (offset in neighbours) {
+                    assertEquals("palette entry $offset is undisturbed", solved[offset], palette[offset], 0f)
+                }
+
+                // The head solves again on the same instance address: path, palette and mask all return.
+                solver.solve(bindPose(), frame)
+                follow(all)
+                assertTrue("the $layer instance draws again", state.draws(section))
+                assertEquals(partition.size, state.shownCount)
+
+                skinner.write(frame, body, palette)
+                assertArrayEquals("the restored instance skins exactly as it did", solved, palette, 0f)
             }
-            frame.renderable[section] = false
-
-            follow(all)
-            assertFalse("the refused instance is hidden", state.draws(section))
-            assertEquals("its neighbours are untouched", partition.size - 1, state.shownCount)
-            for (other in 1 until partition.size) assertTrue(state.draws(other))
-
-            skinner.write(frame, body, palette)
-            for (base in starts) assertIdentity("helper $base holds the bind, not the last path", palette, base)
-            for (offset in neighbours) assertEquals("palette entry $offset is undisturbed", solved[offset], palette[offset], 0f)
-
-            // The head solves again on the same instance address: path, palette and mask all return.
-            solver.solve(bindPose(), frame)
-            follow(all)
-            assertTrue("the instance draws again", state.draws(section))
-            assertEquals(partition.size, state.shownCount)
-
-            skinner.write(frame, body, palette)
-            assertArrayEquals("the restored instance skins exactly as it did", solved, palette, 0f)
         }
     }
 
@@ -321,10 +390,5 @@ class MuscleLayerStageTest {
             }
             assertEquals("$message, entry $entry", expected, palette[offset + entry], 0f)
         }
-    }
-
-    private companion object {
-        const val BINDS = "src/main/assets/anatomy/helpers_v1.json"
-        const val MUSCLE_ASSET = "src/main/assets/characters/muscles_sup.glb"
     }
 }

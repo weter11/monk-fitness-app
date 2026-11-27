@@ -308,26 +308,39 @@ class CharacterSession(
     }
 
     /**
-     * Loads the helper-bound muscle asset and the skinner that drives it. A failure is reported and
-     * the body still draws: the layer is an overlay, and its absence is not a character failure.
+     * Loads one helper-bound asset per partition and the skinner that drives it. A failure is reported
+     * and the body still draws: a layer is an overlay, and its absence is not a character failure.
      */
     private fun prepareMuscleLayer(frame: AnatomyFrame, partition: MuscleSectionPartition) {
         try {
-            val binds = HelperBindSet.read(
+            val atlas = HelperBindSet.read(
                 context.assets.open(HelperBindSet.ASSET_PATH).bufferedReader().use { it.readText() }
-            ).partition(MuscleLayer.SUPERFICIAL)
-            val bytes = context.assets.open(CharacterFeature.MUSCLE_ASSET_PATH).use { it.readBytes() }
-            val rig = GltfRig.parse(bytes)
-            val skinner = MuscleLayerSkinner(
-                rig = rig,
-                binds = binds,
-                heads = frame.heads,
-                unitsPerMetre = unitsPerMetre,
-                pointCapacity = frame.pointCapacity
             )
-            // The renderer is handed the section keys and an index, never a muscle or a side.
-            val stage = MuscleLayerStage(engine, scene, materialProvider, skinner, partition.keys)
-            muscleError = stage.prepare(bytes)
+            // One palette per partition: each GLB binds only its own layer's helpers, so the whole
+            // atlas is skinned in two ranges that are both inside the 255-joint limit.
+            val assets = ArrayList<MuscleLayerAsset>(MuscleLayer.entries.size)
+            val layerIndex = HashMap<MuscleLayer, Int>(MuscleLayer.entries.size)
+            for (layer in MuscleLayer.entries) {
+                val binds = atlas.partition(layer)
+                val bytes = context.assets.open(CharacterFeature.muscleAssetPath(layer)).use { it.readBytes() }
+                val skinner = MuscleLayerSkinner(
+                    rig = GltfRig.parse(bytes),
+                    binds = binds,
+                    heads = frame.heads,
+                    unitsPerMetre = unitsPerMetre,
+                    pointCapacity = frame.pointCapacity
+                )
+                layerIndex[layer] = assets.size
+                assets += MuscleLayerAsset(CharacterFeature.muscleAssetLabel(layer), bytes, skinner)
+            }
+            // The renderer is handed the section keys and each section's asset index, never a muscle
+            // or a side.
+            val sectionAssets = IntArray(partition.size) { section ->
+                layerIndex[partition.layer(section)]
+                    ?: throw IllegalArgumentException("no asset carries ${partition.layer(section)}")
+            }
+            val stage = MuscleLayerStage(engine, scene, materialProvider, assets, partition.keys, sectionAssets)
+            muscleError = stage.prepare()
             muscleStage = stage
         } catch (error: Throwable) {
             muscleError = "${error.javaClass.simpleName}: ${error.message.orEmpty()}".trim()
@@ -576,6 +589,8 @@ class CharacterSession(
             muscleTubeBuilds = tubeMesh?.primitiveBuilds ?: 0,
             muscleAssetSections = muscleStage?.renderableCount ?: 0,
             muscleAssetDrawn = muscleStage?.visibleCount ?: 0,
+            muscleAssetLayers = MuscleLayer.entries.filter { it in selectionGate.layers }
+                .map { it.name.lowercase(java.util.Locale.US) },
             muscleAssetUploads = muscleStage?.skinUploads ?: 0,
             muscleAssetError = muscleError,
             muscleAssetSelected = muscleStage?.state?.selected ?: MuscleSectionState.NO_SECTION,
@@ -670,6 +685,9 @@ class CharacterSession(
         val scene = sceneFrame
         if (frame == null || scene == null || !selection.showsMeshes || !musclesSolved) {
             stage.hideAll()
+            // Recorded, not skipped: the row must read "this stage did not run" rather than keep a
+            // percentile from the last frame the layer was shown.
+            stageTimings.record(FrameStage.MUSCLE_SKIN, 0L)
             return
         }
         val start = System.nanoTime()

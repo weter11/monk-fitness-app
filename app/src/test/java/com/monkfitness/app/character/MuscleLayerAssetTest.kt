@@ -9,39 +9,46 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.io.File
 
-/** The runtime palette must address the authored asset's helpers in manifest order. */
+/**
+ * The runtime palette must address the authored asset's helpers in manifest order — for each
+ * partition's own asset, since each GLB binds only its layer's helpers.
+ */
 class MuscleLayerAssetTest {
 
     @Test
-    fun theSkinUsesTheAuthoredPaletteInManifestOrder() {
-        val binds = HelperBindSet.read(File(MANIFEST).readText()).partition(MuscleLayer.SUPERFICIAL)
-        val asset = MuscleAsset(File(MUSCLES))
-        assertEquals(binds.palette, asset.rig.jointNodes.size)
-        assertEquals(binds.palette, asset.rig.inverseBinds.size)
-        for (group in 0 until binds.helperCount / binds.stationCount) {
-            for (station in 0 until binds.stationCount) {
-                val helper = binds.binds[binds.helperIndexOf(group, station)]
-                val inverse = asset.rig.inverseBinds[binds.paletteIndex(binds.helperIndexOf(group, station))]
-                val bound = floatArrayOf(
-                    -(inverse[0] * inverse[12] + inverse[1] * inverse[13] + inverse[2] * inverse[14]),
-                    -(inverse[4] * inverse[12] + inverse[5] * inverse[13] + inverse[6] * inverse[14]),
-                    -(inverse[8] * inverse[12] + inverse[9] * inverse[13] + inverse[10] * inverse[14])
-                )
-                assertEquals("helper $group/$station bind x", helper.position[0], bound[0], 1e-6f)
-                assertEquals("helper $group/$station bind y", helper.position[1], bound[1], 1e-6f)
-                assertEquals("helper $group/$station bind z", helper.position[2], bound[2], 1e-6f)
-            }
-        }
-        for (primitive in asset.primitives) {
-            assertTrue("${primitive.name} has vertices", primitive.positions.isNotEmpty())
-            for (vertex in primitive.positions.indices) {
-                var weight = 0f
-                for (slot in 0 until 4) {
-                    val joint = primitive.joints[vertex][slot]
-                    assertTrue("${primitive.name} vertex $vertex names a helper", joint >= binds.skinJoints)
-                    if (primitive.weights[vertex][slot] > 0f) weight += primitive.weights[vertex][slot]
+    fun eachSkinUsesItsPartitionsAuthoredPaletteInManifestOrder() {
+        val atlas = HelperBindSet.read(File(MANIFEST).readText())
+        for (layer in MuscleLayer.entries) {
+            val binds = atlas.partition(layer)
+            val asset = MuscleAsset(File(MuscleExportFixture.assetPath(layer)))
+            assertEquals("$layer joint count", binds.palette, asset.rig.jointNodes.size)
+            assertEquals("$layer inverse binds", binds.palette, asset.rig.inverseBinds.size)
+            for (group in 0 until binds.helperCount / binds.stationCount) {
+                for (station in 0 until binds.stationCount) {
+                    val helper = binds.binds[binds.helperIndexOf(group, station)]
+                    val inverse = asset.rig.inverseBinds[binds.paletteIndex(binds.helperIndexOf(group, station))]
+                    val bound = floatArrayOf(
+                        -(inverse[0] * inverse[12] + inverse[1] * inverse[13] + inverse[2] * inverse[14]),
+                        -(inverse[4] * inverse[12] + inverse[5] * inverse[13] + inverse[6] * inverse[14]),
+                        -(inverse[8] * inverse[12] + inverse[9] * inverse[13] + inverse[10] * inverse[14])
+                    )
+                    assertEquals("$layer helper $group/$station bind x", helper.position[0], bound[0], 1e-6f)
+                    assertEquals("$layer helper $group/$station bind y", helper.position[1], bound[1], 1e-6f)
+                    assertEquals("$layer helper $group/$station bind z", helper.position[2], bound[2], 1e-6f)
                 }
-                assertEquals("${primitive.name} vertex $vertex weights", 1f, weight, 1e-6f)
+            }
+            for (primitive in asset.primitives) {
+                assertTrue("${primitive.name} has vertices", primitive.positions.isNotEmpty())
+                for (vertex in primitive.positions.indices) {
+                    var weight = 0f
+                    for (slot in 0 until 4) {
+                        val joint = primitive.joints[vertex][slot]
+                        assertTrue("${primitive.name} vertex $vertex names a helper", joint >= binds.skinJoints)
+                        assertTrue("${primitive.name} vertex $vertex is inside its palette", joint < binds.palette)
+                        if (primitive.weights[vertex][slot] > 0f) weight += primitive.weights[vertex][slot]
+                    }
+                    assertEquals("${primitive.name} vertex $vertex weights", 1f, weight, 1e-6f)
+                }
             }
         }
     }
@@ -115,6 +122,5 @@ class MuscleLayerAssetTest {
 
     private companion object {
         const val MANIFEST = "src/main/assets/anatomy/helpers_v1.json"
-        const val MUSCLES = "src/main/assets/characters/muscles_sup.glb"
     }
 }
