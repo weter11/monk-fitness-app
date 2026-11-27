@@ -1296,12 +1296,46 @@ window can contain the whole interaction with a single foreground transition. Wi
 background it runs all seven steps; with the layer drawn on the visible surface the process is gone
 before the second step.
 
+### 8.6 What the draw actually needs — and what it does not
+
+The probes were extended to separate the *frame path* from the *draw*, and the palette from the
+asset. Each line is one build on the handset:
+
+| Probe | Change | Result |
+| --- | --- | --- |
+| **E** | the partition is loaded, validated and skinned, masks are written, but `scene.addEntities` is skipped — nothing of it is drawn | **clean**, 22 s, same PID, 0 crashes, 1,342 frames (~61 fps) |
+| **G** | entities in the scene, and the palette is overwritten with a valid rigid identity before upload, so no skinner value reaches the GPU | **crashes at frame 1** (`frames=1`, p95 70.47 ms) |
+| **A** | no `Material.createInstance` / `setMaterialInstanceAt` | crashes at frame 1 |
+| **C** | sections cast no shadow | crashes at the reveal |
+| **D** | half the palettes uploaded per frame | no change |
+| **B** | 66 sections live from frame 1 | crashes at frame 1 |
+| deep-only | 20 sections, 114 joints, live from frame 1 | crashed at frame 1 (1 of 1) |
+| sup-only, 8 / 16 / 20 / 24 sections drawn, 242 joints, app resumed | 0 crashes each, frames advancing (`502 → 3,554`, `530 → 4,167`) |
+| sup-only, 40 / 46 sections drawn | inconclusive: the session kept resetting (final `mesh=0/46`), so nothing is claimed |
+
+So the frame path is innocent: with the same solve, skinner, mask writes and tube-slot handling
+running at 61 fps for 22 s and no muscle entity in the scene, it is clean. The draw is what faults,
+and it faults with an identity palette, without app-owned materials, without shadows, and with half
+the bone traffic. The asset itself is byte-for-byte the same *shape* as the one PR #420 rendered:
+same primitive/accessor layout, `JOINTS_0` u16, weights normalised, no misaligned accessor, no joint
+index out of range, and the same node hierarchy (root `Muscles`, joints `1..N`, mesh nodes as its
+children, one skin, `skeleton: 0`) — only the counts differ (16 sections / 106 joints → 46 / 242 and
+20 / 114).
+
+That leaves no single structural variable the renderer controls. The crash reproduces at 66 sections
+in the dual build and at 20 in the deep-only build, and not at 46 in the sup-only build, and the
+handset's focus churn (the chat app re-takes the resumed activity between `am start` calls) makes the
+drawn-section counts unreliable above ~24: a window that looks "clean" can be a window in which the
+loop was paused and nothing was drawn. Any further isolation needs a harness that holds the activity
+resumed without starting it, and an export sweep (fewer heads, hence fewer joints and sections) rather
+than more probe builds on the same two assets.
+
 What remains unexplained, and unchanged from 8.4: the fault is inside `libfilament-jni` (BuildId
 `831f673f590c30fce635baf49cd029339febce3c`) with no symbols, appears only when these exported skins are
 drawn on a visible surface at 20–66 sections, and does not reproduce with the 16-section/106-joint
 export of the same material that Stage 3 ran for 20 s.
 
-### 8.6 What this run does not establish
+### 8.7 What this run does not establish
 
 - **A 20 s window with `66/66`, the toggles and an unchanged PID.** Short windows are clean and the
   readings above are real, but the window the brief asks for ends in the native fault more often than
