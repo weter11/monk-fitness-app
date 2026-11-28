@@ -5,6 +5,7 @@ import com.monkfitness.app.anatomy.AnatomyDefinitionLoader
 import com.monkfitness.app.anatomy.AnatomyFrame
 import com.monkfitness.app.anatomy.AnatomySolver
 import com.monkfitness.app.anatomy.MuscleInstanceId
+import com.monkfitness.app.anatomy.MuscleLayer
 import com.monkfitness.app.anatomy.MuscleSide
 import com.monkfitness.app.animation.SkeletonDefinition
 import com.monkfitness.app.animation.SkeletonPose
@@ -106,11 +107,11 @@ class SceneFrameHandoffTest {
     }
 
     @Test
-    fun everyInstanceMapsToTheSectionTheAssetNamesForIt() {
+    fun everyInstanceMapsToTheSectionItsOwnPartitionNames() {
         val partition = sceneFrame().partition
 
         assertEquals(
-            "the asset carries one section per instance, not one per head",
+            "the atlas carries one section per instance, not one per head",
             definition.instanceCount,
             partition.size
         )
@@ -127,18 +128,17 @@ class SceneFrameHandoffTest {
             assertEquals(definition.muscle(instance.muscleId)?.layer, partition.layer(section))
         }
         assertEquals("an instance the frame does not carry has no section", -1, partition.indexOf(MuscleInstanceId("not_a_muscle", MuscleSide.A)))
-        // The GLB is the Stage-3 export, so it names the exported instances and no others: every
-        // section it publishes must be a section this frame has, and it must carry all of them.
+        // Each GLB is one partition's export, so it must publish exactly that partition's sections:
+        // a section in the wrong asset would be skinned by a palette that does not hold its helpers.
+        for (layer in MuscleExportFixture.LAYERS) {
+            val keys = (0 until partition.size).filter { partition.layer(it) == layer }
+                .map { partition.keys[it] }.toSet()
+            assertEquals("the $layer asset must publish exactly its own sections", keys, assetSectionNames(layer))
+        }
         assertEquals(
-            "the asset must publish exactly the instances the export binds",
-            MuscleExportFixture.definition()
-                .let { exported -> AnatomyFrame.of(exported).instances.map { "${it.muscleId}_${it.side.name}" } }
-                .toSet(),
-            assetSectionNames()
-        )
-        assertTrue(
-            "a section the asset names must be one the frame carries: ${assetSectionNames() - partition.keys.toSet()}",
-            partition.keys.toSet().containsAll(assetSectionNames())
+            "the two exports name every instance of the atlas and no others",
+            partition.keys.toSet(),
+            assetSectionNames(MuscleLayer.SUPERFICIAL) + assetSectionNames(MuscleLayer.DEEP)
         )
     }
 
@@ -162,13 +162,26 @@ class SceneFrameHandoffTest {
     }
 
     @Test
-    fun hidingTheOnlySelectedLayerTurnsOffTheMeshView() {
+    fun hidingOneLayerKeepsTheOtherDrawnAndOnlyTheLastOneOutStopsTheView() {
         val controller = CharacterLayerController()
         controller.toggleMeshes(true)
-        controller.toggleLayer(CharacterLayerId.SUPERFICIAL_MUSCLE)
 
-        assertFalse(controller.selection.showsMeshes)
+        controller.toggleLayer(CharacterLayerId.SUPERFICIAL_MUSCLE)
+        assertTrue("the deep layer still has something to draw", controller.selection.showsMeshes)
+        assertTrue(controller.selection.showsAnyLayer)
+        assertTrue("the deep layer is still on", MuscleLayer.DEEP in controller.selection.layers)
+        assertFalse("the superficial layer is off", MuscleLayer.SUPERFICIAL in controller.selection.layers)
+
+        controller.toggleLayer(CharacterLayerId.DEEP_MUSCLE)
+        assertFalse("the last layer out takes the mesh view with it", controller.selection.showsMeshes)
         assertFalse(controller.selection.showsAnyLayer)
+
+        // Turning one back on is a change the renderer must rebuild for.
+        controller.toggleMeshes(true)
+        val revision = controller.revision
+        controller.toggleLayer(CharacterLayerId.DEEP_MUSCLE)
+        assertTrue(controller.revision > revision)
+        assertTrue(MuscleLayer.DEEP in controller.selection.layers)
     }
 
     @Test
@@ -198,8 +211,8 @@ class SceneFrameHandoffTest {
         assertEquals(5, MorphWeightSet(5).apply(MorphologyPreset.MUSCULAR))
     }
 
-    private fun assetSectionNames(): Set<String> {
-        val buffer = java.nio.ByteBuffer.wrap(File(MUSCLE_ASSET).readBytes())
+    private fun assetSectionNames(layer: MuscleLayer): Set<String> {
+        val buffer = java.nio.ByteBuffer.wrap(File(MuscleExportFixture.assetPath(layer)).readBytes())
             .order(java.nio.ByteOrder.LITTLE_ENDIAN)
         buffer.int; buffer.int; buffer.int
         val jsonLength = buffer.int
@@ -211,6 +224,5 @@ class SceneFrameHandoffTest {
 
     private companion object {
         const val ASSET = "src/main/assets/anatomy/anatomy_v1.json"
-        const val MUSCLE_ASSET = "src/main/assets/characters/muscles_sup.glb"
     }
 }

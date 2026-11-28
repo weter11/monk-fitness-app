@@ -4,6 +4,7 @@ import com.monkfitness.app.anatomy.AnatomyDefinition
 import com.monkfitness.app.anatomy.AnatomyFrame
 import com.monkfitness.app.anatomy.AnatomyPoseFixture
 import com.monkfitness.app.anatomy.AnatomySolver
+import com.monkfitness.app.anatomy.MuscleLayer
 import com.monkfitness.app.anatomy.PathStatus
 import com.monkfitness.app.animation.SkeletonDefinition
 import org.junit.Assert.assertEquals
@@ -13,8 +14,9 @@ import org.junit.Test
 import java.lang.reflect.Method
 
 /**
- * The skinner runs on the frame thread for every solved frame, so it is measured against an empty loop
- * rather than against zero: the counter reports a cost of its own for any window.
+ * The skinner runs on the frame thread for every solved frame, and one frame is skinned into both
+ * partitions, so both palettes are measured against an empty loop rather than against zero: the
+ * counter reports a cost of its own for any window.
  *
  * A calibration case proves the instrument still moves; without it a zero assertion can pass on a dead
  * counter, which is the one failure mode this gate cannot otherwise see.
@@ -22,41 +24,47 @@ import java.lang.reflect.Method
 class MuscleLayerSkinnerAllocationTest {
 
     // The skinned mesh can only draw sections its own GLB declares, so the fixture is the exported
-    // subset of the library rather than the whole atlas; see MuscleExportFixture.
-    private val binds = MuscleExportFixture.binds()
-    private val definition: AnatomyDefinition = MuscleExportFixture.definition(binds = binds)
+    // atlas rather than the authored library; see MuscleExportFixture.
+    private val definition: AnatomyDefinition = MuscleExportFixture.definition()
     private val skeleton = SkeletonDefinition.DEFAULT_ADULT
     private val unitsPerMetre = X1Bind.unitsPerMetre(skeleton)
     private val frame = AnatomyFrame.of(definition)
-    private val skinner = MuscleLayerSkinner(
-        rig = skinningRig(),
-        binds = binds,
-        heads = frame.heads,
-        unitsPerMetre = unitsPerMetre,
-        pointCapacity = definition.sampling.maxPointsPerHead
-    )
-    private val body = FloatArray(binds.skinJoints * 16)
-    private val out = FloatArray(binds.palette * 16)
+    private val binds: Map<MuscleLayer, HelperBinds> = MuscleExportFixture.LAYERS.associateWith {
+        MuscleExportFixture.binds(it)
+    }
+    private val out: Map<MuscleLayer, FloatArray> = binds.mapValues { (_, own) -> FloatArray(own.palette * 16) }
+    private val body = FloatArray(binds.getValue(MuscleLayer.SUPERFICIAL).skinJoints * 16)
+    private val skinners: List<MuscleLayerSkinner> = MuscleExportFixture.LAYERS.map { layer ->
+        MuscleLayerSkinner(
+            rig = skinningRig(binds.getValue(layer)),
+            binds = binds.getValue(layer),
+            heads = frame.heads,
+            unitsPerMetre = unitsPerMetre,
+            pointCapacity = definition.sampling.maxPointsPerHead
+        )
+    }
 
     /** A field read of an allocated object cannot be optimised away; a local could be. */
     private var sink: Any? = null
 
     @Test
-    fun theSteadySkinningPathAllocatesNoMoreThanAnEmptyLoop() {
+    fun bothPartitionsAllocateNoMoreThanAnEmptyLoop() {
         solveRest()
         val counter = allocationCounter()
-        repeat(WARMUP) { skinner.write(frame, body, out) }
+        repeat(WARMUP) { writeBoth() }
 
         val baseline = steadyAllocation(counter) { }
-        val measured = steadyAllocation(counter) { skinner.write(frame, body, out) }
+        val measured = steadyAllocation(counter) { writeBoth() }
 
         assertEquals(
-            "writing ${binds.palette} joint matrices must allocate no more than an empty loop",
+            "writing ${binds.getValue(MuscleLayer.SUPERFICIAL).palette} + " +
+                "${binds.getValue(MuscleLayer.DEEP).palette} joint matrices must allocate no more than an empty loop",
             baseline,
             measured
         )
         val solved = (0 until frame.headCount).count { frame.statuses[it] == PathStatus.VALID.ordinal }
         assertTrue("the measured frame must have paths, not a skipped body", solved > 0)
+        for (skinner in skinners) assertTrue("each skin writes helpers", skinner.helperCount > 0)
     }
 
     @Test
@@ -71,6 +79,14 @@ class MuscleLayerSkinnerAllocationTest {
             "the instrument must see a known allocation: baseline=$baseline measured=$measured bytes",
             measured > baseline
         )
+    }
+
+    /** The frame's steady write path: every partition's palette, in the order the session skins them. */
+    private fun writeBoth() {
+        for (index in skinners.indices) {
+            val layer = MuscleExportFixture.LAYERS[index]
+            skinners[index].write(frame, body, out.getValue(layer))
+        }
     }
 
     private fun solveRest() {
@@ -100,7 +116,7 @@ class MuscleLayerSkinnerAllocationTest {
         return best
     }
 
-    private fun skinningRig(): GltfRig {
+    private fun skinningRig(binds: HelperBinds): GltfRig {
         val inverseBinds = List(binds.palette) { index ->
             if (index < binds.skinJoints) {
                 Mat4.identity()
@@ -146,7 +162,6 @@ class MuscleLayerSkinnerAllocationTest {
     }
 
     private companion object {
-        const val MANIFEST = "src/main/assets/anatomy/helpers_v1.json"
         const val WARMUP = 200
         const val MEASURED = 500
         const val WINDOWS = 3

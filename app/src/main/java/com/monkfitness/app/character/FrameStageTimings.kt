@@ -25,7 +25,7 @@ enum class FrameStage(val label: String) {
     /** `PoseRetargeter.boneMatrices` + `setBonesAsMatrices` — the skinned body's bone upload. */
     RETARGET_UPLOAD("retarget"),
 
-    /** `MuscleLayerSkinner.write` + the layer's palette upload — 72 helpers derived and handed over. */
+    /** Both partitions' `MuscleLayerSkinner.write` calls + their palette uploads — 288 helpers derived. */
     MUSCLE_SKIN("muscleSkin"),
 
     /** `Renderer.beginFrame` — includes the swapchain wait, which is vsync, not our work. */

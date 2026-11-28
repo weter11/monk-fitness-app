@@ -1,6 +1,7 @@
 package com.monkfitness.app.character
 
 import com.monkfitness.app.BuildConfig
+import com.monkfitness.app.anatomy.MuscleLayer
 
 /**
  * Build-time switch for the Filament character. Off in every checked-in configuration; a developer
@@ -11,9 +12,19 @@ object CharacterFeature {
     const val ASSET_PATH = "characters/humanoid_v2.glb"
     const val ANATOMY_PATH = "anatomy/anatomy_v1.json"
 
-    /** The helper-bound muscle asset the layer draws; its binds come from [HelperBindSet.ASSET_PATH]. */
+    /** The helper-bound muscle assets, one skin per layer; their binds come from [HelperBindSet.ASSET_PATH]. */
     const val MUSCLE_ASSET_PATH = "characters/muscles_sup.glb"
+    const val MUSCLE_DEEP_ASSET_PATH = "characters/muscles_deep.glb"
     const val CHARACTER_ID = "humanoid_v2"
+
+    /** The GLB that skins [layer]: each partition is exported under the 255-bone limit on its own. */
+    fun muscleAssetPath(layer: MuscleLayer): String = when (layer) {
+        MuscleLayer.SUPERFICIAL -> MUSCLE_ASSET_PATH
+        MuscleLayer.DEEP -> MUSCLE_DEEP_ASSET_PATH
+    }
+
+    /** The label a partition's failures carry in the readout. */
+    fun muscleAssetLabel(layer: MuscleLayer): String = layer.name.lowercase(java.util.Locale.US)
 
     val isEnabled: Boolean get() = BuildConfig.FILAMENT_CHARACTER_ENABLED
 }

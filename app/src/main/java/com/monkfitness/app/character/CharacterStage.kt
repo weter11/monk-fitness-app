@@ -212,9 +212,11 @@ private fun MuscleDebugOverlay(
             )
             MuscleLayer.entries.forEach { layer ->
                 FilterChip(
-                    selected = selection.showsTubes && layer in selection.layers,
+                    // Both views draw the same two partitions, so either one being on makes the
+                    // layer's own toggle live.
+                    selected = (selection.showsTubes || selection.showsMeshes) && layer in selection.layers,
                     onClick = {
-                        controller.toggleLayer(layerId(layer))
+                        controller.toggleLayer(CharacterLayerId.of(layer))
                         selection = controller.selection
                     },
                     label = { Text(layer.name.lowercase(Locale.US), fontSize = 11.sp) }
@@ -261,11 +263,6 @@ private fun MuscleDebugOverlay(
     }
 }
 
-private fun layerId(layer: MuscleLayer): CharacterLayerId = when (layer) {
-    MuscleLayer.SUPERFICIAL -> CharacterLayerId.SUPERFICIAL_MUSCLE
-    MuscleLayer.DEEP -> CharacterLayerId.DEEP_MUSCLE
-}
-
 private fun describeMuscles(diagnostics: CharacterDiagnostics): String = buildString {
     if (diagnostics.muscleHeads == 0) {
         append("anatomy solve not built")
@@ -287,6 +284,7 @@ private fun describeMuscles(diagnostics: CharacterDiagnostics): String = buildSt
     if (diagnostics.muscleAssetSections > 0 || diagnostics.muscleAssetError != null) {
         append("\nmesh ").append(diagnostics.muscleAssetDrawn).append('/')
         append(diagnostics.muscleAssetSections).append(" sections · ")
+        append(diagnostics.muscleAssetLayers.joinToString(",").ifEmpty { "no layer" }).append(" · ")
         append(diagnostics.muscleAssetUploads).append(" palette uploads")
         if (diagnostics.muscleAssetSelected >= 0) {
             append(" · selected ").append(diagnostics.muscleAssetSelected)

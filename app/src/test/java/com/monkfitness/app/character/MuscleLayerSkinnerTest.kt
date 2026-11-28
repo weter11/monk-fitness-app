@@ -4,6 +4,8 @@ import com.monkfitness.app.anatomy.AnatomyDefinition
 import com.monkfitness.app.anatomy.AnatomyFrame
 import com.monkfitness.app.anatomy.AnatomyPoseFixture
 import com.monkfitness.app.anatomy.AnatomySolver
+import com.monkfitness.app.anatomy.MuscleHeadId
+import com.monkfitness.app.anatomy.MuscleLayer
 import com.monkfitness.app.anatomy.PathStatus
 import com.monkfitness.app.animation.SkeletonDefinition
 import com.monkfitness.app.animation.Vector3
@@ -19,140 +21,209 @@ import kotlin.math.sqrt
  * exported bind on both ends: at the rest stance every helper matrix must be the identity, and on any
  * other path the helper must carry its own bind point onto its station and turn its bind axes onto
  * the path's own direction.
+ *
+ * Both partitions are skinned from the same frame, so every case runs over both of them: a skinner
+ * that wrote a head the other partition binds would corrupt a skin it does not own.
  */
 class MuscleLayerSkinnerTest {
 
     // The skinned mesh can only draw sections its own GLB declares, so the fixture is the exported
-    // subset of the library rather than the whole atlas; see MuscleExportFixture.
-    private val binds = MuscleExportFixture.binds()
-    private val definition: AnatomyDefinition = MuscleExportFixture.definition(binds = binds)
+    // atlas rather than the authored library; see MuscleExportFixture.
+    private val definition: AnatomyDefinition = MuscleExportFixture.definition()
     private val skeleton = SkeletonDefinition.DEFAULT_ADULT
     private val unitsPerMetre = X1Bind.unitsPerMetre(skeleton)
     private val frame = AnatomyFrame.of(definition)
-    private val skinner = MuscleLayerSkinner(
-        rig = skinningRig(binds),
-        binds = binds,
-        heads = frame.heads,
-        unitsPerMetre = unitsPerMetre,
-        pointCapacity = definition.sampling.maxPointsPerHead
-    )
+    private val binds: Map<MuscleLayer, HelperBinds> = MuscleExportFixture.LAYERS.associateWith {
+        MuscleExportFixture.binds(it)
+    }
+    private val skinner: Map<MuscleLayer, MuscleLayerSkinner> = MuscleExportFixture.LAYERS.associateWith { layer ->
+        MuscleLayerSkinner(
+            rig = skinningRig(binds.getValue(layer)),
+            binds = binds.getValue(layer),
+            heads = frame.heads,
+            unitsPerMetre = unitsPerMetre,
+            pointCapacity = definition.sampling.maxPointsPerHead
+        )
+    }
 
     /** A base palette whose entries are all distinguishable, so a copy cannot pass for a computation. */
-    private val body = FloatArray(binds.skinJoints * 16) { index -> index.toFloat() }
-    private val out = FloatArray(binds.palette * 16)
+    private val body = FloatArray(binds.getValue(MuscleLayer.SUPERFICIAL).skinJoints * 16) { index -> index.toFloat() }
+
+    private fun out(layer: MuscleLayer): FloatArray = FloatArray(binds.getValue(layer).palette * 16)
 
     @Test
-    fun thePaletteIsTheBaseRangePlusOneMatrixPerHelper() {
-        assertEquals(binds.palette, skinner.paletteCount)
-        assertEquals(binds.helperCount, skinner.helperCount)
-        assertEquals(binds.skinJoints, skinner.skinJoints)
-        assertEquals(34 + 208, skinner.paletteCount)
-        assertTrue("the palette must fit the renderable", skinner.paletteCount <= HelperBindManifest.PALETTE_LIMIT)
+    fun eachPartitionIsTheBaseRangePlusOneMatrixPerItsOwnHelpers() {
+        assertEquals(34 + 208, skinner.getValue(MuscleLayer.SUPERFICIAL).paletteCount)
+        assertEquals(34 + 80, skinner.getValue(MuscleLayer.DEEP).paletteCount)
+        for ((layer, own) in skinner) {
+            assertEquals(binds.getValue(layer).palette, own.paletteCount)
+            assertEquals(binds.getValue(layer).helperCount, own.helperCount)
+            assertEquals(binds.getValue(layer).skinJoints, own.skinJoints)
+            assertTrue(
+                "$layer must fit the renderable's bindable limit",
+                own.paletteCount <= HelperBindManifest.PALETTE_LIMIT
+            )
+        }
+        assertEquals(
+            "the two palettes must cover the whole atlas without sharing a helper",
+            288,
+            binds.values.sumOf { it.helperCount }
+        )
+    }
+
+    @Test
+    fun eachSkinBindsOnlyTheHeadsItsOwnPartitionCarries() {
+        for ((layer, own) in binds) {
+            val bound = frame.heads.count { own.groupOf(it) >= 0 }
+            assertEquals(
+                "$layer binds ${own.helperCount / own.stationCount} heads, not $bound",
+                own.helperCount / own.stationCount,
+                bound
+            )
+            assertEquals(
+                "${frame.headCount} frame heads must split across the partitions",
+                frame.headCount,
+                binds.values.sumOf { other -> frame.heads.count { other.groupOf(it) >= 0 } }
+            )
+        }
     }
 
     @Test
     fun theBaseRangeIsTheBodyPaletteUnchanged() {
         solveRest()
-        skinner.write(frame, body, out)
-        assertArrayEquals(
-            "the helpers must not touch the rig's own range",
-            body,
-            out.copyOfRange(0, binds.skinJoints * 16),
-            0f
-        )
+        for ((layer, own) in skinner) {
+            val palette = out(layer)
+            own.write(frame, body, palette)
+            assertArrayEquals(
+                "$layer must not touch the rig's own range",
+                body.copyOfRange(0, own.skinJoints * 16),
+                palette.copyOfRange(0, own.skinJoints * 16),
+                0f
+            )
+        }
     }
 
     @Test
     fun theRestPoseReproducesEveryHelperBindAsTheIdentity() {
         solveRest()
-        skinner.write(frame, body, out)
-
-        var worst = 0f
-        for (helper in 0 until binds.helperCount) {
-            val offset = binds.paletteIndex(helper) * 16
-            for (entry in 0 until 16) {
-                val delta = abs(out[offset + entry] - IDENTITY[entry])
-                worst = maxOf(worst, delta)
+        for ((layer, own) in skinner) {
+            val palette = out(layer)
+            own.write(frame, body, palette)
+            var worst = 0f
+            for (helper in 0 until own.helperCount) {
+                val offset = binds.getValue(layer).paletteIndex(helper) * 16
+                for (entry in 0 until 16) {
+                    val delta = abs(palette[offset + entry] - IDENTITY[entry])
+                    worst = maxOf(worst, delta)
+                }
             }
+            assertTrue("$layer's worst rest-pose deviation is $worst", worst <= 1e-3f)
         }
-        assertTrue("the worst rest-pose deviation is $worst", worst <= 1e-3f)
     }
 
     @Test
     fun eachHelperCarriesItsBindPointAndAxesOntoItsStation() {
         val posed = syntheticFrame()
-        skinner.write(posed, body, out)
+        for ((layer, own) in skinner) {
+            val palette = out(layer)
+            own.write(posed, body, palette)
+            val ownBinds = binds.getValue(layer)
+            var worstPoint = 0f
+            var worstAxis = 0f
+            for (helper in 0 until ownBinds.helperCount) {
+                val bind = ownBinds.binds[helper]
+                val slot = slotOf(posed, bind.head)
+                val (point, tangent) = stationFrame(posed, slot, bind.station)
+                val expected = toAsset(point)
+                val offset = ownBinds.paletteIndex(helper) * 16
 
-        var worstPoint = 0f
-        var worstAxis = 0f
-        for (helper in 0 until binds.helperCount) {
-            val bind = binds.binds[helper]
-            val slot = slotOf(posed, bind.head)
-            val (point, tangent) = stationFrame(posed, slot, bind.station)
-            val expected = toAsset(point)
-            val offset = binds.paletteIndex(helper) * 16
+                val carried = apply(palette, offset, bind.position)
+                worstPoint = maxOf(worstPoint, distance(expected, carried))
 
-            val carried = apply(out, offset, bind.position)
-            worstPoint = maxOf(worstPoint, distance(expected, carried))
-
-            val expectedAxes = toAssetBasis(basisRows(tangent))
-            for (axis in 0 until 3) {
-                val bindAxis = floatArrayOf(
-                    bind.basis[axis * 3], bind.basis[axis * 3 + 1], bind.basis[axis * 3 + 2]
-                )
-                val actual = rotate(out, offset, bindAxis)
-                val expectedAxis = floatArrayOf(
-                    expectedAxes[axis * 3], expectedAxes[axis * 3 + 1], expectedAxes[axis * 3 + 2]
-                )
-                worstAxis = maxOf(worstAxis, distance(expectedAxis, actual))
+                val expectedAxes = toAssetBasis(basisRows(tangent))
+                for (axis in 0 until 3) {
+                    val bindAxis = floatArrayOf(
+                        bind.basis[axis * 3], bind.basis[axis * 3 + 1], bind.basis[axis * 3 + 2]
+                    )
+                    val actual = rotate(palette, offset, bindAxis)
+                    val expectedAxis = floatArrayOf(
+                        expectedAxes[axis * 3], expectedAxes[axis * 3 + 1], expectedAxes[axis * 3 + 2]
+                    )
+                    worstAxis = maxOf(worstAxis, distance(expectedAxis, actual))
+                }
             }
+            assertTrue("$layer carried a bind $worstPoint m off its station", worstPoint <= 1e-4f)
+            assertTrue("$layer's axes ended up $worstAxis off the path direction", worstAxis <= 1e-4f)
         }
-        assertTrue("a helper carried its bind $worstPoint m off its station", worstPoint <= 1e-4f)
-        assertTrue("a helper's axes ended up $worstAxis off the path direction", worstAxis <= 1e-4f)
     }
 
     @Test
     fun everyHelperMatrixIsARigidTransform() {
         solveRest()
-        skinner.write(frame, body, out)
-
-        for (helper in 0 until binds.helperCount) {
-            val offset = binds.paletteIndex(helper) * 16
-            for (column in 0 until 3) {
-                val length = sqrt(
-                    out[offset + column * 4] * out[offset + column * 4] +
-                        out[offset + column * 4 + 1] * out[offset + column * 4 + 1] +
-                        out[offset + column * 4 + 2] * out[offset + column * 4 + 2]
-                )
-                // §7.6: a helper scales by exactly 1, so a muscle can move but never stretch.
-                assertEquals("helper $helper column $column is not unit", 1f, length, 1e-5f)
+        for ((layer, own) in skinner) {
+            val palette = out(layer)
+            own.write(frame, body, palette)
+            for (helper in 0 until own.helperCount) {
+                val offset = binds.getValue(layer).paletteIndex(helper) * 16
+                for (column in 0 until 3) {
+                    val length = sqrt(
+                        palette[offset + column * 4] * palette[offset + column * 4] +
+                            palette[offset + column * 4 + 1] * palette[offset + column * 4 + 1] +
+                            palette[offset + column * 4 + 2] * palette[offset + column * 4 + 2]
+                    )
+                    // §7.6: a helper scales by exactly 1, so a muscle can move but never stretch.
+                    assertEquals("$layer helper $helper column $column is not unit", 1f, length, 1e-5f)
+                }
+                assertEquals("$layer helper $helper is not affine", 1f, palette[offset + 15], 0f)
+                assertEquals("$layer helper $helper is mirrored or scaled", 1f, determinant(palette, offset), 1e-4f)
             }
-            assertEquals("helper $helper is not affine", 1f, out[offset + 15], 0f)
-            val determinant = determinant(out, offset)
-            assertEquals("helper $helper is mirrored or scaled", 1f, determinant, 1e-4f)
         }
     }
 
     @Test
     fun aHeadWithoutAPathGetsTheIdentityRatherThanAStaleFrame() {
         val posed = syntheticFrame()
-        skinner.write(posed, body, out)
-        val before = out.copyOf()
-
-        // Refused: no path this frame, so its four helpers must stop carrying last frame's pose.
-        posed.clear()
-        skinner.write(posed, body, out)
-
-        var moved = 0
-        for (helper in 0 until binds.helperCount) {
-            val offset = binds.paletteIndex(helper) * 16
-            for (entry in 0 until 16) {
-                assertEquals("helper $helper entry $entry is stale", IDENTITY[entry], out[offset + entry], 0f)
-                assertTrue("helper $helper entry $entry is not finite", out[offset + entry].isFinite())
-                if (before[offset + entry] != out[offset + entry]) moved++
-            }
+        val before = MuscleExportFixture.LAYERS.associateWith { layer ->
+            out(layer).also { skinner.getValue(layer).write(posed, body, it) }
         }
-        assertTrue("a refused frame must move every helper off the pose it had", moved > 0)
+
+        // Refused: no path this frame, so every helper must stop carrying last frame's pose.
+        posed.clear()
+        for ((layer, own) in skinner) {
+            val palette = out(layer)
+            own.write(posed, body, palette)
+            var moved = 0
+            for (helper in 0 until own.helperCount) {
+                val offset = binds.getValue(layer).paletteIndex(helper) * 16
+                for (entry in 0 until 16) {
+                    assertEquals("$layer helper $helper entry $entry is stale", IDENTITY[entry], palette[offset + entry], 0f)
+                    assertTrue("$layer helper $helper entry $entry is not finite", palette[offset + entry].isFinite())
+                    if (before.getValue(layer)[offset + entry] != palette[offset + entry]) moved++
+                }
+            }
+            assertTrue("$layer must move every helper off the pose it had", moved > 0)
+        }
+    }
+
+    @Test
+    fun oneSkinNeverWritesAHeadTheOtherPartitionBinds() {
+        val posed = syntheticFrame()
+        val deep = skinner.getValue(MuscleLayer.DEEP)
+        val deepBinds = binds.getValue(MuscleLayer.DEEP)
+        val supBinds = binds.getValue(MuscleLayer.SUPERFICIAL)
+        val palette = out(MuscleLayer.DEEP)
+        deep.write(posed, body, palette)
+        val before = palette.copyOf()
+
+        // A superficial head refused this frame: the deep palette owns none of its helpers, so not one
+        // entry of it may move.
+        val foreign = posed.heads.first { supBinds.groupOf(it) >= 0 && deepBinds.groupOf(it) < 0 }
+        val slot = posed.heads.indexOf(foreign)
+        posed.statuses[slot] = PathStatus.INVALID.ordinal
+        posed.pointCounts[slot] = 0
+
+        deep.write(posed, body, palette)
+        assertArrayEquals("$foreign belongs to the other skin", before, palette, 0f)
     }
 
     @Test
@@ -163,7 +234,7 @@ class MuscleLayerSkinnerTest {
         val statuses = posed.statuses.copyOf()
         val lengths = posed.modelledPathLengths.copyOf()
 
-        skinner.write(posed, body, out)
+        for ((layer, own) in skinner) own.write(posed, body, out(layer))
 
         assertArrayEquals("the solver owns the path buffer", paths, posed.paths, 0f)
         assertArrayEquals(counts, posed.pointCounts)
@@ -179,11 +250,13 @@ class MuscleLayerSkinnerTest {
             pointCapacity = definition.sampling.maxPointsPerHead,
             landmarkCount = 0
         )
-        try {
-            skinner.write(shorter, body, out)
-            throw AssertionError("a frame with the wrong head count must be refused")
-        } catch (expected: IllegalArgumentException) {
-            assertTrue("${expected.message}", expected.message?.contains("heads") == true)
+        for ((layer, own) in skinner) {
+            try {
+                own.write(shorter, body, out(layer))
+                throw AssertionError("$layer accepted a frame with the wrong head count")
+            } catch (expected: IllegalArgumentException) {
+                assertTrue("${expected.message}", expected.message?.contains("heads") == true)
+            }
         }
     }
 
@@ -212,7 +285,7 @@ class MuscleLayerSkinnerTest {
         return posed
     }
 
-    private fun slotOf(posed: AnatomyFrame, head: com.monkfitness.app.anatomy.MuscleHeadId): Int {
+    private fun slotOf(posed: AnatomyFrame, head: MuscleHeadId): Int {
         val slot = posed.heads.indexOf(head)
         assertTrue("$head is not a slot of this definition", slot >= 0)
         return slot
@@ -338,8 +411,6 @@ class MuscleLayerSkinnerTest {
     }
 
     private companion object {
-        const val MANIFEST = "src/main/assets/anatomy/helpers_v1.json"
-
         val IDENTITY = floatArrayOf(
             1f, 0f, 0f, 0f,
             0f, 1f, 0f, 0f,

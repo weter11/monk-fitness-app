@@ -199,7 +199,15 @@ class DynamicGeometrySlot(vertexCapacity: Int, indexCapacity: Int) {
 enum class CharacterLayerId {
     BODY,
     SUPERFICIAL_MUSCLE,
-    DEEP_MUSCLE
+    DEEP_MUSCLE;
+
+    companion object {
+        /** The drawable that shows [layer]; both partitions have their own toggle. */
+        fun of(layer: MuscleLayer): CharacterLayerId = when (layer) {
+            MuscleLayer.SUPERFICIAL -> SUPERFICIAL_MUSCLE
+            MuscleLayer.DEEP -> DEEP_MUSCLE
+        }
+    }
 }
 
 /** One drawable layer of the character scene: what it fills, how it is tinted, whether it draws. */
@@ -407,13 +415,17 @@ class CharacterLayerController(
 
     /**
      * Toggles a muscle layer and returns its new state. [CharacterLayerId.BODY] never toggles: the
-     * tubes are read against the body, and a scene with neither is not a diagnostic.
+     * layers are read against the body, and a scene with neither is not a diagnostic.
      */
     fun toggleLayer(id: CharacterLayerId): Boolean {
         val muscleLayer = layer(id)?.muscleLayer ?: return true
         val on = muscleLayer !in current.layers
-        if (!on && current.showsMeshes) current = current.copy(showsMeshes = false)
-        current = current.withLayer(muscleLayer, on)
+        var next = current.withLayer(muscleLayer, on)
+        // The two layers are independent: one leaving leaves the other's draw alone. Only the last
+        // one out takes the view flag with it, because a scene with no muscle has nothing to solve.
+        if (!on && next.layers.isEmpty()) next = next.copy(showsMeshes = false)
+        if (next == current) return on
+        current = next
         publish()
         return on
     }
@@ -452,7 +464,7 @@ class CharacterLayerController(
 
     /** True when [layer]'s instances are shown at all this frame. */
     fun showsLayer(layer: MuscleLayer): Boolean =
-        layer(idOf(layer))?.visible == true && (current.showsTubes || current.showsMeshes)
+        layer(CharacterLayerId.of(layer))?.visible == true && (current.showsTubes || current.showsMeshes)
 
     private fun publish() {
         for (layer in layers) {
@@ -461,11 +473,6 @@ class CharacterLayerController(
         }
         revision++
         diagnosticsListeners.forEach { listener -> listener() }
-    }
-
-    private fun idOf(layer: MuscleLayer): CharacterLayerId = when (layer) {
-        MuscleLayer.SUPERFICIAL -> CharacterLayerId.SUPERFICIAL_MUSCLE
-        MuscleLayer.DEEP -> CharacterLayerId.DEEP_MUSCLE
     }
 }
 
