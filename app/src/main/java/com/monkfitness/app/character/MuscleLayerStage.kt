@@ -1,13 +1,17 @@
 package com.monkfitness.app.character
 
+import com.google.android.filament.Box
+import com.google.android.filament.BufferObject
 import com.google.android.filament.Engine
 import com.google.android.filament.EntityManager
+import com.google.android.filament.IndexBuffer
 import com.google.android.filament.MaterialInstance
 import com.google.android.filament.RenderableManager
 import com.google.android.filament.Scene
-import com.google.android.filament.gltfio.AssetLoader
-import com.google.android.filament.gltfio.FilamentAsset
-import com.google.android.filament.gltfio.ResourceLoader
+import com.google.android.filament.SkinningBuffer
+import com.google.android.filament.SurfaceOrientation
+import com.google.android.filament.VertexBuffer
+import com.google.android.filament.gltfio.MaterialProvider
 import com.google.android.filament.gltfio.UbershaderProvider
 import com.monkfitness.app.anatomy.AnatomyFrame
 import java.nio.ByteBuffer
@@ -26,20 +30,17 @@ internal class MuscleLayerAsset(
 )
 
 /**
- * The authored muscle layers: one skinned renderable per muscle and side, driven by the same palette
+ * The authored muscle layers: one merged skinned renderable per partition, driven by the same palette
  * the body uploads followed by one bone per helper, so a solved path moves the mesh without touching
  * a vertex on the CPU.
  *
- * Each partition is its own skin — `muscles_sup.glb` and `muscles_deep.glb` bind disjoint helper
- * ranges — so a frame is skinned twice into two palettes and the sections of each asset are uploaded
- * from their own. Sections are addressed by index into the keys handed in, and each key names the
- * asset that carries it, so no muscle identity, side or solve verdict crosses into this class.
- *
- * The assets are loaded once and never rebuilt. A hide moves one section's layer mask and a selection
- * writes that section's own instance's tint uniforms; neither touches geometry or renderable material
- * state, because a renderable the scene already references cannot have either replaced while a frame
- * is in flight. A partition that refuses to load is torn down on its own and reported: the other one
- * keeps drawing, which is what keeps a bad export from taking the character down with it.
+ * A partition's sections are concatenated into one vertex buffer and one index buffer, so the scene
+ * holds two skinned renderables — not one per muscle and side — and each partition uploads one bone
+ * buffer per frame. Sections stay addressable by their slice: hiding one collapses its vertices into
+ * its first one and showing it writes the bind positions back, both only when the mask actually
+ * changes; a selection rewrites the vertex colour of the two affected sections and nothing else.
+ * Sections are addressed by index into the keys handed in, and each key names the asset that carries
+ * it, so no muscle identity, side or solve verdict crosses into this class.
  */
 internal class MuscleLayerStage(
     private val engine: Engine,
@@ -54,26 +55,49 @@ internal class MuscleLayerStage(
 
     private val keys: List<String> = sectionKeys.toList()
 
-    /** Which asset carries each section, and its renderable's place inside that asset. */
+    /** Which asset carries each section, and its slice inside that asset's merged buffer. */
     private val sectionLayer: IntArray
     private val sectionLocal: IntArray
 
     /** The keys each asset carries, in the frame's own section order. */
     private val layerKeys: Array<Array<String>>
 
-    /** One mask bit and one highlight per section; the asset's shared instance is never touched. */
+    /** Every global section of each asset, in the order its slice occupies. */
+    private val layerSections: Array<IntArray>
+
+    /** One mask bit and one highlight per section; the merged renderable carries both in geometry. */
     val state = MuscleSectionState(keys.size)
 
     private val renderableManager: RenderableManager = engine.renderableManager
 
     private var prepared = false
 
-    /** Section count the loaded assets publish between them. */
+    /** Sections the loaded partitions publish between them; the readout's `mesh total`. */
     var renderableCount: Int = 0
         private set
 
     /** Frames whose palettes reached the GPU; a frozen counter means the upload never ran. */
     var skinUploads: Long = 0
+        private set
+
+    /** Mask-driven position rewrites; a steady frame must not move it. */
+    var positionWrites: Int = 0
+        private set
+
+    /** Selection-driven colour rewrites; a steady frame must not move it. */
+    var colorWrites: Int = 0
+        private set
+
+    /** Why an asset could not be built, or null when every partition loaded. */
+    var failure: String? = null
+        private set
+
+    /** Why a selection cannot tint its section, or null when the highlight is live. */
+    var highlightError: String? = null
+        private set
+
+    /** True while the selected section's colour is the highlight's. */
+    var highlightApplied: Boolean = false
         private set
 
     init {
@@ -95,49 +119,31 @@ internal class MuscleLayerStage(
             require(counts[index] > 0) { "asset ${assets[index].label} carries no section" }
         }
         val collected = Array(assets.size) { index -> ArrayList<String>(counts[index]) }
-        for (section in keys.indices) collected[sectionLayer[section]] += keys[section]
+        val sections = Array(assets.size) { index -> ArrayList<Int>(counts[index]) }
+        for (section in keys.indices) {
+            collected[sectionLayer[section]] += keys[section]
+            sections[sectionLayer[section]] += section
+        }
         layerKeys = Array(assets.size) { index -> collected[index].toTypedArray() }
+        layerSections = Array(assets.size) { index -> sections[index].toIntArray() }
     }
 
     private val highlightSelection = MuscleHighlightSelection(object : MuscleHighlightTarget {
         override fun setHighlight(section: Int, on: Boolean) {
-            val instance = instanceOf(section) ?: return
-            // baseColorFactor is the term every lit variant reads; emissiveFactor is written too for
-            // the variants that carry it, but the tint must not depend on that variant being chosen.
-            if (on) {
-                instance.setParameter(BASE_COLOR_PARAMETER, HIGHLIGHT_RED, HIGHLIGHT_GREEN, HIGHLIGHT_BLUE, 1f)
-                instance.setParameter(HIGHLIGHT_PARAMETER, HIGHLIGHT_RED, HIGHLIGHT_GREEN, HIGHLIGHT_BLUE)
-            } else {
-                instance.setParameter(BASE_COLOR_PARAMETER, MUSCLE_RED, MUSCLE_GREEN, MUSCLE_BLUE, 1f)
-                instance.setParameter(HIGHLIGHT_PARAMETER, 0f, 0f, 0f)
-            }
+            if (section !in keys.indices) return
+            val layer = layers[sectionLayer[section]]
+            if (layer.slices.isEmpty()) return
+            layer.paint(sectionLocal[section], on)
+            uploadStream(layer, COLOR_SLOT, layer.colors)
+            colorWrites++
         }
     })
 
-    /** Why a selection cannot tint its section, or null when the highlight is live. */
-    var highlightError: String? = null
-        private set
-
-    /** True while the selected section's own instance carries the highlight uniform. */
-    var highlightApplied: Boolean = false
-        private set
-
-    /** Why an asset could not be built, or null when every partition loaded. */
-    var failure: String? = null
-        private set
-
     /** How many sections the last frame showed. */
-    val visibleCount: Int
-        get() {
-            var shown = 0
-            for (section in keys.indices) {
-                if (state.draws(section) && entityOf(section) != 0) shown++
-            }
-            return shown
-        }
+    val visibleCount: Int get() = state.shownCount
 
     /**
-     * Loads, validates and publishes every partition. Returns the failures joined, or null when both
+     * Builds one merged renderable per partition. Returns the failures joined, or null when both
      * skins draw; a refusal is per asset and leaves the other one live.
      */
     fun prepare(): String? {
@@ -148,48 +154,53 @@ internal class MuscleLayerStage(
             return publishFailures()
         }
         for (index in layers.indices) load(index, materialProvider)
-        var loaded = 0
-        for (index in layers.indices) loaded += layers[index].renderables.size
-        renderableCount = loaded
+        renderableCount = layers.filter { it.entities.isNotEmpty() }.sumOf { it.slices.size }
         return publishFailures()
     }
 
     /**
-     * Skins one solved frame into each partition's palette and uploads it. [body] is the rig's own
-     * bone matrices; each partition's helpers are appended after them, so one frame drives both skins.
+     * Skins one solved frame into each partition's buffer and uploads it once per partition. [body]
+     * is the rig's own bone matrices; each partition's helpers follow them, so one frame drives both
+     * skins.
      */
     fun skin(frame: AnatomyFrame, body: FloatArray): Boolean {
         var uploaded = false
         for (index in layers.indices) {
             val layer = layers[index]
-            if (layer.asset == null) continue
+            val buffer = layer.skinningBuffer ?: continue
             layer.skinner.write(frame, body, layer.matrices)
-            layer.buffer.clear()
-            layer.buffer.put(layer.matrices)
-            for (renderable in layer.renderables) {
-                layer.buffer.rewind()
-                renderableManager.setBonesAsMatrices(renderable, layer.buffer, layer.jointCount, 0)
-            }
+            layer.palette.clear()
+            layer.palette.put(layer.matrices)
+            layer.palette.rewind()
+            buffer.setBonesAsMatrices(engine, layer.palette, layer.jointCount, 0)
             uploaded = true
         }
         if (uploaded) skinUploads++
         return uploaded
     }
 
-    /** Shows or hides one section; an unchanged mask costs no renderable write. */
+    /** Hides or shows one section; only a changed mask rewrites its vertices. */
     fun setShown(section: Int, on: Boolean) {
         if (!state.show(section, on)) return
-        val entity = entityOf(section)
-        if (entity == 0) return
-        renderableManager.setLayerMask(entity, LAYER_BIT, if (on) LAYER_BIT else 0)
+        val index = sectionLayer[section]
+        val layer = layers[index]
+        if (layer.slices.isEmpty()) return
+        layer.collapse(sectionLocal[section], hidden = !on)
+        uploadStream(layer, POSITION_SLOT, floatBytes(layer.positions))
+        positionWrites++
+        applyMask(index)
     }
 
-    /** Moves the highlight with one uniform write per affected section; no renderable state moves. */
+    /** Moves the highlight onto one section's vertices; only a moved selection rewrites colours. */
     fun select(section: Int) {
-        val target = if (section in keys.indices && entityOf(section) != 0) section else MuscleSectionState.NO_SECTION
+        val target = if (section in keys.indices && layers[sectionLayer[section]].slices.isNotEmpty()) {
+            section
+        } else {
+            MuscleSectionState.NO_SECTION
+        }
         highlightSelection.select(target)
         state.select(target)
-        highlightApplied = target != MuscleSectionState.NO_SECTION && instanceOf(target) != null
+        highlightApplied = target != MuscleSectionState.NO_SECTION
     }
 
     fun hideAll() {
@@ -197,24 +208,42 @@ internal class MuscleLayerStage(
         select(MuscleSectionState.NO_SECTION)
     }
 
-    /** Drains the render thread, then releases each asset before the provider that owns its materials. */
+    /** Skips a partition's draw when every one of its sections is hidden. */
+    private fun applyMask(index: Int) {
+        val layer = layers[index]
+        if (layer.entities.isEmpty()) return
+        var shown = false
+        for (section in layerSections[index]) {
+            if (state.draws(section)) {
+                shown = true
+                break
+            }
+        }
+        renderableManager.setLayerMask(layer.entities[0], LAYER_BIT, if (shown) LAYER_BIT else 0)
+    }
+
+    /** Drains the render thread, then releases each partition's buffers, instance and skin. */
     fun destroy() {
-        // A queued frame referencing an instance freed here is a native crash inside FEngine::loop.
+        // A queued frame referencing a freed instance or buffer is a native crash inside FEngine::loop.
         engine.flushAndWait()
         highlightSelection.select(MuscleSectionState.NO_SECTION)
         for (index in layers.indices) {
             val layer = layers[index]
-            val loaded = layer.asset
-            layer.asset = null
-            if (loaded != null) scene.removeEntities(loaded.entities)
-            layer.renderables = IntArray(0)
-            try {
-                if (loaded != null) layer.loader?.destroyAsset(loaded)
-            } finally {
-                releaseMaterials(layer)
-                layer.loader?.destroy()
-                layer.loader = null
-            }
+            if (layer.entities.isNotEmpty()) scene.removeEntities(layer.entities)
+            for (entity in layer.entities) if (entity != 0) engine.destroy(entity)
+            layer.entities = IntArray(0)
+            layer.material?.let { engine.destroyMaterialInstance(it) }
+            layer.material = null
+            for (buffer in layer.bufferObjects) engine.destroyBufferObject(buffer)
+            layer.bufferObjects.clear()
+            layer.vertexBuffer?.let { engine.destroy(it) }
+            layer.vertexBuffer = null
+            layer.indexBuffer?.let { engine.destroy(it) }
+            layer.indexBuffer = null
+            layer.skinningBuffer?.let { engine.destroySkinningBuffer(it) }
+            layer.skinningBuffer = null
+            layer.jointCount = 0
+            layer.matrices = FloatArray(0)
         }
         renderableCount = 0
         state.hideAll()
@@ -223,111 +252,323 @@ internal class MuscleLayerStage(
 
     private fun load(index: Int, materialProvider: UbershaderProvider) {
         val layer = layers[index]
-        val direct = ByteBuffer.allocateDirect(layer.bytes.size).order(ByteOrder.nativeOrder())
-        direct.put(layer.bytes)
-        direct.rewind()
-        val loader = AssetLoader(engine, materialProvider, EntityManager.get())
-        layer.loader = loader
-        var loaded: FilamentAsset? = null
+        var shared: SkinningBuffer? = null
         try {
-            loaded = loader.createAsset(direct)
-                ?: throw IllegalStateException("gltfio could not load ${layer.label}")
-            val resources = ResourceLoader(engine)
-            try {
-                resources.loadResources(loaded)
-            } finally {
-                resources.destroy()
-            }
-
-            layer.jointCount = if (loaded.instance.skinCount > 0) loaded.instance.getJointCountAt(0) else 0
+            val mesh = MuscleMeshAsset.read(layer.bytes)
+            layer.jointCount = mesh.jointCount
             require(layer.jointCount == layer.skinner.paletteCount) {
                 "${layer.label} skins ${layer.jointCount} joints, its palette has ${layer.skinner.paletteCount}"
             }
+            val byName = HashMap<String, MuscleSectionMesh>(mesh.sections.size * 2)
+            for (section in mesh.sections) {
+                if (byName.put(section.name, section) != null) {
+                    throw IllegalStateException("${layer.label} names two sections ${section.name}")
+                }
+            }
+            val ordered = layerKeys[index].map { key ->
+                byName[key] ?: throw IllegalStateException("${layer.label} has no section named $key")
+            }
+            val layout = MuscleSectionLayout.of(ordered)
 
-            val byName = HashMap<String, Int>(layerKeys[index].size * 2)
-            for (entity in loaded.renderableEntities) {
-                val name = loaded.getName(entity) ?: continue
-                // Two renderables under one name would tie an instance's visibility to the wrong draw.
-                if (byName.put(name, entity) != null) {
-                    throw IllegalStateException("${layer.label} names two renderables $name")
-                }
-            }
-            val resolved = IntArray(layerKeys[index].size) { local ->
-                byName[layerKeys[index][local]]
-                    ?: throw IllegalStateException("${layer.label} has no section named ${layerKeys[index][local]}")
-            }
-            val own = arrayOfNulls<MaterialInstance>(resolved.size)
-            // Published before the first instance exists, so a refusal half way through still leaves
-            // every instance the teardown has to free reachable from [Layer.materials].
-            layer.materials = own
-            val renderables = IntArray(resolved.size)
-            for (local in resolved.indices) {
-                val renderable = renderableManager.getInstance(resolved[local])
-                require(renderable != 0) {
-                    "section ${layerKeys[index][local]} has no renderable instance"
-                }
-                renderables[local] = renderable
-            }
-            val baseMaterial = renderableManager.getMaterialInstanceAt(renderables[0], 0).material
-                ?: throw IllegalStateException("${layer.label} has no material")
-            val missing = APPEARANCE_PARAMETERS.filterNot(baseMaterial::hasParameter)
+            val instance = instanceFor(materialProvider, layer.label)
+            val missing = APPEARANCE_PARAMETERS.filterNot(instance.material::hasParameter)
             if (missing.isNotEmpty()) {
                 val reason = "the material of ${layer.label} has no ${missing.joinToString()}"
                 if (HIGHLIGHT_PARAMETER in missing) layer.highlightError = reason
                 throw IllegalStateException(reason)
             }
-            for (local in resolved.indices) {
-                // createInstance starts from the Material's own defaults, not from the glTF instance
-                // gltfio authored, so the asset's surface constants are restated on every section.
-                val instance = baseMaterial.createInstance(HIGHLIGHT_LABEL)
-                instance.setParameter(BASE_COLOR_PARAMETER, MUSCLE_RED, MUSCLE_GREEN, MUSCLE_BLUE, 1f)
-                instance.setParameter(METALLIC_PARAMETER, 0f)
-                instance.setParameter(ROUGHNESS_PARAMETER, MUSCLE_ROUGHNESS)
-                instance.setParameter(HIGHLIGHT_PARAMETER, 0f, 0f, 0f)
-                own[local] = instance
-            }
-            // Assigned before any entity reaches the scene: no frame can observe a renderable whose
-            // material is mid-replacement.
-            for (local in resolved.indices) {
-                renderableManager.setMaterialInstanceAt(renderables[local], 0, own[local]!!)
-            }
+            instance.setParameter(BASE_COLOR_PARAMETER, 1f, 1f, 1f, 1f)
+            instance.setParameter(METALLIC_PARAMETER, 0f)
+            instance.setParameter(ROUGHNESS_PARAMETER, MUSCLE_ROUGHNESS)
+            instance.setParameter(HIGHLIGHT_PARAMETER, 0f, 0f, 0f)
+            layer.material = instance
 
-            layer.asset = loaded
-            layer.renderables = renderables
-            layer.matrices = FloatArray(layer.skinner.paletteCount * 16)
-            layer.buffer = ByteBuffer.allocateDirect(layer.skinner.paletteCount * 16 * 4)
+            shared = SkinningBuffer.Builder()
+                .boneCount(mesh.jointCount)
+                .initialize()
+                .build(engine)
+            layer.skinningBuffer = shared
+
+            layer.slices = layout.slices
+            layer.bindPositions = mergedPositions(ordered, layout)
+            layer.positions = layer.bindPositions.copyOf()
+            layer.colors = baseColors(layout.vertexCount)
+
+            val entity = EntityManager.get().create()
+            layer.entities = intArrayOf(entity)
+            layer.vertexBuffer = buildVertexBuffer(ordered, layout, layer)
+            val indices = mergedIndices(ordered, layout)
+            val indexBuffer = IndexBuffer.Builder()
+                .indexCount(indices.size)
+                .bufferType(IndexBuffer.Builder.IndexType.UINT)
+                .build(engine)
+            layer.indexBuffer = indexBuffer
+            val indexUpload = intBuffer(indices)
+            layer.uploads += indexUpload
+            indexBuffer.setBuffer(engine, indexUpload, 0, indices.size * 4)
+
+            // A scene entity without a transform reads an unset component on every frame.
+            engine.transformManager.create(entity)
+            RenderableManager.Builder(1)
+                .boundingBox(boxOf(layer.bindPositions))
+                .culling(false)
+                .castShadows(false)
+                .receiveShadows(false)
+                // A skinned renderable is DYNAMIC to Filament even though only the GPU moves the
+                // vertices: the engine refuses skinning on STATIC geometry.
+                .geometryType(RenderableManager.Builder.GeometryType.DYNAMIC)
+                .geometry(
+                    0, RenderableManager.PrimitiveType.TRIANGLES,
+                    layer.vertexBuffer!!, indexBuffer, 0, indices.size
+                )
+                .material(0, instance)
+                .enableSkinningBuffers(true)
+                .skinning(shared, mesh.jointCount, 0)
+                .build(engine, entity)
+            scene.addEntity(entity)
+            renderableManager.setLayerMask(entity, LAYER_BIT, LAYER_BIT)
+
+            layer.matrices = FloatArray(mesh.jointCount * 16)
+            layer.palette = ByteBuffer.allocateDirect(mesh.jointCount * 16 * 4)
                 .order(ByteOrder.nativeOrder()).asFloatBuffer()
-            scene.addEntities(loaded.entities)
-            // Each section is visible until its owning layer is toggled or the session is destroyed.
-            for (local in layerKeys[index].indices) {
-                renderableManager.setLayerMask(resolved[local], LAYER_BIT, LAYER_BIT)
-            }
         } catch (error: Throwable) {
             layer.failure = "${layer.label}: " +
                 "${error.javaClass.simpleName}: ${error.message.orEmpty()}".trim()
-            // Nothing of this partition reaches the scene or the stats: the other skin is unaffected.
-            try {
-                if (loaded != null) scene.removeEntities(loaded.entities)
-            } finally {
-                try {
-                    loaded?.let { loader.destroyAsset(it) }
-                } finally {
-                    releaseMaterials(layer)
-                    loader.destroy()
-                }
-            }
-            layer.loader = null
-            layer.renderables = IntArray(0)
+            if (layer.entities.isNotEmpty()) scene.removeEntities(layer.entities)
+            for (entity in layer.entities) if (entity != 0) engine.destroy(entity)
+            layer.material?.let { engine.destroyMaterialInstance(it) }
+            layer.material = null
+            for (buffer in layer.bufferObjects) engine.destroyBufferObject(buffer)
+            layer.bufferObjects.clear()
+            layer.vertexBuffer?.let { engine.destroy(it) }
+            layer.vertexBuffer = null
+            layer.indexBuffer?.let { engine.destroy(it) }
+            layer.indexBuffer = null
+            shared?.let { engine.destroySkinningBuffer(it) }
+            layer.skinningBuffer = null
+            layer.entities = IntArray(0)
+            layer.slices = emptyList()
             layer.jointCount = 0
         }
     }
+
+    /**
+     * One material instance per partition: the provider's untextured variant with vertex colours, so
+     * the section tint is a vertex stream rather than a per-section instance.
+     */
+    private fun instanceFor(materialProvider: UbershaderProvider, label: String): MaterialInstance {
+        val key = MaterialProvider.MaterialKey()
+        key.hasVertexColors = true
+        val instance = materialProvider.createMaterialInstance(key, intArrayOf(0, 0), "muscle-$label", null)
+            ?: throw IllegalStateException("the provider has no material for $label")
+        val missing = instance.material.requiredAttributes - REQUIRED_ATTRIBUTES
+        if (missing.isNotEmpty()) {
+            engine.destroyMaterialInstance(instance)
+            throw IllegalStateException(
+                "the material of $label needs $missing, the section layout supplies $REQUIRED_ATTRIBUTES"
+            )
+        }
+        return instance
+    }
+
+    /** One vertex stream: the attribute it fills, how it is typed, and the bytes it carries. */
+    private class Stream(
+        val attribute: VertexBuffer.VertexAttribute,
+        val type: VertexBuffer.AttributeType,
+        val normalized: Boolean,
+        val bytes: ByteArray
+    )
+
+    private fun buildVertexBuffer(
+        sections: List<MuscleSectionMesh>,
+        layout: MuscleSectionLayout,
+        layer: Layer
+    ): VertexBuffer {
+        val streams = streams(sections, layout)
+        val builder = VertexBuffer.Builder()
+            .vertexCount(layout.vertexCount)
+            .bufferCount(streams.size)
+            .enableBufferObjects(true)
+        for ((index, stream) in streams.withIndex()) {
+            builder.attribute(stream.attribute, index, stream.type)
+            if (stream.normalized) builder.normalized(stream.attribute)
+        }
+        val vertexBuffer = builder.build(engine)
+        require(vertexBuffer.vertexCount == layout.vertexCount) {
+            "${layer.label} built ${vertexBuffer.vertexCount} vertices of ${layout.vertexCount}"
+        }
+        for ((index, stream) in streams.withIndex()) {
+            val objectBuffer = BufferObject.Builder()
+                .size(stream.bytes.size)
+                .bindingType(BufferObject.BindingType.VERTEX)
+                .build(engine)
+            vertexBuffer.setBufferObjectAt(engine, index, objectBuffer)
+            layer.bufferObjects += objectBuffer
+            upload(layer, objectBuffer, stream.bytes)
+        }
+        return vertexBuffer
+    }
+
+    /**
+     * The merged partition's streams, typed exactly as [TubeMesh]'s plan types its slots: uv1 as
+     * normalized ushort2, colour as normalized ubyte4, the tangent frame as a normalized short4
+     * quaternion. Position and colour are the two streams a hide or a selection rewrites.
+     */
+    private fun streams(
+        sections: List<MuscleSectionMesh>,
+        layout: MuscleSectionLayout
+    ): List<Stream> {
+        val vertexCount = layout.vertexCount
+        val positions = FloatArray(vertexCount * 3)
+        val uvs = FloatArray(vertexCount * 2)
+        val tangents = ByteArray(vertexCount * 8)
+        val joints = IntArray(vertexCount * 4)
+        val weights = FloatArray(vertexCount * 4)
+        for ((index, section) in sections.withIndex()) {
+            val slice = layout.slice(index)
+            section.positions.copyInto(positions, slice.vertexOffset * 3)
+            section.uvs.copyInto(uvs, slice.vertexOffset * 2)
+            tangentBytes(section).copyInto(tangents, slice.vertexOffset * 8)
+            section.joints.copyInto(joints, slice.vertexOffset * 4)
+            section.weights.copyInto(weights, slice.vertexOffset * 4)
+        }
+        return listOf(
+            Stream(VertexBuffer.VertexAttribute.POSITION, VertexBuffer.AttributeType.FLOAT3, false, floatBytes(positions)),
+            Stream(VertexBuffer.VertexAttribute.UV0, VertexBuffer.AttributeType.FLOAT2, false, floatBytes(uvs)),
+            Stream(VertexBuffer.VertexAttribute.UV1, VertexBuffer.AttributeType.USHORT2, true, ByteArray(vertexCount * 4)),
+            Stream(VertexBuffer.VertexAttribute.COLOR, VertexBuffer.AttributeType.UBYTE4, true, baseColors(vertexCount)),
+            Stream(VertexBuffer.VertexAttribute.TANGENTS, VertexBuffer.AttributeType.SHORT4, true, tangents),
+            Stream(VertexBuffer.VertexAttribute.BONE_INDICES, VertexBuffer.AttributeType.USHORT4, false, ushortBytes(joints)),
+            Stream(VertexBuffer.VertexAttribute.BONE_WEIGHTS, VertexBuffer.AttributeType.FLOAT4, false, floatBytes(weights))
+        )
+    }
+
+    private fun mergedPositions(
+        sections: List<MuscleSectionMesh>,
+        layout: MuscleSectionLayout
+    ): FloatArray {
+        val positions = FloatArray(layout.vertexCount * 3)
+        for ((index, section) in sections.withIndex()) {
+            section.positions.copyInto(positions, layout.slice(index).vertexOffset * 3)
+        }
+        return positions
+    }
+
+    private fun mergedIndices(
+        sections: List<MuscleSectionMesh>,
+        layout: MuscleSectionLayout
+    ): IntArray {
+        val indices = IntArray(layout.indexCount)
+        for ((index, section) in sections.withIndex()) {
+            val slice = layout.slice(index)
+            for (entry in section.indices.indices) {
+                indices[slice.indexOffset + entry] = section.indices[entry] + slice.vertexOffset
+            }
+        }
+        return indices
+    }
+
+    /** The section's authored normal and tangent, packed into snorm16 quaternions. */
+    private fun tangentBytes(section: MuscleSectionMesh): ByteArray {
+        val quats = ByteBuffer.allocateDirect(section.vertexCount * 4 * 4)
+            .order(ByteOrder.nativeOrder()).asFloatBuffer()
+        val orientation = SurfaceOrientation.Builder()
+            .vertexCount(section.vertexCount)
+            .normals(direct(section.normals))
+            .tangents(direct(section.tangents))
+            .build()
+        try {
+            orientation.getQuatsAsFloat(quats)
+        } finally {
+            orientation.destroy()
+        }
+        quats.rewind()
+        val bytes = ByteBuffer.allocate(section.vertexCount * 8).order(ByteOrder.nativeOrder())
+        for (entry in 0 until section.vertexCount * 4) {
+            val value = quats.get(entry).coerceIn(-1f, 1f)
+            bytes.putShort((value * 32767f).toInt().toShort())
+        }
+        return bytes.array()
+    }
+
+    private fun boxOf(positions: FloatArray): Box {
+        val min = FloatArray(3) { Float.MAX_VALUE }
+        val max = FloatArray(3) { -Float.MAX_VALUE }
+        for (vertex in positions.indices step 3) {
+            for (component in 0 until 3) {
+                val value = positions[vertex + component]
+                if (value < min[component]) min[component] = value
+                if (value > max[component]) max[component] = value
+            }
+        }
+        val box = Box()
+        box.setCenter(
+            (min[0] + max[0]) * 0.5f,
+            (min[1] + max[1]) * 0.5f,
+            (min[2] + max[2]) * 0.5f
+        )
+        box.setHalfExtent(
+            maxOf((max[0] - min[0]) * 0.5f, 1e-3f),
+            maxOf((max[1] - min[1]) * 0.5f, 1e-3f),
+            maxOf((max[2] - min[2]) * 0.5f, 1e-3f)
+        )
+        return box
+    }
+
+    private fun baseColors(vertexCount: Int): ByteArray {
+        val colors = ByteArray(vertexCount * 4)
+        for (vertex in 0 until vertexCount) writeVertexColor(colors, vertex, highlight = false)
+        return colors
+    }
+
+    /** Rewrites one whole stream of a loaded partition; only a mask or selection change reaches here. */
+    private fun uploadStream(layer: Layer, slot: Int, bytes: ByteArray) {
+        val buffer = layer.bufferObjects.getOrNull(slot) ?: return
+        upload(layer, buffer, bytes)
+    }
+
+    private fun upload(layer: Layer, buffer: BufferObject, bytes: ByteArray) {
+        // Filament reads an upload's bytes until the driver has consumed it, so the descriptor stays
+        // reachable from the layer for as long as the buffer object does.
+        val upload = direct(bytes)
+        layer.uploads += upload
+        buffer.setBuffer(engine, upload, 0, bytes.size)
+    }
+
+    private fun floatBytes(values: FloatArray): ByteArray {
+        val buffer = ByteBuffer.allocate(values.size * 4).order(ByteOrder.nativeOrder())
+        buffer.asFloatBuffer().put(values)
+        return buffer.array()
+    }
+
+    private fun ushortBytes(values: IntArray): ByteArray {
+        val buffer = ByteBuffer.allocate(values.size * 2).order(ByteOrder.nativeOrder())
+        for (value in values) buffer.putShort(value.toShort())
+        return buffer.array()
+    }
+
+    private fun intBuffer(values: IntArray): ByteBuffer {
+        val buffer = ByteBuffer.allocateDirect(values.size * 4).order(ByteOrder.nativeOrder())
+        buffer.asIntBuffer().put(values)
+        buffer.rewind()
+        return buffer
+    }
+
+    private fun direct(bytes: ByteArray): ByteBuffer {
+        val buffer = ByteBuffer.allocateDirect(bytes.size).order(ByteOrder.nativeOrder())
+        buffer.put(bytes)
+        buffer.rewind()
+        return buffer
+    }
+
+    private fun direct(values: FloatArray): ByteBuffer = direct(floatBytes(values))
 
     private fun publishFailures(): String? {
         var joined: String? = null
         var error: String? = null
         for (layer in layers) {
-            val failure = layer.failure ?: continue
-            joined = if (joined == null) failure else "$joined; $failure"
+            val failed = layer.failure ?: continue
+            joined = if (joined == null) failed else "$joined; $failed"
             val highlight = layer.highlightError
             if (highlight != null) error = if (error == null) highlight else "$error; $highlight"
         }
@@ -337,62 +578,72 @@ internal class MuscleLayerStage(
         return joined
     }
 
-    private fun entityOf(section: Int): Int {
-        if (section !in keys.indices) return 0
-        val local = sectionLocal[section]
-        val renderables = layers[sectionLayer[section]].renderables
-        return if (local < renderables.size) renderables[local] else 0
-    }
-
-    private fun instanceOf(section: Int): MaterialInstance? {
-        if (section !in keys.indices) return null
-        val local = sectionLocal[section]
-        val materials = layers[sectionLayer[section]].materials
-        return if (local < materials.size) materials[local] else null
-    }
-
-    private fun releaseMaterials(layer: Layer) {
-        for (material in layer.materials) material?.let { engine.destroyMaterialInstance(it) }
-        layer.materials = emptyArray()
-    }
-
     /**
-     * One partition's Filament state. Every field has an empty value until [load] publishes it, so a
-     * refusal leaves nothing a later frame or teardown could dereference.
+     * One partition's Filament state and the CPU arrays its two rewritable streams mirror. Every
+     * field has an empty value until [load] publishes it, so a refusal leaves nothing a later frame
+     * or teardown could dereference.
      */
     private class Layer(val spec: MuscleLayerAsset) {
         val label: String get() = spec.label
         val bytes: ByteArray get() = spec.bytes
         val skinner: MuscleLayerSkinner get() = spec.skinner
 
-        var loader: AssetLoader? = null
-        var asset: FilamentAsset? = null
+        var material: MaterialInstance? = null
+        var skinningBuffer: SkinningBuffer? = null
+        var vertexBuffer: VertexBuffer? = null
+        var indexBuffer: IndexBuffer? = null
         var jointCount = 0
-        var renderables = IntArray(0)
-        var materials: Array<MaterialInstance?> = emptyArray()
+        var entities = IntArray(0)
+        var slices: List<MuscleSectionSlice> = emptyList()
+        var bindPositions = FloatArray(0)
+        var positions = FloatArray(0)
+        var colors = ByteArray(0)
         var matrices = FloatArray(0)
-        var buffer: FloatBuffer = ByteBuffer.allocateDirect(16).order(ByteOrder.nativeOrder()).asFloatBuffer()
+        var palette: FloatBuffer =
+            ByteBuffer.allocateDirect(16).order(ByteOrder.nativeOrder()).asFloatBuffer()
+        /** Slot 0 is the position stream and slot 3 the colour stream; both are rewritten in place. */
+        val bufferObjects = ArrayList<BufferObject>()
+        /** Every CPU descriptor Filament may still be reading; released with the layer. */
+        val uploads = ArrayList<ByteBuffer>()
         var failure: String? = null
         var highlightError: String? = null
+
+        /** Collapses a hidden section onto its first vertex, or restores its bind positions. */
+        fun collapse(slice: Int, hidden: Boolean) {
+            val place = slices[slice]
+            val source = if (hidden) 0 else place.vertexOffset
+            for (vertex in 0 until place.vertexCount) {
+                for (component in 0 until 3) {
+                    positions[(place.vertexOffset + vertex) * 3 + component] =
+                        bindPositions[(source) * 3 + component]
+                }
+            }
+        }
+
+        fun paint(slice: Int, on: Boolean) {
+            val place = slices[slice]
+            for (vertex in 0 until place.vertexCount) {
+                writeVertexColor(colors, place.vertexOffset + vertex, on)
+            }
+        }
     }
 
     private companion object {
         const val LAYER_BIT = 1
+        const val POSITION_SLOT = 0
+        const val COLOR_SLOT = 3
         const val HIGHLIGHT_PARAMETER = "emissiveFactor"
         const val BASE_COLOR_PARAMETER = "baseColorFactor"
         const val METALLIC_PARAMETER = "metallicFactor"
         const val ROUGHNESS_PARAMETER = "roughnessFactor"
-        const val HIGHLIGHT_LABEL = "muscleSection"
-        const val HIGHLIGHT_RED = 0.95f
-        const val HIGHLIGHT_GREEN = 0.62f
-        const val HIGHLIGHT_BLUE = 0.10f
 
-        // The muscle assets' authored material, restated because createInstance starts from the
-        // Material's defaults rather than from the instance gltfio configured.
         const val MUSCLE_RED = 0.62f
         const val MUSCLE_GREEN = 0.2f
         const val MUSCLE_BLUE = 0.24f
         const val MUSCLE_ROUGHNESS = 0.55f
+        const val HIGHLIGHT_RED = 0.95f
+        const val HIGHLIGHT_GREEN = 0.62f
+        const val HIGHLIGHT_BLUE = 0.10f
 
         val APPEARANCE_PARAMETERS = listOf(
             BASE_COLOR_PARAMETER,
@@ -400,5 +651,26 @@ internal class MuscleLayerStage(
             ROUGHNESS_PARAMETER,
             HIGHLIGHT_PARAMETER
         )
+
+        val REQUIRED_ATTRIBUTES = setOf(
+            VertexBuffer.VertexAttribute.POSITION,
+            VertexBuffer.VertexAttribute.TANGENTS,
+            VertexBuffer.VertexAttribute.UV0,
+            VertexBuffer.VertexAttribute.UV1,
+            VertexBuffer.VertexAttribute.COLOR,
+            VertexBuffer.VertexAttribute.BONE_INDICES,
+            VertexBuffer.VertexAttribute.BONE_WEIGHTS
+        )
     }
+}
+
+/** The authored muscle colour, or the selection tint, as one normalized-ubyte vertex colour. */
+private fun writeVertexColor(colors: ByteArray, vertex: Int, highlight: Boolean) {
+    val red = if (highlight) 0.95f else 0.62f
+    val green = if (highlight) 0.62f else 0.2f
+    val blue = if (highlight) 0.10f else 0.24f
+    colors[vertex * 4] = (red * 255f).toInt().toByte()
+    colors[vertex * 4 + 1] = (green * 255f).toInt().toByte()
+    colors[vertex * 4 + 2] = (blue * 255f).toInt().toByte()
+    colors[vertex * 4 + 3] = 0xFF.toByte()
 }
