@@ -1355,8 +1355,9 @@ advanced frame counts into the thousands.
 | **16** | **7** | 2 → 2 | p95 36.63 ms |
 | **20** | **6** | 1 → 1 | p95 69.32 ms |
 
-The boundary is exactly 13 → 14, and it reproduces. But it is not a section and not a count the
-renderer can act on: all twenty deep sections are structurally identical (106 vertices, 208
+The boundary is exactly 13 → 14, and it reproduces — but it is not a section. Section 8.9 shows the
+same threshold is reached by the count of live skinned renderables whatever API draws them, so the
+number, not the muscle, is the variable. It is not a count the renderer can act on either: all twenty deep sections are structurally identical (106 vertices, 208
 triangles, `u32` indices, one primitive, six attributes each), and both skins' inverse bind
 matrices are well-formed (|det| between 1.0 and 1.0000004, no non-finite entry), so there is no
 "bad section" to point at. The same sweep on `muscles_sup.glb` (242 joints per renderable) draws
@@ -1411,3 +1412,66 @@ those frames needs a Filament 1.81.0 build with symbols, not more probes.
 - **Any of the numbers under a clean build.** Every reading above comes from the APK whose hash is in
   8.2; the probe builds used to bisect the crash (sup-only, deep-only, 1-section, limits) are not
   part of the shipped tree.
+
+### 8.9 The fix — 66 live skinned renderables consolidated into two
+
+**The root cause is the number of simultaneously live skinned renderables, not gltfio.** Owning the
+geometry outright (no `AssetLoader`, no `ResourceManager`, one shared `SkinningBuffer` per partition)
+did not change the failure, and neither did removing skinning, materials or scene membership:
+
+| Probe (owned renderables, `TubeMesh`'s recipe) | Result |
+| --- | --- |
+| entities + transforms only, no renderables | clean |
+| 1 skinned section per partition (2 renderables) | clean, `frames` 314 → 367 |
+| 4 / 6 / 8 / 12 renderables | clean, `frames` 235–488 |
+| 16 renderables | crash on the first frame |
+
+A synthetic three-vertex triangle with no bones crashed identically once enough renderables existed,
+and the gltfio path hit the same wall at 14 deep sections in 8.7. Two different vertex-buffer paths,
+two different upload mechanisms and two different materials all die at the same *count*, so the count
+is the variable the fix has to move.
+
+**What the layer does now.** Each partition's sections are concatenated into one vertex buffer and one
+index buffer (`MuscleMeshAsset` reads the GLB, `MuscleSectionLayout` keeps each section's slice), and
+the scene holds exactly **two** skinned renderables — 46 superficial sections over 242 joints and 20
+deep sections over 114 — each bound to its partition's shared `SkinningBuffer`. A frame still uploads
+two bone buffers; nothing uploads bones per section any more.
+
+Sections stay addressable through their slice:
+
+| Behaviour | Mechanism | Cost |
+| --- | --- | --- |
+| Hide/show one section | its vertices collapse onto the section's first vertex, and the bind positions are written back on show | one position stream rewrite, only when the mask changes |
+| Selection tint | the section's vertices carry the highlight colour in `COLOR` (`hasVertexColors`, normalized `ubyte4`) | one colour stream rewrite for the two sections that changed |
+| Layer toggle | the partition's single renderable gets layer mask 0 when every one of its sections is hidden | one `setLayerMask` |
+| Steady frame | no mask change, no selection change | zero buffer writes; `positionWrites` / `colorWrites` in the stage stay put |
+
+Teardown is transactional and in reference order: `flushAndWait`, scene removal, entity destruction,
+material instance, buffer objects, vertex and index buffers, then the skinning buffer.
+
+**Unit suite over the change:** `classes=438 tests=4022 failed=0 errors=0 skipped=0`
+(`:app:testDebugUnitTest`, JUnit XML summed). `animation/**`, `poses/**`, `CharacterFrameProducer.kt`
+and `ExerciseCameraFramer3D.kt` are untouched, as are the nine `UNAFFECTED_CORPUS_DIGEST` guards.
+
+**The 3 × 20 s acceptance, on the handset.** Build `assembleDebug -Pmonk.filamentCharacter=true`,
+APK 44,903,276 bytes, `sha256 21c33c2f230df39554ffbb016d827b7a7f9bb3303dcdc055d4b98d8656044429`,
+`versionCode` 1002750, install `Success`. Each window: fresh process, reveal to `mesh=66/66`, then one
+`--es action sequence --es instance rectus_abdominis:A` intent carrying both layer toggles and the
+hide/show/select, then 20 s with no further starts (the activity stayed `topResumedActivity` in all
+three).
+
+| Window | PID | Steps | `frames` | frames/s | smoothed `fps` | p95 ms | `anatomyPaths` p50/p95 | `muscleSkin` p50/p95 | Crashes | `logcat -b crash` |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| 1 | 28904 → 28904 | 7/7 | 2,006 → 3,284 (20.06 s) | 63 | 59 | 13.36 | 8.96 / 12.11 | 0.35 / 0.46 | 0 | 0 bytes |
+| 2 | 29799 → 29799 | 7/7 | 2,293 → 3,544 (20.07 s) | 62 | 59 | 13.74 | 8.95 / 12.63 | 0.34 / 0.45 | 0 | 0 bytes |
+| 3 | 30728 → 30728 | 7/7 | 2,331 → 3,621 (20.07 s) | 64 | 57 | 14.94 | 8.70 / 13.88 | 0.34 / 0.45 | 0 | 0 bytes |
+
+All seven sequence steps ran in every window (`DEEP` off/on, `SUPERFICIAL` off/on, hide, show,
+select), `mesh=66/66` throughout, PID unchanged and `dumpsys activity exit-info` gained no
+`APP CRASH(NATIVE)` entry. The frame counter advanced 1,278 / 1,251 / 1,290 frames in 20.06 s — 62–64
+frames per second — while the smoothed counter read 57–59 over the same spans; both are quoted, and
+the frame count divided by the window is the figure the acceptance asks for.
+
+What this does not establish is unchanged from 8.8: the sections sit inside the opaque body, so the
+selection tint is proven at the uniform/vertex-colour and code level, not as pixels, and the numbers
+come from a debug build whose flag is off in every shipped configuration.
