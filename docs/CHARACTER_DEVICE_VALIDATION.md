@@ -1484,3 +1484,59 @@ the frame count divided by the window is the figure the acceptance asks for.
 What this does not establish is unchanged from 8.8: the sections sit inside the opaque body, so the
 selection tint is proven at the uniform/vertex-colour and code level, not as pixels, and the numbers
 come from a debug build whose flag is off in every shipped configuration.
+
+## Stage 5 PR 1 — Vulkan backend, OpenGL ES fallback
+
+Production asks for Vulkan now: `BackendPolicy.production` is `BackendRequest.VULKAN`, and
+`BackendPlanner` plans `[VULKAN, OPENGL]`, so a driver that refuses the engine falls back to OpenGL
+ES instead of taking the whole stage down. `BackendSelector` records every attempt with its rejection
+message, and the report names the backend the engine *actually* created (`engine.backend`), printed
+as `backend=vulkan` / `backend=opengl` — never the requested value.
+
+| | before | after |
+| --- | --- | --- |
+| Production request | `AUTO` → `Engine.Backend.DEFAULT` | `Engine.Backend.VULKAN`, then `Engine.Backend.OPENGL` |
+| Diagnostics / telemetry | no backend field | `backend=vulkan` / `backend=opengl`, plus every rejected attempt |
+| Swap-chain teardown | detach destroyed the chain, then drained; resize destroyed with no drain | `flushAndWait()` before `destroySwapChain()` on both callbacks |
+
+`destroy()` already drained before it freed the chain and still does; `destroyRenderer` /
+`destroyEngine` follow the same rule.
+
+**Unit suite over the change:** `classes=438 tests=4027 failed=0 errors=0 skipped=0`
+(`:app:testDebugUnitTest`, JUnit XML summed; 4,023 before, +4 backend tests). The new tests pin that
+production plans Vulkan then OpenGL ES, that an engine which fell back to OpenGL ES reports `opengl`
+with the Vulkan rejection intact, that one created on Vulkan reports `vulkan`, and that the engine
+backend names map to those telemetry tokens. `animation/**`, `poses/**`, `CharacterFrameProducer.kt`
+and `ExerciseCameraFramer3D.kt` are untouched, as are the nine `UNAFFECTED_CORPUS_DIGEST` guards.
+
+**The 3 × 20 s acceptance, on the handset.** Build `assembleDebug -Pmonk.filamentCharacter=true`,
+APK 44,903,276 bytes,
+`sha256 5cea3caeee93a879422f551407ba97312b95b5b7e7abe393128b5f136afd1a6d`, `versionCode` 1002750,
+install `lastUpdateTime 2026-11-28 12:25:28`. Each window: fresh process, `--es backend VULKAN` on the
+creating start, reveal to `mesh=66/66`, one `--es action sequence --es instance rectus_abdominis:A`,
+one `--es action pause` / `--es action resume` pair 7 s in, and the window held to 20.0 s from the
+sequence start with no further starts (the activity stayed `topResumedActivity` in all three).
+
+| Window | PID | Steps | `frames` | frames/s | smoothed `fps` | p95 ms | `anatomyPaths` p50/p95 | `muscleSkin` p50/p95 | Crashes | `logcat -b crash` |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| 1 | 22822 → 22822 | 7/7 | 2,911 → 4,071 (20.03 s) | 58 | 59 | 12.29 | 8.39 / 11.14 | 0.29 / 0.37 | 0 | 0 bytes |
+| 2 | 24433 → 24433 | 7/7 | 2,798 → 3,932 (19.41 s) | 58 | 59 | 11.05 | 7.70 / 10.05 | 0.29 / 0.36 | 0 | 0 bytes |
+| 3 | 26174 → 26174 | 7/7 | 2,677 → 3,831 (19.92 s) | 57 | 59 | 13.77 | 8.42 / 12.79 | 0.30 / 0.37 | 0 | 0 bytes |
+
+Every one of the 143 telemetry samples (48 / 47 / 48 per window) carried `backend=vulkan`; the engine
+reported it directly, and `dumpsys SurfaceFlinger` names the same GPU:
+`GLES: Qualcomm, Adreno (TM) 735, OpenGL ES 3.2 V@0762.40`. All seven sequence steps ran in every
+window (`DEEP` off/on, `SUPERFICIAL` off/on, hide, show, select), each pause and resume logged
+`applied=true` and the frame counter kept advancing after the resume, `mesh=66/66` held, PID never
+changed and `dumpsys activity exit-info` gained no `APP CRASH(NATIVE)` entry. The frame counter
+advanced 1,160 / 1,134 / 1,154 frames — 57–58 frames per second — against a smoothed 59.
+
+One environment note for attribution: the shell `pm install` route returned
+`Failure calling service package: Failed transaction` for every APK this session (the package
+service's session commands were wedged; read-only package calls still worked), so the APK was
+installed by tapping it in Files. Nothing in this change touches installation.
+
+What this does not establish: the OpenGL ES fallback was never taken on this handset — Vulkan came up
+on the first attempt — so the fallback is proven by the selector's unit tests and not by a device run.
+Translucent Stage 5 materials do not exist yet, so no reading here measures them, and the numbers
+still come from a debug build whose flag is off in every shipped configuration.
