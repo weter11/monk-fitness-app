@@ -36,9 +36,10 @@ internal class MuscleLayerAsset(
  *
  * A partition's sections are concatenated into one vertex buffer and one index buffer, so the scene
  * holds two skinned renderables — not one per muscle and side — and each partition uploads one bone
- * buffer per frame. Sections stay addressable by their slice: hiding one collapses its vertices into
- * its first one and showing it writes the bind positions back, both only when the mask actually
- * changes; a selection rewrites the vertex colour of the two affected sections and nothing else.
+ * buffer per frame. Sections stay addressable by their slice: hiding one zeroes its four skin weights,
+ * so the GPU sends every vertex of it to the origin in every pose, and showing it restores the
+ * authored weights — both only when the mask actually changes; a selection rewrites the vertex colour
+ * of the two affected sections and nothing else.
  * Sections are addressed by index into the keys handed in, and each key names the asset that carries
  * it, so no muscle identity, side or solve verdict crosses into this class.
  */
@@ -72,6 +73,9 @@ internal class MuscleLayerStage(
 
     private var prepared = false
 
+    /** True once the buffers are freed, so a second teardown cannot touch native handles twice. */
+    private var destroyed = false
+
     /** Sections the loaded partitions publish between them; the readout's `mesh total`. */
     var renderableCount: Int = 0
         private set
@@ -80,8 +84,8 @@ internal class MuscleLayerStage(
     var skinUploads: Long = 0
         private set
 
-    /** Mask-driven position rewrites; a steady frame must not move it. */
-    var positionWrites: Int = 0
+    /** Mask-driven weight rewrites; a steady frame must not move it. */
+    var weightWrites: Int = 0
         private set
 
     /** Selection-driven colour rewrites; a steady frame must not move it. */
@@ -179,15 +183,15 @@ internal class MuscleLayerStage(
         return uploaded
     }
 
-    /** Hides or shows one section; only a changed mask rewrites its vertices. */
+    /** Hides or shows one section; only a changed mask rewrites its weights. */
     fun setShown(section: Int, on: Boolean) {
         if (!state.show(section, on)) return
         val index = sectionLayer[section]
         val layer = layers[index]
-        if (layer.slices.isEmpty()) return
-        layer.collapse(sectionLocal[section], hidden = !on)
-        uploadStream(layer, POSITION_SLOT, floatBytes(layer.positions))
-        positionWrites++
+        val weights = layer.weights ?: return
+        if (!weights.setHidden(sectionLocal[section], hidden = !on)) return
+        uploadStream(layer, BONE_WEIGHTS_SLOT, floatBytes(weights.weights))
+        weightWrites++
         applyMask(index)
     }
 
@@ -224,6 +228,8 @@ internal class MuscleLayerStage(
 
     /** Drains the render thread, then releases each partition's buffers, instance and skin. */
     fun destroy() {
+        if (destroyed) return
+        destroyed = true
         // A queued frame referencing a freed instance or buffer is a native crash inside FEngine::loop.
         engine.flushAndWait()
         highlightSelection.select(MuscleSectionState.NO_SECTION)
@@ -291,7 +297,7 @@ internal class MuscleLayerStage(
 
             layer.slices = layout.slices
             layer.bindPositions = mergedPositions(ordered, layout)
-            layer.positions = layer.bindPositions.copyOf()
+            layer.weights = MuscleSectionWeights(mergedWeights(ordered, layout), layout.slices)
             layer.colors = baseColors(layout.vertexCount)
 
             val entity = EntityManager.get().create()
@@ -349,6 +355,7 @@ internal class MuscleLayerStage(
             layer.entities = IntArray(0)
             layer.slices = emptyList()
             layer.jointCount = 0
+            layer.weights = null
         }
     }
 
@@ -384,7 +391,9 @@ internal class MuscleLayerStage(
         layout: MuscleSectionLayout,
         layer: Layer
     ): VertexBuffer {
-        val streams = streams(sections, layout)
+        val weights = layer.weights
+            ?: throw IllegalStateException("${layer.label} builds a vertex buffer with no weights")
+        val streams = streams(sections, layout, weights.weights)
         val builder = VertexBuffer.Builder()
             .vertexCount(layout.vertexCount)
             .bufferCount(streams.size)
@@ -412,25 +421,24 @@ internal class MuscleLayerStage(
     /**
      * The merged partition's streams, typed exactly as [TubeMesh]'s plan types its slots: uv1 as
      * normalized ushort2, colour as normalized ubyte4, the tangent frame as a normalized short4
-     * quaternion. Position and colour are the two streams a hide or a selection rewrites.
+     * quaternion. Weights and colour are the two streams a hide or a selection rewrites.
      */
     private fun streams(
         sections: List<MuscleSectionMesh>,
-        layout: MuscleSectionLayout
+        layout: MuscleSectionLayout,
+        weights: FloatArray
     ): List<Stream> {
         val vertexCount = layout.vertexCount
         val positions = FloatArray(vertexCount * 3)
         val uvs = FloatArray(vertexCount * 2)
         val tangents = ByteArray(vertexCount * 8)
         val joints = IntArray(vertexCount * 4)
-        val weights = FloatArray(vertexCount * 4)
         for ((index, section) in sections.withIndex()) {
             val slice = layout.slice(index)
             section.positions.copyInto(positions, slice.vertexOffset * 3)
             section.uvs.copyInto(uvs, slice.vertexOffset * 2)
             tangentBytes(section).copyInto(tangents, slice.vertexOffset * 8)
             section.joints.copyInto(joints, slice.vertexOffset * 4)
-            section.weights.copyInto(weights, slice.vertexOffset * 4)
         }
         return listOf(
             Stream(VertexBuffer.VertexAttribute.POSITION, VertexBuffer.AttributeType.FLOAT3, false, floatBytes(positions)),
@@ -452,6 +460,17 @@ internal class MuscleLayerStage(
             section.positions.copyInto(positions, layout.slice(index).vertexOffset * 3)
         }
         return positions
+    }
+
+    private fun mergedWeights(
+        sections: List<MuscleSectionMesh>,
+        layout: MuscleSectionLayout
+    ): FloatArray {
+        val weights = FloatArray(layout.vertexCount * 4)
+        for ((index, section) in sections.withIndex()) {
+            section.weights.copyInto(weights, layout.slice(index).vertexOffset * 4)
+        }
+        return weights
     }
 
     private fun mergedIndices(
@@ -596,29 +615,18 @@ internal class MuscleLayerStage(
         var entities = IntArray(0)
         var slices: List<MuscleSectionSlice> = emptyList()
         var bindPositions = FloatArray(0)
-        var positions = FloatArray(0)
+        /** The authored skin weights and the copy the BONE_WEIGHTS stream mirrors; null until load. */
+        var weights: MuscleSectionWeights? = null
         var colors = ByteArray(0)
         var matrices = FloatArray(0)
         var palette: FloatBuffer =
             ByteBuffer.allocateDirect(16).order(ByteOrder.nativeOrder()).asFloatBuffer()
-        /** Slot 0 is the position stream and slot 3 the colour stream; both are rewritten in place. */
+        /** Slot 3 is the colour stream and slot 6 the weight stream; both are rewritten in place. */
         val bufferObjects = ArrayList<BufferObject>()
         /** Every CPU descriptor Filament may still be reading; released with the layer. */
         val uploads = ArrayList<ByteBuffer>()
         var failure: String? = null
         var highlightError: String? = null
-
-        /** Collapses a hidden section onto its first vertex, or restores its bind positions. */
-        fun collapse(slice: Int, hidden: Boolean) {
-            val place = slices[slice]
-            val source = if (hidden) 0 else place.vertexOffset
-            for (vertex in 0 until place.vertexCount) {
-                for (component in 0 until 3) {
-                    positions[(place.vertexOffset + vertex) * 3 + component] =
-                        bindPositions[(source) * 3 + component]
-                }
-            }
-        }
 
         fun paint(slice: Int, on: Boolean) {
             val place = slices[slice]
@@ -630,8 +638,8 @@ internal class MuscleLayerStage(
 
     private companion object {
         const val LAYER_BIT = 1
-        const val POSITION_SLOT = 0
         const val COLOR_SLOT = 3
+        const val BONE_WEIGHTS_SLOT = 6
         const val HIGHLIGHT_PARAMETER = "emissiveFactor"
         const val BASE_COLOR_PARAMETER = "baseColorFactor"
         const val METALLIC_PARAMETER = "metallicFactor"
@@ -661,6 +669,44 @@ internal class MuscleLayerStage(
             VertexBuffer.VertexAttribute.BONE_INDICES,
             VertexBuffer.VertexAttribute.BONE_WEIGHTS
         )
+    }
+}
+
+/**
+ * One partition's authored skin weights and the copy its `BONE_WEIGHTS` stream mirrors.
+ *
+ * Hiding a section zeroes its four weights per vertex: under GPU skinning a zero weight sends the
+ * vertex to (0, 0, 0) in every pose, which collapsing `POSITION` alone cannot do because the bone
+ * transforms still move the slice. Showing it copies the authored slice back, so a hide/show cycle is
+ * bit-exact rather than clipping the section to its first vertex. A request for the state the mask
+ * already holds reports no change, so a steady frame uploads nothing.
+ */
+internal class MuscleSectionWeights(
+    bind: FloatArray,
+    private val slices: List<MuscleSectionSlice>
+) {
+
+    /** The weights exactly as exported, four per vertex, kept so a shown section can be restored. */
+    val bindWeights: FloatArray = bind.copyOf()
+
+    /** The weights the vertex buffer carries; only a mask change rewrites a section's slice. */
+    val weights: FloatArray = bind.copyOf()
+
+    private val sectionHidden = BooleanArray(slices.size)
+
+    /** Zeroes or restores one section; false when the mask already held that state. */
+    fun setHidden(section: Int, hidden: Boolean): Boolean {
+        if (sectionHidden[section] == hidden) return false
+        sectionHidden[section] = hidden
+        val place = slices[section]
+        val start = place.vertexOffset * 4
+        val end = (place.vertexOffset + place.vertexCount) * 4
+        if (hidden) {
+            weights.fill(0f, start, end)
+        } else {
+            bindWeights.copyInto(weights, destinationOffset = start, startIndex = start, endIndex = end)
+        }
+        return true
     }
 }
 

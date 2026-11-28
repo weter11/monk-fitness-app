@@ -249,6 +249,39 @@ class MuscleLayerStageTest {
     }
 
     @Test
+    fun hidingASectionZeroesItsWeightsAndShowingItRestoresTheExactBindSlice() {
+        val layout = MuscleSectionLayout.ofCounts(listOf(3 to 3, 4 to 3, 2 to 3))
+        val authored = FloatArray(layout.vertexCount * 4) { entry -> (entry % 7) / 8f }
+        val weights = MuscleSectionWeights(authored.copyOf(), layout.slices)
+        val start = layout.slice(1).vertexOffset * 4
+        val end = (layout.slice(1).vertexOffset + layout.slice(1).vertexCount) * 4
+
+        assertTrue("hiding a shown section rewrites its slice", weights.setHidden(1, hidden = true))
+        assertEquals("the slice spans four weights per vertex", 16, end - start)
+        for (entry in start until end) {
+            assertEquals("hidden weight $entry is zero", 0f, weights.weights[entry], 0f)
+        }
+        assertArrayEquals(
+            "the sections before it keep their weights",
+            authored.copyOfRange(0, start),
+            weights.weights.copyOfRange(0, start),
+            0f
+        )
+        assertArrayEquals(
+            "the sections after it keep their weights",
+            authored.copyOfRange(end, authored.size),
+            weights.weights.copyOfRange(end, authored.size),
+            0f
+        )
+
+        assertFalse("a steady frame re-hides nothing", weights.setHidden(1, hidden = true))
+        assertTrue("showing it rewrites its slice again", weights.setHidden(1, hidden = false))
+        assertArrayEquals("the authored weights return bit-for-bit", authored, weights.weights, 0f)
+        assertFalse("a steady frame re-shows nothing", weights.setHidden(1, hidden = false))
+        assertArrayEquals("a hide and show never overwrote the bind copy", authored, weights.bindWeights, 0f)
+    }
+
+    @Test
     fun aFreshSectionMaskPublishesEverySection() {
         val state = MuscleSectionState(3)
         state.select(2)
