@@ -125,6 +125,9 @@ class CharacterSession(
 
     val backend: String get() = backendName
 
+    /** The backend as the telemetry line prints it: `vulkan`, `opengl` or `unknown`. */
+    val backendLabel: String get() = backendToken(backendName)
+
     private val frameCallback = object : Choreographer.FrameCallback {
         override fun doFrame(frameTimeNanos: Long) {
             if (!running || destroyed) return
@@ -141,14 +144,19 @@ class CharacterSession(
 
     private val renderCallback = object : UiHelper.RendererCallback {
         override fun onNativeWindowChanged(surface: Surface) {
-            swapChain?.let { engine.destroySwapChain(it) }
+            // The old chain may still be referenced by a frame the render thread is executing;
+            // Vulkan frees it asynchronously, so the drain has to come before the destroy.
+            swapChain?.let {
+                engine.flushAndWait()
+                engine.destroySwapChain(it)
+            }
             swapChain = engine.createSwapChain(surface)
         }
 
         override fun onDetachedFromSurface() {
             swapChain?.let {
-                engine.destroySwapChain(it)
                 engine.flushAndWait()
+                engine.destroySwapChain(it)
             }
             swapChain = null
             // The loop keeps running but renders nothing until a new chain exists; pausing here
@@ -563,6 +571,7 @@ class CharacterSession(
         val diagnostics = CharacterDiagnostics(
             requested = request,
             activeBackend = backend,
+            backendToken = backendLabel,
             attempts = selection.attempts,
             capabilities = capabilities,
             fallbackReason = selection.fallbackReason,

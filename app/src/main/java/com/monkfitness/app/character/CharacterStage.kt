@@ -71,7 +71,7 @@ private class CharacterAttachment(
 fun CharacterStage(
     animationId: String,
     modifier: Modifier = Modifier,
-    backendRequest: BackendRequest = BackendRequest.AUTO,
+    backendRequest: BackendRequest = BackendPolicy.production,
     morphology: MorphologyPreset = MorphologyPreset.NEUTRAL,
     debugLayers: Boolean = false,
     onSession: (CharacterSession?) -> Unit = {},

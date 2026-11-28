@@ -7,12 +7,33 @@ import android.os.Build
 import com.google.android.filament.Engine
 import com.google.android.filament.Filament
 import com.google.android.filament.gltfio.Gltfio
+import java.util.Locale
 
-/** What the caller asks the runtime for. Production always uses [AUTO]. */
+/** What the caller asks the runtime for. Production asks for [VULKAN] and accepts the fallback. */
 enum class BackendRequest(val label: String) {
     AUTO("Auto"),
     VULKAN("Vulkan"),
     OPENGL("OpenGL ES")
+}
+
+object BackendPolicy {
+
+    /**
+     * The backend production asks for. Vulkan first, and [BackendPlanner] falls back to OpenGL ES
+     * when the driver refuses the engine, so a device without a working Vulkan path still draws.
+     */
+    val production: BackendRequest = BackendRequest.VULKAN
+}
+
+/**
+ * The lower-case token the diagnostics and the telemetry line print for the backend the engine
+ * actually created, so a device run can be read as `backend=vulkan` or `backend=opengl`.
+ */
+fun backendToken(backend: String?): String = when (backend?.uppercase(Locale.ROOT)) {
+    "VULKAN" -> "vulkan"
+    "OPENGL" -> "opengl"
+    "DEFAULT" -> "default"
+    else -> "unknown"
 }
 
 /**

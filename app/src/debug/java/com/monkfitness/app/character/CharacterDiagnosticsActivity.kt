@@ -63,7 +63,7 @@ class CharacterDiagnosticsActivity : ComponentActivity() {
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         val requested = intent.getStringExtra(EXTRA_BACKEND)
             ?.let { name -> BackendRequest.entries.firstOrNull { it.name == name } }
-            ?: BackendRequest.AUTO
+            ?: BackendPolicy.production
         command.value = DebugCommand.parse(intent, 0)
         setContent {
             MaterialTheme {
@@ -282,7 +282,7 @@ private fun DiagnosticsScreen(request: BackendRequest, command: State<DebugComma
 
 private fun CharacterDiagnostics.describe(request: BackendRequest): String = buildString {
     append("requested ").append(request.label)
-    append(" → active ").append(activeBackend)
+    append(" → active ").append(backendToken)
     if (attempts.size > 1) {
         append(" (fallback: ")
         attempts.dropLast(1).forEach { append(it.backend).append(" failed: ").append(it.failure).append("; ") }
@@ -317,7 +317,8 @@ private fun CharacterDiagnostics.describe(request: BackendRequest): String = bui
 
 /** One machine-readable line per poll: the readings a device run transcribes into the record. */
 private fun CharacterDiagnostics.telemetry(): String = buildString {
-    append("frames=").append(frames)
+    append("backend=").append(backendToken)
+    append(" frames=").append(frames)
     append(" fps=").append(fps.toInt())
     append(" p95=").append(fixed(frameTimeP95Ms))
     append(" mesh=").append(muscleAssetDrawn).append('/').append(muscleAssetSections)

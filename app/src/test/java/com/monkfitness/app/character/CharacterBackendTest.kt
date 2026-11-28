@@ -62,6 +62,49 @@ class CharacterBackendTest {
     }
 
     @Test
+    fun productionRequestsVulkanFirstAndPlansOpenGlEsAsItsOnlyFallback() {
+        assertEquals(BackendRequest.VULKAN, BackendPolicy.production)
+        assertEquals(
+            "production must try Vulkan, then the OpenGL ES fallback",
+            listOf(Engine.Backend.VULKAN, Engine.Backend.OPENGL),
+            BackendPlanner.attempts(BackendPolicy.production)
+        )
+    }
+
+    @Test
+    fun aProductionEngineThatFellBackReportsTheBackendThatActuallyCameUp() {
+        val selection = selector { backend ->
+            if (backend == Engine.Backend.VULKAN) throw RuntimeException("vkCreateInstance failed")
+            Creation(backend.name)
+        }.select(BackendPolicy.production)
+
+        assertEquals("OPENGL", selection.value)
+        assertEquals("opengl", backendToken(selection.value))
+        assertTrue(
+            "the rejected Vulkan attempt stays in the report: $selection",
+            selection.attempts.first().failure!!.contains("vkCreateInstance")
+        )
+        assertTrue(selection.usedFallback)
+    }
+
+    @Test
+    fun aProductionEngineCreatedOnVulkanReportsVulkan() {
+        val selection = selector { backend -> Creation(backend.name) }
+            .select(BackendPolicy.production)
+
+        assertEquals("VULKAN", selection.value)
+        assertEquals("vulkan", backendToken(selection.value))
+        assertNull(selection.fallbackReason)
+    }
+
+    @Test
+    fun engineBackendNamesMapToTheTokenTheTelemetryLinePrints() {
+        assertEquals("vulkan", backendToken("VULKAN"))
+        assertEquals("opengl", backendToken("OPENGL"))
+        assertEquals("unknown", backendToken(null))
+    }
+
+    @Test
     fun everyBackendFailingLeavesNoEngineAndTheLastReason() {
         val selection = selector { backend -> Creation(null, "$backend unavailable") }
             .select(BackendRequest.VULKAN)
