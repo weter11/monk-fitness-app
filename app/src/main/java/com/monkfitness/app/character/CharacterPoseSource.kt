@@ -11,6 +11,8 @@ fun interface CharacterPoseSource {
 data class CharacterDiagnostics(
     val requested: BackendRequest,
     val activeBackend: String,
+    /** The active backend as `backend=vulkan` / `backend=opengl` telemetry reads it. */
+    val backendToken: String = "unknown",
     val attempts: List<BackendAttempt>,
     val capabilities: GraphicsCapabilities,
     val fallbackReason: String?,
