@@ -1441,16 +1441,25 @@ Sections stay addressable through their slice:
 
 | Behaviour | Mechanism | Cost |
 | --- | --- | --- |
-| Hide/show one section | its vertices collapse onto the section's first vertex, and the bind positions are written back on show | one position stream rewrite, only when the mask changes |
+| Hide/show one section | hiding zeroes the section's `BONE_WEIGHTS` slice (four weights per vertex), showing copies the authored slice back from `bindWeights` | one `BONE_WEIGHTS` stream rewrite, only when the mask changes |
 | Selection tint | the section's vertices carry the highlight colour in `COLOR` (`hasVertexColors`, normalized `ubyte4`) | one colour stream rewrite for the two sections that changed |
 | Layer toggle | the partition's single renderable gets layer mask 0 when every one of its sections is hidden | one `setLayerMask` |
-| Steady frame | no mask change, no selection change | zero buffer writes; `positionWrites` / `colorWrites` in the stage stay put |
+| Steady frame | no mask change, no selection change | zero buffer writes; `weightWrites` / `colorWrites` in the stage stay put |
+
+The mask is a weight operation and not a position one: a collapsed `POSITION` could not survive posed
+skinning, because `JOINTS_0`/`WEIGHTS_0` differ per vertex inside a section, so a non-identity bone
+transform pulled the collapsed slice apart into a deformed sliver. Zero weights send every vertex of
+the section to `(0, 0, 0)` in **every** pose without touching `POSITION`, and restoring copies the
+authored per-vertex weights rather than the section's first vertex, so a hide/show cycle is bit-exact.
+`destroy()` is idempotent, so a second teardown returns before touching a freed handle.
 
 Teardown is transactional and in reference order: `flushAndWait`, scene removal, entity destruction,
 material instance, buffer objects, vertex and index buffers, then the skinning buffer.
 
-**Unit suite over the change:** `classes=438 tests=4022 failed=0 errors=0 skipped=0`
-(`:app:testDebugUnitTest`, JUnit XML summed). `animation/**`, `poses/**`, `CharacterFrameProducer.kt`
+**Unit suite over the change:** `classes=438 tests=4023 failed=0 errors=0 skipped=0`
+(`:app:testDebugUnitTest`, JUnit XML summed); `MuscleLayerStageTest` carries the section-mask
+regression, `hidingASectionZeroesItsWeightsAndShowingItRestoresTheExactBindSlice`.
+`animation/**`, `poses/**`, `CharacterFrameProducer.kt`
 and `ExerciseCameraFramer3D.kt` are untouched, as are the nine `UNAFFECTED_CORPUS_DIGEST` guards.
 
 **The 3 × 20 s acceptance, on the handset.** Build `assembleDebug -Pmonk.filamentCharacter=true`,
